@@ -256,7 +256,11 @@ ok("después del descanso sí se puede", not err(r))
 bz = q("select * from provider_busy(%s,%s,%s)", (pid3, d3, d3), role="anon")
 ok("ocupados públicos incluyen el descanso", any(int((b[1]-b[0]).total_seconds()//60) == 90 for b in bz))
 ok("mis turnos trae indicaciones y retoque", (lambda m: m and m[-1]["prep_note"] == "Venir sin esmalte" and m[-1]["repeat_days"] == 21)(q("select my_bookings()", uid=c3)[0][0]))
-ok("repetición cada 6 semanas permitida", not err(q("select book_slot(%s, %s, 6, 1, 'mp')", (sv, dt.datetime.combine(next_weekday(3), dt.time(15, 0), tz)), uid=c3)))
+# horario libre garantizado: el primer día hábil después de d3 (d3 ya tiene turnos de esta prestadora) a las 19:00,
+# hora que ninguna otra prueba usa con ella. Antes era next_weekday(3) a las 15:00, que de jueves a sábado cae en d3 (H09).
+d6w = d3 + dt.timedelta(days=1)
+while d6w.weekday() >= 5: d6w += dt.timedelta(days=1)
+ok("repetición cada 6 semanas permitida", not err(q("select book_slot(%s, %s, 6, 1, 'mp')", (sv, dt.datetime.combine(d6w, dt.time(19, 0), tz)), uid=c3)))
 ok("repetición rara rechazada", err(q("select book_slot(%s, %s, 5, 1, 'mp')", (sv, dt.datetime.combine(next_weekday(3), dt.time(17, 0), tz)), uid=c3), "bad_repeat"))
 # privados y otros endurecimientos
 ok("prestador no puede marcarse Mercado Pago conectado", err(q("update provider_private set mp_connected=true where provider_id=%s", (pid3,), uid=nails_owner)))
