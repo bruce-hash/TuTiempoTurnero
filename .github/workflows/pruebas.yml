@@ -1,4 +1,5 @@
-# Pruebas de TuTiempo en cada PR: la base (Postgres 16 con las mismas extensiones que Supabase) y el frontend (modo demo).
+# Pruebas de TuTiempo: la base (Postgres 16 con las mismas extensiones que Supabase), el frontend (Vite, modo demo)
+# y el navegador real (Chromium contra PostgREST + la base: e2e y comparación con la versión anterior al Bloque A).
 name: Pruebas
 
 on:
@@ -37,12 +38,12 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: TODO_EN_UNO.sql idéntico a las migraciones
         run: node tools/todo_en_uno.mjs --check
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -59,27 +60,88 @@ jobs:
         run: python3 pruebas/test_db.py "host=localhost port=5432 dbname=tt user=postgres password=postgres"
 
   frontend:
-    name: Frontend (build · crawl · clicks)
+    name: Frontend (mudanza pura · sin demo · crawl · clicks)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
         with:
-          node-version: "22"
+          fetch-depth: 0 # la verificación de la mudanza lee la versión de referencia de git
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
           cache: npm
 
       - name: npm ci
         run: npm ci
 
-      - name: Build (dist/)
-        run: node tools/build.mjs
+      - name: Mudanza pura (cada declaración de la referencia, idéntica en su módulo)
+        run: npm run test:mudanza
 
-      - name: Crawl (cada botón de cada pantalla)
+      - name: Build de producción sin nada de la demo
+        run: npm run test:sin-demo
+
+      - name: Crawl (cada botón de cada pantalla, reloj fijo)
         run: npm run test:crawl
 
       - name: Clicks (cada data-act con su acción, cada formulario con su envío)
         run: npm run test:clicks
+
+  navegador:
+    name: Navegador (e2e · comparación con la versión anterior)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      POSTGREST: ${{ runner.temp }}/postgrest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # comparar.mjs arma el build de referencia desde su commit
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci y Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: PostgREST 12.2.3
+        run: |
+          curl -sSfL https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz | tar xJ -C "$RUNNER_TEMP"
+          "$POSTGREST" --version
+
+      - name: e2e (recorrido completo en navegador, en vivo)
+        run: npm run test:e2e
+
+      - name: Comparación con la versión anterior (demo y en vivo, texto y capturas)
+        run: npm run test:comparar
+
+      - name: Diferencias de la comparación
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: comparacion
+          path: .build/comparar/
+          if-no-files-found: ignore
