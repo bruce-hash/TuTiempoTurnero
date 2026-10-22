@@ -1,0 +1,83 @@
+# Pruebas de TuTiempo en cada PR: la base (Postgres 16 con las mismas extensiones que Supabase) y el frontend (modo demo).
+name: Pruebas
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  base:
+    name: Base (Postgres 16 · test_db.py)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: TODO_EN_UNO.sql idéntico a las migraciones
+        run: node tools/todo_en_uno.mjs --check
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Driver de Postgres para Python
+        run: pip install "psycopg[binary]==3.3.*"
+
+      - name: Cargar la base (emulación de Supabase + TODO_EN_UNO.sql)
+        run: |
+          createdb tt
+          psql -v ON_ERROR_STOP=1 -q -d tt -f pruebas/supabase_emulation.sql
+          psql -v ON_ERROR_STOP=1 -q -d tt -f supabase/TODO_EN_UNO.sql
+
+      - name: test_db.py
+        run: python3 pruebas/test_db.py "host=localhost port=5432 dbname=tt user=postgres password=postgres"
+
+  frontend:
+    name: Frontend (build · crawl · clicks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Build (dist/)
+        run: node tools/build.mjs
+
+      - name: Crawl (cada botón de cada pantalla)
+        run: npm run test:crawl
+
+      - name: Clicks (cada data-act con su acción, cada formulario con su envío)
+        run: npm run test:clicks
