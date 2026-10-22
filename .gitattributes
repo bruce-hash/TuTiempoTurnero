@@ -1,0 +1,6 @@
+# Finales de línea fijos en LF para todo el repo, aunque se trabaje en Windows.
+* text=auto eol=lf
+
+# Binarios: sin conversión ni diff de texto.
+*.woff2 binary
+*.pdf binary
