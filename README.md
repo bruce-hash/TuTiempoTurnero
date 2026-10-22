@@ -9,11 +9,14 @@ Turnos online de belleza y bienestar en Olavarría. Versión 31 (Supabase + Host
 
 ## Uso rápido
 
+Node 22 (ver `.nvmrc`).
+
 ```bash
-npm install
-npm run build        # genera dist/ desde src/prototipo.html (lo que se sube a Hostinger)
-npm run test:crawl   # toca cada botón de cada pantalla (modo demo)
+npm ci
+npm run dev          # servidor local con recarga; sin config.js completo, en modo demo
+npm run build        # genera dist/ (lo que se sube a Hostinger: solo en vivo, sin demo)
+npm run test:crawl   # toca cada botón de cada pantalla (modo demo, reloj fijo)
 npm run test:clicks  # cada botón con su acción, cada formulario con su envío
 ```
 
-Abrir `src/prototipo.html` en el navegador muestra la app en modo demo (datos de ejemplo, no guarda nada).
+Más pruebas (base, navegador real, comparación con la versión anterior): ver [`CLAUDE.md`](CLAUDE.md).

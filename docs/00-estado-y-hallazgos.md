@@ -96,4 +96,25 @@ no cargar ejemplos en producción.
 
 ### H16 · Baja · Mantenimiento
 - `vendor/supabase.js` 2.45.4 es viejo: actualizar en un bloque propio, con todas las pruebas.
-- Variables internas con letras sueltas en `prototipo.html`: renombrar de a poco.
+- Variables internas con letras sueltas (hoy en los módulos de `src/`, que vienen de `prototipo.html`): se renombran en el Bloque A2.
+
+### H17 · Baja · Código muerto de saldo y cashback (Bloque A1)
+TuTiempo ya no maneja saldo ni cashback (v25), pero el código sigue: `src/lib/saldo.js` (`CASHBACK = 0`, `cbOf`, `wMove`,
+`walletPay`, `applyPay`, `refundPay`, `walletBox`, `walletPanel`) y sus usos (`S.wallet`, `S.wmov`, `paid_wallet`, `cashback`
+en las vistas y en `liveApi`). En el Bloque A1 se mudó tal cual. **Borrarlo en el Bloque 2**, con sus pruebas (la base
+conserva las columnas por compatibilidad).
+
+### H18 · Media · Credenciales de demo precargadas en vivo (Bloque A1)
+El estado inicial (`fresh()` en `src/state.js`) trae `S.blogin = { email: "hidro.style@tutiempo.demo", pass: "barbero123" }`
+y el formulario "Acceso prestadores" los muestra **también en vivo** (versión 31). Además, `vBPerfil` usa
+`sofia@tutiempo.demo` / `hidro.style@tutiempo.demo` como email de respaldo si no hay usuario. En A1 no se tocó (cero cambios
+visibles); `pruebas/sin_demo.mjs` los tolera con un tope exacto y avisa "PEND". **Corregir en el Bloque 2** (con H14) y
+bajar el tope a 0.
+
+### H19 · Baja · Texto de prototipo visible en producción (Bloque A1)
+El pie dice "… Olavarría, Buenos Aires, Argentina · Prototipo" (`index.html`). Revisar en el Bloque 2.
+
+### H20 · Baja · Prueba e2e que dependía de la hora (resuelto en el Bloque A1)
+`pruebas/e2e.js` bloqueaba de 20:00 a 21:00 el día de la reserva de la clienta, que es su primer turno libre: corrida de
+tarde, la reserva caía a las 20:00 y el bloqueo chocaba ("bloqueo guardado en la base" fallaba también con la versión 31).
+Ahora bloquea un día hábil sin turnos. 107/107 con la versión 31 y con la nueva.
