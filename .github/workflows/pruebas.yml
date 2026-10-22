@@ -111,7 +111,6 @@ jobs:
       PGPORT: "5432"
       PGUSER: postgres
       PGPASSWORD: postgres
-      POSTGREST: ${{ runner.temp }}/postgrest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -130,7 +129,8 @@ jobs:
       - name: PostgREST 12.2.3
         run: |
           curl -sSfL https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz | tar xJ -C "$RUNNER_TEMP"
-          "$POSTGREST" --version
+          "$RUNNER_TEMP/postgrest" --version
+          echo "POSTGREST=$RUNNER_TEMP/postgrest" >> "$GITHUB_ENV"
 
       - name: e2e (recorrido completo en navegador, en vivo)
         run: npm run test:e2e
