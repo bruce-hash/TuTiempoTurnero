@@ -3,6 +3,8 @@ name: Pruebas
 
 on:
   pull_request:
+  push:
+    branches: [developer, main]
   workflow_dispatch:
 
 permissions:
