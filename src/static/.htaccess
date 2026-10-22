@@ -1,0 +1,40 @@
+# TuTiempo · Hostinger (LiteSpeed / Apache)
+DirectoryIndex index.html
+Options -Indexes
+AddDefaultCharset UTF-8
+AddType font/woff2 .woff2
+AddType application/javascript .js .cjs
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Forzar HTTPS
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+  # Bloquear archivos ocultos y de respaldo
+  RewriteRule (^|/)\.(?!well-known/) - [F,L]
+  RewriteRule \.(bak|sql|log|ini|sh|md|zip)$ - [F,L,NC]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "DENY"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+  Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+  # CSP: solo scripts propios; conexiones solo a Supabase. Si usás un dominio propio para Supabase, agregalo en connect-src e img-src.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+  <FilesMatch "\.(html|js|cjs)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  <FilesMatch "^config\.(js|cjs)$">
+    Header set Cache-Control "no-store"
+  </FilesMatch>
+  <FilesMatch "\.(woff2|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript image/svg+xml
+</IfModule>

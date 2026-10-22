@@ -1,0 +1,13 @@
+# Configuración de las Edge Functions para `supabase functions deploy`.
+# Las que llama Mercado Pago (o el navegador al volver de MP) no llevan JWT de usuario.
+[functions.mp-create-preference]
+verify_jwt = true
+
+[functions.mp-webhook]
+verify_jwt = false
+
+[functions.mp-oauth]
+verify_jwt = false
+
+[functions.mp-refunds]
+verify_jwt = false

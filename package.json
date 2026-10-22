@@ -1,0 +1,17 @@
+{
+  "name": "tutiempo",
+  "private": true,
+  "description": "TuTiempo · turnos online (Supabase + Hostinger)",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "build:dev": "node tools/build.mjs --no-minify",
+    "test:crawl": "node pruebas/crawl.js src/prototipo.html",
+    "test:clicks": "python3 pruebas/audit_clicks.py src/prototipo.html"
+  },
+  "devDependencies": {
+    "esbuild": "0.23.1",
+    "jsdom": "24.1.3",
+    "pg": "8.12.0",
+    "playwright": "1.56.0"
+  }
+}

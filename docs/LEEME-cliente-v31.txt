@@ -1,0 +1,306 @@
+EDICIÓN PARA MANDAR POR GMAIL
+-----------------------------
+Gmail bloquea los archivos ".js", así que en esta copia los archivos JavaScript terminan en ".cjs"
+(app.cjs, config.cjs, vendor/supabase.cjs y las pruebas). Es el mismo código. NO HAY QUE RENOMBRAR
+NADA: subí la carpeta subir-a-hostinger tal cual; el .htaccess ya le dice a Hostinger que los .cjs
+son JavaScript. Las pruebas de la carpeta pruebas/ se corren igual: node e2e.cjs, node crawl.cjs.
+IMPORTANTE: subí también el archivo .htaccess (es oculto: en el Administrador de archivos de
+Hostinger activá "Mostrar archivos ocultos"). Sin él, el sitio queda en blanco.
+
+TUTIEMPO · CÓMO PONERLO EN MARCHA (Supabase + Hostinger)
+==========================================================
+
+Qué hay en este paquete
+-----------------------
+subir-a-hostinger/   La app web. Es lo único que va a Hostinger.
+supabase/            La base de datos (migrations/ o TODO_EN_UNO.sql) y las Edge Functions de Mercado Pago.
+pruebas/             Las pruebas automáticas que se corrieron (para tu desarrollador).
+
+Sin configurar, la app funciona en MODO DEMO (datos de ejemplo, no guarda nada).
+Cuando completás config.cjs con tu proyecto de Supabase, pasa a funcionar EN VIVO.
+
+
+PASO 1 · Crear la base en Supabase (10 minutos)
+-----------------------------------------------
+1. Entrá a supabase.com → New project. Región: São Paulo (la más cercana a Argentina).
+   Elegí una contraseña fuerte para la base y guardala.
+2. Database → Extensions: activá "pg_cron". Lo usa para liberar reservas sin pagar, mandar los
+   recordatorios y saludos de cumpleaños dentro de la app y recalcular cada noche el orden del listado.
+3. SQL Editor → New query → pegá TODO el contenido de supabase/TODO_EN_UNO.sql → Run.
+   Tiene que terminar sin errores. Crea tablas, índices, seguridad (RLS), funciones, rubros y la ciudad.
+4. Si activaste pg_cron después del paso 3, volvé a correr solo el final de 0005_storage_seed.sql.
+   ¿YA CARGASTE UNA VERSIÓN ANTERIOR? Volvé a pegar y correr TODO_EN_UNO.sql completo: actualiza
+   tablas, funciones y permisos sin borrar prestadores, clientes ni turnos (probado sobre una base con datos).
+   Versión 31: además volvé a publicar las 4 Edge Functions de Mercado Pago (comandos del PASO 3,
+   punto 3). Cambiaron: cobro con la llave del prestador renovada sola, PKCE y controles del webhook.
+5. OPCIONAL · Datos de ejemplo: New query → pegá supabase/ejemplos.sql → Run.
+   Carga los 13 prestadores de ejemplo de los 6 rubros (barberías, peluquerías, masajes, pestañas,
+   uñas y depilación) con servicios, indicaciones, horarios, reseñas y tarjetas de sellos (una por servicio).
+   No tienen dueño: sirven para que la app no arranque vacía y para probar reservas reales.
+   Para borrarlos cuando tengas prestadores reales:
+      delete from providers where slug like 'ej-%';
+
+PASO 2 · Configurar las cuentas (Auth)
+--------------------------------------
+La app trae: crear cuenta (nombre, email, celular opcional, contraseña), ingresar con email y contraseña,
+ingresar con Google, entrar con un código por email, "¿Olvidaste tu contraseña?" con link para crear
+una nueva, y "Cambiar contraseña" en Mi perfil. Clientes y prestadores usan las mismas cuentas.
+
+A) Authentication → URL Configuration
+   - Site URL: https://tutiempo.com.ar   (o el subdominio donde pruebes, ej. https://app.tutiempo.com.ar)
+   - Redirect URLs: agregá la misma dirección (y la del subdominio de prueba si usás los dos).
+
+B) Authentication → Sign In / Providers → Email
+   - Enable Email provider: activado.  Confirm email: activado (la cuenta se activa con el link del email).
+   - Minimum password length: 8.  Password requirements: "Letters and digits"
+     (es la misma regla que pide la app; así se cumple también del lado del servidor).
+   - Secure password change: activado.  Leaked password protection: activado (si tu plan lo permite).
+
+C) Authentication → Emails → Templates (copiá cada uno tal cual; el link usa token_hash para que
+   funcione aunque abran el email en otro dispositivo):
+   - "Confirm signup" (activar cuenta):
+       <h2>Activá tu cuenta de TuTiempo</h2>
+       <p><a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=signup">Activar mi cuenta</a></p>
+   - "Reset Password" (recuperar contraseña):
+       <h2>Creá tu contraseña nueva</h2>
+       <p><a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery">Crear contraseña nueva</a></p>
+       <p>El link vence en 1 hora y sirve una sola vez. Si no lo pediste, ignorá este email.</p>
+   - "Magic Link" (entrar con código):
+       <p>Tu código para entrar a TuTiempo es: <b>{{ .Token }}</b></p>
+   - "Change Email Address":
+       <p><a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email_change">Confirmar email nuevo</a></p>
+   Recomendado para producción: Authentication → Emails → SMTP Settings con tu propio envío
+   (Resend, Brevo o el correo de Hostinger). El envío incluido de Supabase es solo para pruebas
+   y manda muy pocos emails por hora.
+
+D) Google (botones "Continuar con Google" y "Entrar con Google")
+   1. console.cloud.google.com → APIs y servicios → Pantalla de consentimiento OAuth: tipo Externo,
+      nombre TuTiempo, tu email y el logo. Publicala ("En producción").
+   2. Credenciales → Crear credenciales → ID de cliente OAuth → Aplicación web.
+      Orígenes autorizados: https://tutiempo.com.ar
+      URI de redireccionamiento autorizado: https://TU-PROYECTO.supabase.co/auth/v1/callback
+   3. Copiá el Client ID y el Client Secret en Supabase → Authentication → Providers → Google → activado.
+
+E) Authentication → Rate Limits: dejá los valores por defecto (frenan fuerza bruta y abuso de emails).
+   Authentication → Attack Protection → CAPTCHA (Cloudflare Turnstile): recomendado al abrir al público.
+
+Cómo probarlo: creá una cuenta con tu email, tocá el link de activación, cerrá sesión, entrá con la
+contraseña, probá "¿Olvidaste tu contraseña?" y entrá con Google.
+
+PANEL DE TUTIEMPO (ADMIN). Para que tu cuenta sea admin, una sola vez en el SQL Editor:
+  insert into app_admins (user_id) select id from auth.users where email = 'TU-EMAIL';
+Después entrá a la app con esa cuenta → Mi perfil → "Panel de TuTiempo (admin)". Tiene 4 pestañas:
+  - RESUMEN: comisión de TuTiempo del mes (contra el mes pasado), "Para revisar" (DNI pendientes,
+    prestadores sin Mercado Pago), Hoy y Ayer (turnos y comisión), "Cómo vienen las semanas"
+    (las últimas 4 semanas con turnos, facturado y comisión, en números), 8 indicadores del mes,
+    los 5 más activos y turnos por rubro.
+  - PRESTADORES: los que esperan verificación (ver DNI, aprobar) y la lista dividida por rubro
+    (o por nivel de actividad: muy activos, activos, poca actividad, sin actividad). Cada uno tiene
+    su "Ficha" con NOTAS PRIVADAS (solo las ven los admins: ni el prestador ni los clientes),
+    Suspender/Reactivar y "Eliminar prestador" (pide confirmar; cancela sus turnos futuros, a los
+    clientes se les devuelve todo con aviso para reprogramar, y deja de aparecer. No se deshace).
+  - BALANCE: las cuentas de TuTiempo mes a mes y año a año (2025 a 2028): comisiones − gastos =
+    resultado. En cada mes: reservas pagadas, cobrado por Mercado Pago, señas para los prestadores,
+    comisión, y los gastos de TuTiempo (los cargás vos: hosting, publicidad...). "Cerrar el mes"
+    cuando terminó (los números quedan fijos; se puede reabrir) y "Cerrar el año" (cierra también
+    los meses que falten).
+  - COMISIÓN: escribís el % que quieras, de 0 a 30, con decimales (por ejemplo 8,5). Por defecto 10%.
+    Es un % del precio y LA PAGA EL CLIENTE APARTE, junto con la seña. Ejemplo: corte de $20.000,
+    el prestador pide 50% de seña ($10.000) → el cliente paga $10.000 + $2.000 = $12.000 al reservar.
+    El prestador recibe sus $10.000 completos (y $10.000 más en el local); TuTiempo cobra $2.000.
+
+PASO 3 · Mercado Pago (cobro de señas con comisión)
+---------------------------------------------------
+CÓMO VA LA PLATA: cada cobro se crea con la cuenta de Mercado Pago DEL PRESTADOR (la conectó con
+OAuth). La seña entra directo a SU cuenta; la comisión de TuTiempo viaja en el mismo pago como
+"marketplace_fee" y Mercado Pago la acredita directo en la cuenta de TUTIEMPO, que es la DUEÑA de la
+aplicación (CLIENT_ID). La plata nunca pasa por el servidor de TuTiempo. Mercado Pago primero
+descuenta su propia comisión y después la de TuTiempo, del monto del pago.
+1. Entrá a developers.mercadopago.com CON LA CUENTA DE MERCADO PAGO DE TUTIEMPO (la que va a recibir
+   las comisiones; no uses la cuenta personal de un prestador) y creá una aplicación de tipo
+   "Marketplace" (Checkout Pro). En "Detalles de la aplicación" activá PKCE (la app ya lo manda).
+   Anotá CLIENT_ID y CLIENT_SECRET. Configurá como Redirect URL:
+      https://TU-PROYECTO.supabase.co/functions/v1/mp-oauth
+2. Webhooks: URL https://TU-PROYECTO.supabase.co/functions/v1/mp-webhook , evento "Pagos".
+   Copiá la "clave secreta" del webhook.
+3. Instalá la CLI de Supabase en tu compu y desde la carpeta supabase/ corré:
+      supabase login
+      supabase link --project-ref TU-PROYECTO
+      supabase secrets set SITE_URL=https://tutiempo.com.ar MP_CLIENT_ID=... MP_CLIENT_SECRET=... MP_WEBHOOK_SECRET=...
+      supabase functions deploy mp-create-preference
+      supabase functions deploy mp-webhook --no-verify-jwt
+      supabase functions deploy mp-oauth --no-verify-jwt
+      supabase functions deploy mp-refunds --no-verify-jwt
+   (SUPABASE_URL, SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY ya los trae Supabase solo.)
+4. Devoluciones automáticas cada 10 minutos (SQL Editor, activar antes la extensión "pg_net"):
+      select cron.schedule('tt-refunds', '*/10 * * * *', $$
+        select net.http_post(url := 'https://TU-PROYECTO.supabase.co/functions/v1/mp-refunds',
+          headers := jsonb_build_object('Authorization', 'Bearer ' || 'TU-SERVICE-ROLE-KEY'))
+      $$);
+   La service_role key va SOLO acá (dentro de Supabase). Nunca en Hostinger ni en config.cjs.
+
+Cada prestador conecta su propia cuenta desde su panel → Perfil → "Conectar Mercado Pago" (no puede ser
+la misma cuenta de TuTiempo). Su llave dura 180 días: la app la renueva sola antes de que venza.
+Los pagos se aprueban o rechazan al instante (sin Rapipago/Pago Fácil), y el webhook confirma el turno
+solo si el pago está aprobado, en pesos, por el monto correcto y entró a la cuenta de ESE prestador.
+El cliente paga la seña + la comisión en un solo pago; Mercado Pago le deposita la seña completa al
+prestador y la comisión va a tu cuenta de TuTiempo (10% del precio por defecto, la cambiás en el Panel).
+Si cancela el prestador, al cliente se le devuelve todo (seña y comisión).
+
+PASO 4 · Subir a Hostinger
+--------------------------
+1. Abrí subir-a-hostinger/config.cjs y reemplazá:
+      supabaseUrl:     la "Project URL"  (Supabase → Project Settings → API)
+      supabaseAnonKey: la clave "anon public" (es pública por diseño; la seguridad está en la base)
+2. Hostinger → hPanel → Administrador de archivos. Recomendado: probá primero en un subdominio
+   (ej. app.tutiempo.com.ar): creálo en Dominios → Subdominios y entrá a su carpeta.
+3. Subí TODO el contenido de subir-a-hostinger/ (incluido .htaccess, que es un archivo oculto:
+   activá "mostrar archivos ocultos"). Tiene que quedar index.html en la raíz de esa carpeta.
+4. hPanel → SSL: activá el certificado gratis para ese dominio o subdominio.
+5. Abrí la dirección: si ya no aparece la franja amarilla "Modo demo", está conectada a tu base.
+Si Supabase te da un dominio propio (custom domain), agregalo en .htaccess dentro de connect-src e img-src.
+
+Qué puede hacer cada uno
+------------------------
+Clientes:
+- Ver a todos los prestadores, buscar y filtrar por rubro. Primero aparecen los más activos: los que
+  más servicios hicieron por la app en los últimos 30 días (se recalcula cada noche; entre iguales, el
+  orden rota cada día; el número no se muestra). Al entrar a un rubro, el banner dice solo ese rubro.
+- Fechas y horarios siempre en hora de Argentina, aunque el celular tenga otra zona horaria.
+- Turnero de 31 días: desde hoy hasta 30 días adelante, igual para todos los prestadores.
+- Perfil del prestador con su foto, rubros y botón Seguir debajo del nombre, y tres pestañas:
+  Servicios (reservar), Trabajos (fotos y videos, se ven como historias) y Reseñas.
+- Reservar pagando SIEMPRE la seña con Mercado Pago (o el total, si el prestador lo pide). El resto
+  lo elige: efectivo en el local o Mercado Pago. Con la seña paga el turno queda confirmado al
+  instante: no hay que confirmar asistencia. El pago muestra la seña (para el prestador) y aparte
+  la comisión de TuTiempo: "Seña $10.000 + Comisión TuTiempo $2.000 = Pagás ahora $12.000".
+  Si reserva varios turnos juntos (cada 2 o 3 semanas), paga ahora la seña y la comisión de cada
+  uno. El que falta pierde lo pagado y listo: no se le cobra el total en las próximas reservas.
+- Si el profesional cancela (o bloquea ese día por vacaciones), le llega el aviso en la app, se le
+  devuelve la seña y en Mis turnos tiene el botón "Reprogramar".
+- Mis turnos: primero el próximo turno, después los avisos y mensajes, después Mis sellos y al final
+  los anteriores. Cuando el prestador marca "Asistió", el turno pasa a Anteriores con el sello sumado.
+- Tarjetas de sellos: una por cada servicio. En el perfil del prestador, al tocar un servicio ve la
+  tarjeta de ese servicio (cuántos sellos tiene y cuántos le faltan). En Mis turnos → "Mis sellos" ve
+  todas. Con la tarjeta de un servicio llena, ese servicio le sale gratis ("Usar mi premio" al pagar);
+  si cancela, los sellos vuelven a esa tarjeta.
+- Dejar reseñas de los turnos a los que fue, poner su foto de perfil y leer los mensajes de sus
+  profesionales en Mis turnos.
+Prestadores:
+- Foto de perfil, subir y borrar trabajos (los clientes los ven como historias).
+- Tarjetas de sellos (Panel → Perfil): las activa, marca qué servicios tienen tarjeta y cuántos sellos
+  necesita cada uno (de 15 a 20). Cada turno de ese servicio que marca "Asistió" le suma 1 sello en
+  esa tarjeta; también puede sumar 1 a mano (máximo uno por día por cliente y por servicio) y canjear
+  el premio en el local desde la ficha del cliente.
+  Los sellos son de cada prestador: no se mezclan ni se pasan a otro.
+- Aceptar o no el resto en efectivo (Panel → Perfil). La seña siempre va por Mercado Pago; el que
+  falta sin aviso pierde lo que pagó (no se le cobra el total en las próximas reservas).
+- Bloquear días o semanas (Horarios → "Bloquear días o semanas"): vacaciones, feriados, cursos.
+  Elige desde/hasta (o 1 día, 1 semana, 2 semanas, 1 mes) y esos días aparecen "Cerrado" en el
+  turnero. Si ya tenía turnos, primero le mostramos la lista; al confirmar se cancelan y a los clientes
+  de la app les llega el aviso. TuTiempo NO devuelve la seña de esos turnos: el prestador llama a cada
+  cliente y le devuelve la seña o le da otro turno (de eso se encarga él). Le queda la lista con el
+  teléfono y la seña que pagó cada uno. Si cancela UN turno suelto, ahí sí se devuelve todo solo.
+- Finanzas: "Caja del día" (lo que entró hoy en efectivo y Mercado Pago, con la seña completa, y el
+  botón "Cerrar la caja", con el efectivo contado para saber si sobra o falta), "Mes" (gastos fijos
+  del mes cargados una sola vez, con "Copiar los gastos del mes pasado", ingresos por día, balance y
+  "Cerrar el mes": el mes cerrado queda bloqueado; con "Desbloquear para editar" se puede cambiar y
+  volver a cerrar, en cualquier mes) y "Año" (balance de cada mes y del año, de 2025 a 2028).
+- Compras de productos: solo desde Productos → "Compré más" (cantidad y cuánto pagó): suma el stock y
+  entra sola en los gastos del mes.
+- Mandar mensajes a sus clientes: mensajes listos para elegir (te extrañamos, turnos libres, promoción,
+  aviso, gracias), editables, con {nombre} de cada cliente, eligiendo a quién con checks (o todos).
+  Los grupos rápidos (fieles, cumplen este mes, hace 5+ semanas) se agregan con un toque y se sacan
+  con otro. Les llega como notificación dentro de la app; a quien no tiene la app no le llega.
+- Avisos automáticos en la app (Panel → Perfil): confirmación al reservar, recordatorio 24 h y 2 h
+  antes, gracias y pedido de reseña después del turno, y saludo de cumpleaños. Se pueden apagar y
+  editar. NO se usa WhatsApp: no hay costo por mensaje.
+- Agenda de los próximos 31 días (incluye hoy), semana por semana. La barra de secciones tiene
+  flechas para pasar de una a otra; Finanzas está al lado de Caja.
+- Agregar contactos a mano (o desde los contactos del celular, en Android), con celular y cumpleaños.
+- Indicaciones antes de venir por servicio, descanso entre turnos, ficha del cliente por rubro,
+  turnos que se repiten, caja, productos, gastos y finanzas (lo cargado a mano va en una sola línea).
+  Al cargar servicios, cada campo dice qué es (nombre, duración en minutos, precio). Para cerrar un
+  día, se destilda y aparece "Cerrado".
+- El teléfono del prestador es privado: solo lo ve TuTiempo, nunca los clientes.
+TuTiempo no guarda dinero de nadie: no hay saldo ni cashback.
+
+Fotos de perfil: se guardan en el bucket "avatars" de Supabase (lo crea TODO_EN_UNO.sql). La app las
+achica a 640 px y las vuelve JPEG antes de subirlas, así pesan poco y no llevan la ubicación del celular.
+
+Seguridad que ya trae
+---------------------
+- RLS en todas las tablas: cada cliente ve solo sus turnos; cada prestador solo su agenda, clientes,
+  productos, gastos y finanzas. Probado con usuarios reales en una base Postgres.
+- Precios, señas, descuentos y forma de pago los valida la base. El navegador no puede cambiarlos.
+- Dos personas no pueden reservar el mismo horario (restricción a nivel base: probado con 60 a la vez).
+- Seña obligatoria en toda reserva (salvo el premio de la tarjeta de sellos, que es gratis): nadie
+  puede ocupar horarios sin pagar. El "resto en efectivo" solo si el prestador lo acepta.
+- Panel admin: solo cuentas de la tabla app_admins; la comisión solo se cambia con su función.
+  Notas privadas, gastos y cierres del balance: tablas sin acceso desde la app (ni siquiera para el
+  admin): solo se leen y escriben con funciones que verifican que sea admin.
+- La comisión la calcula la base al reservar y la Edge Function la cobra como "marketplace_fee":
+  el navegador no puede cambiarla. Al eliminar un prestador, su llave de Mercado Pago se guarda hasta
+  hacer las devoluciones pendientes y después se borra sola.
+- Mensajes: solo a clientes propios, hasta 300 por envío y 600 por día por prestador; nadie puede
+  insertarlos a mano ni leer los de otro.
+- Fotos: cada uno solo sube a su carpeta y solo puede usar su propia foto (lo verifica la base).
+- Sellos: solo los suma o descuenta la base (al marcar Asistió, a mano o al canjear); nadie puede
+  editarlos a mano. Cada turno suma una sola vez, el turno de premio no suma, y el premio exige la
+  tarjeta llena de ESE servicio.
+- Orden del listado: la actividad la calcula solo la base con turnos de la app pagados y atendidos;
+  un prestador no puede cambiarla ni inflarla cargando turnos a mano.
+- DNI en un depósito privado: solo lo ve un admin. Tokens de Mercado Pago solo los leen las Edge Functions.
+- Webhook de Mercado Pago con verificación de firma y consulta del pago real antes de confirmar.
+- Cuentas: contraseñas de 8+ caracteres con letras y números (no puede contener tu email), medidor de
+  seguridad, bloqueo de 5 intentos fallidos en pantalla además de los límites de Supabase, links de
+  activación y recuperación de un solo uso que vencen, y "recuperar contraseña" responde igual exista
+  o no el email (nadie puede averiguar quién tiene cuenta). La dirección se limpia después de usar un link.
+- Límites anti-abuso: máximo 5 reservas sin pagar a la vez y 20 intentos por día por cliente;
+  fichas y mensajes con tamaño máximo; trabajos solo dentro de la carpeta del prestador.
+- Las reseñas las firma la base (nombre + inicial) y solo puede reseñar quien fue al turno.
+- Ninguna función interna de la base se puede llamar desde el navegador (permisos cerrados por defecto).
+- La app escapa todo texto que escribe la gente (nombres, reseñas, notas): probado con intentos de inyección.
+- Si algo inesperado falla, la app muestra "Algo salió mal · Volver al inicio" en vez de quedar en blanco.
+- Hostinger: HTTPS forzado, CSP (solo scripts propios, conexiones solo a Supabase), sin iframes, sin listado
+  de carpetas, sin acceso a archivos ocultos.
+
+Escala (millones de usuarios y prestadores)
+-------------------------------------------
+- Listados por cursor con índices: 3 ms por página con 200.000 prestadores y 1.000.000 de turnos.
+- Búsqueda (texto completo + tolerancia a errores de tipeo): menos de 100 ms con 200.000 prestadores.
+- La app nunca descarga "todo": pide de a 12 prestadores, y el panel solo los datos de ese prestador.
+- Hostinger solo sirve archivos estáticos (sin servidor que se caiga); la carga la absorbe Supabase.
+  Con mucho tráfico: subir el plan de Supabase (Compute) y activar el pooler. No hay que cambiar código.
+
+Pruebas que se corrieron (carpeta pruebas/)
+-------------------------------------------
+- test_db.py: 244 controles de seguridad, reservas, seña y comisión aparte (también varios turnos
+  juntos), panel admin (notas privadas, eliminar prestador, balance y cierres de mes y año), bloqueo de días con cancelación y aviso, cierres de caja, sellos por servicio,
+  avisos en la app, orden por actividad, turnero de 31 días, mensajes, fotos, descansos, dinero, reseñas,
+  bajas y paginación.
+- test_load.py: carga de 200.000 prestadores, 1.000.000 de turnos y 60 reservas simultáneas.
+- crawl.js: entra a 37 pantallas y toca cada botón uno por uno (471 toques): ningún error, ningún
+  botón que lleve a otro lado. audit_clicks.py: cada botón tiene su acción y cada formulario su envío.
+  Correlos cada vez que se agrega algo (ver "Cómo está armado el código").
+- e2e.js + e2e_server.js: 107 pasos en un navegador real contra la base real (listado, crear cuenta,
+  activar con el link, ingresar con contraseña, recuperar y crear contraseña nueva, login por código,
+  reserva con seña + comisión aparte y resto en efectivo o Mercado Pago, cierre de caja
+  del día y del mes, bloqueo de un día con turnos (cancelación, aviso y lista para que el prestador llame), tarjeta de
+  sellos por servicio y premio gratis, orden por actividad, bloqueo de semanas, panel admin
+  (resumen simple, prestadores por rubro, notas privadas, eliminar, balance con gastos y cierre),
+  comisión con decimales, descanso entre turnos,
+  fotos de perfil, mensajes a clientes,
+  panel del prestador, cancelación con devolución y ataques desde el navegador).
+Cómo está armado el código (para agregar cosas sin romper)
+---------------------------------------------------------
+La app está separada en capas dentro de app.cjs: (1) estado S y datos; (2) acceso a datos con dos
+implementaciones con las mismas funciones: demoApi (modo demo) y liveApi (Supabase), y toda
+escritura pasa por api.m.* → saved(); (3) vistas v*() que solo arman HTML (con esc() para todo texto);
+(4) un único manejador de toques por data-act / data-go / data-btab y uno de formularios por id.
+Para agregar una función: una vista o un bloque en su vista, un data-act nuevo con su rama en el
+manejador, y su api.m.* en demo y en vivo. En la base: una migración idempotente nueva y su permiso
+explícito (todo cerrado por defecto). Después: test_db.py, e2e.js, audit_clicks.py y crawl.js.
+
+Lo único simulado en las pruebas: el servidor de Auth y Mercado Pago (no hay cuentas reales).
+Antes de abrir al público: hacé una compra real chica con tu cuenta de Mercado Pago de prueba.

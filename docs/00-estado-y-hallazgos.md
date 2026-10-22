@@ -1,0 +1,99 @@
+# Estado de la versión 31 y hallazgos
+
+Auditoría de Bruno (con Claude) sobre el paquete del cliente, octubre 2026.
+
+## Qué se verificó
+
+| Qué | Resultado |
+| --- | --- |
+| Migraciones `0001`–`0006` vs `TODO_EN_UNO.sql` | Idénticas |
+| Carga del SQL en Postgres 16 | Sin errores: 34 tablas, 45 políticas, 76 funciones |
+| `pruebas/test_db.py` | 243 de 244. La que falla es la prueba (ver H09), no la app |
+| RLS | Activa en todas las tablas. Funciones `security definer` con `search_path`. Nada interno ejecutable por `anon` |
+| `vendor/supabase.js` | Idéntico byte a byte al oficial `@supabase/supabase-js` 2.45.4 |
+| `src/prototipo.html` (reconstruido) | Mismo comportamiento que el `app.cjs` del cliente: crawl (465 toques, 0 errores), audit_clicks y recorrido en navegador idénticos |
+| `tools/build.mjs` → `dist/` | Mismo comportamiento que el paquete del cliente en navegador real |
+| Edge Functions de Mercado Pago | Bien diseñadas, con los errores de abajo |
+
+## Hallazgos
+
+### H01 · Alta · Devolución que nunca se ejecuta (verificado)
+**Caso:** el cliente paga después de que venció su reserva temporal (10 min) y otro ya tomó ese horario.
+`confirm_payment` marca el turno `cancelled_provider` con `refund_pending`, pero **no guarda `mp_payment_id`**
+(solo lo guarda en el primer turno *confirmado*: `case when ok + failed = 0`). `mp-refunds` busca el pago por
+`mp_payment_id` (o por la serie) y no lo encuentra: la devolución queda pendiente para siempre.
+Lo mismo pasa en una serie si el primer turno es el que falla.
+**Reproducción:** `pruebas/reproducir_errores_cobro.py` (caso 1).
+
+### H02 · Alta · Pago aprobado sin turno ni devolución (verificado)
+**Caso:** el prestador cancela un turno en estado `hold` (o bloquea ese día, o el admin lo elimina) y el cliente
+termina de pagar igual. `confirm_payment` solo acepta turnos `hold`/`expired` → `bookings_not_found` → el webhook
+responde 409 y Mercado Pago reintenta indefinidamente. La plata queda en la cuenta del prestador, sin turno ni devolución.
+**Reproducción:** `pruebas/reproducir_errores_cobro.py` (caso 2).
+
+### H03 · Media · Monto distinto deja el pago en el limbo
+`confirm_payment` lanza `amount_mismatch` → mismo efecto que H02.
+
+**Arreglo de H01–H03 (uno solo):** tabla `payments` (id de pago de MP único, ids de turnos, monto, comisión,
+estado, fecha) como fuente de verdad del cobro. `confirm_payment` **nunca falla** para un pago aprobado:
+registra el pago y, si un turno ya no está disponible, fue cancelado o el monto no coincide, lo marca para
+devolver (o para revisión manual) en lugar de lanzar error. `mp-refunds` toma el id de pago de `payments`.
+Idempotencia por id de pago.
+
+### H04 · Media · Contracargos y devoluciones hechas en Mercado Pago se ignoran
+`mp-webhook` solo procesa `status = approved`. Si el pago pasa a `refunded`, `cancelled` o `charged_back`,
+el turno sigue confirmado y pagado. Hay que reflejarlo en el turno y en `payments`.
+
+### H05 · Media · Devoluciones fallidas sin aviso ni registro
+`mp-refunds` reintenta cada 10 minutos sin límite y sin avisar (por ejemplo, prestador sin saldo). Tampoco guarda
+el id ni la fecha de la devolución hecha. Registrar cada intento y resultado, y mostrar las fallidas en el panel admin
+("Para revisar").
+
+### H06 · Media · A verificar en la primera prueba real
+`mp-webhook` exige la firma `x-signature` con `MP_WEBHOOK_SECRET`. Confirmar con un pago de prueba que Mercado Pago
+firma con la clave de la aplicación de TuTiempo los avisos de pagos cobrados con la llave del prestador
+(`notification_url` de la preferencia). Si no, ningún turno se confirmaría.
+
+### H07 · Media · Recordatorios solo dentro de la app
+`send_scheduled_notices` crea avisos en `client_messages`: quien no abre la app no se entera del recordatorio de
+24 h / 2 h. Agregar envío por email (y opcionalmente Web Push). Afecta directamente las faltas.
+
+### H08 · Media · Precios ×100 con coma decimal (heredado del prototipo)
+Los campos de precio usan `parseInt(valor.replace(/\D/g, ""))`: "12500,50" se guarda como 1.250.050.
+Validar enteros en pesos y rechazar decimales con mensaje claro (editor de servicios, productos, gastos, caja, admin).
+
+### H09 · Baja · Prueba que depende de la fecha
+`test_db.py` línea ~259 ("repetición cada 6 semanas permitida") reserva un horario que otra prueba anterior ya
+ocupó según el día en que se corre. Usar un horario libre garantizado.
+
+### H10 · Media · DNI en los metadatos de la cuenta
+El registro de prestador manda `provider_reg` (con el DNI) en `user_metadata` de Supabase Auth. Queda en
+`auth.users` y en el token de sesión hasta que se crea el perfil. El DNI tiene que ir directo a
+`provider_private` por función del servidor, nunca por metadatos.
+
+### H11 · Baja · "Identidad verificada" siempre visible
+En el perfil público la insignia no depende de `dni_verified`. Riesgo bajo (solo se ven perfiles activados por un
+admin), pero debe mostrarse según el dato.
+
+### H12 · Baja · Se puede conectar la cuenta de Mercado Pago de TuTiempo como prestador
+El LEEME dice que no se puede, pero `mp-oauth` no lo controla. Comparar `tok.user_id` con el id de usuario de
+Mercado Pago de TuTiempo (variable `MP_OWNER_USER_ID`) y rechazar.
+
+### H13 · Baja · Llaves y secretos
+- Las llaves de Mercado Pago (`provider_secrets`) se guardan sin cifrar. Evaluar Supabase Vault.
+- La tarea programada de devoluciones lleva la `service_role` key escrita en el SQL del cron: guardarla en Vault.
+- `mp_oauth_states` no se limpia si el prestador abandona la conexión: borrar estados de más de 1 día.
+
+### H14 · Alta (antes de abrir) · Negocios reales en datos de ejemplo
+`ejemplos.sql` y el array `P` de la demo usan nombres, direcciones y hasta un teléfono de negocios reales de
+Olavarría. Esos perfiles se pueden reservar y fallan (no tienen Mercado Pago). Reemplazar por datos ficticios y
+no cargar ejemplos en producción.
+
+### H15 · Baja · Contradicciones del LEEME
+- Clientes: "si el profesional bloquea el día se devuelve la seña y hay botón Reprogramar". Prestadores y pruebas
+  (v31): TuTiempo **no** devuelve la seña en bloqueos de días; el prestador la arregla. Vale la segunda.
+- "No puede ser la misma cuenta de TuTiempo": no está implementado (H12).
+
+### H16 · Baja · Mantenimiento
+- `vendor/supabase.js` 2.45.4 es viejo: actualizar en un bloque propio, con todas las pruebas.
+- Variables internas con letras sueltas en `prototipo.html`: renombrar de a poco.
