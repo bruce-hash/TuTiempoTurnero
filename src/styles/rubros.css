@@ -1,0 +1,42 @@
+.h1,.hero h1,.sec-h h2,.cb h3,.bk-h,.segtile b,.wc-top b{font-family:var(--font-d);text-transform:var(--d-tt);letter-spacing:var(--d-ls);font-weight:var(--d-w)}
+.lbl,.catchip,footer h4,.pk-gl,.btabs button,.seg3 button{font-family:var(--font-d)}
+.btn{border-radius:var(--r-btn);text-transform:var(--btn-tt);letter-spacing:var(--btn-ls);font-family:var(--btn-font);font-size:var(--btn-fs)}
+.card,.panel,.picker,.tcard,.kpi,.btabs,.empty{border-radius:var(--r)}
+.btabs button{border-radius:max(calc(var(--r) - 4px),3px)}
+.sec-h h2{font-size:22px}
+.cb h3{font-size:17px}
+.ph .badge{font-family:var(--font)}
+.card{transition:border-color .15s,transform .15s}
+.card:hover{border-color:var(--brand-line)}
+body[data-seg="b"] .hero h1 em,.seg-b .hero h1 em{background:linear-gradient(90deg,#fff 0%,#c8c8cc 60%,#7d7d84 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+body[data-seg="b"] .btn-ghost{background:transparent;border-color:#3a3a3f}
+body[data-seg="b"] .btn-ghost:hover{border-color:#fff}
+body[data-seg="b"] .btn-pri:hover{background:#d9d9d9}
+body[data-seg="b"] .h1{font-size:22px}
+body[data-seg="b"] .ph-i{font-weight:500;letter-spacing:.24em;font-size:34px;padding-left:.24em}
+body[data-seg="b"] .lbl{letter-spacing:.16em}
+.seg-b .ph-i{font-weight:500;letter-spacing:.24em;font-size:34px;padding-left:.24em}
+.seg-b .btn-pri:hover{background:#d9d9d9}
+body[data-seg="p"] .hero h1 em,.seg-p .hero h1 em{font-style:italic}
+body[data-seg="p"] .ph-i,.seg-p .ph-i{font-style:italic;font-weight:500}
+.hero h1{font-family:var(--font-d)}
+/* Selector de segmento en el inicio */
+.segpick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:22px auto 0;max-width:900px}
+@media (min-width:700px){.segpick{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.segtile{position:relative;display:grid;justify-items:start;align-content:start;gap:3px;text-align:left;padding:14px 13px 12px;min-height:128px;border:1px solid var(--hero-bd);background:var(--hero-bg);color:var(--hero-fg);border-radius:var(--r);overflow:hidden;font-family:var(--font);transition:transform .15s,box-shadow .15s}
+.segtile:hover{transform:translateY(-2px)}
+.segtile .st-k{font-size:20px;line-height:1;margin-bottom:6px}
+.segtile b{font-size:20px;line-height:1.1}
+.segtile span{font-size:12.5px;color:var(--hero-muted)}
+.segtile em{margin-top:auto;padding-top:10px;font-style:normal;font-size:12px;font-weight:600;font-family:var(--btn-font);text-transform:var(--btn-tt);letter-spacing:var(--btn-ls)}
+.segtile em::after{content:" →"}
+.segtile[aria-pressed="true"]{outline:2px solid currentColor;outline-offset:2px}
+.segtile[aria-pressed="true"] em::after{content:""}
+.seg-b.segtile b{font-size:18px}
+@media (max-width:380px){.segtile{padding:14px 12px 12px;min-height:128px}.segtile b{font-size:17px}.seg-b.segtile b{font-size:15px}}
+.hero-all{display:inline-block;margin-top:14px;background:none;border:0;color:var(--hero-fg);text-decoration:underline;text-underline-offset:3px;font-size:14px;font-weight:600}
+body[data-seg="b"] .booked{background:radial-gradient(120% 90% at 50% 125%,rgba(74,222,128,.22),transparent 62%),#050505;border:1px solid var(--ok-line)}
+body[data-seg="b"] .bk-ic{background:var(--ok);color:#03140a}
+body[data-seg="b"] .booked .note{color:#a7f3c4}
+body[data-seg="p"] .booked{background:linear-gradient(160deg,#2f7d4f,#1f5c39)}
+/* ===== Marketplace multirrubro ===== */

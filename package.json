@@ -2,18 +2,29 @@
   "name": "tutiempo",
   "private": true,
   "description": "TuTiempo · turnos online (Supabase + Hostinger)",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
-    "build": "node tools/build.mjs",
-    "build:dev": "node tools/build.mjs --no-minify",
-    "test:crawl": "node pruebas/crawl.js src/prototipo.html",
-    "test:clicks": "python3 pruebas/audit_clicks.py src/prototipo.html",
+    "dev": "vite",
+    "build": "vite build",
+    "build:test": "vite build --mode test",
+    "preview": "vite preview",
+    "test:crawl": "vite build --mode test --logLevel warn && node pruebas/crawl.js dist-test",
+    "test:clicks": "python3 pruebas/audit_clicks.py src",
+    "test:sin-demo": "vite build --logLevel warn && node pruebas/sin_demo.mjs",
+    "test:mudanza": "node tools/mudanza/verificar.mjs",
+    "test:e2e": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/e2e.js {url} {pg}",
+    "test:comparar": "vite build --logLevel warn && vite build --mode test --logLevel warn && node pruebas/comparar.mjs",
     "sql:build": "node tools/todo_en_uno.mjs",
     "sql:check": "node tools/todo_en_uno.mjs --check"
   },
   "devDependencies": {
-    "esbuild": "0.23.1",
+    "@babel/parser": "7.29.9",
+    "@babel/traverse": "7.29.10",
     "jsdom": "24.1.3",
     "pg": "8.12.0",
-    "playwright": "1.56.0"
+    "playwright": "1.56.0",
+    "vite": "8.3.4"
   }
 }

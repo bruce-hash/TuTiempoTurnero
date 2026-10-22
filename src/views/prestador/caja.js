@@ -1,0 +1,36 @@
+import { money } from "../../lib/dinero.js";
+import { esc } from "../../lib/dom.js";
+import { nowHM } from "../../lib/fechas.js";
+import { S } from "../../state.js";
+import { store } from "../../store.js";
+
+const MEDIOS = ["Efectivo", "Mercado Pago"];
+export function vCaja(e) {
+  const a = S.walk;
+  const t = a.reduce((i, l) => i + l.precio + l.propina, 0);
+  const s = S.earnToday;
+  const n = {};
+  a.forEach((i) => (n[i.medio] = (n[i.medio] || 0) + i.precio + i.propina));
+  const o = S.walkOpen
+    ? `<form class="panel" id="fWalk" novalidate style="background:var(--bg)"><p class="lbl">Servicio sin turno o venta</p>
+    <div class="f"><label for="wsv">¿Qué hiciste?</label><select id="wsv"><optgroup label="Servicios">${e.svcs.map((i, l) => `<option value="${l}">${esc(i[0])} · ${money(i[2])}</option>`).join("")}<option value="otro">Otro servicio</option></optgroup><optgroup label="Productos">${store.PRODS.map((i, l) => `<option value="p${l}" ${i.stock ? "" : "disabled"}>${esc(i.n)} · ${money(i.p)}${i.stock ? ` (${i.stock} en stock)` : " · sin stock"}</option>`).join("")}</optgroup></select></div>
+    <div class="f" id="wotroBox" hidden><label for="wotro">¿Qué servicio?</label><input id="wotro" placeholder="Ej: Diseño en la ceja" autocomplete="off"></div>
+    <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+     <div class="f"><label for="wpr">Cobraste</label><input id="wpr" inputmode="numeric" value="${(e.svcs[0] || [0, 0, 0])[2]}" autocomplete="off"></div>
+     <div class="f"><label for="whr">Hora</label><input id="whr" type="time" value="${nowHM()}"></div></div>
+    <div class="f"><label>Medio de pago</label><div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))">${MEDIOS.map((i, l) => `<button type="button" class="opt" data-medio="${i}" aria-pressed="${(S.walkMedio || "Efectivo") === i}">${i}</button>`).join("")}</div></div>
+    <div class="f"><label for="wcl">Cliente (opcional)</label><input id="wcl" placeholder="Nombre" autocomplete="off"></div>
+    <div class="err" id="werr"></div>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="walkClose">Cancelar</button><button class="btn btn-pri" type="submit">Guardar servicio</button></div>
+    <p class="note" style="margin-top:8px">Los servicios sin turno no pagan comisión.</p></form>`
+    : '<button class="btn btn-pri btn-block" data-act="walkOpen">+ Cargar servicio sin turno o venta</button>';
+  return `<div class="panel stack" style="gap:12px"><p class="lbl" style="margin:0">Caja de hoy</p>
+   <div class="stats2"><div><b>${S.jobsToday + a.length}</b><span>Servicios</span></div><div><b>${money(t)}</b><span>En el local, sin turno</span></div><div><b>${money(s)}</b><span>Por TuTiempo</span></div></div>
+   <div class="sum"><div class="tot" style="border-top:0;padding-top:0"><span>Total del día</span><span style="color:var(--ok)">${money(t + s)}</span></div>
+    ${Object.keys(n)
+      .map((i) => `<div><span>${i}</span><span>${money(n[i])}</span></div>`)
+      .join("")}</div>
+   ${o}
+   ${a.length ? `<ul class="ag">${a.map((i, l) => `<li><span class="ag-t">${esc(i.hora)}</span><div><b>${i.kind === "prod" ? "🧴 " : ""}${esc(i.svc)}</b><span>${esc(i.cliente || "Cliente sin turno")} · ${esc(i.medio)}</span></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(i.precio)}</b><button class="xbtn" data-act="walkDel" data-i="${l}" aria-label="Borrar">✕</button></span></li>`).join("")}</ul>` : '<p class="note">Cuando te cae alguien sin turno, cargalo acá en 10 segundos. Así tus estadísticas y tu caja quedan completas.</p>'}
+  </div>`;
+}
