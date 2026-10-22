@@ -14,7 +14,8 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
 1. supabase.com → New project → nombre `tutiempo-prueba`, región São Paulo. El plan gratuito alcanza para probar
    (se pausa tras una semana sin uso; se reactiva desde el panel).
 2. Database → Extensions: activar `pg_cron` y `pg_net`.
-3. Cargar la base con la CLI (recomendado) o pegando `supabase/TODO_EN_UNO.sql` en el SQL Editor.
+3. Cargar la base con la CLI (recomendado: `supabase link --project-ref <proyecto-prueba>` y `supabase db push`, que aplica
+   `supabase/migrations/` en orden) o pegando `supabase/TODO_EN_UNO.sql` en el SQL Editor.
    Usá siempre la versión del repo **después** de los arreglos de Claude Code.
 4. **No** cargues `ejemplos.NO-USAR-EN-PRODUCCION.sql`: creá 1 o 2 prestadores de prueba propios desde la app.
 5. Auth: seguir el PASO 2 del LEEME (URL del subdominio, plantillas de email, Google). Para prueba alcanza el email de Supabase.

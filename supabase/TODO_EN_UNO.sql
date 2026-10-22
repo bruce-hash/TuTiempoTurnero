@@ -1,6 +1,6 @@
 -- TuTiempo · esquema completo en un solo archivo (pegar en Supabase → SQL Editor → Run)
 
--- ===================== 0001_schema.sql =====================
+-- ===================== 20261001000001_schema.sql =====================
 -- =====================================================================
 -- TuTiempo · 0001 · Esquema
 -- Turnos online multirrubro. Pensado para escalar: todo lo que se lista
@@ -498,7 +498,7 @@ create table if not exists public.admin_closings (
 -- Turnos cancelados por bloquear días: TuTiempo NO devuelve la seña; el prestador llama al cliente y se la devuelve o le da otro turno.
 alter table public.bookings add column if not exists settle_by_provider boolean not null default false;
 
--- ===================== 0002_triggers.sql =====================
+-- ===================== 20261001000002_triggers.sql =====================
 -- =====================================================================
 -- TuTiempo · 0002 · Funciones auxiliares y triggers
 -- =====================================================================
@@ -696,7 +696,7 @@ create trigger bookings_activity after update of status on public.bookings for e
 update public.provider_categories pc set rank_key = p.shuffle_key - p.activity
   from public.providers p where p.id = pc.provider_id and pc.rank_key is distinct from p.shuffle_key - p.activity;
 
--- ===================== 0003_security.sql =====================
+-- ===================== 20261001000003_security.sql =====================
 -- =====================================================================
 -- TuTiempo · 0003 · Seguridad: RLS en TODAS las tablas + permisos mínimos
 -- Regla general: el navegador usa la clave pública (anon). Lo que no está
@@ -960,7 +960,7 @@ alter table public.admin_expenses enable row level security;
 alter table public.admin_closings enable row level security;
 revoke all on public.admin_notes, public.admin_expenses, public.admin_closings from anon, authenticated;
 
--- ===================== 0004_functions.sql =====================
+-- ===================== 20261001000004_functions.sql =====================
 -- =====================================================================
 -- TuTiempo · 0004 · Funciones del servidor (RPC)
 -- Todo lo que mueve dinero o valida horarios se hace acá, nunca en el navegador.
@@ -2115,7 +2115,7 @@ grant execute on function public.confirm_payment(bigint[],text,int), public.expi
   public.refresh_activity(), public.send_scheduled_notices()
   to service_role;
 
--- ===================== 0005_storage_seed.sql =====================
+-- ===================== 20261001000005_storage_seed.sql =====================
 -- =====================================================================
 -- TuTiempo · 0005 · Archivos (Storage), datos base y tareas programadas
 -- =====================================================================
@@ -2176,7 +2176,7 @@ drop policy if exists avatars_remove on storage.objects;
 create policy avatars_remove on storage.objects for delete to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 
--- ===================== 0006_mercadopago.sql =====================
+-- ===================== 20261001000006_mercadopago.sql =====================
 -- =====================================================================
 -- TuTiempo · 0006 · Soporte para Mercado Pago (OAuth de prestadores)
 -- Solo lo usan las Edge Functions con service_role. Sin políticas = nadie más lo ve.

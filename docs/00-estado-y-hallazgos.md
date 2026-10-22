@@ -6,7 +6,7 @@ Auditoría de Bruno (con Claude) sobre el paquete del cliente, octubre 2026.
 
 | Qué | Resultado |
 | --- | --- |
-| Migraciones `0001`–`0006` vs `TODO_EN_UNO.sql` | Idénticas |
+| Migraciones `0001`–`0006` (hoy `20261001000001`–`20261001000006`) vs `TODO_EN_UNO.sql` | Idénticas |
 | Carga del SQL en Postgres 16 | Sin errores: 34 tablas, 45 políticas, 76 funciones |
 | `pruebas/test_db.py` | 243 de 244. La que falla es la prueba (ver H09), no la app |
 | RLS | Activa en todas las tablas. Funciones `security definer` con `search_path`. Nada interno ejecutable por `anon` |
@@ -62,7 +62,7 @@ firma con la clave de la aplicación de TuTiempo los avisos de pagos cobrados co
 Los campos de precio usan `parseInt(valor.replace(/\D/g, ""))`: "12500,50" se guarda como 1.250.050.
 Validar enteros en pesos y rechazar decimales con mensaje claro (editor de servicios, productos, gastos, caja, admin).
 
-### H09 · Baja · Prueba que depende de la fecha
+### H09 · Baja · Prueba que depende de la fecha (resuelto en el Bloque 0)
 `test_db.py` línea ~259 ("repetición cada 6 semanas permitida") reserva un horario que otra prueba anterior ya
 ocupó según el día en que se corre. Usar un horario libre garantizado.
 

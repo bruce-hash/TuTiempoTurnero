@@ -23,8 +23,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   (`e`, `a`, `t`). Cuando toques una función, renombrá sus variables con nombres claros en ese mismo cambio.
 - `src/static/`: archivos que se copian tal cual a Hostinger (`.htaccess`, fuentes, `vendor/supabase.js`, `config.example.js`).
 - `tools/build.mjs`: genera `dist/` (lo que se sube a Hostinger). `dist/` no se versiona.
-- `supabase/migrations/`: migraciones idempotentes en orden. `supabase/TODO_EN_UNO.sql` es su concatenación exacta:
-  si cambiás una migración, regenerá TODO_EN_UNO y verificá que sigan siendo idénticos.
+- `supabase/migrations/`: migraciones idempotentes en orden, con el formato de la CLI de Supabase
+  (`AAAAMMDDHHMMSS_nombre.sql`, por ejemplo `20261001000001_schema.sql`). `supabase/TODO_EN_UNO.sql` es su concatenación
+  exacta: si cambiás o agregás una migración, regeneralo con `npm run sql:build` y verificá con `npm run sql:check`
+  (el CI falla si no son idénticos).
 - `supabase/functions/`: Edge Functions de Mercado Pago (`_shared/util.ts` compartido).
 - `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: usa negocios reales de Olavarría. Solo para pruebas locales.
 - `pruebas/`: pruebas del cliente + `reproducir_errores_cobro.py` (reproduce los 2 errores de cobro conocidos).
@@ -43,7 +45,8 @@ Una función nueva = vista + `data-act` + rama en el manejador + `api.m.*` en de
 - **Seguridad:** RLS en toda tabla nueva; permisos cerrados por defecto y abiertos explícitamente; funciones
   `security definer` siempre con `set search_path`. Nada de `service_role` en el frontend.
 - **Hora:** todo "hoy/ahora" en `America/Argentina/Buenos_Aires`, calculado en el servidor o con `NOW()` de la app.
-- **Migraciones nuevas:** archivo nuevo (`0007_...sql`, `0008_...sql`), idempotente, sin borrar datos.
+- **Migraciones nuevas:** archivo nuevo con fecha y hora actuales (`supabase migration new <nombre>` o a mano, por
+  ejemplo `20261022150000_payments.sql`; siempre posterior a la última), idempotente, sin borrar datos. Después, `npm run sql:build`.
 - **Producción:** nunca toques producción ni corras SQL contra un proyecto remoto. Bruno despliega.
 - **Secretos:** nunca en el repo. `config.js` real, claves de Mercado Pago y de Supabase quedan fuera de git.
 
@@ -55,17 +58,21 @@ Una función nueva = vista + `data-act` + rama en el manejador + `api.m.*` en de
   Nunca commit directo a `main`. Commits chicos, en español.
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
-  `pruebas/test_db.py` (base), `npm run test:crawl` y `npm run test:clicks` (frontend), `node tools/build.mjs`.
+  `npm run sql:check` y `pruebas/test_db.py` (base), `npm run test:crawl` y `npm run test:clicks` (frontend), `node tools/build.mjs`.
+  El workflow `.github/workflows/pruebas.yml` corre lo mismo en cada PR.
+- La cantidad de toques del crawl cambia con la fecha y la hora (la agenda de la demo depende de "hoy"): lo que importa
+  es 0 errores y 0 destinos equivocados.
 - No inventes reglas de negocio: si algo no está en el SQL ni en `docs/01-decisiones.md`, preguntá.
 - Textos de interfaz en español rioplatense (voseo), con el tono actual de la app.
 
 ## Cómo correr las pruebas de base localmente
 
 ```bash
-# Postgres 16 local (las pruebas usan btree_gist, pg_trgm, unaccent)
+# Postgres 16 local (las pruebas usan btree_gist, pg_trgm, unaccent) y el driver: pip install "psycopg[binary]"
+npm run sql:check                                # TODO_EN_UNO.sql idéntico a supabase/migrations/
 createdb tt
-psql -d tt -f pruebas/supabase_emulation.sql     # imita lo que Supabase ya trae (roles, auth, storage)
-psql -d tt -f supabase/TODO_EN_UNO.sql
+psql -v ON_ERROR_STOP=1 -d tt -f pruebas/supabase_emulation.sql     # imita lo que Supabase ya trae (roles, auth, storage)
+psql -v ON_ERROR_STOP=1 -d tt -f supabase/TODO_EN_UNO.sql
 python3 pruebas/test_db.py "host=... port=... dbname=tt user=postgres"
 python3 pruebas/reproducir_errores_cobro.py "host=... dbname=OTRA_BASE_LIMPIA user=postgres"
 ```

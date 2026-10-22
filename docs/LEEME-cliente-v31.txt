@@ -28,7 +28,7 @@ PASO 1 · Crear la base en Supabase (10 minutos)
    recordatorios y saludos de cumpleaños dentro de la app y recalcular cada noche el orden del listado.
 3. SQL Editor → New query → pegá TODO el contenido de supabase/TODO_EN_UNO.sql → Run.
    Tiene que terminar sin errores. Crea tablas, índices, seguridad (RLS), funciones, rubros y la ciudad.
-4. Si activaste pg_cron después del paso 3, volvé a correr solo el final de 0005_storage_seed.sql.
+4. Si activaste pg_cron después del paso 3, volvé a correr solo el final de supabase/migrations/20261001000005_storage_seed.sql.
    ¿YA CARGASTE UNA VERSIÓN ANTERIOR? Volvé a pegar y correr TODO_EN_UNO.sql completo: actualiza
    tablas, funciones y permisos sin borrar prestadores, clientes ni turnos (probado sobre una base con datos).
    Versión 31: además volvé a publicar las 4 Edge Functions de Mercado Pago (comandos del PASO 3,

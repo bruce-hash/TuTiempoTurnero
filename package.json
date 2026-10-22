@@ -6,7 +6,9 @@
     "build": "node tools/build.mjs",
     "build:dev": "node tools/build.mjs --no-minify",
     "test:crawl": "node pruebas/crawl.js src/prototipo.html",
-    "test:clicks": "python3 pruebas/audit_clicks.py src/prototipo.html"
+    "test:clicks": "python3 pruebas/audit_clicks.py src/prototipo.html",
+    "sql:build": "node tools/todo_en_uno.mjs",
+    "sql:check": "node tools/todo_en_uno.mjs --check"
   },
   "devDependencies": {
     "esbuild": "0.23.1",
