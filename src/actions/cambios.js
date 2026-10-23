@@ -9,101 +9,105 @@ import { comm } from "../views/prestador/comunidad.js";
 import { fillMsg, updMsgCount } from "../views/prestador/mensajes.js";
 import { readSvcEditor } from "../views/prestador/perfil.js";
 
-document.addEventListener("change", (e) => {
-  if (e.target.dataset && e.target.dataset.add != null) {
-    const n = +e.target.dataset.add;
-    S.adds = (S.adds || []).filter((o) => o !== n);
-    if (e.target.checked) {
-      S.adds.push(n);
+// cambios en casillas y selectores: adicionales del servicio, acciones registradas por id, días y franjas de
+// Horarios, avisos automáticos, destinatarios de mensajes y rubros del editor de servicios
+document.addEventListener("change", (ev) => {
+  if (ev.target.dataset && ev.target.dataset.add != null) {
+    const index = +ev.target.dataset.add;
+    S.adds = (S.adds || []).filter((item) => item !== index);
+    if (ev.target.checked) {
+      S.adds.push(index);
     }
     S.slot = null;
     render();
     return;
   }
-  const accion = CHANGE.get(e.target.id);
+  const accion = CHANGE.get(ev.target.id);
   if (accion) {
-    accion(e);
+    accion(ev);
     return;
   }
-  const a = e.target.id && e.target.id.match(/^hd(\d)$/);
-  if (a) {
-    const n = a[1];
-    const o = e.target.checked;
-    ["m", "t"].forEach((i) => {
-      const l = $("#h" + i + n);
-      l.disabled = !o;
-      const c = o && l.checked;
-      $("#h" + i + "f" + n).disabled = !c;
-      $("#h" + i + "t" + n).disabled = !c;
-      l.closest(".rng").classList.toggle("off", !c);
+  const dayMatch = ev.target.id && ev.target.id.match(/^hd(\d)$/);
+  if (dayMatch) {
+    const dow = dayMatch[1];
+    const on = ev.target.checked;
+    ["m", "t"].forEach((part) => {
+      const box = $("#h" + part + dow);
+      box.disabled = !on;
+      const rngOn = on && box.checked;
+      $("#h" + part + "f" + dow).disabled = !rngOn;
+      $("#h" + part + "t" + dow).disabled = !rngOn;
+      box.closest(".rng").classList.toggle("off", !rngOn);
     });
-    e.target.closest(".hday").classList.toggle("off", !o);
+    ev.target.closest(".hday").classList.toggle("off", !on);
     return;
   }
-  const t = e.target.id && e.target.id.match(/^h([mt])(\d)$/);
-  if (t) {
-    const n = e.target.checked;
-    $("#h" + t[1] + "f" + t[2]).disabled = !n;
-    $("#h" + t[1] + "t" + t[2]).disabled = !n;
-    e.target.closest(".rng").classList.toggle("off", !n);
+  const rngMatch = ev.target.id && ev.target.id.match(/^h([mt])(\d)$/);
+  if (rngMatch) {
+    const on = ev.target.checked;
+    $("#h" + rngMatch[1] + "f" + rngMatch[2]).disabled = !on;
+    $("#h" + rngMatch[1] + "t" + rngMatch[2]).disabled = !on;
+    ev.target.closest(".rng").classList.toggle("off", !on);
     return;
   }
-  const s = e.target.dataset && e.target.dataset.mon;
-  if (s != null) {
-    store.MSGS[+s].on = e.target.checked;
-    api.m.saveTemplate(store.MSGS[+s]);
-    toast(`${store.MSGS[+s].t}: ${e.target.checked ? "activado" : "desactivado"}`);
+  const mon = ev.target.dataset && ev.target.dataset.mon;
+  if (mon != null) {
+    store.MSGS[+mon].on = ev.target.checked;
+    api.m.saveTemplate(store.MSGS[+mon]);
+    toast(`${store.MSGS[+mon].t}: ${ev.target.checked ? "activado" : "desactivado"}`);
     return;
   }
-  if (e.target.dataset && e.target.dataset.mc !== void 0) {
-    S.msg.sel[e.target.dataset.mc] = e.target.checked;
+  if (ev.target.dataset && ev.target.dataset.mc !== void 0) {
+    S.msg.sel[ev.target.dataset.mc] = ev.target.checked;
     updMsgCount();
     return;
   }
-  if (e.target.dataset && e.target.dataset.rc) {
+  if (ev.target.dataset && ev.target.dataset.rc) {
     readSvcEditor();
     render();
     return;
   }
 });
-document.addEventListener("input", (e) => {
-  if (e.target.dataset && e.target.dataset.iq) {
+// lo que se escribe: preguntas previas al turno, vista previa del aviso y acciones registradas por id
+document.addEventListener("input", (ev) => {
+  if (ev.target.dataset && ev.target.dataset.iq) {
     S.intake = S.intake || {};
-    const a = e.target.value.slice(0, 200);
-    if (a.trim()) {
-      S.intake[e.target.dataset.iq] = a;
+    const value = ev.target.value.slice(0, 200);
+    if (value.trim()) {
+      S.intake[ev.target.dataset.iq] = value;
     } else {
-      delete S.intake[e.target.dataset.iq];
+      delete S.intake[ev.target.dataset.iq];
     }
     return;
   }
-  if (e.target.id && /^mtx\d$/.test(e.target.id)) {
-    const a = $(".ntf-t");
-    if (a) {
-      a.textContent = fillMsg(e.target.value);
+  if (ev.target.id && /^mtx\d$/.test(ev.target.id)) {
+    const preview = $(".ntf-t");
+    if (preview) {
+      preview.textContent = fillMsg(ev.target.value);
     }
     return;
   }
-  const accion = INPUT.get(e.target.id);
+  const accion = INPUT.get(ev.target.id);
   if (accion) {
-    accion(e);
+    accion(ev);
     return;
   }
 });
-document.addEventListener("keydown", (e) => {
+// historias: Escape cierra, flechas pasan
+document.addEventListener("keydown", (ev) => {
   if (S.story) {
-    if (e.key === "Escape") {
+    if (ev.key === "Escape") {
       S.story = null;
       render();
-    } else if (e.key === "ArrowRight") {
-      const a = comm(S.story.pid).media;
-      if (S.story.i < a.length - 1) {
+    } else if (ev.key === "ArrowRight") {
+      const media = comm(S.story.pid).media;
+      if (S.story.i < media.length - 1) {
         S.story.i++;
       } else {
         S.story = null;
       }
       render();
-    } else if (e.key === "ArrowLeft") {
+    } else if (ev.key === "ArrowLeft") {
       S.story.i = Math.max(0, S.story.i - 1);
       render();
     }
