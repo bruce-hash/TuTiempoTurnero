@@ -525,5 +525,25 @@ ok("los turnos quedan anónimos", q("select count(*) from bookings where client_
 dp = q("select delete_my_provider()", uid=prov)
 ok("borrar perfil de prestador", not err(dp) and q("select status from providers where id=%s", (pid,))[0][0] == "deleted")
 ok("ya no aparece en ningún rubro", q("select count(*) from provider_categories where provider_id=%s and active", (pid,))[0][0] == 0)
+# slugs reservados (Bloque B): la lista de la base es la misma que la del frontend
+import os, re
+rutas = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "lib", "rutas.js"), encoding="utf8").read()
+front = sorted(re.findall(r'^\s+"([a-z0-9-]+)",$', rutas.split("RESERVED_SLUGS = [")[1].split("];")[0], re.M))
+base_list = sorted(q("select unnest(reserved_slugs())")[i][0] for i in range(len(q("select unnest(reserved_slugs())"))))
+ok(f"slugs reservados: la base y src/lib/rutas.js tienen la misma lista ({len(front)})", front == base_list and len(front) > 20)
+ok("is_reserved_slug no distingue mayúsculas", q("select is_reserved_slug('PANEL'), is_reserved_slug('panel-1'), is_reserved_slug(null)")[0] == (True, False, False))
+for nombre, esperado in (("Panel", "panel-1"), ("Admin", "admin-1"), ("Mis Turnos", "mis-turnos-1")):
+    u = mkuser(f"res-{esperado}@test.ar", nombre)
+    r = q("select register_provider(%s, 'Calle 1', array['b'], '2284 1', '30999888')", (nombre,), uid=u)
+    r = r if err(r) else q("select slug from providers where id = %s", (r[0][0],))
+    ok(f"un prestador llamado \"{nombre}\" recibe el slug {esperado}", not err(r) and r[0][0] == esperado)
+u = mkuser("res-panel2@test.ar", "Panel")
+r = q("select register_provider('Panel', 'Calle 2', array['b'], '2284 2', '30999877')", uid=u)
+r = r if err(r) else q("select slug from providers where id = %s", (r[0][0],))
+ok("el segundo \"Panel\" recibe panel-2 (reservado y ocupado se saltean igual)", not err(r) and r[0][0] == "panel-2")
+u = mkuser("res-directo@test.ar", "Directo")
+ok("el alta directa en la tabla tampoco puede usar un slug reservado",
+   err(q("insert into providers (slug, name, city_id) values ('blog', 'Directo', (select id from cities limit 1))", uid=u), "providers_slug_not_reserved"))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
