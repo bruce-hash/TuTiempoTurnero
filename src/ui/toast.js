@@ -1,16 +1,18 @@
 import { $ } from "../lib/dom.js";
 
-export function toast(e) {
-  const a = $("#toast");
-  a.textContent = e;
-  a.hidden = false;
+// aviso corto abajo; el temporizador se guarda en la propia función para reiniciarlo si llega otro
+export function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.hidden = false;
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => (a.hidden = true), 2400);
+  toast.t = setTimeout(() => (el.hidden = true), 2400);
 }
+// aviso arriba con HTML (ya escapado por quien llama)
 export function notif(html) {
-  const a = $("#notif");
-  a.innerHTML = html;
-  a.hidden = false;
+  const el = $("#notif");
+  el.innerHTML = html;
+  el.hidden = false;
   clearTimeout(notif.t);
-  notif.t = setTimeout(() => (a.hidden = true), 4500);
+  notif.t = setTimeout(() => (el.hidden = true), 4500);
 }
