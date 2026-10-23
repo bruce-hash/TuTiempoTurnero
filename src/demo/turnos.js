@@ -49,107 +49,108 @@ export function seedTurnos() {
       n: 0,
     },
   };
-  const e = TODAY();
-  const a = dkey(addDays(1));
-  const t = dkey(addDays(2));
-  const s = dkey(addDays(3));
-  const n = (d, p, w, y, k, h, j, b, g) =>
+  const today = TODAY();
+  const tomorrow = dkey(addDays(1));
+  const in2 = dkey(addDays(2));
+  const in3 = dkey(addDays(3));
+  // turno de ejemplo en Hidro.Style (prestador 7); los de la app pagaron la seña del 50 %
+  const addHidro = (date, time, dur, svc, price, client, src, type, extra) =>
     store.BOOK.push(
       Object.assign(
         {
           id: store.BID++,
           pid: 7,
-          date: d,
-          time: p,
-          dur: w,
-          svc: y,
-          price: k,
-          cliente: h,
-          src: j,
-          type: b || "local",
+          date: date,
+          time: time,
+          dur: dur,
+          svc: svc,
+          price: price,
+          cliente: client,
+          src: src,
+          type: type || "local",
           status: "confirmed",
-          paid: j === "app" ? Math.round(k * 0.5) : 0,
+          paid: src === "app" ? Math.round(price * 0.5) : 0,
           att: false,
           late: 0,
           disc: 0,
         },
-        g || {},
+        extra || {},
       ),
     );
-  n(e, "10:00", 25, "Corte de cabello", 8e3, "Pablo M.", "app", "local", {
+  addHidro(today, "10:00", 25, "Corte de cabello", 8e3, "Pablo M.", "app", "local", {
     att: true,
     disc: 20,
   });
-  n(e, "11:30", 30, "Corte de cabello y barba", 12500, "Ezequiel R.", "manual", "local", {
+  addHidro(today, "11:30", 30, "Corte de cabello y barba", 12500, "Ezequiel R.", "manual", "local", {
     att: true,
   });
-  n(e, "17:00", 25, "Corte de cabello", 1e4, "Sergio L.", "app", "local", {
+  addHidro(today, "17:00", 25, "Corte de cabello", 1e4, "Sergio L.", "app", "local", {
     paid: 1e4,
   });
-  n(e, "18:00", 30, "Corte de cabello y barba", 12500, "Tomás V.", "app", "local", {
+  addHidro(today, "18:00", 30, "Corte de cabello y barba", 12500, "Tomás V.", "app", "local", {
     att: true,
   });
-  n(e, "19:30", 25, "Corte de cabello", 1e4, "Ana B. (para su hijo)", "app", "local", {
+  addHidro(today, "19:30", 25, "Corte de cabello", 1e4, "Ana B. (para su hijo)", "app", "local", {
     att: true,
   });
-  n(a, "09:30", 25, "Corte de cabello", 1e4, "Raúl F.", "app", "local", {
+  addHidro(tomorrow, "09:30", 25, "Corte de cabello", 1e4, "Raúl F.", "app", "local", {
     att: true,
   });
-  n(a, "16:00", 15, "Arreglo de barba", 6e3, "Nicolás D.", "app");
-  n(a, "18:30", 30, "Corte de cabello y barba", 12500, "Federico A.", "manual", "local", {
+  addHidro(tomorrow, "16:00", 15, "Arreglo de barba", 6e3, "Nicolás D.", "app");
+  addHidro(tomorrow, "18:30", 30, "Corte de cabello y barba", 12500, "Federico A.", "manual", "local", {
     att: true,
   });
-  n(t, "10:00", 30, "Corte de cabello y barba", 1e4, "Hernán S.", "app", "local", {
+  addHidro(in2, "10:00", 30, "Corte de cabello y barba", 1e4, "Hernán S.", "app", "local", {
     disc: 20,
   });
-  n(s, "18:00", 25, "Corte de cabello", 1e4, "Gonzalo T.", "app");
-  ["17:00", "17:30", "18:00", "19:00", "19:30", "20:00", "20:30"].forEach((d, p) => {
-    const w = ["Lucas", "Matías", "Bruno", "Iván", "Leo", "Nahuel", "Franco"][p] + " " + "ABCDEFG"[p] + ".";
-    store.CLIENTS[w] = {
-      v: 2 + p,
+  addHidro(in3, "18:00", 25, "Corte de cabello", 1e4, "Gonzalo T.", "app");
+  ["17:00", "17:30", "18:00", "19:00", "19:30", "20:00", "20:30"].forEach((time, index) => {
+    const name = ["Lucas", "Matías", "Bruno", "Iván", "Leo", "Nahuel", "Franco"][index] + " " + "ABCDEFG"[index] + ".";
+    store.CLIENTS[name] = {
+      v: 2 + index,
       n: 0,
     };
-    n(a, d, 30, "Corte de cabello y barba", 12500, w, "app", "local", {
-      att: p % 2 === 0,
+    addHidro(tomorrow, time, 30, "Corte de cabello y barba", 12500, name, "app", "local", {
+      att: index % 2 === 0,
     });
   });
-  const o = (d, p, w, y, k, h, j, b) =>
+  const addOther = (pid, date, time, dur, svc, price, client, src) =>
     store.BOOK.push({
       id: store.BID++,
-      pid: d,
-      date: p,
-      time: w,
-      dur: y,
-      svc: k,
-      price: h,
-      cliente: j,
-      src: b,
+      pid: pid,
+      date: date,
+      time: time,
+      dur: dur,
+      svc: svc,
+      price: price,
+      cliente: client,
+      src: src,
       type: "local",
       status: "confirmed",
-      paid: b === "app" ? Math.round(h * 0.5) : 0,
-      att: b === "app",
+      paid: src === "app" ? Math.round(price * 0.5) : 0,
+      att: src === "app",
       late: 0,
       disc: 0,
     });
-  o(21, e, "10:00", 120, "Extensiones pelo a pelo", 3e4, "Valentina R.", "app");
+  addOther(21, today, "10:00", 120, "Extensiones pelo a pelo", 3e4, "Valentina R.", "app");
   store.BOOK[store.BOOK.length - 1].intake = {
     primera: "Sí",
     estilo: "Ojo de gato",
     sensible: "No",
   };
-  o(21, e, "15:00", 60, "Esmaltado semipermanente", 12e3, "Camila S.", "app");
-  o(21, e, "16:30", 20, "Depilación de cejas", 4500, "Julieta M.", "manual");
-  o(21, a, "09:00", 90, "Uñas esculpidas", 18e3, "Rocío P.", "app");
+  addOther(21, today, "15:00", 60, "Esmaltado semipermanente", 12e3, "Camila S.", "app");
+  addOther(21, today, "16:30", 20, "Depilación de cejas", 4500, "Julieta M.", "manual");
+  addOther(21, tomorrow, "09:00", 90, "Uñas esculpidas", 18e3, "Rocío P.", "app");
   store.BOOK[store.BOOK.length - 1].intake = {
     forma: "Coffin",
     largo: "Largo",
     diseno: "Baby boomer",
   };
   store.BOOK[store.BOOK.length - 1].addons = [["Retiro de esculpidas", 4e3, 30]];
-  o(21, a, "17:00", 60, "Lifting de pestañas", 15e3, "Martina G.", "app");
-  o(22, a, "10:00", 60, "Masaje descontracturante", 2e4, "Laura B.", "app");
-  o(22, t, "18:00", 75, "Piedras calientes", 24e3, "Graciela F.", "app");
-  const i = [
+  addOther(21, tomorrow, "17:00", 60, "Lifting de pestañas", 15e3, "Martina G.", "app");
+  addOther(22, tomorrow, "10:00", 60, "Masaje descontracturante", 2e4, "Laura B.", "app");
+  addOther(22, in2, "18:00", 75, "Piedras calientes", 24e3, "Graciela F.", "app");
+  const names = [
     "Micaela T.",
     "Agustina L.",
     "Paula R.",
@@ -163,7 +164,7 @@ export function seedTurnos() {
     "Romina A.",
     "Javier O.",
   ];
-  const l = {
+  const intakeByCat = {
     b: {
       estilo: "Fade",
     },
@@ -193,54 +194,55 @@ export function seedTurnos() {
       medica: "No",
     },
   };
-  P.filter((d) => ![7, 21].includes(d.id)).forEach((d, p) => {
-    d.svcs.slice(0, 3).forEach((w, y) => {
-      const k = [e, a, t][y];
-      const h = ["10:00", "16:00", "18:00"][(p + y) % 3];
-      if (!store.BOOK.some((j) => j.pid === d.id && j.date === k && j.time === h)) {
+  P.filter((prov) => ![7, 21].includes(prov.id)).forEach((prov, provIndex) => {
+    prov.svcs.slice(0, 3).forEach((svc, svcIndex) => {
+      const date = [today, tomorrow, in2][svcIndex];
+      const time = ["10:00", "16:00", "18:00"][(provIndex + svcIndex) % 3];
+      if (!store.BOOK.some((item) => item.pid === prov.id && item.date === date && item.time === time)) {
         store.BOOK.push({
           id: store.BID++,
-          pid: d.id,
-          date: k,
-          time: h,
-          dur: w[1],
-          svc: w[0],
-          price: w[2],
-          cliente: i[(p * 3 + y) % i.length],
-          src: y === 1 ? "manual" : "app",
+          pid: prov.id,
+          date: date,
+          time: time,
+          dur: svc[1],
+          svc: svc[0],
+          price: svc[2],
+          cliente: names[(provIndex * 3 + svcIndex) % names.length],
+          src: svcIndex === 1 ? "manual" : "app",
           type: "local",
           status: "confirmed",
-          paid: y === 1 ? 0 : Math.round(w[2] * 0.5),
-          att: y !== 2,
+          paid: svcIndex === 1 ? 0 : Math.round(svc[2] * 0.5),
+          att: svcIndex !== 2,
           late: 0,
           disc: 0,
-          cat: w[3],
-          intake: l[w[3]] || {},
+          cat: svc[3],
+          intake: intakeByCat[svc[3]] || {},
         });
       }
     });
   });
-  const c = (d, p, w, y, k) =>
+  // turnos pasados del cliente de ejemplo (Juan P.), para su historial y sus sellos
+  const addMine = (daysAgo, pid, svc, price, extra) =>
     store.BOOK.push({
       id: store.BID++,
-      pid: p,
-      date: dkey(addDays(-d)),
+      pid: pid,
+      date: dkey(addDays(-daysAgo)),
       time: "17:00",
       dur: 60,
-      svc: w,
-      price: y,
+      svc: svc,
+      price: price,
       cliente: "Juan P.",
       src: "app",
       type: "local",
       status: "done",
-      paid: Math.round(y * 0.5),
+      paid: Math.round(price * 0.5),
       mine: true,
       att: true,
       late: 0,
       disc: 0,
-      cat: k,
+      cat: extra,
     });
-  c(19, 21, "Esmaltado semipermanente", 12e3, "u");
-  c(26, 7, "Corte de cabello", 1e4, "b");
-  c(40, 22, "Masaje relajante", 17e3, "m");
+  addMine(19, 21, "Esmaltado semipermanente", 12e3, "u");
+  addMine(26, 7, "Corte de cabello", 1e4, "b");
+  addMine(40, 22, "Masaje relajante", 17e3, "m");
 }
