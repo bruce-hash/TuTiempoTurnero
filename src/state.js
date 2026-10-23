@@ -1,3 +1,6 @@
+// Estado de la pantalla (lo que se ve y lo que se está editando). Los nombres cortos vienen del original:
+// view/pid (pantalla del cliente), role (cliente, barbero = prestador, admin), btab (pestaña del panel),
+// svc/day/slot/rep (la reserva en curso), me (prestador del panel).
 export const fresh = () => ({
   role: "cliente",
   view: "home",
@@ -22,6 +25,7 @@ export const fresh = () => ({
     email: "",
     err: "",
   },
+  // email y contraseña de demo precargados en el ingreso de prestadores: llegan a producción (H18)
   blogin: {
     step: "form",
     email: "hidro.style@tutiempo.demo",
@@ -32,6 +36,7 @@ export const fresh = () => ({
   },
   reg: {},
   svc: 0,
+  // celular de ejemplo de la demo (en vivo lo reemplaza el del perfil)
   form: {
     tel: "2284 555123",
   },
