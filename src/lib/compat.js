@@ -1,28 +1,30 @@
+// Ayudantes que dejó el minificador del cliente (esbuild): H(destino, origen) copia las propiedades de origen,
+// incluidas las de tipo Symbol, como un Object.assign.
 var W = Object.defineProperty;
 var U = Object.getOwnPropertySymbols;
 var J = Object.prototype.hasOwnProperty;
 var Q = Object.prototype.propertyIsEnumerable;
-var Y = (e, a, t) =>
-  a in e
-    ? W(e, a, {
+var Y = (obj, key, value) =>
+  key in obj
+    ? W(obj, key, {
         enumerable: true,
         configurable: true,
         writable: true,
-        value: t,
+        value: value,
       })
-    : (e[a] = t);
-export var H = (e, a) => {
-  for (var t in (a ||= {})) {
-    if (J.call(a, t)) {
-      Y(e, t, a[t]);
+    : (obj[key] = value);
+export var H = (target, source) => {
+  for (var key in (source ||= {})) {
+    if (J.call(source, key)) {
+      Y(target, key, source[key]);
     }
   }
   if (U) {
-    for (var t of U(a)) {
-      if (Q.call(a, t)) {
-        Y(e, t, a[t]);
+    for (var key of U(source)) {
+      if (Q.call(source, key)) {
+        Y(target, key, source[key]);
       }
     }
   }
-  return e;
+  return target;
 };
