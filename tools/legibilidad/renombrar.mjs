@@ -40,7 +40,22 @@ const claveDe = (st) => {
   return "@" + lineOf(st.start);
 };
 const top = ast.program.body.filter((s) => s.type !== "ImportDeclaration");
-const claveEn = (pos) => { const s = top.find((t) => pos >= t.start && pos < t.end); return s ? claveDe(s) : null; };
+// dentro de un objeto de primer nivel (const x = { … } u Object.assign(LM, { … })), la clave es "<objeto>.<propiedad>"
+const objetoDe = (st) => {
+  const d = st.type === "ExportNamedDeclaration" && st.declaration ? st.declaration : st;
+  if (d.type === "VariableDeclaration" && d.declarations[0].init?.type === "ObjectExpression") return d.declarations[0].init;
+  const e = d.expression;
+  if (e?.type === "CallExpression" && code.slice(e.callee.start, e.callee.end) === "Object.assign" && e.arguments[1]?.type === "ObjectExpression") return e.arguments[1];
+  return null;
+};
+const claveEn = (pos) => {
+  const s = top.find((t) => pos >= t.start && pos < t.end);
+  if (!s) return null;
+  const obj = objetoDe(s);
+  const prop = obj && obj.properties.find((q) => pos >= q.start && pos < q.end && q.key);
+  const base = claveDe(s).replace(/^@\d+$/, (k) => (obj ? code.slice(s.expression.arguments[0].start, s.expression.arguments[0].end) : k));
+  return prop ? `${base}.${prop.key.name || prop.key.value}` : claveDe(s);
+};
 
 // variables locales, en orden de aparición, con su clave y su número de aparición (#k)
 const locales = [];

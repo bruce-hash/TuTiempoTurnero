@@ -12,35 +12,38 @@ import { avatarUrl } from "../../ui/fotos.js";
 import { toast } from "../../ui/toast.js";
 
 export const liveCuenta = {
+  // Sesión de Supabase → S.user. Si es prestador, carga su panel; después, sus turnos, avisos, sellos y si es admin.
   async session() {
-    const { data: e } = await sb.auth.getSession();
-    const a = e && e.session;
-    if (!a) {
+    const { data: data } = await sb.auth.getSession();
+    const session = data && data.session;
+    if (!session) {
       return null;
     }
-    const t = a.user;
-    const s = await call(
-      sb.from("profiles").select("full_name,phone,avatar_path").eq("id", t.id).maybeSingle(),
+    const user = session.user;
+    const profile = await call(
+      sb.from("profiles").select("full_name,phone,avatar_path").eq("id", user.id).maybeSingle(),
     ).catch(() => null);
     S.user = {
-      id: t.id,
-      email: t.email,
-      name: (s && s.full_name) || (t.user_metadata && t.user_metadata.full_name) || t.email.split("@")[0],
-      photo: avatarUrl(s && s.avatar_path) || (t.user_metadata && t.user_metadata.avatar_url) || null,
+      id: user.id,
+      email: user.email,
+      name: (profile && profile.full_name) || (user.user_metadata && user.user_metadata.full_name) || user.email.split("@")[0],
+      photo: avatarUrl(profile && profile.avatar_path) || (user.user_metadata && user.user_metadata.avatar_url) || null,
     };
-    S.form.tel = (s && s.phone) || "";
-    let n = await call(sb.rpc("my_provider"));
-    const o = t.user_metadata && t.user_metadata.provider_reg;
-    if (!n && o) {
+    S.form.tel = (profile && profile.phone) || "";
+    let pid = await call(sb.rpc("my_provider"));
+    // Alta de prestador pendiente (los datos viajaron en los metadatos de la cuenta al registrarse, DNI incluido: H10):
+    // se crea el perfil en el primer ingreso y se borran los metadatos.
+    const reg = user.user_metadata && user.user_metadata.provider_reg;
+    if (!pid && reg) {
       try {
-        n = await call(
+        pid = await call(
           sb.rpc("register_provider", {
-            p_name: o.name,
-            p_address: o.address || "",
-            p_categories: o.categories,
-            p_phone: o.phone || "",
-            p_dni: o.dni,
-            p_instagram: o.instagram || null,
+            p_name: reg.name,
+            p_address: reg.address || "",
+            p_categories: reg.categories,
+            p_phone: reg.phone || "",
+            p_dni: reg.dni,
+            p_instagram: reg.instagram || null,
             p_city: CITY,
           }),
         );
@@ -49,12 +52,12 @@ export const liveCuenta = {
             provider_reg: null,
           },
         });
-      } catch (i) {
-        toast(errMsg(i));
+      } catch (err) {
+        toast(errMsg(err));
       }
     }
-    if (n) {
-      S.me = n;
+    if (pid) {
+      S.me = pid;
       S.barberAuth = true;
       await liveApi.loadMine();
     }
@@ -65,8 +68,9 @@ export const liveCuenta = {
     if (!S.user) {
       return;
     }
-    const e = await call(sb.rpc("my_bookings"));
-    const a = {
+    const rows = await call(sb.rpc("my_bookings"));
+    // Estados de la base → los de la app.
+    const statusMap = {
       confirmed: "confirmed",
       done: "done",
       no_show: "noshow",
@@ -75,49 +79,49 @@ export const liveCuenta = {
       hold: "hold",
       expired: "expired",
     };
-    store.BOOK = store.BOOK.filter((t) => !t.mine).concat(
-      (e || []).map((t) => {
-        const s =
-          pr(t.provider_id) ||
+    store.BOOK = store.BOOK.filter((booking) => !booking.mine).concat(
+      (rows || []).map((row) => {
+        const prov =
+          pr(row.provider_id) ||
           upsertP({
-            id: t.provider_id,
-            name: t.provider_name,
-            addr: t.address || "",
-            hue: t.hue,
-            cats: [t.category || "n"],
+            id: row.provider_id,
+            name: row.provider_name,
+            addr: row.address || "",
+            hue: row.hue,
+            cats: [row.category || "n"],
             svcs: [],
           });
-        if (t.photo_path && !s.photo) {
-          s.photo = avatarUrl(t.photo_path);
+        if (row.photo_path && !prov.photo) {
+          prov.photo = avatarUrl(row.photo_path);
         }
         return Object.assign(
           {
-            id: t.id,
-            pid: t.provider_id,
-            dur: minsBetween(t.starts_at, t.ends_at),
-            svc: t.service_name,
-            price: t.price,
-            paid: t.paid_mp + t.paid_wallet,
-            fee: +t.client_fee || 0,
-            disc: t.discount_pct,
-            status: a[t.status] || t.status,
-            byProv: t.status === "cancelled_provider",
-            self: !!t.settle_by_provider,
+            id: row.id,
+            pid: row.provider_id,
+            dur: minsBetween(row.starts_at, row.ends_at),
+            svc: row.service_name,
+            price: row.price,
+            paid: row.paid_mp + row.paid_wallet,
+            fee: +row.client_fee || 0,
+            disc: row.discount_pct,
+            status: statusMap[row.status] || row.status,
+            byProv: row.status === "cancelled_provider",
+            self: !!row.settle_by_provider,
             mine: true,
-            pay: t.pay_method || "mp",
-            series: t.series_id,
-            cat: t.category,
+            pay: row.pay_method || "mp",
+            series: row.series_id,
+            cat: row.category,
             type: "local",
             src: "app",
             cliente: uname(),
-            addons: (t.addons || []).map((n) => [n.name, n.price, n.min]),
-            intake: t.intake || {},
-            every: t.repeat_days || 0,
-            note: t.prep_note || "",
-            reviewed: !!t.reviewed,
-            stamped: !!t.stamped,
+            addons: (row.addons || []).map((addon) => [addon.name, addon.price, addon.min]),
+            intake: row.intake || {},
+            every: row.repeat_days || 0,
+            note: row.prep_note || "",
+            reviewed: !!row.reviewed,
+            stamped: !!row.stamped,
           },
-          isoToLocal(t.starts_at),
+          isoToLocal(row.starts_at),
         );
       }),
     );
@@ -130,29 +134,29 @@ export const liveCuenta = {
     if (!S.user) {
       return;
     }
-    const e = await call(sb.rpc("my_stamps")).catch(() => []);
+    const rows = await call(sb.rpc("my_stamps")).catch(() => []);
     S.myStampsBy = S.myStampsBy || {};
-    S.cards = (e || []).map((a) => {
-      (S.myStampsBy[a.provider_id] ||= {})[a.service_id] = a.stamps;
+    S.cards = (rows || []).map((row) => {
+      (S.myStampsBy[row.provider_id] ||= {})[row.service_id] = row.stamps;
       return {
-        pid: a.provider_id,
-        sid: a.service_id,
-        svc: a.service_name,
-        name: a.provider_name,
-        photo: avatarUrl(a.photo_path),
-        hue: a.hue,
-        cat: a.category || "n",
-        n: a.stamps,
-        goal: a.stamp_goal || 0,
-        on: a.stamps_on,
-        done: a.done,
+        pid: row.provider_id,
+        sid: row.service_id,
+        svc: row.service_name,
+        name: row.provider_name,
+        photo: avatarUrl(row.photo_path),
+        hue: row.hue,
+        cat: row.category || "n",
+        n: row.stamps,
+        goal: row.stamp_goal || 0,
+        on: row.stamps_on,
+        done: row.done,
       };
     });
   },
   async commission() {
-    const e = await call(sb.rpc("commission")).catch(() => null);
-    if (e != null && isFinite(+e)) {
-      store.COMISION = +e;
+    const rate = await call(sb.rpc("commission")).catch(() => null);
+    if (rate != null && isFinite(+rate)) {
+      store.COMISION = +rate;
     }
   },
 };
