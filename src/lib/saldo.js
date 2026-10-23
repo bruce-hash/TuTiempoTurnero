@@ -1,23 +1,25 @@
 import { TODAY, dayLabel } from "./fechas.js";
 import { S } from "../state.js";
 
+// Saldo TuTiempo y cashback: ya no existen (v25, CASHBACK = 0) y este código no hace nada útil. Se borra en el
+// Bloque 2 (H17).
 const CASHBACK = 0;
-const cbOf = (e) => Math.floor(e * CASHBACK);
-function wMove(e, amt) {
+const cbOf = (amount) => Math.floor(amount * CASHBACK);
+function wMove(text, amt) {
   S.wmov.unshift({
     d: dayLabel(TODAY()),
-    t: e,
+    t: text,
     amt: amt,
   });
 }
 function walletPay(total) {
-  const a = S.useWallet ? Math.min(S.wallet, total) : 0;
-  const t = total - a;
-  const s = cbOf(t);
+  const used = S.useWallet ? Math.min(S.wallet, total) : 0;
+  const mp = total - used;
+  const cashback = cbOf(mp);
   return {
-    used: a,
-    mp: t,
-    cb: s,
+    used: used,
+    mp: mp,
+    cb: cashback,
   };
 }
 function applyPay(pay, what) {
@@ -30,21 +32,21 @@ function applyPay(pay, what) {
     wMove("Cashback 5% · " + what, pay.cb);
   }
 }
-export function refundPay(e, what) {
-  if (e) {
-    if (e.wUsed) {
-      S.wallet += e.wUsed;
-      wMove("Devolución a tu saldo · " + what, e.wUsed);
+export function refundPay(booking, what) {
+  if (booking) {
+    if (booking.wUsed) {
+      S.wallet += booking.wUsed;
+      wMove("Devolución a tu saldo · " + what, booking.wUsed);
     }
-    if (e.cb) {
-      const t = Math.min(S.wallet, e.cb);
-      S.wallet -= t;
-      if (t) {
-        wMove("Se descuenta el cashback · " + what, -t);
+    if (booking.cb) {
+      const back = Math.min(S.wallet, booking.cb);
+      S.wallet -= back;
+      if (back) {
+        wMove("Se descuenta el cashback · " + what, -back);
       }
     }
-    e.wUsed = 0;
-    e.cb = 0;
+    booking.wUsed = 0;
+    booking.cb = 0;
   }
 }
 function walletBox(total) {
