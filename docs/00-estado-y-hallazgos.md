@@ -15,25 +15,28 @@ Auditoría de Bruno (con Claude) sobre el paquete del cliente, octubre 2026.
 | `tools/build.mjs` → `dist/` | Mismo comportamiento que el paquete del cliente en navegador real |
 | Edge Functions de Mercado Pago | Bien diseñadas, con los errores de abajo |
 | Bloque A1: `src/prototipo.html` → módulos de `src/` con Vite (`1368349` → merge `9899126`) | Mudanza pura: cada declaración de la referencia, idéntica en su módulo (`tools/mudanza/`, borrado al aprobar A1). Crawl idéntico toque por toque, e2e 107/107, comparación en navegador 36/36 |
+| Bloque 1: cobros (`payments`, `refunds`, `mp_accounts`) | H01–H05 y H23 resueltos. `pruebas/test_cobros.py` (base) y `pruebas/funciones/` (Edge Functions reales con Deno contra un Mercado Pago falso) en el CI |
 | Bloque A2: nombres claros y comentarios (merge `9899126` → merge `6d7b5a0`) | Código idéntico módulo por módulo: árbol de sintaxis con las variables locales en nombres canónicos y sin comentarios (`tools/legibilidad/`, borrado al aprobar A2). Variables locales de una letra: 2834 → 0. Crawl idéntico toque por toque, e2e 107/107, comparación 36/36 |
 
 ## Hallazgos
 
-### H01 · Alta · Devolución que nunca se ejecuta (verificado)
+### H01 · Alta · Devolución que nunca se ejecuta (verificado · resuelto en el Bloque 1)
 **Caso:** el cliente paga después de que venció su reserva temporal (10 min) y otro ya tomó ese horario.
 `confirm_payment` marca el turno `cancelled_provider` con `refund_pending`, pero **no guarda `mp_payment_id`**
 (solo lo guarda en el primer turno *confirmado*: `case when ok + failed = 0`). `mp-refunds` busca el pago por
 `mp_payment_id` (o por la serie) y no lo encuentra: la devolución queda pendiente para siempre.
 Lo mismo pasa en una serie si el primer turno es el que falla.
-**Reproducción:** `pruebas/reproducir_errores_cobro.py` (caso 1).
+**Reproducción (hasta el Bloque 1):** `pruebas/reproducir_errores_cobro.py` (caso 1). Hoy es una prueba que pasa en
+`pruebas/test_cobros.py`: el turno queda para devolver, ligado al pago (`refunds.payment_id`) y a la cuenta que cobró.
 
-### H02 · Alta · Pago aprobado sin turno ni devolución (verificado)
+### H02 · Alta · Pago aprobado sin turno ni devolución (verificado · resuelto en el Bloque 1)
 **Caso:** el prestador cancela un turno en estado `hold` (o bloquea ese día, o el admin lo elimina) y el cliente
 termina de pagar igual. `confirm_payment` solo acepta turnos `hold`/`expired` → `bookings_not_found` → el webhook
 responde 409 y Mercado Pago reintenta indefinidamente. La plata queda en la cuenta del prestador, sin turno ni devolución.
-**Reproducción:** `pruebas/reproducir_errores_cobro.py` (caso 2).
+**Reproducción (hasta el Bloque 1):** `pruebas/reproducir_errores_cobro.py` (caso 2). Hoy, en `test_cobros.py`: el pago se
+registra y se devuelve todo; el webhook responde 200.
 
-### H03 · Media · Monto distinto deja el pago en el limbo
+### H03 · Media · Monto distinto deja el pago en el limbo (resuelto en el Bloque 1, D16)
 `confirm_payment` lanza `amount_mismatch` → mismo efecto que H02.
 
 **Arreglo de H01–H03 (uno solo):** tabla `payments` (id de pago de MP único, ids de turnos, monto, comisión,
@@ -41,15 +44,20 @@ estado, fecha) como fuente de verdad del cobro. `confirm_payment` **nunca falla*
 registra el pago y, si un turno ya no está disponible, fue cancelado o el monto no coincide, lo marca para
 devolver (o para revisión manual) en lugar de lanzar error. `mp-refunds` toma el id de pago de `payments`.
 Idempotencia por id de pago.
+**Hecho en el Bloque 1** (migración `20261023215124_cobros.sql`): `payments` + `payment_bookings` (lo cobrado por cada
+turno) + `refunds`, con topes en la base para no devolver nunca más de lo cobrado (por pago y por turno).
 
-### H04 · Media · Contracargos y devoluciones hechas en Mercado Pago se ignoran
+### H04 · Media · Contracargos y devoluciones hechas en Mercado Pago se ignoran (resuelto en el Bloque 1, D17 y D18)
 `mp-webhook` solo procesa `status = approved`. Si el pago pasa a `refunded`, `cancelled` o `charged_back`,
 el turno sigue confirmado y pagado. Hay que reflejarlo en el turno y en `payments`.
+**Hecho:** `payment_mp_update` (estado propio `cancelled_refunded`, avisos al cliente y al prestador, "Para revisar").
 
-### H05 · Media · Devoluciones fallidas sin aviso ni registro
+### H05 · Media · Devoluciones fallidas sin aviso ni registro (resuelto en el Bloque 1, D19 y D20)
 `mp-refunds` reintenta cada 10 minutos sin límite y sin avisar (por ejemplo, prestador sin saldo). Tampoco guarda
 el id ni la fecha de la devolución hecha. Registrar cada intento y resultado, y mostrar las fallidas en el panel admin
 ("Para revisar").
+**Hecho:** cada intento queda en `refunds` (intentos, último error, id de la devolución de MP); backoff de ~3 días y
+"Para revisar · cobros" en el panel admin con "Reintentar" y "Resuelto a mano".
 
 ### H06 · Media · A verificar en la primera prueba real
 `mp-webhook` exige la firma `x-signature` con `MP_WEBHOOK_SECRET`. Confirmar con un pago de prueba que Mercado Pago
@@ -155,12 +163,16 @@ pasar las ramas de demo a `src/demo/`.
 
 **En el Bloque 2:** borrar lo muerto y corregir el texto.
 
-### H23 · Media · "Desconectar" Mercado Pago no desconecta (Bloque A2 → Bloque 1)
+### H23 · Media · "Desconectar" Mercado Pago no desconecta (Bloque A2 → resuelto en el Bloque 1)
 En el perfil del prestador, el botón "Desconectar" (`mpDesc`, `src/actions/prestador-perfil.js`) solo pone
 `S.mp = "none"` y vuelve a dibujar: en la base `provider_private.mp_connected` sigue en `true` y las llaves siguen en
 `provider_secrets`, así que se sigue cobrando con esa cuenta. Al recargar vuelve a aparecer "conectado".
 **En el Bloque 1 (toca cobros):** una función del servidor que desconecte de verdad (borre las llaves de
 `provider_secrets` y ponga `mp_connected = false`), y que el prestador vea claramente si puede cobrar o no.
+**Hecho (con el cambio que pidió Bruno):** las llaves no se borran al desconectar: pasan a `mp_accounts` (una por cuenta
+de Mercado Pago) y la desconectada queda "solo devoluciones y consultas" hasta que no haga falta (`purge_mp_accounts`).
+`mp_disconnect()` deja de cobrar en el acto; `book_slot` rechaza reservas con seña sin cuenta activa; el perfil público
+dice "Todavía no toma turnos online". En vivo ya no se muestra "hidro.style.mp" (parte de H21): se ve el número de cuenta.
 
 ### H24 · Baja · Links armados en la base con el dominio escrito a mano (Bloque B → Bloque 2)
 Los avisos que arma la base (`notify_booking` y `send_scheduled_notices`, al reemplazar `{link}`) usan

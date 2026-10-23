@@ -40,6 +40,11 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
    supabase functions deploy mp-refunds --no-verify-jwt
    ```
    (`MP_OWNER_USER_ID` lo agrega Claude Code en el bloque 2: id de usuario de Mercado Pago de TuTiempo.)
+   **Nunca** cargues `MP_API_URL` en Supabase: existe solo para las pruebas (un Mercado Pago falso). Sin ese secreto las
+   funciones usan la API real. Si alguna vez aparece en `supabase secrets list`, borralo (`supabase secrets unset MP_API_URL`).
+   Bloque 1: las 4 funciones cambian juntas con la migración `20261023215124_cobros.sql` (llaves en `mp_accounts`,
+   pagos en `payments`): primero la migración, después el deploy de las 4. Las llaves que ya estuvieran en
+   `provider_secrets` se copian solas a `mp_accounts`; `provider_secrets` queda sin uso hasta el Bloque 2 (D21).
 5. Tarea de devoluciones: la deja armada Claude Code usando Vault (no pegues la `service_role` key en el cron).
 
 ### 3. Hostinger (subdominio de prueba)
@@ -67,7 +72,13 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
 - [ ] Pago rechazado: el horario se libera.
 - [ ] Abandonar el pago: a los 10 minutos el horario se libera.
 - [ ] El prestador cancela un turno pagado: devolución total en Mercado Pago.
-- [ ] Casos de los errores H01 y H02 (los arma Claude Code en el bloque 1): termina en devolución, no en limbo.
+- [ ] Casos de los errores H01 y H02 (Bloque 1): pagar una reserva vencida cuyo horario ya tomó otro, y pagar una
+      reserva que el prestador canceló mientras el cliente estaba en Mercado Pago. Las dos terminan en devolución
+      (ver `refunds` y el panel admin), no en limbo.
+- [ ] Desconectar Mercado Pago desde el panel: el perfil público dice "Todavía no toma turnos online", una cancelación
+      de un turno ya pagado se devuelve igual, y reconectar la misma cuenta vuelve a cobrar.
+- [ ] Devolver un pago desde el panel de Mercado Pago del vendedor de prueba: el turno queda cancelado
+      ("Pago devuelto por Mercado Pago") y al prestador le llega el aviso.
 - [ ] Recordatorio por email 24 h antes (bloque 3).
 - [ ] Sellos: marcar "Asistió" suma sello; canjear el premio.
 
