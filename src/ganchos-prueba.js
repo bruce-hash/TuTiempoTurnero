@@ -7,25 +7,25 @@ const STORE_VARS = ["ADM_READY","AEID","BID","BOOK","CFGS","CLIENTS","CLOSINGS",
 export function exponerParaPruebas() {
   const modulos = import.meta.glob(["./**/*.js", "!./main.js", "!./ganchos-prueba.js", "!./demo/barra.js", "!./demo/prestadores.js", "!./demo/sembrar.js", "!./demo/estado.js", "!./demo/reiniciar.js", "!./demo/index.js"], { eager: true });
   const desde = {};
-  for (const m of Object.values(modulos)) {
-    for (const k of Object.keys(m)) {
-      desde[k] = m;
+  for (const mod of Object.values(modulos)) {
+    for (const name of Object.keys(mod)) {
+      desde[name] = mod;
     }
   }
   const nombres = [...Object.keys(desde), ...STORE_VARS];
   const tt = {};
-  for (const k of nombres) {
-    const get = () => (k in desde ? desde[k][k] : store[k]);
-    const set = (v) => {
-      if (STORE_VARS.includes(k)) {
-        store[k] = v;
+  for (const name of nombres) {
+    const get = () => (name in desde ? desde[name][name] : store[name]);
+    const set = (value) => {
+      if (STORE_VARS.includes(name)) {
+        store[name] = value;
       } else {
-        throw new Error("No se puede reasignar " + k);
+        throw new Error("No se puede reasignar " + name);
       }
     };
-    Object.defineProperty(tt, k, { get, set, enumerable: true });
-    if (!(k in window)) {
-      Object.defineProperty(window, k, { get, set, configurable: true });
+    Object.defineProperty(tt, name, { get, set, enumerable: true });
+    if (!(name in window)) {
+      Object.defineProperty(window, name, { get, set, configurable: true });
     }
   }
   window.__TT__ = tt;
