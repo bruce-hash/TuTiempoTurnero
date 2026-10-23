@@ -12,36 +12,38 @@ import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { useProvider } from "../views/prestador/panel.js";
 
-async function liveRegister(e) {
-  const a = $("#fPrest button[type=submit]");
-  if (a) {
-    a.disabled = true;
-    a.textContent = "Creando tu cuenta…";
+// alta en vivo: los datos del negocio viajan en provider_reg (metadatos de la cuenta) y session() crea el perfil
+// en el primer ingreso. Si Supabase no pide confirmar el email, eso pasa acá mismo: entra al panel y sube el DNI.
+async function liveRegister(reg) {
+  const btn = $("#fPrest button[type=submit]");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Creando tu cuenta…";
   }
   try {
-    const t = {
-      name: e.nombre,
-      address: e.addr || "",
-      categories: e.cats,
-      phone: e.tel,
-      dni: e.dni,
+    const providerReg = {
+      name: reg.nombre,
+      address: reg.addr || "",
+      categories: reg.cats,
+      phone: reg.tel,
+      dni: reg.dni,
       instagram: null,
     };
-    const s = await sb.auth.signUp({
-      email: e.email,
-      password: e.pass,
+    const res = await sb.auth.signUp({
+      email: reg.email,
+      password: reg.pass,
       options: {
         data: {
-          full_name: e.nombre,
-          provider_reg: t,
+          full_name: reg.nombre,
+          provider_reg: providerReg,
         },
         emailRedirectTo: location.origin + location.pathname,
       },
     });
-    if (s.error) {
-      throw s.error;
+    if (res.error) {
+      throw res.error;
     }
-    if (s.data.session) {
+    if (res.data.session) {
       await api.session();
       if (store.REGFILES.length) {
         await api.m.uploadDni(store.REGFILES);
@@ -56,37 +58,39 @@ async function liveRegister(e) {
     }
     S.reg = {
       done: true,
-      nombre: e.nombre,
-      email: e.email,
+      nombre: reg.nombre,
+      email: reg.email,
       confirm: true,
     };
     render();
     window.scrollTo(0, 0);
-  } catch (t) {
-    toast(errMsg(t));
-    if (a) {
-      a.disabled = false;
-      a.textContent = "Crear cuenta de prestador";
+  } catch (err) {
+    toast(errMsg(err));
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Crear cuenta de prestador";
     }
   }
 }
+// lee el formulario de alta
 export function readReg() {
-  const e = (t) => ($("#" + t) || {}).value;
-  const a = {};
+  const val = (id) => ($("#" + id) || {}).value;
+  const reg = {};
   if ($("#pn")) {
-    a.nombre = e("pn").trim();
-    a.email = e("pe").trim();
-    a.pass = e("pp");
-    a.dni = e("pd").replace(/\D/g, "");
-    a.addr = (e("pa") || "").trim();
-    a.tel = (e("ptel") || "").trim();
-    a.cats = CATS.map((t) => t[0]).filter((t) => $("#rr-" + t) && $("#rr-" + t).checked);
-    a.tc = $("#ptc").checked;
+    reg.nombre = val("pn").trim();
+    reg.email = val("pe").trim();
+    reg.pass = val("pp");
+    reg.dni = val("pd").replace(/\D/g, "");
+    reg.addr = (val("pa") || "").trim();
+    reg.tel = (val("ptel") || "").trim();
+    reg.cats = CATS.map((row) => row[0]).filter((cat) => $("#rr-" + cat) && $("#rr-" + cat).checked);
+    reg.tc = $("#ptc").checked;
   }
-  return a;
+  return reg;
 }
 store.REGFILES = [];
-registerClick("regGoogle", (e, x, v) => {
+// demo: completa el formulario como si viniera de Google
+registerClick("regGoogle", (ev, el, act) => {
   S.reg = Object.assign({}, S.reg, readReg(), {
     nombre: readReg().nombre || S.reg.nombre || "Barbería Don Pepe",
     email: "donpepe.barber@gmail.com",
@@ -96,18 +100,19 @@ registerClick("regGoogle", (e, x, v) => {
   toast("Datos completados con Google");
   render();
 });
-registerClick("regPanel", (e, x, v) => {
-  const r = S.reg;
-  const m = 100 + P.length;
+// demo: crea el prestador nuevo con un servicio por rubro y entra a su panel
+registerClick("regPanel", (ev, el, act) => {
+  const reg = S.reg;
+  const id = 100 + P.length;
   P.push({
-    id: m,
-    cats: r.cats && r.cats.length ? r.cats : ["b"],
-    name: r.nombre || "Mi negocio",
-    addr: r.addr || "",
-    tel: r.tel || "",
-    hue: (m * 47) % 360,
+    id: id,
+    cats: reg.cats && reg.cats.length ? reg.cats : ["b"],
+    name: reg.nombre || "Mi negocio",
+    addr: reg.addr || "",
+    tel: reg.tel || "",
+    hue: (id * 47) % 360,
     verified: false,
-    svcs: (r.cats && r.cats.length ? r.cats : ["b"]).map((f) => [
+    svcs: (reg.cats && reg.cats.length ? reg.cats : ["b"]).map((cat) => [
       {
         b: "Corte",
         p: "Corte y peinado",
@@ -115,14 +120,14 @@ registerClick("regPanel", (e, x, v) => {
         l: "Lifting de pestañas",
         u: "Esmaltado",
         d: "Depilación",
-      }[f],
+      }[cat],
       30,
       1e4,
-      f,
+      cat,
     ]),
   });
-  useProvider(m);
-  cfg(m).on = false;
+  useProvider(id);
+  cfg(id).on = false;
   S.reg = {};
   S.barberAuth = true;
   S.role = "barbero";
@@ -131,55 +136,55 @@ registerClick("regPanel", (e, x, v) => {
   render();
   window.scrollTo(0, 0);
 });
-registerChange("dniUp", (e) => {
+registerChange("dniUp", (ev) => {
   api.m
-    .uploadDni([...e.target.files].slice(0, 4))
+    .uploadDni([...ev.target.files].slice(0, 4))
     .then(() => toast("Recibimos tu DNI. Te avisamos cuando esté verificado."))
     .catch(() => {});
   return;
 });
-registerSubmit("fPrest", (e) => {
-  const a = Object.assign(S.reg, readReg());
-  const t = {};
-  if (!a.cats || !a.cats.length) {
-    t.cats = "Elegí al menos un rubro.";
+registerSubmit("fPrest", (ev) => {
+  const reg = Object.assign(S.reg, readReg());
+  const errs = {};
+  if (!reg.cats || !reg.cats.length) {
+    errs.cats = "Elegí al menos un rubro.";
   }
-  if (!a.nombre) {
-    t.nombre = "Ingresá el nombre de tu negocio o tu nombre.";
+  if (!reg.nombre) {
+    errs.nombre = "Ingresá el nombre de tu negocio o tu nombre.";
   }
-  if (!a.tel || a.tel.replace(/\D/g, "").length < 8) {
-    t.tel = "Ingresá un celular válido.";
+  if (!reg.tel || reg.tel.replace(/\D/g, "").length < 8) {
+    errs.tel = "Ingresá un celular válido.";
   }
-  if (a.email) {
-    if (!EMAIL.test(a.email)) {
-      t.email = "Ese email no es válido.";
+  if (reg.email) {
+    if (!EMAIL.test(reg.email)) {
+      errs.email = "Ese email no es válido.";
     }
   } else {
-    t.email = "Ingresá tu email.";
+    errs.email = "Ingresá tu email.";
   }
-  if (!a.pass || a.pass.length < 8) {
-    t.pass = "La contraseña debe tener al menos 8 caracteres.";
+  if (!reg.pass || reg.pass.length < 8) {
+    errs.pass = "La contraseña debe tener al menos 8 caracteres.";
   }
-  if (!/^\d{7,8}$/.test(a.dni || "")) {
-    t.dni = "El DNI tiene que tener 7 u 8 números, sin puntos.";
+  if (!/^\d{7,8}$/.test(reg.dni || "")) {
+    errs.dni = "El DNI tiene que tener 7 u 8 números, sin puntos.";
   }
-  if (!a.files) {
-    t.files = "Subí la foto del DNI (frente y dorso).";
+  if (!reg.files) {
+    errs.files = "Subí la foto del DNI (frente y dorso).";
   }
-  if (!a.tc) {
-    t.tc = "Tenés que aceptar los términos para continuar.";
+  if (!reg.tc) {
+    errs.tc = "Tenés que aceptar los términos para continuar.";
   }
-  a.errs = t;
-  if (Object.keys(t).length) {
+  reg.errs = errs;
+  if (Object.keys(errs).length) {
     render();
     toast("Revisá los campos marcados");
     return;
   }
   if (LIVE) {
-    liveRegister(a);
+    liveRegister(reg);
     return;
   }
-  a.done = true;
+  reg.done = true;
   render();
   window.scrollTo(0, 0);
   return;
