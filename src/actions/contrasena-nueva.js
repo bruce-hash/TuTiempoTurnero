@@ -10,64 +10,65 @@ import { store } from "../store.js";
 import { go } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
-registerSubmit("fNewPass", (e) => {
-  const a = $("#np1").value;
-  const t = $("#np2").value;
-  const s = (i) => {
-    $("#nperr").textContent = i;
+// guardar la contraseña nueva (desde el link de recuperación o desde Mi perfil)
+registerSubmit("fNewPass", (ev) => {
+  const pass = $("#np1").value;
+  const pass2 = $("#np2").value;
+  const showErr = (msg) => {
+    $("#nperr").textContent = msg;
   };
-  if (!pwOk(a)) {
-    return s(
+  if (!pwOk(pass)) {
+    return showErr(
       "La contraseña tiene que tener " +
         PWRULE.toLowerCase().replace("mínimo ", "al menos ").replace(".", ""),
     );
   }
-  if (a !== t) {
-    return s("Las contraseñas no coinciden.");
+  if (pass !== pass2) {
+    return showErr("Las contraseñas no coinciden.");
   }
-  const n = S.npMode === "change";
+  const isChange = S.npMode === "change";
   if (LIVE) {
-    const i = e.target.querySelector("button[type=submit]");
-    if (i) {
-      i.disabled = true;
+    const btn = ev.target.querySelector("button[type=submit]");
+    if (btn) {
+      btn.disabled = true;
     }
     sb.auth
       .updateUser({
-        password: a,
+        password: pass,
       })
-      .then(async (l) => {
-        if (l.error) {
-          if (i) {
-            i.disabled = false;
+      .then(async (res) => {
+        if (res.error) {
+          if (btn) {
+            btn.disabled = false;
           }
-          return s(errMsg(l.error));
+          return showErr(errMsg(res.error));
         }
         S.recovering = false;
         S.npMode = null;
-        if (!n) {
+        if (!isChange) {
           await api.session();
         }
-        toast(n ? "Contraseña cambiada." : "Listo, tu contraseña nueva quedó guardada.");
-        go(n ? "cuenta" : "home");
+        toast(isChange ? "Contraseña cambiada." : "Listo, tu contraseña nueva quedó guardada.");
+        go(isChange ? "cuenta" : "home");
       })
-      .catch((l) => {
-        if (i) {
-          i.disabled = false;
+      .catch((err) => {
+        if (btn) {
+          btn.disabled = false;
         }
-        s(errMsg(l));
+        showErr(errMsg(err));
       });
     return;
   }
-  const o = S.user ? S.user.email : S.recoverEmail;
-  if (store.DEMO_USERS[o]) {
-    store.DEMO_USERS[o].pass = a;
+  const email = S.user ? S.user.email : S.recoverEmail;
+  if (store.DEMO_USERS[email]) {
+    store.DEMO_USERS[email].pass = pass;
   }
   if (!S.user) {
-    demoSignIn(o);
+    demoSignIn(email);
   }
   S.recoverEmail = null;
   S.npMode = null;
-  toast(n ? "Contraseña cambiada." : "Listo, tu contraseña nueva quedó guardada.");
-  go(n ? "cuenta" : "home");
+  toast(isChange ? "Contraseña cambiada." : "Listo, tu contraseña nueva quedó guardada.");
+  go(isChange ? "cuenta" : "home");
   return;
 });
