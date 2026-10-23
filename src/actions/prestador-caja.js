@@ -11,140 +11,143 @@ import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { closeDay, dayLines, finTot, ymk } from "../views/prestador/finanzas.js";
 
-registerClick("reopenDay", (e, x, v) => {
+registerClick("reopenDay", (ev, el, act) => {
   delete store.CLOSINGS["day|" + TODAY()];
   api.m.reopenCash("day", TODAY());
   render();
   return;
 });
-registerClick(["closePast", "closeAllPast"], (e, x, v) => {
-  const r = TODAY();
-  const m = store.FIN.filter(
-    (f) =>
-      ymk(f.date) === ymk(r) &&
-      f.date < r &&
-      finTot(f) > 0 &&
-      !store.CLOSINGS["day|" + f.date] &&
-      (v === "closeAllPast" || f.date === x.dataset.d),
+// cerrar días anteriores del mes que quedaron abiertos (uno o todos), sin detalle de efectivo
+registerClick(["closePast", "closeAllPast"], (ev, el, act) => {
+  const today = TODAY();
+  const days = store.FIN.filter(
+    (day) =>
+      ymk(day.date) === ymk(today) &&
+      day.date < today &&
+      finTot(day) > 0 &&
+      !store.CLOSINGS["day|" + day.date] &&
+      (act === "closeAllPast" || day.date === el.dataset.d),
   );
-  m.forEach((f) => {
-    const u = {
-      income: finTot(f),
+  days.forEach((day) => {
+    const closing = {
+      income: finTot(day),
       cash: 0,
       mp: 0,
       counted: null,
       at: "—",
     };
-    store.CLOSINGS["day|" + f.date] = u;
-    api.m.closeCash("day", f.date, u);
+    store.CLOSINGS["day|" + day.date] = closing;
+    api.m.closeCash("day", day.date, closing);
   });
-  toast(`Cerraste ${m.length} día${m.length === 1 ? "" : "s"}.`);
+  toast(`Cerraste ${days.length} día${days.length === 1 ? "" : "s"}.`);
   render();
   return;
 });
-registerClick("walkOpen", (e, x, v) => {
+registerClick("walkOpen", (ev, el, act) => {
   S.walkOpen = true;
   S.walkMedio = "Efectivo";
   render();
-  const r = $("#wsv");
-  if (r) {
-    r.focus();
+  const input = $("#wsv");
+  if (input) {
+    input.focus();
   }
 });
-registerClick("walkClose", (e, x, v) => {
+registerClick("walkClose", (ev, el, act) => {
   S.walkOpen = false;
   render();
 });
-registerClick("walkDel", (e, x, v) => {
-  const r = S.walk.splice(+x.dataset.i, 1)[0];
-  api.m.delWalk(r);
-  toast("Borraste " + r.svc + " de las " + r.hora);
+registerClick("walkDel", (ev, el, act) => {
+  const walk = S.walk.splice(+el.dataset.i, 1)[0];
+  api.m.delWalk(walk);
+  toast("Borraste " + walk.svc + " de las " + walk.hora);
   render();
 });
-registerChange("wsv", (e) => {
-  const n = pr(ME());
-  const o = e.target.value;
-  $("#wotroBox").hidden = o !== "otro";
-  if (o[0] === "p") {
-    $("#wpr").value = store.PRODS[+o.slice(1)].p;
-  } else if (o !== "otro") {
-    $("#wpr").value = n.svcs[+o][2];
+registerChange("wsv", (ev) => {
+  const prov = pr(ME());
+  const value = ev.target.value;
+  $("#wotroBox").hidden = value !== "otro";
+  if (value[0] === "p") {
+    $("#wpr").value = store.PRODS[+value.slice(1)].p;
+  } else if (value !== "otro") {
+    $("#wpr").value = prov.svcs[+value][2];
   } else {
     $("#wpr").value = "";
     $("#wotro").focus();
   }
   return;
 });
-registerSubmit("fWalk", (e) => {
-  const a = pr(ME());
-  const t = $("#wsv").value;
-  const s = t[0] === "p";
-  const n = s ? store.PRODS[+t.slice(1)] : null;
-  const o = s ? n.n : t === "otro" ? $("#wotro").value.trim() : a.svcs[+t][0];
-  if (s && n.stock <= 0) {
+// servicio sin turno o venta de producto cargado en la caja (sin comisión; la propina no se pide: va en 0)
+registerSubmit("fWalk", (ev) => {
+  const prov = pr(ME());
+  const value = $("#wsv").value;
+  const isProd = value[0] === "p";
+  const prod = isProd ? store.PRODS[+value.slice(1)] : null;
+  const label = isProd ? prod.n : value === "otro" ? $("#wotro").value.trim() : prov.svcs[+value][0];
+  if (isProd && prod.stock <= 0) {
     $("#werr").textContent = "No te queda stock de ese producto.";
     return;
   }
-  const i = parseInt($("#wpr").value.replace(/\D/g, "")) || 0;
-  const l = 0;
-  const c = $("#whr").value;
-  if (!o) {
+  const price = parseInt($("#wpr").value.replace(/\D/g, "")) || 0;
+  const tip = 0;
+  const time = $("#whr").value;
+  if (!label) {
     $("#werr").textContent = "Escribí qué servicio hiciste.";
     return;
   }
-  if (i <= 0) {
+  if (price <= 0) {
     $("#werr").textContent = "Ingresá cuánto cobraste.";
     return;
   }
-  if (!c) {
+  if (!time) {
     $("#werr").textContent = "Ingresá la hora.";
     return;
   }
-  const d = $("#wcl").value.trim();
-  if (s) {
-    n.stock--;
-  } else if (d) {
-    const w = cli(d);
-    w.v++;
-    w.last = 0;
-    w.spend ||= i;
+  const client = $("#wcl").value.trim();
+  if (isProd) {
+    prod.stock--;
+  } else if (client) {
+    const stats = cli(client);
+    stats.v++;
+    stats.last = 0;
+    stats.spend ||= price;
   }
-  const p = {
-    svc: o,
-    precio: i,
-    propina: l,
-    hora: c,
+  const walk = {
+    svc: label,
+    precio: price,
+    propina: tip,
+    hora: time,
     medio: S.walkMedio || "Efectivo",
-    cliente: d,
-    kind: s ? "prod" : "svc",
-    pid: (s && n.id) || null,
+    cliente: client,
+    kind: isProd ? "prod" : "svc",
+    pid: (isProd && prod.id) || null,
   };
-  S.walk.push(p);
-  api.m.addWalk(p);
-  if (s) {
-    api.m.setStock(n);
+  S.walk.push(walk);
+  api.m.addWalk(walk);
+  if (isProd) {
+    api.m.setStock(prod);
   }
-  S.walk.sort((w, y) => w.hora.localeCompare(y.hora));
+  S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
   S.walkOpen = false;
-  toast(s ? `Venta guardada: ${o}. Quedan ${n.stock} en stock.` : `Guardado: ${o} · ${money(i)}`);
+  toast(isProd ? `Venta guardada: ${label}. Quedan ${prod.stock} en stock.` : `Guardado: ${label} · ${money(price)}`);
   render();
   return;
 });
-registerSubmit("fCloseDay", (e) => {
-  const a = TODAY();
-  const t = dayLines(a);
-  const s = t.reduce((c, d) => c + d.m, 0);
-  const n = t.filter((c) => c.medio === "Efectivo").reduce((c, d) => c + d.m, 0);
-  const o = ($("#cdCount").value || "").trim();
-  const i = o === "" ? null : parseInt(o.replace(/\D/g, ""));
-  if (o !== "" && !(i >= 0)) {
+// cierre de la caja de hoy; con el efectivo contado, avisa si sobra o falta
+registerSubmit("fCloseDay", (ev) => {
+  const today = TODAY();
+  const lines = dayLines(today);
+  const total = lines.reduce((sum, line) => sum + line.m, 0);
+  const cash = lines.filter((line) => line.medio === "Efectivo").reduce((sum, line) => sum + line.m, 0);
+  const counted = ($("#cdCount").value || "").trim();
+  const countedN = counted === "" ? null : parseInt(counted.replace(/\D/g, ""));
+  if (counted !== "" && !(countedN >= 0)) {
     $("#cderr").textContent = "Escribí solo números.";
     return;
   }
-  closeDay(a, s, n, s - n, i);
-  const l = i == null ? null : i - n;
+  closeDay(today, total, cash, total - cash, countedN);
+  const diff = countedN == null ? null : countedN - cash;
   toast(
-    `Caja cerrada: ${money(s)}.${l == null ? "" : l === 0 ? " El efectivo da justo." : l > 0 ? ` Te sobran ${money(l)}.` : ` Te faltan ${money(-l)}.`}`,
+    `Caja cerrada: ${money(total)}.${diff == null ? "" : diff === 0 ? " El efectivo da justo." : diff > 0 ? ` Te sobran ${money(diff)}.` : ` Te faltan ${money(-diff)}.`}`,
   );
   render();
   return;
