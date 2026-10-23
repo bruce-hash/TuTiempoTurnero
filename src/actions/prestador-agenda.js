@@ -17,241 +17,246 @@ import { feeOf } from "../views/prestador/finanzas.js";
 import { pushNotice } from "../views/prestador/mensajes.js";
 import { BTABS, selectBtab } from "../views/prestador/panel.js";
 
-registerClick(["tabPrev", "tabNext"], (e, x, v) => {
-  const r = Math.max(
+registerClick(["tabPrev", "tabNext"], (ev, el, act) => {
+  const current = Math.max(
     0,
-    BTABS.findIndex((f) => f[0] === S.btab),
+    BTABS.findIndex((tab) => tab[0] === S.btab),
   );
-  const m = Math.max(0, Math.min(BTABS.length - 1, r + (v === "tabNext" ? 1 : -1)));
-  selectBtab(BTABS[m][0]);
+  const next = Math.max(0, Math.min(BTABS.length - 1, current + (act === "tabNext" ? 1 : -1)));
+  selectBtab(BTABS[next][0]);
   return;
 });
-registerClick("selClose", (e, x, v) => {
+registerClick("selClose", (ev, el, act) => {
   S.sel = null;
   S.bAsk = null;
   render();
 });
-registerClick("offerGap", (e, x, v) => {
-  S.offered[x.dataset.g] = true;
-  const [r, m] = x.dataset.g.split("|");
-  api.m.post(`Tengo lugar ${dayLabel(r).toLowerCase()} de ${m} a ${x.dataset.z}. Reservá en TuTiempo.`);
+// “Ofrecer” un hueco libre: se publica como aviso a los seguidores
+registerClick("offerGap", (ev, el, act) => {
+  S.offered[el.dataset.g] = true;
+  const [day, from] = el.dataset.g.split("|");
+  api.m.post(`Tengo lugar ${dayLabel(day).toLowerCase()} de ${from} a ${el.dataset.z}. Reservá en TuTiempo.`);
   toast(
-    `Avisamos a ${store.COMM.followers} seguidores: “Tengo lugar ${dayLabel(r).toLowerCase()} de ${m} a ${x.dataset.z}”`,
+    `Avisamos a ${store.COMM.followers} seguidores: “Tengo lugar ${dayLabel(day).toLowerCase()} de ${from} a ${el.dataset.z}”`,
   );
   render();
 });
-registerClick("bDone", (e, x, v) => {
-  const r = store.BOOK.find((E) => E.id === +x.dataset.id);
-  if (!r || r.status !== "confirmed") {
+// el cliente vino: suma la visita y, si el servicio da sellos y reservó por la app, un sello
+registerClick("bDone", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === +el.dataset.id);
+  if (!booking || booking.status !== "confirmed") {
     return;
   }
-  r.status = "done";
-  api.m.markBooking(r, "done");
-  cli(r.cliente).v++;
-  cli(r.cliente).last = 0;
-  const m = pr(ME()).svcs.find((E) => E[0] === r.svc);
-  const f = stampGoal(ME(), m);
-  let u = "";
+  booking.status = "done";
+  api.m.markBooking(booking, "done");
+  cli(booking.cliente).v++;
+  cli(booking.cliente).last = 0;
+  const svc = pr(ME()).svcs.find((row) => row[0] === booking.svc);
+  const goal = stampGoal(ME(), svc);
+  let stampMsg = "";
   if (
-    f &&
-    r.src === "app" &&
-    r.pay !== "reward" &&
-    (!LIVE || (store.CLIENTS[r.cliente] && store.CLIENTS[r.cliente].user))
+    goal &&
+    booking.src === "app" &&
+    booking.pay !== "reward" &&
+    (!LIVE || (store.CLIENTS[booking.cliente] && store.CLIENTS[booking.cliente].user))
   ) {
-    const E = cliStamps(r.cliente, m) + 1;
-    setCliStamps(r.cliente, m, E);
-    r.stamped = true;
-    u = ` 🎟️ Sumó un sello en ${m[0]} (${Math.min(E, f)}/${f})${E >= f ? ": ¡ya tiene su premio!" : "."}`;
+    const have = cliStamps(booking.cliente, svc) + 1;
+    setCliStamps(booking.cliente, svc, have);
+    booking.stamped = true;
+    stampMsg = ` 🎟️ Sumó un sello en ${svc[0]} (${Math.min(have, goal)}/${goal})${have >= goal ? ": ¡ya tiene su premio!" : "."}`;
   }
-  if (r.mine) {
-    pushNotice(ME(), "rev", r, r.stamped ? ` 🎟️ Sumaste 1 sello en tu tarjeta de ${r.svc}.` : "");
+  if (booking.mine) {
+    pushNotice(ME(), "rev", booking, booking.stamped ? ` 🎟️ Sumaste 1 sello en tu tarjeta de ${booking.svc}.` : "");
   }
-  if (r.date === TODAY()) {
+  if (booking.date === TODAY()) {
     S.jobsToday++;
-    S.earnToday += r.price - (r.src === "app" ? feeOf(r) : 0);
+    S.earnToday += booking.price - (booking.src === "app" ? feeOf(booking) : 0);
   }
   toast(
-    `${r.cliente} asistió. ${r.price > r.paid ? "Cobrale " + money(r.price - r.paid) + " en el local." : ""}${u}`,
+    `${booking.cliente} asistió. ${booking.price > booking.paid ? "Cobrale " + money(booking.price - booking.paid) + " en el local." : ""}${stampMsg}`,
   );
   render();
 });
-registerClick("bNoShow", (e, x, v) => {
-  const r = store.BOOK.find((m) => m.id === +x.dataset.id);
-  r.status = "noshow";
-  api.m.markBooking(r, "noshow");
-  cli(r.cliente).n++;
+registerClick("bNoShow", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === +el.dataset.id);
+  booking.status = "noshow";
+  api.m.markBooking(booking, "noshow");
+  cli(booking.cliente).n++;
   toast(
-    r.paid ? `Marcado como ausente. Te quedás con la seña de ${money(r.paid)}.` : "Marcado como ausente.",
+    booking.paid ? `Marcado como ausente. Te quedás con la seña de ${money(booking.paid)}.` : "Marcado como ausente.",
   );
   render();
 });
-registerClick("bCancel", (e, x, v) => {
-  S.bAsk = +x.dataset.id;
+registerClick("bCancel", (ev, el, act) => {
+  S.bAsk = +el.dataset.id;
   render();
 });
-registerClick("bCancelNo", (e, x, v) => {
+registerClick("bCancelNo", (ev, el, act) => {
   S.bAsk = null;
   render();
 });
-registerClick("bCancelYes", (e, x, v) => {
-  const r = store.BOOK.find((f) => f.id === +x.dataset.id);
-  r.status = "cancelled";
-  r.byProv = true;
-  if (r.mine) {
-    pushCancel(r);
+// el prestador cancela un turno: al cliente se le devuelve todo (seña y comisión) y los sellos canjeados;
+// se avisa a la lista de espera
+registerClick("bCancelYes", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === +el.dataset.id);
+  booking.status = "cancelled";
+  booking.byProv = true;
+  if (booking.mine) {
+    pushCancel(booking);
   }
-  api.m.cancelProvider(r);
-  if (r.pay === "reward" && !r.stampBack) {
-    r.stampBack = true;
-    const f = pr(ME()).svcs.find((u) => u[0] === r.svc);
-    if (f) {
-      setCliStamps(r.cliente, f, cliStamps(r.cliente, f) + (r.rwGoal || stampGoal(ME(), f)));
+  api.m.cancelProvider(booking);
+  if (booking.pay === "reward" && !booking.stampBack) {
+    booking.stampBack = true;
+    const svc = pr(ME()).svcs.find((row) => row[0] === booking.svc);
+    if (svc) {
+      setCliStamps(booking.cliente, svc, cliStamps(booking.cliente, svc) + (booking.rwGoal || stampGoal(ME(), svc)));
     }
   }
-  r.refund = (r.paid || 0) + (r.fee || 0);
-  if (r.mine) {
-    refundPay(r, r.svc + " en " + pr(r.pid).name);
+  booking.refund = (booking.paid || 0) + (booking.fee || 0);
+  if (booking.mine) {
+    refundPay(booking, booking.svc + " en " + pr(booking.pid).name);
   }
   S.bAsk = null;
-  const m = freed(r);
+  const notified = freed(booking);
   toast(
-    `Turno cancelado. ${r.paid ? "Le devolvemos " + money(r.paid) + " al cliente. " : ""}${m ? "Avisamos a " + m + " persona" + (m > 1 ? "s" : "") + " en lista de espera." : ""}`,
+    `Turno cancelado. ${booking.paid ? "Le devolvemos " + money(booking.paid) + " al cliente. " : ""}${notified ? "Avisamos a " + notified + " persona" + (notified > 1 ? "s" : "") + " en lista de espera." : ""}`,
   );
   render();
 });
-registerClick("bUnblock", (e, x, v) => {
-  const r = store.BOOK.find((m) => m.id === +x.dataset.id);
-  store.BOOK = store.BOOK.filter((m) => m.id !== +x.dataset.id);
-  if (r) {
-    api.m.delBooking(r);
+registerClick("bUnblock", (ev, el, act) => {
+  const block = store.BOOK.find((item) => item.id === +el.dataset.id);
+  store.BOOK = store.BOOK.filter((item) => item.id !== +el.dataset.id);
+  if (block) {
+    api.m.delBooking(block);
   }
   toast("Horario desbloqueado");
   render();
 });
-registerClick("manOpen", (e, x, v) => {
+registerClick("manOpen", (ev, el, act) => {
   S.manOpen = true;
   S.blockOpen = false;
   S.manSvc = 0;
   render();
 });
-registerClick("manClose", (e, x, v) => {
+registerClick("manClose", (ev, el, act) => {
   S.manOpen = false;
   render();
 });
-registerClick("turnosOn", (e, x, v) => {
-  const r = cfg(ME());
-  r.on = !r.on;
-  api.m.saveSettings(r);
-  toast(r.on ? "Turnos online activados" : "Turnos online pausados");
+registerClick("turnosOn", (ev, el, act) => {
+  const conf = cfg(ME());
+  conf.on = !conf.on;
+  api.m.saveSettings(conf);
+  toast(conf.on ? "Turnos online activados" : "Turnos online pausados");
   render();
 });
-registerClick("walkFromAgenda", (e, x, v) => {
+registerClick("walkFromAgenda", (ev, el, act) => {
   S.btab = "caja";
   S.walkOpen = true;
   S.walkMedio = "Efectivo";
   render();
 });
-registerClick("blockOpen", (e, x, v) => {
+registerClick("blockOpen", (ev, el, act) => {
   S.blockOpen = true;
   S.manOpen = false;
   render();
 });
-registerClick("blockClose", (e, x, v) => {
+registerClick("blockClose", (ev, el, act) => {
   S.blockOpen = false;
   render();
 });
-registerSubmit("fBlock", (e) => {
-  const a = S.aday || TODAY();
-  const t = $("#bkf").value;
-  const s = $("#bkt").value;
-  if (!t || !s || s <= t) {
+registerSubmit("fBlock", (ev) => {
+  const day = S.aday || TODAY();
+  const from = $("#bkf").value;
+  const to = $("#bkt").value;
+  if (!from || !to || to <= from) {
     $("#bkerr").textContent = "La hora de fin tiene que ser posterior a la de inicio.";
     return;
   }
-  const n = busy(ME(), a).filter(
-    (o) => o.type !== "block" && overlaps(toMin(t), toMin(s), toMin(o.time), toMin(o.time) + o.dur),
+  const clash = busy(ME(), day).filter(
+    (item) => item.type !== "block" && overlaps(toMin(from), toMin(to), toMin(item.time), toMin(item.time) + item.dur),
   );
-  if (n.length) {
+  if (clash.length) {
     $("#bkerr").textContent =
-      `Ya tenés ${n.length} turno${n.length > 1 ? "s" : ""} en esa franja (${n.map((o) => o.time).join(", ")}). Cancelalos primero o elegí otro horario.`;
+      `Ya tenés ${clash.length} turno${clash.length > 1 ? "s" : ""} en esa franja (${clash.map((item) => item.time).join(", ")}). Cancelalos primero o elegí otro horario.`;
     return;
   }
   {
-    const o = {
+    const block = {
       id: store.BID++,
       pid: ME(),
-      date: a,
-      time: t,
-      dur: toMin(s) - toMin(t),
-      svc: `${t} a ${s} h`,
+      date: day,
+      time: from,
+      dur: toMin(to) - toMin(from),
+      svc: `${from} a ${to} h`,
       cliente: "Horario bloqueado",
       type: "block",
       status: "confirmed",
       paid: 0,
       price: 0,
     };
-    store.BOOK.push(o);
-    api.m.addBooking(o);
+    store.BOOK.push(block);
+    api.m.addBooking(block);
   }
   S.blockOpen = false;
   toast("Horario bloqueado. Nadie puede reservar en esa franja.");
   render();
   return;
 });
-registerSubmit("fManual", (e) => {
-  const a = S.aday || TODAY();
-  const t = pr(ME());
-  const s = +$("#msv").value;
-  const n = t.svcs[s];
-  const o = ($("#mhr") || {}).value;
-  const i = $("#mcl").value.trim();
-  if (!o) {
+// turno agendado a mano (sin pago ni comisión); si el cliente no estaba, se suma a la lista
+registerSubmit("fManual", (ev) => {
+  const day = S.aday || TODAY();
+  const prov = pr(ME());
+  const svcIndex = +$("#msv").value;
+  const svc = prov.svcs[svcIndex];
+  const time = ($("#mhr") || {}).value;
+  const client = $("#mcl").value.trim();
+  if (!time) {
     $("#merr").textContent = "No quedan horarios libres este día.";
     return;
   }
-  if (!i) {
+  if (!client) {
     $("#merr").textContent = "Escribí el nombre del cliente.";
     return;
   }
-  if (!slotsFor(ME(), a, n[1]).list.some((l) => l.free && l.time === o)) {
+  if (!slotsFor(ME(), day, svc[1]).list.some((slot) => slot.free && slot.time === time)) {
     $("#merr").textContent = "Ese horario se acaba de ocupar. Elegí otro.";
     render();
     return;
   }
   {
-    const l = {
+    const booking = {
       id: store.BID++,
       pid: ME(),
-      date: a,
-      time: o,
-      dur: n[1],
-      svc: n[0],
-      price: n[2],
-      cliente: i,
+      date: day,
+      time: time,
+      dur: svc[1],
+      svc: svc[0],
+      price: svc[2],
+      cliente: client,
       tel: $("#mtel").value.trim(),
       src: "manual",
       type: "local",
       status: "confirmed",
       paid: 0,
     };
-    store.BOOK.push(l);
-    api.m.addBooking(l);
+    store.BOOK.push(booking);
+    api.m.addBooking(booking);
   }
   S.manOpen = false;
   S.manName = "";
-  if (!store.CLIENTS[i]) {
-    store.CLIENTS[i] = {
+  if (!store.CLIENTS[client]) {
+    store.CLIENTS[client] = {
       v: 0,
       n: 0,
       last: null,
-      spend: n[2],
+      spend: svc[2],
       tel: $("#mtel").value.trim(),
       notes: "",
       bday: "",
     };
-    api.m.upsertClient(i, store.CLIENTS[i]);
+    api.m.upsertClient(client, store.CLIENTS[client]);
   }
-  toast(`Agendado: ${i}, ${dayLabel(a)} ${o}`);
+  toast(`Agendado: ${client}, ${dayLabel(day)} ${time}`);
   render();
   return;
 });
