@@ -32,11 +32,12 @@ function nav() {
       `<span class="user"><span class="av">${ini(pr(ME()).name)}</span><button class="btn btn-ghost" data-act="salirBarbero">Salir</button></span>`;
     return;
   }
-  const e = myUpcoming().length;
+  const upcoming = myUpcoming().length;
   $("#nav").innerHTML = S.user
-    ? `<span class="user"><button class="btn btn-ghost nbtn" data-go="misturnos" aria-label="Mis turnos">📅 <span class="nb-l">Mis turnos</span>${e ? `<span class="cnt">${e}</span>` : ""}${(S.inbox || []).some((a) => !a.read) ? '<i class="dotn" title="Tenés avisos nuevos"></i>' : ""}</button><button class="avbtn" data-go="cuenta" aria-label="Mi perfil" title="Mi perfil">${avatar(S.user)}</button></span>`
+    ? `<span class="user"><button class="btn btn-ghost nbtn" data-go="misturnos" aria-label="Mis turnos">📅 <span class="nb-l">Mis turnos</span>${upcoming ? `<span class="cnt">${upcoming}</span>` : ""}${(S.inbox || []).some((msg) => !msg.read) ? '<i class="dotn" title="Tenés avisos nuevos"></i>' : ""}</button><button class="avbtn" data-go="cuenta" aria-label="Mi perfil" title="Mi perfil">${avatar(S.user)}</button></span>`
     : '<button class="btn btn-ghost" data-go="loginBarbero">Soy prestador</button><button class="btn btn-pri" data-go="login">Ingresar</button>';
 }
+// rubro que tiñe la página (data-seg del body): el del prestador que se está viendo, o "n" (neutro)
 function segNow() {
   if (S.role === "admin") {
     return "n";
@@ -44,174 +45,176 @@ function segNow() {
   if (S.role === "barbero") {
     return pcat(pr(ME()), S.pctx);
   }
-  const e = S.view;
-  if (e === "perfil" || e === "checkoutT") {
-    const a = pr(S.pid);
-    if (a) {
-      return pcat(a, S.pctx);
+  const view = S.view;
+  if (view === "perfil" || view === "checkoutT") {
+    const prov = pr(S.pid);
+    if (prov) {
+      return pcat(prov, S.pctx);
     } else {
       return "n";
     }
   }
-  if (e === "turnoOk") {
-    const a = store.BOOK.find((s) => s.id === S.turnoId);
-    const t = a && pr(a.pid);
-    if (t) {
-      return pcat(t, a.cat || S.pctx);
+  if (view === "turnoOk") {
+    const booking = store.BOOK.find((item) => item.id === S.turnoId);
+    const prov = booking && pr(booking.pid);
+    if (prov) {
+      return pcat(prov, booking.cat || S.pctx);
     } else {
       return "n";
     }
   }
-  if ((!e || e === "home") && CAT[S.cat] && S.cat !== "n") {
+  if ((!view || view === "home") && CAT[S.cat] && S.cat !== "n") {
     return S.cat;
   } else {
     return "n";
   }
 }
+// dibuja toda la app desde el estado S; si una vista falla, muestra un aviso en lugar de una página rota
 export function render() {
   try {
     renderInner();
-  } catch (e) {
-    console.error(e);
-    const a = document.getElementById("app");
-    if (a) {
-      a.innerHTML =
+  } catch (err) {
+    console.error(err);
+    const app = document.getElementById("app");
+    if (app) {
+      app.innerHTML =
         '<div class="apperr panel"><div style="font-size:36px">😕</div><h1 class="h1">Algo salió mal</h1><p class="lead">No se perdió nada de lo que ya guardaste.</p><button class="btn btn-pri btn-block" data-act="recover">Volver al inicio</button></div>';
     }
   }
 }
 function renderInner() {
   renderMain();
-  const e = document.querySelector(".btabs [aria-selected=true]");
-  if (e && e.parentElement) {
-    const t = e.parentElement;
-    t.scrollLeft = Math.max(0, e.offsetLeft - (t.clientWidth - e.offsetWidth) / 2);
+  const tab = document.querySelector(".btabs [aria-selected=true]");
+  if (tab && tab.parentElement) {
+    const bar = tab.parentElement;
+    bar.scrollLeft = Math.max(0, tab.offsetLeft - (bar.clientWidth - tab.offsetWidth) / 2);
   }
-  const a = document.getElementById("app");
-  if (a && S.story) {
-    a.insertAdjacentHTML("beforeend", vStory());
+  const app = document.getElementById("app");
+  if (app && S.story) {
+    app.insertAdjacentHTML("beforeend", vStory());
     storyTick();
   }
 }
 function renderMain() {
   document.body.dataset.seg = segNow();
   nav();
-  document.querySelectorAll("[data-role-view]").forEach((a) => {
-    if (a.closest(".sw")) {
-      a.setAttribute("aria-pressed", a.dataset.roleView === S.role);
+  document.querySelectorAll("[data-role-view]").forEach((btn) => {
+    if (btn.closest(".sw")) {
+      btn.setAttribute("aria-pressed", btn.dataset.roleView === S.role);
     }
   });
-  let e;
+  let html;
   if (S.role === "admin") {
-    e = vAdmin();
+    html = vAdmin();
   } else if (S.role === "barbero") {
-    e = S.preview
+    html = S.preview
       ? `<div class="prevbar"><span>👁 Así ve tu perfil un cliente</span><button class="btn btn-pri" data-act="exitPreview">Volver al panel</button></div>${vPerfil()}`
       : vBarbero();
   } else {
     switch (S.view) {
       case "perfil":
-        e =
+        html =
           pr(S.pid) && pr(S.pid).deleted
             ? '<div class="narrow" style="margin-top:24px"><div class="panel" style="text-align:center"><b>Este perfil ya no está disponible.</b><button class="btn btn-pri btn-block" style="margin-top:12px" data-go="home">Ver otros profesionales</button></div></div>'
             : vPerfil();
         break;
       case "login":
-        e = vLogin(false);
+        html = vLogin(false);
         break;
       case "register":
-        e = vLogin(true);
+        html = vLogin(true);
         break;
       case "newpass":
-        e = vNewPass();
+        html = vNewPass();
         break;
       case "prestador":
-        e = vRegPrest();
+        html = vRegPrest();
         break;
       case "loginBarbero":
-        e = vLoginBarbero();
+        html = vLoginBarbero();
         break;
       case "cuenta":
-        e = S.user ? vCuenta() : vLogin(false);
+        html = S.user ? vCuenta() : vLogin(false);
         break;
       case "terminos":
-        e = vTerminos();
+        html = vTerminos();
         break;
       case "misturnos":
-        e = S.user ? vMisTurnos() : vLogin(false);
+        html = S.user ? vMisTurnos() : vLogin(false);
         break;
       case "checkoutT":
-        e = vCheckoutTurno();
+        html = vCheckoutTurno();
         break;
       case "turnoOk":
-        e = vTurnoOk();
+        html = vTurnoOk();
         break;
       default:
-        e = vHome();
+        html = vHome();
     }
   }
-  $("#app").innerHTML = e;
+  $("#app").innerHTML = html;
 }
-export function go(e, id) {
+// navegación entre pantallas del cliente (id = prestador, para "perfil")
+export function go(view, id) {
   if (S.role === "barbero" && S.preview) {
     S.preview = false;
     render();
     window.scrollTo(0, 0);
     return;
   }
-  if (e === "misturnos" && !S.user) {
+  if (view === "misturnos" && !S.user) {
     S.after = "misturnos";
-    e = "login";
+    view = "login";
   }
-  if (e === "loginBarbero" && S.barberAuth) {
+  if (view === "loginBarbero" && S.barberAuth) {
     S.role = "barbero";
     render();
     window.scrollTo(0, 0);
     return;
   }
   S.role = "cliente";
-  if (e !== S.view) {
+  if (view !== S.view) {
     S.prev = S.view;
   }
-  if ((e === "login" || e === "register") && !S.keepLogin) {
+  if ((view === "login" || view === "register") && !S.keepLogin) {
     S.login = {
-      mode: e === "register" ? "up" : "in",
+      mode: view === "register" ? "up" : "in",
       email: "",
       err: "",
     };
   }
   S.keepLogin = false;
-  if (e === "loginBarbero") {
+  if (view === "loginBarbero") {
     Object.assign(S.blogin, {
       step: "form",
       err: "",
       show: false,
     });
   }
-  if (e === "prestador" && S.reg.done) {
+  if (view === "prestador" && S.reg.done) {
     S.reg = {};
   }
-  if ((e === "login" || e === "register") && S.user) {
+  if ((view === "login" || view === "register") && S.user) {
     S.view = "cuenta";
     render();
     window.scrollTo(0, 0);
     return;
   }
-  if (e === "home") {
+  if (view === "home") {
     S.reprog = null;
   }
-  if (e !== "turnoOk") {
+  if (view !== "turnoOk") {
     S.justBooked = false;
     S.cancelAsk = false;
   }
-  if (e === "perfil" && (!id || +id !== S.pid || S.view !== "perfil")) {
+  if (view === "perfil" && (!id || +id !== S.pid || S.view !== "perfil")) {
     S.ptab = "svc";
   }
   S.story = null;
   if (id) {
     S.pid = +id;
   }
-  S.view = e;
+  S.view = view;
   render();
   window.scrollTo(0, 0);
 }
