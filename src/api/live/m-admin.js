@@ -2,120 +2,125 @@ import { LM } from "./index.js";
 import { saved } from "../saved.js";
 import { sb } from "../../config.js";
 
+// Escrituras del administrador (todas por funciones de la base que verifican el rol) y, al final, sellos y
+// mensajes del prestador a sus clientes.
 Object.assign(LM, {
-  adminSetCommission: (e) =>
+  adminSetCommission: (pct) =>
     saved(
       sb.rpc("admin_set_commission", {
-        p_pct: e,
+        p_pct: pct,
       }),
     ),
-  adminSetProvider: (e, a, t) =>
+  adminSetProvider: (providerId, status, verified) =>
     saved(
       sb.rpc("admin_set_provider", {
-        pid: e,
-        p_status: a,
-        p_verified: t,
+        pid: providerId,
+        p_status: status,
+        p_verified: verified,
       }),
     ),
-  adminAddNote: (e, a) =>
+  adminAddNote: (providerId, body) =>
     saved(
       sb.rpc("admin_add_note", {
-        pid: e,
-        p_body: a,
+        pid: providerId,
+        p_body: body,
       }),
     ),
-  adminDelNote: (e) =>
+  adminDelNote: (noteId) =>
     saved(
       sb.rpc("admin_delete_note", {
-        p_id: e,
+        p_id: noteId,
       }),
     ),
-  adminDeleteProvider: (e) =>
+  adminDeleteProvider: (providerId) =>
     saved(
       sb.rpc("admin_delete_provider", {
-        pid: e,
+        pid: providerId,
       }),
     ),
-  adminClose: (e, a) =>
+  adminClose: (kind, period) =>
     saved(
       sb.rpc("admin_close", {
-        p_kind: e,
-        p_period: a,
+        p_kind: kind,
+        p_period: period,
       }),
     ),
-  adminReopen: (e, a) =>
+  adminReopen: (kind, period) =>
     saved(
       sb.rpc("admin_reopen", {
-        p_kind: e,
-        p_period: a,
+        p_kind: kind,
+        p_period: period,
       }),
     ),
-  adminAddExp: (e, a, t) =>
+  adminAddExp: (day, concept, amount) =>
     saved(
       sb.rpc("admin_add_expense", {
-        p_day: e,
-        p_concept: a,
-        p_amount: t,
+        p_day: day,
+        p_concept: concept,
+        p_amount: amount,
       }),
     ),
-  adminDelExp: (e) =>
+  adminDelExp: (expenseId) =>
     saved(
       sb.rpc("admin_delete_expense", {
-        p_id: e,
+        p_id: expenseId,
       }),
     ),
-  adminDni: async (e) => {
-    const a = await sb.storage.from("dni").list(e, {
+  // fotos del DNI de un prestador: enlaces firmados que vencen a los 5 minutos
+  adminDni: async (userId) => {
+    const res = await sb.storage.from("dni").list(userId, {
       limit: 10,
     });
-    if (a.error) {
-      throw a.error;
+    if (res.error) {
+      throw res.error;
     }
-    const t = [];
-    for (const s of a.data || []) {
-      const n = await sb.storage.from("dni").createSignedUrl(e + "/" + s.name, 300);
-      if (n.data) {
-        t.push(n.data.signedUrl);
+    const urls = [];
+    for (const file of res.data || []) {
+      const signed = await sb.storage.from("dni").createSignedUrl(userId + "/" + file.name, 300);
+      if (signed.data) {
+        urls.push(signed.data.signedUrl);
       }
     }
-    return t;
+    return urls;
   },
-  giveStamp: (e, a) =>
+  giveStamp: (client, svcId) =>
     saved(
       sb.rpc("give_stamp", {
-        p_client: e.id,
-        p_service: a,
+        p_client: client.id,
+        p_service: svcId,
       }),
     ),
-  redeemStamps: (e, a) =>
+  redeemStamps: (client, svcId) =>
     saved(
       sb.rpc("redeem_stamps", {
-        p_client: e.id,
-        p_service: a,
+        p_client: client.id,
+        p_service: svcId,
       }),
     ),
-  saveStampGoals: (e, a) =>
+  // goals: { idServicio: sellos para el premio }; sin valor, el servicio no da sellos
+  saveStampGoals: (prov, goals) =>
     Promise.all(
-      e.svcs
-        .filter((t) => t[4])
-        .map((t) =>
+      prov.svcs
+        .filter((svc) => svc[4])
+        .map((svc) =>
           saved(
             sb
               .from("services")
               .update({
-                stamp_goal: a[t[4]] || null,
+                stamp_goal: goals[svc[4]] || null,
               })
-              .eq("id", t[4]),
+              .eq("id", svc[4]),
           ),
         ),
     ),
-  sendMessages: (e, a) =>
+  sendMessages: (clientIds, body) =>
     saved(
       sb.rpc("send_client_messages", {
-        p_client_ids: e,
-        p_body: a,
+        p_client_ids: clientIds,
+        p_body: body,
       }),
     ),
+  // marcar como leídos no es importante: si falla no se avisa
   readMessages: () =>
     sb.rpc("mark_messages_read").then(
       () => {},
