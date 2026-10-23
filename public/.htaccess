@@ -13,6 +13,13 @@ AddType application/javascript .js .cjs
   # Bloquear archivos ocultos y de respaldo
   RewriteRule (^|/)\.(?!well-known/) - [F,L]
   RewriteRule \.(bak|sql|log|ini|sh|md|zip)$ - [F,L,NC]
+  # Direcciones de la app (Bloque B): un pedido que no es un archivo ni una carpeta y no tiene extensión va a index.html,
+  # y el enrutador de la app muestra la pantalla (o "no encontrado"). Un archivo con extensión que no existe da 404:
+  # nunca HTML en lugar de un .js o un .css. La query (?mp=, ?token_hash=) pasa tal cual.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_URI} !\.[A-Za-z0-9]{1,8}$
+  RewriteRule ^ /index.html [L]
 </IfModule>
 
 <IfModule mod_headers.c>

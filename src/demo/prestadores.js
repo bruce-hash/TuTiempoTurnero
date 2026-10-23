@@ -1,3 +1,4 @@
+import { isReservedSlug } from "../lib/rutas.js";
 import { P } from "../store.js";
 
 P.push(...[
@@ -167,4 +168,21 @@ const JOBS30 = {
 };
 P.forEach((prov) => {
   prov.jobs30 = JOBS30[prov.id] || 0;
+});
+// slug de cada prestador de ejemplo, armado del nombre igual que register_provider en la base (sin acentos, guiones,
+// y con sufijo si ya está tomado o es una palabra reservada)
+P.forEach((prov) => {
+  const base =
+    prov.name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 50) || "prestador";
+  let slug = base;
+  for (let n = 1; isReservedSlug(slug) || P.some((other) => other !== prov && other.slug === slug); n++) {
+    slug = base + "-" + n;
+  }
+  prov.slug = slug;
 });

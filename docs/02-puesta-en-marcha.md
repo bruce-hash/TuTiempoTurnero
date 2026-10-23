@@ -19,6 +19,8 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
    Usá siempre la versión del repo **después** de los arreglos de Claude Code.
 4. **No** cargues `ejemplos.NO-USAR-EN-PRODUCCION.sql`: creá 1 o 2 prestadores de prueba propios desde la app.
 5. Auth: seguir el PASO 2 del LEEME (URL del subdominio, plantillas de email, Google). Para prueba alcanza el email de Supabase.
+   En **Redirect URLs** alcanza con la raíz del sitio (`https://prueba.tutiempo.com.ar/`): desde el Bloque B la app siempre
+   pide volver a la raíz y recuerda aparte a qué pantalla iba.
 6. Admin: `insert into app_admins (user_id) select id from auth.users where email = 'TU-EMAIL';`
 7. Panel admin → Comisión → **4**.
 
@@ -47,6 +49,9 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
    El build no lo pisa: solo lo crea (desde `config.example.js`) si no existe. Sin `config.js` completo, el sitio
    muestra "Falta configurar el sitio" (la demo no viaja en el build de producción).
 4. Subir **el contenido** de `dist/` a la carpeta del subdominio, incluido `.htaccess` (archivo oculto) y la carpeta `assets/`.
+   **El sitio va siempre en la raíz de su dominio o subdominio** (`https://prueba.tutiempo.com.ar/`), nunca en una
+   subcarpeta: desde el Bloque B cada pantalla tiene su dirección (`/panel/agenda`, `/<slug>`…) y el `.htaccess` manda a
+   `index.html` todo pedido sin extensión que no sea un archivo. Los archivos con extensión que no existen dan 404.
 5. Para que Google no indexe la prueba: en ese subdominio, `robots.txt` con `Disallow: /`.
 
 ### 4. Prueba de punta a punta (checklist)

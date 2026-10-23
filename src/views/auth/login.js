@@ -8,6 +8,9 @@ import { authHead, pwField } from "./campos.js";
 // ingreso del cliente según S.login.mode: in (contraseña), up (crear cuenta), code / codeSent (código por email),
 // forgot / sent (recuperar contraseña) y confirm (falta activar la cuenta)
 export function vLogin() {
+  // viene de reservar (S.after "perfil" / "checkoutT" o una dirección de reserva), no de Mis turnos, la cuenta, etc.
+  const after = String(S.after || "");
+  const forBooking = !!after && !["misturnos", "cuenta"].includes(after) && (!after.startsWith("/") || /^\/[^/]+\/reservar/.test(after));
   const login = S.login;
   const mode = login.mode || "in";
   if (mode === "codeSent") {
@@ -69,7 +72,7 @@ export function vLogin() {
    </form>${provLinks}</div></div>`;
   } else {
     return `<div class="narrow"><div class="panel" style="margin-top:24px">
-   ${authHead(S.after ? "Ingresá para reservar" : "Ingresá a TuTiempo", S.after ? "Tu horario queda guardado mientras ingresás." : "")}${tabs}${google}
+   ${authHead(forBooking ? "Ingresá para reservar" : "Ingresá a TuTiempo", forBooking ? "Tu horario queda guardado mientras ingresás." : "")}${tabs}${google}
    ${LIVE ? "" : '<div class="demohint">Demo: <b>juan.perez@gmail.com</b> · <b>cliente123</b> (o creá una cuenta nueva)</div>'}
    <form id="fLogin" novalidate>
     <div class="f"><label for="ai_e">Email</label><input id="ai_e" type="email" autocomplete="email" maxlength="120" value="${esc(login.email || "")}"></div>

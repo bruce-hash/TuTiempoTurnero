@@ -1,6 +1,8 @@
+import qrcode from "qrcode-generator";
 import { LIVE } from "../../config.js";
 import { esc } from "../../lib/dom.js";
 import { pr } from "../../lib/prestadores.js";
+import { profileLinkText, profileUrl } from "../../router.js";
 import { store } from "../../store.js";
 import { gallery, rating, reviewsHtml } from "../../ui/resenas.js";
 
@@ -81,22 +83,23 @@ export function vBComunidad(prov) {
    <button class="btn btn-pri btn-block" data-act="publicar">Enviar a ${store.COMM.followers} seguidores</button>
    <p class="note" style="margin-top:6px">Les llega una notificación con link para reservar.</p></div>
   <div class="panel"><p class="lbl">Reseñas de clientes</p>${reviewsHtml(true)}</div>
-  <div class="panel" style="text-align:center"><p class="lbl">Sumá seguidores</p><div class="qr" aria-hidden="true">${qr()}</div><p style="margin:8px 0 2px;font-weight:700">tutiempo.com.ar/${esc(prov.slug || "p/" + prov.id)}</p><p class="note">Imprimí el QR para el espejo y poné el link en tu bio de Instagram.</p>
+  <div class="panel" style="text-align:center"><p class="lbl">Sumá seguidores</p><div class="qr" aria-hidden="true">${qr(profileUrl(prov))}</div><p style="margin:8px 0 2px;font-weight:700">${esc(profileLinkText(prov))}</p><p class="note">Imprimí el QR para el espejo y poné el link en tu bio de Instagram.</p>
    <button class="btn btn-ghost btn-block" data-act="copiarLink">Copiar link</button></div>`;
 }
-// QR decorativo (no codifica el link): tres marcas de esquina y puntos pseudoaleatorios
-function qr() {
-  let cells = "";
-  const finder = (left, top) =>
-    `<rect x="${left}" y="${top}" width="7" height="7"/><rect x="${left + 1}" y="${top + 1}" width="5" height="5" fill="#fff"/><rect x="${left + 2}" y="${top + 2}" width="3" height="3"/>`;
-  for (let row = 0; row < 21; row++) {
-    for (let col = 0; col < 21; col++) {
-      if ((!(col < 8) || !(row < 8)) && (!(col > 12) || !(row < 8)) && (!(col < 8) || !(row > 12))) {
-        if ((col * 7 + row * 13 + col * row) % 5 < 2) {
-          cells += `<rect x="${col}" y="${row}" width="1" height="1"/>`;
-        }
+// QR con la dirección del perfil (Bloque B), con qrcode-generator 2.0.4 (MIT, ver docs/licencias.md): corrección de
+// errores media y 4 módulos de margen blanco, como pide el estándar para que lo lean todas las cámaras
+function qr(url) {
+  const code = qrcode(0, "M");
+  code.addData(url);
+  code.make();
+  const size = code.getModuleCount();
+  let dark = "";
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      if (code.isDark(row, col)) {
+        dark += `M${col} ${row}h1v1h-1z`;
       }
     }
   }
-  return `<svg viewBox="-1 -1 23 23" width="132" height="132" fill="#0f172a" style="background:#fff">${finder(0, 0)}${finder(14, 0)}${finder(0, 14)}${cells}</svg>`;
+  return `<svg viewBox="-4 -4 ${size + 8} ${size + 8}" width="132" height="132" shape-rendering="crispEdges" style="background:#fff"><path fill="#0f172a" d="${dark}"/></svg>`;
 }

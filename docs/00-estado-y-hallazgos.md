@@ -14,6 +14,8 @@ Auditoría de Bruno (con Claude) sobre el paquete del cliente, octubre 2026.
 | `src/prototipo.html` (reconstruido) | Mismo comportamiento que el `app.cjs` del cliente: crawl (465 toques, 0 errores), audit_clicks y recorrido en navegador idénticos |
 | `tools/build.mjs` → `dist/` | Mismo comportamiento que el paquete del cliente en navegador real |
 | Edge Functions de Mercado Pago | Bien diseñadas, con los errores de abajo |
+| Bloque A1: `src/prototipo.html` → módulos de `src/` con Vite (`1368349` → merge `9899126`) | Mudanza pura: cada declaración de la referencia, idéntica en su módulo (`tools/mudanza/`, borrado al aprobar A1). Crawl idéntico toque por toque, e2e 107/107, comparación en navegador 36/36 |
+| Bloque A2: nombres claros y comentarios (merge `9899126` → merge `6d7b5a0`) | Código idéntico módulo por módulo: árbol de sintaxis con las variables locales en nombres canónicos y sin comentarios (`tools/legibilidad/`, borrado al aprobar A2). Variables locales de una letra: 2834 → 0. Crawl idéntico toque por toque, e2e 107/107, comparación 36/36 |
 
 ## Hallazgos
 
@@ -89,6 +91,19 @@ Mercado Pago de TuTiempo (variable `MP_OWNER_USER_ID`) y rechazar.
 Olavarría. Esos perfiles se pueden reservar y fallan (no tienen Mercado Pago). Reemplazar por datos ficticios y
 no cargar ejemplos en producción.
 
+**Ampliado en el Bloque A2:** además de `src/demo/`, hay datos de ejemplo en funciones de producción que mezclan demo y
+vivo, y llegan a `dist/`:
+- `seedStore` y `demoClosings` (`src/views/prestador/panel.js`): clientes, fichas ("Koleston 7.1 + oxidante 20 vol",
+  "Trabajar cervicales; evitar lumbar"…), teléfonos "2284 4…", finanzas de 29 días, gastos ("Alquiler", "Insumos de …")
+  y cierres de caja. Viajan enteros en el build de producción. Solo se ejecutan desde `useProvider`, que en vivo solo
+  llama la acción `demoLogin` (su botón solo aparece en la demo), pero el código y los textos están.
+- `seedComm` (`src/views/prestador/comunidad.js`): en vivo devuelve una comunidad vacía. Sus reseñas y trabajos
+  inventados **no** llegan a `dist/` (el minificador los saca porque `LIVE` vale `true`); conviene moverlo igual.
+
+**En el Bloque 2:** mover todo eso a `src/demo/` (en vivo el panel arranca vacío y lo llena la base) y ampliar
+`test:sin-demo` para que lo detecte: buscar en `dist/` textos de esos datos (por ejemplo "Koleston 7.1") y que ninguna
+función de siembra (`seedStore`, `demoClosings`, `seedComm`) sobreviva en el build de producción.
+
 ### H15 · Baja · Contradicciones del LEEME
 - Clientes: "si el profesional bloquea el día se devuelve la seña y hay botón Reprogramar". Prestadores y pruebas
   (v31): TuTiempo **no** devuelve la seña en bloqueos de días; el prestador la arregla. Vale la segunda.
@@ -96,7 +111,7 @@ no cargar ejemplos en producción.
 
 ### H16 · Baja · Mantenimiento
 - `vendor/supabase.js` 2.45.4 es viejo: actualizar en un bloque propio, con todas las pruebas.
-- Variables internas con letras sueltas (hoy en los módulos de `src/`, que vienen de `prototipo.html`): se renombran en el Bloque A2.
+- Variables internas con letras sueltas: resuelto en el Bloque A2 (ver la tabla de arriba).
 
 ### H17 · Baja · Código muerto de saldo y cashback (Bloque A1)
 TuTiempo ya no maneja saldo ni cashback (v25), pero el código sigue: `src/lib/saldo.js` (`CASHBACK = 0`, `cbOf`, `wMove`,
@@ -118,3 +133,48 @@ El pie dice "… Olavarría, Buenos Aires, Argentina · Prototipo" (`index.html`
 `pruebas/e2e.js` bloqueaba de 20:00 a 21:00 el día de la reserva de la clienta, que es su primer turno libre: corrida de
 tarde, la reserva caía a las 20:00 y el bloqueo chocaba ("bloqueo guardado en la base" fallaba también con la versión 31).
 Ahora bloquea un día hábil sin turnos. 107/107 con la versión 31 y con la nueva.
+
+### H21 · Media · Lógica de demo en código de producción (Bloque A2)
+- `realClients` (`src/views/prestador/clientes.js`) descarta con una expresión regular los nombres de relleno de la demo
+  (`Lucas|Matías|Bruno|Iván|Leo|Nahuel|Franco` + inicial A–G + punto) y el nombre "R". **Corre en vivo:** un cliente
+  real que se llame, por ejemplo, "Bruno F." no aparece en la lista de clientes ni en los mensajes del prestador.
+- `vBPerfil` (`src/views/prestador/perfil.js`): con Mercado Pago conectado, **en vivo** muestra la cuenta
+  "hidro.style.mp" (la de la demo). (El botón "Desconectar" de esa misma tarjeta es H23, Bloque 1.)
+- `occAt` (`estadisticas.js`) y `monthTotals` (`finanzas.js`) inventan ocupación e ingresos de días y meses pasados con
+  fórmulas cuando no es `LIVE`. En el build de producción esas ramas no quedan (el minificador las saca), así que hoy
+  solo afectan a la demo, pero mezclan demo y vivo en la misma función.
+
+**En el Bloque 2:** que `realClients` no filtre por nombre en vivo; mostrar la cuenta de Mercado Pago real (o ninguna);
+pasar las ramas de demo a `src/demo/`.
+
+### H22 · Baja · Código muerto y texto viejo (Bloque A2)
+- `misTurnosHtml` (`src/ui/bookbar.js`) no se usa (el build ya la descarta).
+- `const hours = hoursUntil(booking)` en `src/views/cliente/turno.js` no se usa.
+- La barra de la demo dice "completá config.cjs": el archivo ahora es `config.js`. Solo se ve en la demo (desarrollo y
+  pruebas); el build de producción no la incluye.
+
+**En el Bloque 2:** borrar lo muerto y corregir el texto.
+
+### H23 · Media · "Desconectar" Mercado Pago no desconecta (Bloque A2 → Bloque 1)
+En el perfil del prestador, el botón "Desconectar" (`mpDesc`, `src/actions/prestador-perfil.js`) solo pone
+`S.mp = "none"` y vuelve a dibujar: en la base `provider_private.mp_connected` sigue en `true` y las llaves siguen en
+`provider_secrets`, así que se sigue cobrando con esa cuenta. Al recargar vuelve a aparecer "conectado".
+**En el Bloque 1 (toca cobros):** una función del servidor que desconecte de verdad (borre las llaves de
+`provider_secrets` y ponga `mp_connected = false`), y que el prestador vea claramente si puede cobrar o no.
+
+### H24 · Baja · Links armados en la base con el dominio escrito a mano (Bloque B → Bloque 2)
+Los avisos que arma la base (`notify_booking` y `send_scheduled_notices`, al reemplazar `{link}`) usan
+`'tutiempo.com.ar/' || slug`. En el subdominio de prueba (o si el dominio cambia, D12) esos links llevan a otro sitio.
+Desde el Bloque B el frontend usa el dominio en el que corre (`location.origin`).
+**En el Bloque 2:** agregar `app_settings.site_url` (texto, por ejemplo `https://prueba.tutiempo.com.ar`, editable solo
+por el admin) y armar los links con `site_url || '/' || slug` (o `/p/<id>` si el slug es reservado).
+
+## Mejoras futuras (no son hallazgos; después del lanzamiento)
+
+### F01 · Vista previa de los links de prestadores (WhatsApp, Instagram)
+El título y la descripción de cada pantalla los pone JavaScript (Bloque B). WhatsApp, Instagram y Facebook no ejecutan
+JavaScript: al compartir `/<slug>` se ve el título genérico del sitio. Hostinger Business ejecuta PHP, así que un
+`index.php` chico podría atender `/<slug>`: consultar el prestador en Supabase con la clave `anon` (solo datos públicos),
+escribir en el HTML el título, la descripción y la imagen (`og:title`, `og:description`, `og:image`) y devolver el mismo
+`index.html` de siempre. Requiere cambiar el fallback del `.htaccess` para esas rutas y una prueba propia.
+

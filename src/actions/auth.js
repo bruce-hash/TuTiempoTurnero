@@ -4,7 +4,7 @@ import { LIVE, sb } from "../config.js";
 import { demoSignIn } from "../demo/usuarios.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
-import { afterLogin, authErr, saveAfter } from "../lib/sesion.js";
+import { afterLogin, authErr, goAfter, saveAfter } from "../lib/sesion.js";
 import { EMAIL, PWRULE, pwOk, pwScore } from "../lib/validar.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
@@ -18,7 +18,7 @@ registerClick("google", (ev, el, act) => {
       .signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: location.origin + location.pathname,
+          redirectTo: location.origin + "/",
         },
       })
       .then((res) => {
@@ -74,7 +74,7 @@ registerClick("resendConfirm", (ev, el, act) => {
         type: "signup",
         email: S.login.email,
         options: {
-          emailRedirectTo: location.origin + location.pathname,
+          emailRedirectTo: location.origin + "/",
         },
       })
       .then((res) => toast(res.error ? errMsg(res.error) : "Te lo reenviamos a " + S.login.email));
@@ -215,7 +215,7 @@ registerSubmit("fForgot", (ev) => {
   if (LIVE) {
     sb.auth
       .resetPasswordForEmail(email, {
-        redirectTo: location.origin + location.pathname,
+        redirectTo: location.origin + "/",
       })
       .then((res) => {
         if (res.error && /rate|security purposes|Failed to fetch/i.test(res.error.message || "")) {
@@ -302,9 +302,7 @@ registerSubmit("fCode", (ev) => {
           err: "",
         };
         toast("Ingresaste como " + S.user.name);
-        const next = S.after || "home";
-        S.after = null;
-        go(next);
+        goAfter();
       })
       .catch((err) => {
         S.login.err = errMsg(err);
@@ -331,8 +329,6 @@ registerSubmit("fCode", (ev) => {
     err: "",
   };
   toast("Ingresaste como " + name);
-  const next = S.after || "home";
-  S.after = null;
-  go(next);
+  goAfter();
   return;
 });

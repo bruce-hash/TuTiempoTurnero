@@ -60,15 +60,13 @@ jobs:
         run: python3 pruebas/test_db.py "host=localhost port=5432 dbname=tt user=postgres password=postgres"
 
   frontend:
-    name: Frontend (legibilidad · sin demo · crawl · clicks)
+    name: Frontend (sin demo · crawl · clicks)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0   # test:legibilidad compara con el merge de A1
 
       - uses: actions/setup-node@v5
         with:
@@ -77,9 +75,6 @@ jobs:
 
       - name: npm ci
         run: npm ci
-
-      - name: "Legibilidad (A2 solo renombra y comenta; el código es el mismo que en A1)"
-        run: npm run test:legibilidad
 
       - name: Build de producción sin nada de la demo
         run: npm run test:sin-demo
@@ -91,7 +86,7 @@ jobs:
         run: npm run test:clicks
 
   navegador:
-    name: Navegador (e2e · comparación con la versión anterior)
+    name: Navegador (e2e · rutas · comparación con la versión anterior)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -135,6 +130,9 @@ jobs:
       - name: e2e (recorrido completo en navegador, en vivo)
         run: npm run test:e2e
 
+      - name: Rutas (cada dirección, atrás/adelante, recarga, sesión, reservadas, QR)
+        run: npm run test:rutas
+
       - name: Comparación con la versión anterior (demo y en vivo, texto y capturas)
         run: npm run test:comparar
 
@@ -145,3 +143,44 @@ jobs:
           name: comparacion
           path: .build/comparar/
           if-no-files-found: ignore
+
+  apache:
+    name: Apache (.htaccess real · fallback, HTTPS, CSP)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci y build de producción
+        run: |
+          npm ci
+          npm run build
+
+      - name: Apache 2.4 (contenedor httpd con mod_rewrite, mod_headers y mod_ssl) sirviendo dist/
+        run: |
+          mkdir -p "$RUNNER_TEMP/certs"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=localhost" \
+            -keyout "$RUNNER_TEMP/certs/tt.key" -out "$RUNNER_TEMP/certs/tt.crt"
+          chmod 644 "$RUNNER_TEMP/certs/"*
+          docker run -d --name tt-httpd -p 8080:8080 -p 8443:8443 \
+            -v "$PWD/dist:/srv/www:ro" -v "$PWD/pruebas/apache:/conf:ro" -v "$RUNNER_TEMP/certs:/certs:ro" \
+            httpd:2.4.62 sh -c 'mkdir -p /tmp/run && exec httpd -C "Define MODDIR /usr/local/apache2/modules" \
+              -C "Define DOCROOT /srv/www" -C "Define CERTS /certs" -C "Define RUNDIR /tmp/run" \
+              -C "Define RUNUSER www-data" -C "Define RUNGROUP www-data" -f /conf/httpd.conf -DFOREGROUND'
+
+      - name: Probar el .htaccess (rutas profundas, 404, HTTPS, CSP, retornos ?mp= y ?token_hash=)
+        run: node pruebas/htaccess.mjs dist
+
+      - name: Log de Apache
+        if: failure()
+        run: |
+          docker logs tt-httpd || true
+          docker exec tt-httpd cat /tmp/run/error.log || true
+

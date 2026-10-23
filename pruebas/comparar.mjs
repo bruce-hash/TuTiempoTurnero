@@ -61,7 +61,24 @@ async function pagina(browser, { relojFijo }) {
   if (relojFijo) await page.clock.setFixedTime(AHORA);
   return page;
 }
+// Diferencias buscadas desde el Bloque B, iguales en las dos versiones antes de comparar: el link del prestador ("Tu link de
+// turnos" y "Sumá seguidores") pasó de tutiempo.com.ar/… escrito a mano al dominio en el que corre la app, y el QR pasó
+// de decorativo a uno real con la dirección del perfil (lo prueba pruebas/rutas.mjs). Se reemplazan por un texto y un
+// recuadro fijos; el resto de la pantalla se compara igual, texto y píxeles.
+async function normalizar(page) {
+  await page.evaluate(() => {
+    document.querySelectorAll("#app p.lbl").forEach((label) => {
+      if (!/^(Tu link de turnos|Sumá seguidores)$/.test(label.textContent.trim())) return;
+      const box = label.parentElement;
+      const link = [...box.querySelectorAll("p")].find((el) => el !== label && el.style.fontWeight === "700");
+      if (link) link.textContent = "LINK DEL PRESTADOR";
+      const qr = box.querySelector(".qr");
+      if (qr) qr.innerHTML = '<svg width="132" height="132"><rect width="132" height="132" fill="#ccc"/></svg>';
+    });
+  });
+}
 async function foto(page, pasos, nombre) {
+  await normalizar(page);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(350);
   const texto = await page.locator("#app").innerText();

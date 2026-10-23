@@ -4,6 +4,7 @@ import { CAT, pcat } from "../lib/rubros.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { LOGO } from "./iconos.js";
+import { syncUrl } from "../router.js";
 import { vAdmin } from "../views/admin/admin.js";
 import { vLoginBarbero } from "../views/auth/acceso-prestadores.js";
 import { vRegPrest } from "../views/auth/alta-prestador.js";
@@ -16,6 +17,7 @@ import { myUpcoming, vHome } from "../views/cliente/home.js";
 import { vMisTurnos } from "../views/cliente/mis-turnos.js";
 import { vPerfil } from "../views/cliente/perfil.js";
 import { vTurnoOk } from "../views/cliente/turno.js";
+import { vNotFound } from "../views/legal/no-encontrado.js";
 import { vTerminos } from "../views/legal/terminos.js";
 import { vBarbero } from "../views/prestador/panel.js";
 
@@ -73,6 +75,7 @@ function segNow() {
 export function render() {
   try {
     renderInner();
+    syncUrl();
   } catch (err) {
     console.error(err);
     const app = document.getElementById("app");
@@ -138,6 +141,9 @@ function renderMain() {
         break;
       case "terminos":
         html = vTerminos();
+        break;
+      case "notfound":
+        html = vNotFound();
         break;
       case "misturnos":
         html = S.user ? vMisTurnos() : vLogin(false);

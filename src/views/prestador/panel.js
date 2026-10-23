@@ -194,8 +194,12 @@ export const BTABS = [
   ["comunidad", "Trabajos"],
   ["perfil", "Perfil"],
 ];
-// cambia de pestaña del panel y cierra lo que hubiera abierto
+// cambia de pestaña del panel y cierra lo que hubiera abierto (setBtab no dibuja: lo usa también el enrutador)
 export function selectBtab(tab) {
+  setBtab(tab);
+  render();
+}
+export function setBtab(tab) {
   S.btab = tab;
   S.delAsk = null;
   S.cli = null;
@@ -209,7 +213,6 @@ export function selectBtab(tab) {
   S.hErr = null;
   S.manOpen = false;
   S.blockOpen = false;
-  render();
 }
 // panel del prestador: cabecera (rubros, turnos online), pestañas y la sección elegida
 export function vBarbero() {

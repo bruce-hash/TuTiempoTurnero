@@ -9,6 +9,7 @@ import { EMAIL } from "../lib/validar.js";
 import { S } from "../state.js";
 import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
+import { afterPanelLogin } from "../router.js";
 import { useProvider } from "../views/prestador/panel.js";
 
 registerClick("demoLogin", (ev, el, act) => {
@@ -20,6 +21,9 @@ registerClick("demoLogin", (ev, el, act) => {
   S.pctx = null;
   S.edSvcs = null;
   toast("Entraste como " + pr(pid).name);
+  if (afterPanelLogin()) {
+    return;
+  }
   render();
   window.scrollTo(0, 0);
   return;
@@ -31,7 +35,7 @@ registerClick("googleProv", (ev, el, act) => {
       .signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: location.origin + location.pathname,
+          redirectTo: location.origin + "/",
         },
       })
       .then((res) => {
@@ -47,6 +51,9 @@ registerClick("googleProv", (ev, el, act) => {
   S.btab = "agenda";
   S.pctx = null;
   toast("Entraste con Google como " + pr(7).name);
+  if (afterPanelLogin()) {
+    return;
+  }
   render();
   window.scrollTo(0, 0);
 });
@@ -80,7 +87,7 @@ registerSubmit("fRecover", (ev) => {
   }
   if (LIVE) {
     sb.auth.resetPasswordForEmail(email, {
-      redirectTo: location.origin + location.pathname,
+      redirectTo: location.origin + "/",
     });
   }
   S.blogin.step = "sent";
@@ -131,6 +138,9 @@ registerSubmit("fBarb", (ev) => {
         S.role = "barbero";
         S.btab = "agenda";
         toast("Bienvenido, " + pr(S.me).name);
+        if (afterPanelLogin()) {
+          return;
+        }
         render();
         window.scrollTo(0, 0);
       })
@@ -150,6 +160,9 @@ registerSubmit("fBarb", (ev) => {
     S.btab = "agenda";
     S.pctx = null;
     toast("Bienvenida, Sofía");
+    if (afterPanelLogin()) {
+      return;
+    }
     render();
     window.scrollTo(0, 0);
     return;
@@ -168,6 +181,9 @@ registerSubmit("fBarb", (ev) => {
     S.role = "barbero";
     S.btab = "agenda";
     toast("Bienvenido, Hidro.Style");
+    if (afterPanelLogin()) {
+      return;
+    }
     render();
     window.scrollTo(0, 0);
     return;

@@ -3,6 +3,7 @@ import { esc } from "../../lib/dom.js";
 import { dayWord } from "../../lib/fechas.js";
 import { ME, avatar, pr } from "../../lib/prestadores.js";
 import { S } from "../../state.js";
+import { profileUrl } from "../../router.js";
 import { store } from "../../store.js";
 import { lastTxt, realClients, thisMonthBday } from "./clientes.js";
 import { STORE } from "./panel.js";
@@ -92,7 +93,7 @@ export function updMsgCount() {
     allBox.checked = !!names.length && count === names.length;
   }
 }
-export const myLink = () => "tutiempo.com.ar/" + (pr(ME()).slug || "p/" + ME());
+export const myLink = () => profileUrl(pr(ME()));
 // texto del mensaje a un cliente con sus datos; fillMsg es la vista previa de un aviso con datos de ejemplo
 export const fillMsg2 = (text, name) =>
   text
@@ -156,7 +157,7 @@ export function fillMsg(text) {
     .replace(/{dia}/g, "jueves 16")
     .replace(/{hora}/g, "18:30")
     .replace(/{direccion}/g, pr(ME()).addr)
-    .replace(/{link}/g, "tutiempo.com.ar/t/8F2K");
+    .replace(/{link}/g, myLink());
 }
 export function vMensajes() {
   return `<div class="panel"><p class="lbl">🔔 Avisos automáticos en la app</p><p class="note" style="text-align:left;margin:-2px 0 10px">Les llegan solos a tus clientes como notificación en TuTiempo.</p>
@@ -188,7 +189,7 @@ function fillTpl(text, booking, prov) {
     .replace(/\{dia\}/g, dayWord(booking.date))
     .replace(/\{hora\}/g, booking.time)
     .replace(/\{direccion\}/g, prov.addr)
-    .replace(/\{link\}/g, "tutiempo.com.ar/" + (prov.slug || "p/" + prov.id));
+    .replace(/\{link\}/g, profileUrl(prov));
 }
 // demo: simula que al cliente le llega el aviso automático key del prestador
 export function pushNotice(pid, key, booking, extra) {
