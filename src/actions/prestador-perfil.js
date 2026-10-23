@@ -16,270 +16,274 @@ import { stampCfg } from "../ui/sellos.js";
 import { toast } from "../ui/toast.js";
 import { readSvcEditor } from "../views/prestador/perfil.js";
 
-registerClick("cashToggle", (e, x, v) => {
-  const r = cfg(ME());
-  r.cash = r.cash === false;
-  api.m.saveSettings(r);
-  toast(r.cash ? "Ahora aceptás el resto en efectivo." : "Ahora el resto también va por Mercado Pago.");
+registerClick("cashToggle", (ev, el, act) => {
+  const conf = cfg(ME());
+  conf.cash = conf.cash === false;
+  api.m.saveSettings(conf);
+  toast(conf.cash ? "Ahora aceptás el resto en efectivo." : "Ahora el resto también va por Mercado Pago.");
   render();
   return;
 });
-registerClick("mediaDel", (e, x, v) => {
-  const r = +x.dataset.i;
-  if (S.mDelAsk !== r) {
-    S.mDelAsk = r;
+// borrar un trabajo pide un segundo toque en menos de 3 segundos
+registerClick("mediaDel", (ev, el, act) => {
+  const index = +el.dataset.i;
+  if (S.mDelAsk !== index) {
+    S.mDelAsk = index;
     toast("Tocá ✕ de nuevo para borrarlo");
     setTimeout(() => {
       S.mDelAsk = null;
     }, 3e3);
     return;
   }
-  const m = store.COMM.media.splice(r, 1)[0];
+  const media = store.COMM.media.splice(index, 1)[0];
   S.mDelAsk = null;
-  if (m) {
-    api.m.delMedia(m).catch(() => {});
+  if (media) {
+    api.m.delMedia(media).catch(() => {});
   }
   toast("Trabajo borrado");
   render();
   return;
 });
-registerClick("svcOpts", (e, x, v) => {
+registerClick("svcOpts", (ev, el, act) => {
   readSvcEditor();
   S.edOpen = S.edOpen || {};
-  const r = +x.dataset.i;
-  S.edOpen[r] = !S.edOpen[r];
+  const index = +el.dataset.i;
+  S.edOpen[index] = !S.edOpen[index];
   render();
   return;
 });
-registerClick("addNew", (e, x, v) => {
+registerClick("addNew", (ev, el, act) => {
   readSvcEditor();
-  const r = S.edSvcs[+x.dataset.i];
-  r[5] = r[5] || svcMeta(r);
-  if (r[5].add.length >= 10) {
+  const svc = S.edSvcs[+el.dataset.i];
+  svc[5] = svc[5] || svcMeta(svc);
+  if (svc[5].add.length >= 10) {
     toast("Máximo 10 adicionales por servicio");
     return;
   }
-  r[5].add.push(["", 0, 0, null]);
+  svc[5].add.push(["", 0, 0, null]);
   render();
   return;
 });
-registerClick("addDel", (e, x, v) => {
+registerClick("addDel", (ev, el, act) => {
   readSvcEditor();
-  S.edSvcs[+x.dataset.i][5].add.splice(+x.dataset.j, 1);
+  S.edSvcs[+el.dataset.i][5].add.splice(+el.dataset.j, 1);
   render();
   return;
 });
-registerClick("svcAdd", (e, x, v) => {
+registerClick("svcAdd", (ev, el, act) => {
   readSvcEditor();
   S.edSvcs.push(["", 30, 0, S.edCats[0] || pr(ME()).cats[0], null]);
   render();
-  const r = $("#sn" + (S.edSvcs.length - 1));
-  if (r) {
-    r.focus();
+  const input = $("#sn" + (S.edSvcs.length - 1));
+  if (input) {
+    input.focus();
   }
   return;
 });
-registerClick("svcDel", (e, x, v) => {
+registerClick("svcDel", (ev, el, act) => {
   readSvcEditor();
   if (S.edSvcs.length <= 1) {
     toast("Tenés que tener al menos un servicio.");
     return;
   }
-  S.edSvcs.splice(+x.dataset.i, 1);
+  S.edSvcs.splice(+el.dataset.i, 1);
   render();
   return;
 });
-registerClick("publicar", (e, x, v) => {
-  const r = ($("#postTxt") || {}).value || "";
-  if (!r.trim()) {
+registerClick("publicar", (ev, el, act) => {
+  const text = ($("#postTxt") || {}).value || "";
+  if (!text.trim()) {
     toast("Escribí un mensaje primero");
     return;
   }
-  api.m.post(r.trim().slice(0, 400));
+  api.m.post(text.trim().slice(0, 400));
   toast(`Aviso enviado a ${store.COMM.followers} seguidores`);
   render();
 });
-registerClick("responder", (e, x, v) => {
-  const r = +x.dataset.i;
-  const m = ($("#rep" + r) || {}).value || "";
-  if (!m.trim()) {
+registerClick("responder", (ev, el, act) => {
+  const index = +el.dataset.i;
+  const text = ($("#rep" + index) || {}).value || "";
+  if (!text.trim()) {
     toast("Escribí tu respuesta.");
     return;
   }
-  store.COMM.reviews[r].reply = m.trim().slice(0, 600);
-  api.m.reply(store.COMM.reviews[r]);
+  store.COMM.reviews[index].reply = text.trim().slice(0, 600);
+  api.m.reply(store.COMM.reviews[index]);
   toast("Respuesta publicada");
   render();
 });
-registerClick("mpConnect", (e, x, v) => {
+registerClick("mpConnect", (ev, el, act) => {
   if (LIVE) {
-    api.m.mpConnect().catch((r) => toast(errMsg(r)));
+    api.m.mpConnect().catch((err) => toast(errMsg(err)));
     return;
   }
   S.mp = "auth";
   render();
 });
-registerClick("mpCancel", (e, x, v) => {
+registerClick("mpCancel", (ev, el, act) => {
   S.mp = "none";
   render();
 });
-registerClick("mpOk", (e, x, v) => {
+registerClick("mpOk", (ev, el, act) => {
   S.mp = "ok";
   toast("Mercado Pago conectado");
   render();
 });
-registerClick("mpDesc", (e, x, v) => {
+registerClick("mpDesc", (ev, el, act) => {
   S.mp = "none";
   render();
 });
-registerChange("useW", (e) => {
-  S.useWallet = e.target.checked;
+registerChange("useW", (ev) => {
+  S.useWallet = ev.target.checked;
   render();
   return;
 });
-registerChange("msv", (e) => {
-  S.manSvc = +e.target.value;
-  const n = $("#mcl").value;
-  const o = $("#mtel").value;
+registerChange("msv", (ev) => {
+  S.manSvc = +ev.target.value;
+  const client = $("#mcl").value;
+  const tel = $("#mtel").value;
   render();
-  $("#mcl").value = n;
-  $("#mtel").value = o;
+  $("#mcl").value = client;
+  $("#mtel").value = tel;
   return;
 });
-registerChange("pf", (e) => {
-  store.REGFILES = [...e.target.files].slice(0, 4);
+registerChange("pf", (ev) => {
+  store.REGFILES = [...ev.target.files].slice(0, 4);
   Object.assign(S.reg, readReg());
-  S.reg.files = e.target.files.length;
+  S.reg.files = ev.target.files.length;
   if (S.reg.errs) {
     delete S.reg.errs.files;
   }
   render();
   return;
 });
-registerChange("upPhoto", (e) => {
-  onPhoto(e.target, "pro");
+registerChange("upPhoto", (ev) => {
+  onPhoto(ev.target, "pro");
   return;
 });
-registerChange("upMedia", (e) => {
-  [...e.target.files].slice(0, 10).forEach((n) => {
-    if (n.size > 15728640) {
+// subir trabajos: se muestran al instante (URL local) y se suben de fondo, hasta 10 de 15 MB
+registerChange("upMedia", (ev) => {
+  [...ev.target.files].slice(0, 10).forEach((file) => {
+    if (file.size > 15728640) {
       toast("Máximo 15 MB por archivo");
       return;
     }
-    const o = {
-      label: n.name.slice(0, 80),
-      url: URL.createObjectURL(n),
-      video: n.type.startsWith("video"),
+    const media = {
+      label: file.name.slice(0, 80),
+      url: URL.createObjectURL(file),
+      video: file.type.startsWith("video"),
     };
-    store.COMM.media.unshift(o);
+    store.COMM.media.unshift(media);
     api.m
-      .upload(n, o)
+      .upload(file, media)
       .then(render)
       .catch(() => {});
   });
   toast("Publicado en tus trabajos");
   render();
 });
-registerSubmit("fStamps", (e) => {
-  const a = pr(ME());
-  const t = stampCfg(ME());
-  const s = (c) => {
-    $("#sterr").textContent = c;
+// tarjetas de sellos: cada servicio marcado necesita su meta de 15 a 20 (y en vivo, estar guardado)
+registerSubmit("fStamps", (ev) => {
+  const prov = pr(ME());
+  const stamps = stampCfg(ME());
+  const showErr = (msg) => {
+    $("#sterr").textContent = msg;
   };
-  const n = $("#stOn").checked;
-  if (!a.svcs.length) {
-    return s("Cargá al menos un servicio en Mis datos.");
+  const on = $("#stOn").checked;
+  if (!prov.svcs.length) {
+    return showErr("Cargá al menos un servicio en Mis datos.");
   }
-  const o = {};
-  let i = false;
-  document.querySelectorAll("[data-sts]").forEach((c) => {
-    if (!c.checked) {
+  const goals = {};
+  let invalid = false;
+  document.querySelectorAll("[data-sts]").forEach((box) => {
+    if (!box.checked) {
       return;
     }
-    const d = a.svcs[+c.dataset.sts];
-    const p = +(document.querySelector(`[data-stg="${c.dataset.sts}"]`) || {}).value;
-    if (d) {
-      if (LIVE && !d[4]) {
-        i = true;
+    const svc = prov.svcs[+box.dataset.sts];
+    const goal = +(document.querySelector(`[data-stg="${box.dataset.sts}"]`) || {}).value;
+    if (svc) {
+      if (LIVE && !svc[4]) {
+        invalid = true;
         return;
       }
-      if (!(p >= 15) || !(p <= 20)) {
-        i = true;
+      if (!(goal >= 15) || !(goal <= 20)) {
+        invalid = true;
         return;
       }
-      o[skey(d)] = p;
+      goals[skey(svc)] = goal;
     }
   });
-  if (i) {
-    return s(LIVE ? "Guardá primero tus servicios en Mis datos." : "Cada tarjeta lleva de 15 a 20 sellos.");
+  if (invalid) {
+    return showErr(LIVE ? "Guardá primero tus servicios en Mis datos." : "Cada tarjeta lleva de 15 a 20 sellos.");
   }
-  if (n && !Object.keys(o).length) {
-    return s("Elegí al menos un servicio que sume sello.");
+  if (on && !Object.keys(goals).length) {
+    return showErr("Elegí al menos un servicio que sume sello.");
   }
-  t.on = n;
-  t.goals = o;
+  stamps.on = on;
+  stamps.goals = goals;
   api.m.saveSettings(cfg(ME()));
-  api.m.saveStampGoals(a, o);
-  const l = Object.keys(o).length;
-  toast(n ? `Tarjetas activas en ${l} servicio${l > 1 ? "s" : ""}.` : "Tarjetas de sellos desactivadas.");
+  api.m.saveStampGoals(prov, goals);
+  const count = Object.keys(goals).length;
+  toast(on ? `Tarjetas activas en ${count} servicio${count > 1 ? "s" : ""}.` : "Tarjetas de sellos desactivadas.");
   render();
   return;
 });
-registerSubmit("fDatos", (e) => {
-  const a = pr(ME());
+// datos y servicios del perfil: valida el editor y guarda; removed = servicios que se sacaron (quedan inactivos)
+registerSubmit("fDatos", (ev) => {
+  const prov = pr(ME());
   readSvcEditor();
-  const t = (c) => {
-    $("#derr").textContent = c;
+  const showErr = (msg) => {
+    $("#derr").textContent = msg;
   };
-  const s = $("#dn").value.trim();
-  if (s.length < 2) {
-    return t("El nombre visible tiene que tener al menos 2 letras.");
+  const name = $("#dn").value.trim();
+  if (name.length < 2) {
+    return showErr("El nombre visible tiene que tener al menos 2 letras.");
   }
   if (!S.edCats.length) {
-    return t("Elegí al menos un rubro.");
+    return showErr("Elegí al menos un rubro.");
   }
-  const n = S.edSvcs.findIndex(
-    (c) =>
-      c[0].length < 2 ||
-      c[1] < 5 ||
-      c[1] > 480 ||
-      c[2] <= 0 ||
-      (c[5] && c[5].add.some((d) => d[0].length < 2)),
+  const bad = S.edSvcs.findIndex(
+    (svc) =>
+      svc[0].length < 2 ||
+      svc[1] < 5 ||
+      svc[1] > 480 ||
+      svc[2] <= 0 ||
+      (svc[5] && svc[5].add.some((addon) => addon[0].length < 2)),
   );
-  if (n >= 0) {
-    return t(
-      `Revisá el servicio ${n + 1}: nombre, minutos (5 a 480), precio y nombres de los adicionales.`,
+  if (bad >= 0) {
+    return showErr(
+      `Revisá el servicio ${bad + 1}: nombre, minutos (5 a 480), precio y nombres de los adicionales.`,
     );
   }
-  const o = S.edCats.filter((c) => !S.edSvcs.some((d) => d[3] === c));
-  if (o.length) {
-    return t(`Agregá al menos un servicio de ${o.map(catName).join(", ")} o quitá ese rubro.`);
+  const emptyCats = S.edCats.filter((cat) => !S.edSvcs.some((svc) => svc[3] === cat));
+  if (emptyCats.length) {
+    return showErr(`Agregá al menos un servicio de ${emptyCats.map(catName).join(", ")} o quitá ese rubro.`);
   }
-  const i = a.svcs.map((c) => c[4]).filter((c) => c && !S.edSvcs.some((d) => d[4] === c));
-  a.name = s.slice(0, 80);
-  a.bio = $("#dd").value.trim().slice(0, 600);
-  a.addr = $("#da").value.trim().slice(0, 160);
-  a.ig = $("#di").value.trim().slice(0, 60);
-  const l = a.svcs.map((c) => c.slice());
-  a.cats = S.edCats.slice();
-  a.svcs = S.edSvcs.map((c) => {
-    const d = c.slice();
-    d[5] &&= {
-      every: d[5].every,
-      note: d[5].note,
-      add: d[5].add.map((p) => p.slice()),
+  const removed = prov.svcs.map((svc) => svc[4]).filter((id) => id && !S.edSvcs.some((svc) => svc[4] === id));
+  prov.name = name.slice(0, 80);
+  prov.bio = $("#dd").value.trim().slice(0, 600);
+  prov.addr = $("#da").value.trim().slice(0, 160);
+  prov.ig = $("#di").value.trim().slice(0, 60);
+  const before = prov.svcs.map((svc) => svc.slice());
+  prov.cats = S.edCats.slice();
+  prov.svcs = S.edSvcs.map((svc) => {
+    const copy = svc.slice();
+    copy[5] &&= {
+      every: copy[5].every,
+      note: copy[5].note,
+      add: copy[5].add.map((addon) => addon.slice()),
     };
-    return d;
+    return copy;
   });
-  a.before = l;
+  prov.before = before;
   S.edSvcs = null;
   S.svc = 0;
   S.list = null;
   S.counts = null;
-  if (!a.cats.includes(S.pctx)) {
+  if (!prov.cats.includes(S.pctx)) {
     S.pctx = null;
   }
-  api.m.saveProfile(a, i).catch(() => {});
+  api.m.saveProfile(prov, removed).catch(() => {});
   toast("Datos guardados. Ya se ven en tu perfil.");
   render();
   return;
