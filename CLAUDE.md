@@ -33,7 +33,6 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
 - `public/`: archivos que se copian tal cual a Hostinger (`.htaccess`, fuentes, `vendor/supabase.js`, `config.example.js`).
 - `vite.config.mjs`: `npm run dev` (servidor local con demo), `npm run build` → `dist/` (lo que se sube a Hostinger: solo
   en vivo, archivos con hash), `npm run build:test` → `dist-test/` (con demo y ganchos de prueba). No se versionan.
-- `tools/mudanza/`: script y verificación de la mudanza del Bloque A1 (se borra cuando se apruebe A1).
 - `supabase/migrations/`: migraciones idempotentes en orden, con el formato de la CLI de Supabase
   (`AAAAMMDDHHMMSS_nombre.sql`, por ejemplo `20261001000001_schema.sql`). `supabase/TODO_EN_UNO.sql` es su concatenación
   exacta: si cambiás o agregás una migración, regeneralo con `npm run sql:build` y verificá con `npm run sql:check`

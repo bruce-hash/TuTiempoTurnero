@@ -60,15 +60,13 @@ jobs:
         run: python3 pruebas/test_db.py "host=localhost port=5432 dbname=tt user=postgres password=postgres"
 
   frontend:
-    name: Frontend (mudanza pura · sin demo · crawl · clicks)
+    name: Frontend (sin demo · crawl · clicks)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0 # la verificación de la mudanza lee la versión de referencia de git
 
       - uses: actions/setup-node@v5
         with:
@@ -77,9 +75,6 @@ jobs:
 
       - name: npm ci
         run: npm ci
-
-      - name: Mudanza pura (cada declaración de la referencia, idéntica en su módulo)
-        run: npm run test:mudanza
 
       - name: Build de producción sin nada de la demo
         run: npm run test:sin-demo
