@@ -139,14 +139,13 @@ Ahora bloquea un día hábil sin turnos. 107/107 con la versión 31 y con la nue
   (`Lucas|Matías|Bruno|Iván|Leo|Nahuel|Franco` + inicial A–G + punto) y el nombre "R". **Corre en vivo:** un cliente
   real que se llame, por ejemplo, "Bruno F." no aparece en la lista de clientes ni en los mensajes del prestador.
 - `vBPerfil` (`src/views/prestador/perfil.js`): con Mercado Pago conectado, **en vivo** muestra la cuenta
-  "hidro.style.mp" (la de la demo). Y el botón "Desconectar" (`mpDesc`) solo cambia la pantalla (`S.mp = "none"`): no
-  desconecta nada en la base.
+  "hidro.style.mp" (la de la demo). (El botón "Desconectar" de esa misma tarjeta es H23, Bloque 1.)
 - `occAt` (`estadisticas.js`) y `monthTotals` (`finanzas.js`) inventan ocupación e ingresos de días y meses pasados con
   fórmulas cuando no es `LIVE`. En el build de producción esas ramas no quedan (el minificador las saca), así que hoy
   solo afectan a la demo, pero mezclan demo y vivo en la misma función.
 
-**En el Bloque 2:** que `realClients` no filtre por nombre en vivo; mostrar la cuenta de Mercado Pago real (o ninguna) y
-resolver qué hace "Desconectar"; pasar las ramas de demo a `src/demo/`.
+**En el Bloque 2:** que `realClients` no filtre por nombre en vivo; mostrar la cuenta de Mercado Pago real (o ninguna);
+pasar las ramas de demo a `src/demo/`.
 
 ### H22 · Baja · Código muerto y texto viejo (Bloque A2)
 - `misTurnosHtml` (`src/ui/bookbar.js`) no se usa (el build ya la descarta).
@@ -155,4 +154,27 @@ resolver qué hace "Desconectar"; pasar las ramas de demo a `src/demo/`.
   pruebas); el build de producción no la incluye.
 
 **En el Bloque 2:** borrar lo muerto y corregir el texto.
+
+### H23 · Media · "Desconectar" Mercado Pago no desconecta (Bloque A2 → Bloque 1)
+En el perfil del prestador, el botón "Desconectar" (`mpDesc`, `src/actions/prestador-perfil.js`) solo pone
+`S.mp = "none"` y vuelve a dibujar: en la base `provider_private.mp_connected` sigue en `true` y las llaves siguen en
+`provider_secrets`, así que se sigue cobrando con esa cuenta. Al recargar vuelve a aparecer "conectado".
+**En el Bloque 1 (toca cobros):** una función del servidor que desconecte de verdad (borre las llaves de
+`provider_secrets` y ponga `mp_connected = false`), y que el prestador vea claramente si puede cobrar o no.
+
+### H24 · Baja · Links armados en la base con el dominio escrito a mano (Bloque B → Bloque 2)
+Los avisos que arma la base (`notify_booking` y `send_scheduled_notices`, al reemplazar `{link}`) usan
+`'tutiempo.com.ar/' || slug`. En el subdominio de prueba (o si el dominio cambia, D12) esos links llevan a otro sitio.
+Desde el Bloque B el frontend usa el dominio en el que corre (`location.origin`).
+**En el Bloque 2:** agregar `app_settings.site_url` (texto, por ejemplo `https://prueba.tutiempo.com.ar`, editable solo
+por el admin) y armar los links con `site_url || '/' || slug` (o `/p/<id>` si el slug es reservado).
+
+## Mejoras futuras (no son hallazgos; después del lanzamiento)
+
+### F01 · Vista previa de los links de prestadores (WhatsApp, Instagram)
+El título y la descripción de cada pantalla los pone JavaScript (Bloque B). WhatsApp, Instagram y Facebook no ejecutan
+JavaScript: al compartir `/<slug>` se ve el título genérico del sitio. Hostinger Business ejecuta PHP, así que un
+`index.php` chico podría atender `/<slug>`: consultar el prestador en Supabase con la clave `anon` (solo datos públicos),
+escribir en el HTML el título, la descripción y la imagen (`og:title`, `og:description`, `og:image`) y devolver el mismo
+`index.html` de siempre. Requiere cambiar el fallback del `.htaccess` para esas rutas y una prueba propia.
 
