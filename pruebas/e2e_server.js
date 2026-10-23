@@ -3,10 +3,12 @@
 //  /auth/v1/*      → Auth simulado (emite JWT firmados con el mismo secreto que PostgREST)
 //  /functions/v1/* → Edge Functions simuladas (Mercado Pago "aprueba" al instante)
 //  /storage/v1/*   → Storage simulado (aplica la misma regla de carpeta)
-//  resto           → archivos del paquete para Hostinger, con la CSP del .htaccess
+//  resto           → archivos del paquete para Hostinger, con la CSP y el fallback de direcciones del .htaccess
+//                    (misma regla que Apache: pruebas/fallback.cjs)
 // Uso: node e2e_server.js <carpeta web> <puerto> <jwt_secret> <pg_conn> <postgrest_url>
 const http = require("http"), fs = require("fs"), path = require("path"), crypto = require("crypto");
 const { Client } = require("pg");
+const { resolver } = require("./fallback.cjs");
 const [WEB, PORT, SECRET, PGCONN, PGRST] = process.argv.slice(2);
 const db = new Client({ connectionString: PGCONN }); db.connect();
 
@@ -109,10 +111,10 @@ http.createServer(async (req, res) => {
     if (url.pathname.startsWith("/auth/v1")) return await auth(req, res, url);
     if (url.pathname.startsWith("/functions/v1")) return await functions(req, res, url);
     if (url.pathname.startsWith("/storage/v1")) return await storage(req, res, url);
-    let f = url.pathname === "/" ? "/index.html" : url.pathname;
+    const f = url.pathname;
     if (f === "/config.js" || f === "/config.cjs") { res.writeHead(200, { "Content-Type": "application/javascript" }); return res.end(`window.TT_CONFIG={supabaseUrl:"http://localhost:${PORT}",supabaseAnonKey:"${ANON}",city:"olavarria"};`) }
-    const fp = path.join(path.resolve(WEB), path.normalize(f).replace(/^(\.\.[/\\])+/, ""));
-    if (!fp.startsWith(path.resolve(WEB)) || !fs.existsSync(fp)) { res.writeHead(404); return res.end("no") }
+    const { status, file: fp } = resolver(WEB, f);
+    if (!fp) { res.writeHead(status, { "Content-Security-Policy": CSP }); return res.end("no") }
     res.writeHead(200, { "Content-Type": TYPES[path.extname(fp)] || "application/octet-stream", "Content-Security-Policy": CSP });
     fs.createReadStream(fp).pipe(res);
   } catch (e) { console.error(e); send(res, 500, { message: e.message }) }
