@@ -14,6 +14,8 @@
     "test:clicks": "python3 pruebas/audit_clicks.py src",
     "test:sin-demo": "vite build --logLevel warn && node pruebas/sin_demo.mjs",
     "test:e2e": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/e2e.js {url} {pg}",
+    "test:rutas": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/rutas.js {url} {pg}",
+    "test:htaccess": "vite build --logLevel warn && bash pruebas/apache/local.sh",
     "test:comparar": "vite build --logLevel warn && vite build --mode test --logLevel warn && node pruebas/comparar.mjs",
     "sql:build": "node tools/todo_en_uno.mjs",
     "sql:check": "node tools/todo_en_uno.mjs --check"

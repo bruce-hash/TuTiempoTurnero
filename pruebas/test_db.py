@@ -531,6 +531,9 @@ rutas = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src
 front = sorted(re.findall(r'^\s+"([a-z0-9-]+)",$', rutas.split("RESERVED_SLUGS = [")[1].split("];")[0], re.M))
 base_list = sorted(q("select unnest(reserved_slugs())")[i][0] for i in range(len(q("select unnest(reserved_slugs())"))))
 ok(f"slugs reservados: la base y src/lib/rutas.js tienen la misma lista ({len(front)})", front == base_list and len(front) > 20)
+rubros = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "lib", "rubros.js"), encoding="utf8").read()
+front_cats = dict(re.findall(r'^\s+([a-z]): "([a-z0-9-]+)",$', rubros.split("CAT_SLUGS = {")[1].split("};")[0], re.M))
+ok("rubros en la URL: src/lib/rubros.js (CAT_SLUGS) tiene los mismos slugs que categories", front_cats == dict(q("select id, slug from categories")) and len(front_cats) == 6)
 ok("is_reserved_slug no distingue mayúsculas", q("select is_reserved_slug('PANEL'), is_reserved_slug('panel-1'), is_reserved_slug(null)")[0] == (True, False, False))
 for nombre, esperado in (("Panel", "panel-1"), ("Admin", "admin-1"), ("Mis Turnos", "mis-turnos-1")):
     u = mkuser(f"res-{esperado}@test.ar", nombre)

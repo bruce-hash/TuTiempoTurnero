@@ -4,7 +4,8 @@
 //  - una carpeta que existe: su index.html si tiene; si no, 403 (Options -Indexes)
 //  - una dirección sin extensión que no es archivo ni carpeta: index.html (el enrutador de la app muestra la pantalla)
 //  - una dirección con extensión que no existe: 404 (nunca HTML en lugar de un .js o .css)
-// Devuelve { status, file }: file es la ruta en disco a servir (status 200) o null.
+// Devuelve { status, file }: file es la ruta en disco a servir (status 200) o null. (Las carpetas dan 403 acá; el Apache
+// de prueba da 404 porque no carga mod_autoindex: en los dos casos nunca hay listado ni app.)
 const fs = require("fs");
 const path = require("path");
 

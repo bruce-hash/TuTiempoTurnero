@@ -26,11 +26,18 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - `src/actions/`: `registro.js` (acción → función), `toques.js` / `formularios.js` / `cambios.js` (los listeners de
     `document`) y un módulo por pantalla que registra sus acciones con `registerClick("act", (ev, el, act) => …)`
     (evento, elemento tocado, nombre de la acción), `registerSubmit("idForm", (ev) => …)`, etc.
+  - `src/router.js` + `src/router/` (Bloque B): cada pantalla tiene su dirección (History API, sin `#`). `render()` llama a
+    `syncUrl()`; `router/direcciones.js` arma URL, título y descripción desde `S`, y `router/pantallas.js` arma `S` desde
+    la URL (carga, recarga, atrás/adelante). Una pantalla nueva = su ruta en los dos archivos. Las palabras que no puede
+    tomar un prestador como slug están en `src/lib/rutas.js` (`RESERVED_SLUGS`) y en la base (`reserved_slugs()`):
+    `test_db.py` verifica que coincidan.
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en
     inglés, como el resto del código) y los comentarios van en español; mantené ese estilo en lo que agregues.
 - `public/`: archivos que se copian tal cual a Hostinger (`.htaccess`, fuentes, `vendor/supabase.js`, `config.example.js`).
+  El `.htaccess` manda a `index.html` todo pedido sin extensión que no sea archivo ni carpeta (el sitio va siempre en la
+  raíz de su dominio); `pruebas/fallback.cjs` imita esa regla en los servidores de prueba.
 - `vite.config.mjs`: `npm run dev` (servidor local con demo), `npm run build` → `dist/` (lo que se sube a Hostinger: solo
   en vivo, archivos con hash), `npm run build:test` → `dist-test/` (con demo y ganchos de prueba). No se versionan.
 - `supabase/migrations/`: migraciones idempotentes en orden, con el formato de la CLI de Supabase
@@ -70,8 +77,9 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
   `npm run sql:check` y `pruebas/test_db.py` (base); `npm run test:crawl`, `npm run test:clicks` y
-  `npm run test:sin-demo` (frontend); `npm run test:e2e` y `npm run test:comparar` (navegador real, necesitan
-  Postgres y PostgREST: ver abajo). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
+  `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas` y `npm run test:comparar` (navegador
+  real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` si tocás el `.htaccess` (Apache local; en
+  el CI corre en un contenedor `httpd:2.4`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
   fecha (la agenda de la demo sale de "hoy"). Lo que importa es 0 errores y 0 destinos equivocados.
 - No inventes reglas de negocio: si algo no está en el SQL ni en `docs/01-decisiones.md`, preguntá.
@@ -96,5 +104,7 @@ npx playwright install chromium                  # una sola vez
 # PostgREST 12: https://github.com/PostgREST/postgrest/releases (binario en el PATH o en POSTGREST=/ruta/postgrest)
 export PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=...
 npm run test:e2e        # recorrido completo en vivo (base nueva + PostgREST + pruebas/e2e_server.js)
+npm run test:rutas      # direcciones: cada ruta, recarga, atrás/adelante, sesión, reservadas, QR (mismo entorno)
+npm run test:htaccess   # el .htaccess real con el apache2 local (apt install apache2): fallback, 404, HTTPS, CSP
 npm run test:comparar   # versión anterior al Bloque A vs. la actual: demo y en vivo, texto y capturas
 ```
