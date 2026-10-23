@@ -4,7 +4,8 @@
 // Mapa: { "<declaración>": { "a": "walk", "i#2": "item" } }. <declaración> es el nombre de la función o variable de
 // primer nivel, "click:<acción>" / "submit:<form>" / … para las acciones registradas, "listener:<evento>" para los
 // listeners de document y "@<línea>" para otras sentencias. "i#2" = la segunda variable llamada i en esa declaración
-// (en orden de aparición); "i" sola = todas las que se llaman i ahí.
+// (en orden de aparición); "i" sola = todas las que se llaman i ahí. "click:*" (o "submit:*", …) vale para todas las
+// acciones registradas de ese tipo que no tengan su propia entrada para esa variable.
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "@babel/parser";
@@ -89,10 +90,10 @@ if (modo === "--listar") {
 
 // ---------- Aplicar el mapa ----------
 const mapa = JSON.parse(fs.readFileSync(modo, "utf8"));
+const comodin = (clave) => (/^(click|submit|change|input):/.test(clave || "") ? clave.split(":")[0] + ":*" : null);
 const nuevoDe = (b) => {
-  const m = mapa[b.clave];
-  if (!m) return null;
-  return m[`${b.identifier.name}#${b.n}`] || m[b.identifier.name] || null;
+  const desde = (m) => (m && (m[`${b.identifier.name}#${b.n}`] || m[b.identifier.name])) || null;
+  return desde(mapa[b.clave]) || desde(mapa[comodin(b.clave)]);
 };
 // propiedades abreviadas { a } (en objetos y en desestructuración): la clave tiene que quedar
 const abreviadas = new Map();
@@ -111,6 +112,7 @@ for (const b of locales) {
   const nuevo = nuevoDe(b);
   if (!nuevo || nuevo === b.identifier.name) continue;
   aplicados.add(`${b.clave}:${b.identifier.name}`);
+  if (comodin(b.clave)) aplicados.add(`${comodin(b.clave)}:${b.identifier.name}`);
   if (!/^[A-Za-z_$][\w$]*$/.test(nuevo)) problemas.push(`${b.clave}: "${nuevo}" no es un nombre válido`);
   // choques: el nombre nuevo ya se usa en ese alcance o lo usa algo de afuera que quedaría tapado
   const otro = b.scope.getBinding(nuevo);
@@ -141,7 +143,7 @@ for (const b of locales) {
     edits.set(id.start, { start: id.start, end: id.end, text: clave !== undefined ? `${clave}: ${nuevo}` : nuevo });
   }
 }
-for (const [clave, m] of Object.entries(mapa)) for (const k of Object.keys(m)) {
+for (const [clave, m] of Object.entries(mapa)) for (const k of clave.endsWith(":*") ? [] : Object.keys(m)) {
   if (![...aplicados].some((a) => a === `${clave}:${k.replace(/#\d+$/, "")}`)) problemas.push(`el mapa nombra ${clave} → ${k}, que no existe en ${archivo}`);
 }
 if (problemas.length) {
