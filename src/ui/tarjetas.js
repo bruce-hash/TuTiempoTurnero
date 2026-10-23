@@ -1,20 +1,22 @@
 import { cfg, nextFree } from "../lib/turnero.js";
 import { S } from "../state.js";
 
-export function cardInfo(e, cat) {
-  if (e.card && e.card[S.cat || "todos"]) {
-    const l = e.card[S.cat || "todos"];
+// datos de la tarjeta de un prestador en el listado: precio desde, próximo horario y happy hour.
+// En vivo vienen precalculados en prov.card por rubro; en la demo se calculan acá.
+export function cardInfo(prov, cat) {
+  if (prov.card && prov.card[S.cat || "todos"]) {
+    const card = prov.card[S.cat || "todos"];
     return {
-      min: l.min,
-      minName: l.minName,
-      happy: l.happy,
-      next: l.next,
-      multi: e.svcs.length > 1 || !!l.minName,
+      min: card.min,
+      minName: card.minName,
+      happy: card.happy,
+      next: card.next,
+      multi: prov.svcs.length > 1 || !!card.minName,
     };
   }
-  const t = e.svcs.filter((l) => l[3] === cat);
-  const s = t.length ? t : e.svcs;
-  if (!s.length) {
+  const ofCat = prov.svcs.filter((svc) => svc[3] === cat);
+  const pool = ofCat.length ? ofCat : prov.svcs;
+  if (!pool.length) {
     return {
       min: 0,
       minName: "",
@@ -22,14 +24,14 @@ export function cardInfo(e, cat) {
       next: null,
     };
   }
-  const n = s.reduce((l, c) => (c[2] < l[2] ? c : l), s[0]);
-  const o = nextFree(e.id, n[1]);
-  const i = cfg(e.id);
+  const cheapest = pool.reduce((best, svc) => (svc[2] < best[2] ? svc : best), pool[0]);
+  const next = nextFree(prov.id, cheapest[1]);
+  const conf = cfg(prov.id);
   return {
-    min: n[2],
-    minName: n[0],
-    happy: i.on && i.happy.on ? i.happy.pct : 0,
-    next: o,
-    multi: s.length > 1,
+    min: cheapest[2],
+    minName: cheapest[0],
+    happy: conf.on && conf.happy.on ? conf.happy.pct : 0,
+    next: next,
+    multi: pool.length > 1,
   };
 }
