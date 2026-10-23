@@ -1,39 +1,43 @@
 import { LIVE, TZ } from "../config.js";
 
 export const DOW = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-export const pad = (e) => String(e).padStart(2, "0");
+export const pad = (num) => String(num).padStart(2, "0");
+// "Ahora" en hora de Argentina (UTC−3), sea cual sea la zona del dispositivo: los getters locales del Date que
+// devuelve (getHours, getDate…) dan la hora de Buenos Aires.
 export const NOW = () => new Date(Date.now() + /* @__PURE__ */ (new Date().getTimezoneOffset() - 180) * 6e4);
-export const dkey = (e) => e.getFullYear() + "-" + pad(e.getMonth() + 1) + "-" + pad(e.getDate());
-export const addDays = (e, a) => {
-  const t = a ? /* @__PURE__ */ new Date(a + "T12:00:00") : NOW();
-  t.setHours(12, 0, 0, 0);
-  t.setDate(t.getDate() + e);
-  return t;
+// Fecha como clave "AAAA-MM-DD" (la que usan la agenda y la base).
+export const dkey = (date) => date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+// Fecha a `days` días de hoy (o de la fecha `from`), al mediodía: así un cambio de horario no la mueve de día.
+export const addDays = (days, from) => {
+  const date = from ? /* @__PURE__ */ new Date(from + "T12:00:00") : NOW();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  return date;
 };
 export const TODAY = () => dkey(NOW());
-export const toMin = (e) => {
-  const [a, t] = e.split(":").map(Number);
-  return a * 60 + t;
+export const toMin = (hm) => {
+  const [hours, mins] = hm.split(":").map(Number);
+  return hours * 60 + mins;
 };
-export const fromMin = (e) => pad(Math.floor(e / 60)) + ":" + pad(e % 60);
-export function dayLabel(e, short) {
-  const t = TODAY();
-  const s = dkey(addDays(1));
-  if (e === t) {
+export const fromMin = (mins) => pad(Math.floor(mins / 60)) + ":" + pad(mins % 60);
+export function dayLabel(key, short) {
+  const today = TODAY();
+  const tomorrow = dkey(addDays(1));
+  if (key === today) {
     return "Hoy";
   }
-  if (e === s) {
+  if (key === tomorrow) {
     return "Mañana";
   }
-  const n = /* @__PURE__ */ new Date(e + "T12:00:00");
+  const date = /* @__PURE__ */ new Date(key + "T12:00:00");
   return (
-    (short ? DOW[n.getDay()] : DOW[n.getDay()].toLowerCase()) + " " + n.getDate() + "/" + (n.getMonth() + 1)
+    (short ? DOW[date.getDay()] : DOW[date.getDay()].toLowerCase()) + " " + date.getDate() + "/" + (date.getMonth() + 1)
   );
 }
-export function longLabel(e) {
-  const a = /* @__PURE__ */ new Date(e + "T12:00:00");
-  const t = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][a.getDay()];
-  const s = [
+export function longLabel(key) {
+  const date = /* @__PURE__ */ new Date(key + "T12:00:00");
+  const dayName = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"][date.getDay()];
+  const monthName = [
     "enero",
     "febrero",
     "marzo",
@@ -46,10 +50,10 @@ export function longLabel(e) {
     "octubre",
     "noviembre",
     "diciembre",
-  ][a.getMonth()];
-  const n =
-    (e === TODAY() ? "Hoy, " : e === dkey(addDays(1)) ? "Mañana, " : "") + t + " " + a.getDate() + " de " + s;
-  return n.charAt(0).toUpperCase() + n.slice(1);
+  ][date.getMonth()];
+  const label =
+    (key === TODAY() ? "Hoy, " : key === dkey(addDays(1)) ? "Mañana, " : "") + dayName + " " + date.getDate() + " de " + monthName;
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 export const MESES = [
   "enero",
@@ -65,13 +69,13 @@ export const MESES = [
   "noviembre",
   "diciembre",
 ];
-export const hoursUntil = (e) => /* @__PURE__ */ (new Date(e.date + "T" + e.time + ":00") - NOW()) / 36e5;
-export function prevMonthDay(e) {
-  const a = NOW();
-  a.setDate(1);
-  a.setMonth(a.getMonth() - 1);
-  a.setDate(e);
-  return dkey(a);
+export const hoursUntil = (booking) => /* @__PURE__ */ (new Date(booking.date + "T" + booking.time + ":00") - NOW()) / 36e5;
+export function prevMonthDay(day) {
+  const date = NOW();
+  date.setDate(1);
+  date.setMonth(date.getMonth() - 1);
+  date.setDate(day);
+  return dkey(date);
 }
 const _fmt =
   typeof Intl != "undefined"
@@ -85,50 +89,52 @@ const _fmt =
         hourCycle: "h23",
       })
     : null;
+// Fecha y hora de un timestamp de la base, en hora de Argentina.
 export function isoToLocal(iso) {
-  const a = {};
-  _fmt.formatToParts(new Date(iso)).forEach((t) => (a[t.type] = t.value));
+  const parts = {};
+  _fmt.formatToParts(new Date(iso)).forEach((part) => (parts[part.type] = part.value));
   return {
-    date: `${a.year}-${a.month}-${a.day}`,
-    time: `${a.hour === "24" ? "00" : a.hour}:${a.minute}`,
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour === "24" ? "00" : parts.hour}:${parts.minute}`,
   };
 }
-export const localToIso = (e, a) => `${e}T${a}:00-03:00`;
-export const minsBetween = (e, a) => Math.round((new Date(a) - new Date(e)) / 6e4);
-export const daysAgo = (e) =>
-  e
+// Al revés: fecha y hora de Argentina → timestamp para la base (Argentina no tiene horario de verano).
+export const localToIso = (date, time) => `${date}T${time}:00-03:00`;
+export const minsBetween = (from, to) => Math.round((new Date(to) - new Date(from)) / 6e4);
+export const daysAgo = (key) =>
+  key
     ? Math.max(
         0,
         Math.round(
-          /* @__PURE__ */ (new Date(TODAY() + "T12:00:00") - /* @__PURE__ */ new Date(e + "T12:00:00")) /
+          /* @__PURE__ */ (new Date(TODAY() + "T12:00:00") - /* @__PURE__ */ new Date(key + "T12:00:00")) /
             864e5,
         ),
       )
     : null;
 export function relDate(iso) {
-  const a = daysAgo(iso.slice(0, 10));
-  if (a === 0) {
+  const days = daysAgo(iso.slice(0, 10));
+  if (days === 0) {
     return "hoy";
-  } else if (a === 1) {
+  } else if (days === 1) {
     return "ayer";
-  } else if (a < 7) {
-    return `hace ${a} días`;
-  } else if (a < 30) {
-    return `hace ${Math.round(a / 7)} semana${Math.round(a / 7) > 1 ? "s" : ""}`;
+  } else if (days < 7) {
+    return `hace ${days} días`;
+  } else if (days < 30) {
+    return `hace ${Math.round(days / 7)} semana${Math.round(days / 7) > 1 ? "s" : ""}`;
   } else {
-    return `hace ${Math.round(a / 30)} mes${Math.round(a / 30) > 1 ? "es" : ""}`;
+    return `hace ${Math.round(days / 30)} mes${Math.round(days / 30) > 1 ? "es" : ""}`;
   }
 }
 export function nowHM() {
-  const e = NOW();
-  return String(e.getHours()).padStart(2, "0") + ":" + String(e.getMinutes()).padStart(2, "0");
+  const now = NOW();
+  return String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
 }
-export const capW = (e) => e.charAt(0).toUpperCase() + e.slice(1);
-export const dm = (e) => +String(e).slice(8, 10) + "/" + +String(e).slice(5, 7);
-export const dmy = (e) => String(e).slice(8, 10) + "/" + String(e).slice(5, 7) + "/" + String(e).slice(0, 4);
-export const dmyIso = (e) => (e ? dmy(LIVE ? isoToLocal(e).date : String(e).slice(0, 10)) : "");
+export const capW = (word) => word.charAt(0).toUpperCase() + word.slice(1);
+export const dm = (key) => +String(key).slice(8, 10) + "/" + +String(key).slice(5, 7);
+export const dmy = (key) => String(key).slice(8, 10) + "/" + String(key).slice(5, 7) + "/" + String(key).slice(0, 4);
+export const dmyIso = (iso) => (iso ? dmy(LIVE ? isoToLocal(iso).date : String(iso).slice(0, 10)) : "");
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-export const dayWord = (e) => {
-  const a = /* @__PURE__ */ new Date(e + "T12:00:00");
-  return DIAS[a.getDay()] + " " + a.getDate() + "/" + (a.getMonth() + 1);
+export const dayWord = (key) => {
+  const date = /* @__PURE__ */ new Date(key + "T12:00:00");
+  return DIAS[date.getDay()] + " " + date.getDate() + "/" + (date.getMonth() + 1);
 };
