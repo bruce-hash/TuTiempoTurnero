@@ -5,71 +5,74 @@ import { sb } from "../../config.js";
 import { TODAY, fromMin, localToIso, toMin } from "../../lib/fechas.js";
 import { S } from "../../state.js";
 
+// Escrituras del panel del prestador (agenda, clientes, caja, productos, gastos, avisos y horarios), todas por saved().
+// Lo que crea una fila guarda su id en el objeto de la app.
 Object.assign(LM, {
-  markBooking: (e, a) =>
+  markBooking: (booking, status) =>
     saved(
       sb.rpc("mark_booking", {
-        p_booking: e.id,
-        p_status: a === "noshow" ? "no_show" : "done",
+        p_booking: booking.id,
+        p_status: status === "noshow" ? "no_show" : "done",
       }),
     ),
-  cancelProvider: (e) =>
+  cancelProvider: (booking) =>
     saved(
       sb.rpc("cancel_by_provider", {
-        p_booking: e.id,
+        p_booking: booking.id,
       }),
     ),
-  addBooking: (e) =>
+  // turno agendado a mano o bloqueo de horario (sin dinero: la política de la base no lo permite)
+  addBooking: (booking) =>
     saved(
       sb
         .from("bookings")
         .insert({
           provider_id: S.me,
-          client_name: e.cliente,
-          client_phone: e.tel || null,
-          service_name: e.svc,
-          source: e.type === "block" ? "block" : "manual",
+          client_name: booking.cliente,
+          client_phone: booking.tel || null,
+          service_name: booking.svc,
+          source: booking.type === "block" ? "block" : "manual",
           status: "confirmed",
-          starts_at: localToIso(e.date, e.time),
-          ends_at: localToIso(e.date, fromMin(toMin(e.time) + e.dur)),
-          price: e.price || 0,
+          starts_at: localToIso(booking.date, booking.time),
+          ends_at: localToIso(booking.date, fromMin(toMin(booking.time) + booking.dur)),
+          price: booking.price || 0,
         })
         .select("id")
         .single(),
-    ).then((a) => {
-      e.id = a.id;
+    ).then((row) => {
+      booking.id = row.id;
     }),
-  delBooking: (e) => saved(sb.from("bookings").delete().eq("id", e.id)),
-  upsertClient: (e, a) =>
-    a.id
+  delBooking: (booking) => saved(sb.from("bookings").delete().eq("id", booking.id)),
+  upsertClient: (name, client) =>
+    client.id
       ? saved(
           sb
             .from("provider_clients")
             .update({
-              phone: a.tel || null,
-              notes: a.notes || null,
-              birthday: a.bday || null,
-              profile: a.profile || {},
+              phone: client.tel || null,
+              notes: client.notes || null,
+              birthday: client.bday || null,
+              profile: client.profile || {},
             })
-            .eq("id", a.id),
+            .eq("id", client.id),
         )
       : saved(
           sb
             .from("provider_clients")
             .insert({
               provider_id: S.me,
-              name: e,
-              phone: a.tel || null,
-              notes: a.notes || null,
-              birthday: a.bday || null,
-              profile: a.profile || {},
+              name: name,
+              phone: client.tel || null,
+              notes: client.notes || null,
+              birthday: client.bday || null,
+              profile: client.profile || {},
             })
             .select("id")
             .single(),
-        ).then((t) => {
-          a.id = t.id;
+        ).then((row) => {
+          client.id = row.id;
         }),
-  contacted: (e) =>
+  contacted: (names) =>
     saved(
       sb
         .from("provider_clients")
@@ -77,94 +80,95 @@ Object.assign(LM, {
           contacted_at: /* @__PURE__ */ new Date().toISOString(),
         })
         .eq("provider_id", S.me)
-        .in("name", e),
+        .in("name", names),
     ),
-  addWalk: (e) =>
+  addWalk: (walk) =>
     saved(
       sb
         .from("walkins")
         .insert({
           provider_id: S.me,
-          at: localToIso(TODAY(), e.hora),
-          kind: e.kind === "prod" ? "product" : "service",
-          description: e.svc,
-          amount: e.precio,
-          tip: e.propina || 0,
-          method: e.medio === "Mercado Pago" ? "mp" : "cash",
-          client_name: e.cliente || null,
-          product_id: e.pid || null,
+          at: localToIso(TODAY(), walk.hora),
+          kind: walk.kind === "prod" ? "product" : "service",
+          description: walk.svc,
+          amount: walk.precio,
+          tip: walk.propina || 0,
+          method: walk.medio === "Mercado Pago" ? "mp" : "cash",
+          client_name: walk.cliente || null,
+          product_id: walk.pid || null,
         })
         .select("id")
         .single(),
-    ).then((a) => {
-      e.id = a.id;
+    ).then((row) => {
+      walk.id = row.id;
     }),
-  delWalk: (e) => (e.id ? saved(sb.from("walkins").delete().eq("id", e.id)) : Promise.resolve()),
-  setStock: (e) =>
+  delWalk: (walk) => (walk.id ? saved(sb.from("walkins").delete().eq("id", walk.id)) : Promise.resolve()),
+  setStock: (prod) =>
     saved(
       sb
         .from("products")
         .update({
-          stock: e.stock,
+          stock: prod.stock,
         })
-        .eq("id", e.id),
+        .eq("id", prod.id),
     ),
-  addProduct: (e) =>
+  addProduct: (prod) =>
     saved(
       sb
         .from("products")
         .insert({
           provider_id: S.me,
-          name: e.n,
-          price: e.p,
-          stock: e.stock,
-          min_stock: e.min,
+          name: prod.n,
+          price: prod.p,
+          stock: prod.stock,
+          min_stock: prod.min,
         })
         .select("id")
         .single(),
-    ).then((a) => {
-      e.id = a.id;
+    ).then((row) => {
+      prod.id = row.id;
     }),
-  addExpense: (e) =>
+  addExpense: (expense) =>
     saved(
       sb
         .from("expenses")
         .insert({
           provider_id: S.me,
-          concept: e.c,
-          amount: e.m,
-          category: e.cat,
-          spent_on: e.d,
-          product_id: e.prodId || null,
-          qty: e.qty || null,
+          concept: expense.c,
+          amount: expense.m,
+          category: expense.cat,
+          spent_on: expense.d,
+          product_id: expense.prodId || null,
+          qty: expense.qty || null,
         })
         .select("id")
         .single(),
-    ).then((a) => {
-      e.id = a.id;
+    ).then((row) => {
+      expense.id = row.id;
     }),
-  delExpense: (e) => saved(sb.from("expenses").delete().eq("id", e.id)),
-  saveTemplate: (e) =>
+  delExpense: (expense) => saved(sb.from("expenses").delete().eq("id", expense.id)),
+  saveTemplate: (tpl) =>
     saved(
       sb.from("message_templates").upsert({
         provider_id: S.me,
-        key: e.k,
-        enabled: e.on,
-        body: e.txt,
+        key: tpl.k,
+        enabled: tpl.on,
+        body: tpl.txt,
       }),
     ),
-  saveSettings: (e) => {
-    const a = cfgToDb(S.me, e);
-    return saved(sb.from("provider_settings").upsert(a.st))
+  // los horarios se reemplazan enteros: se borran los del prestador y se insertan los nuevos
+  saveSettings: (conf) => {
+    const rows = cfgToDb(S.me, conf);
+    return saved(sb.from("provider_settings").upsert(rows.st))
       .then(() => saved(sb.from("provider_hours").delete().eq("provider_id", S.me)))
-      .then(() => (a.hours.length ? saved(sb.from("provider_hours").insert(a.hours)) : null));
+      .then(() => (rows.hours.length ? saved(sb.from("provider_hours").insert(rows.hours)) : null));
   },
-  setGoal: (e) =>
+  setGoal: (goal) =>
     saved(
       sb
         .from("provider_private")
         .update({
-          monthly_goal: e,
+          monthly_goal: goal,
         })
         .eq("provider_id", S.me),
     ),
