@@ -546,7 +546,34 @@ r = r if err(r) else q("select slug from providers where id = %s", (r[0][0],))
 ok("el segundo \"Panel\" recibe panel-2 (reservado y ocupado se saltean igual)", not err(r) and r[0][0] == "panel-2")
 u = mkuser("res-directo@test.ar", "Directo")
 ok("el alta directa en la tabla tampoco puede usar un slug reservado",
-   err(q("insert into providers (slug, name, city_id) values ('blog', 'Directo', (select id from cities limit 1))", uid=u), "providers_slug_not_reserved"))
+   err(q("insert into providers (slug, name, city_id) values ('blog', 'Directo', (select id from cities limit 1))", uid=u), "reserved_slug"))
+ok("ni el admin puede crear un prestador con slug reservado (mayúsculas incluidas)",
+   err(q("insert into providers (slug, name, city_id) values ('Soporte', 'Directo', (select id from cities limit 1))"), "reserved_slug"))
+# Bloque 1: un prestador que ya tenía un slug reservado (de antes del Bloque B) sigue funcionando: el trigger mira el
+# slug solo cuando se crea o se cambia (un check "not valid" lo revisaba en cada update de la fila)
+ok("el slug reservado se controla con un trigger, no con un check",
+   q("select count(*) from pg_constraint where conname = 'providers_slug_not_reserved'")[0][0] == 0
+   and q("select count(*) from pg_trigger where tgname = 'providers_slug_not_reserved' and tgenabled = 'O'")[0][0] == 1)
+uv = mkuser("viejo-turnos@test.ar", "Turnos Viejo")
+q("alter table providers disable trigger providers_slug_not_reserved")
+pv = q("insert into providers (owner_id, slug, name, city_id, status) values (%s, 'turnos', 'Turnos Viejo', (select id from cities limit 1), 'pending') returning id", (uv,))
+q("alter table providers enable trigger providers_slug_not_reserved")
+pv = pv[0][0]
+q("insert into provider_settings (provider_id) values (%s)", (pv,))
+ok("prestador con slug reservado preexistente: el admin lo activa", not err(q("update providers set status = 'active' where id = %s", (pv,))))
+ok("…se le actualizan puntaje y reseñas", not err(q("update providers set rating_avg = 4.5, rating_count = 2 where id = %s", (pv,))))
+ok("…suma un seguidor", not err(q("insert into follows (user_id, provider_id) values (%s, %s)", (cli2, pv))) and q("select followers from providers where id = %s", (pv,))[0][0] == 1)
+bv = q("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s, %s, 'Beto Díaz', 'Corte', 'app', 'confirmed', now() - interval '2 hours', now() - interval '1 hour', 8000) returning id", (pv, cli2))[0][0]
+mv = q("select mark_booking(%s, 'done')", (bv,), uid=uv)
+ok("…marca Asistió en un turno y suma actividad", not err(mv) and q("select activity from providers where id = %s", (pv,))[0][0] == 1)
+ok("…el reshuffle de cada noche lo incluye", not err(q("select reshuffle_providers()", role="service_role")))
+ok("…el dueño edita su perfil sin tocar el slug", not err(q("update providers set bio = 'Hola' where id = %s", (pv,), uid=uv)))
+ok("…el dueño no puede cambiar el slug (solo el admin, por SQL)", err(q("update providers set slug = 'turnos-2' where id = %s", (pv,), uid=uv), "permission denied"))
+ok("…el admin puede guardar el mismo slug que ya tenía", not err(q("update providers set slug = 'turnos', name = 'Turnos Viejo' where id = %s", (pv,))))
+ok("…pero no cambiarlo por otro reservado", err(q("update providers set slug = 'ayuda' where id = %s", (pv,)), "reserved_slug"))
+ok("…y sí por uno libre", not err(q("update providers set slug = 'turnos-viejo' where id = %s", (pv,))))
+ok("…una vez libre, tampoco puede volver al reservado", err(q("update providers set slug = 'turnos' where id = %s", (pv,)), "reserved_slug"))
+ok("a un prestador común no se le puede poner un slug reservado", err(q("update providers set slug = 'Panel' where id = %s", (pid2,)), "reserved_slug"))
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

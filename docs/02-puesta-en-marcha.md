@@ -55,6 +55,11 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
 5. Para que Google no indexe la prueba: en ese subdominio, `robots.txt` con `Disallow: /`.
 
 ### 4. Prueba de punta a punta (checklist)
+- [ ] Direcciones en Hostinger (LiteSpeed lee el `.htaccess`, pero el CI lo prueba con Apache): abrir
+      `https://prueba.tutiempo.com.ar/panel/agenda` directo (pide ingresar y vuelve a la agenda), recargar el perfil de
+      un prestador (`/<slug>`), abrir un `.js` que no existe (`/assets/no-existe.js` tiene que dar 404, no la app) y
+      verificar que en Supabase → Auth → URL Configuration → Redirect URLs esté la raíz del subdominio
+      (`https://prueba.tutiempo.com.ar/`).
 - [ ] Crear cuenta, activar por email, ingresar, recuperar contraseña, entrar con Google.
 - [ ] Alta de prestador, subir DNI, aprobarlo desde el panel admin, conectar Mercado Pago (vendedor de prueba).
 - [ ] Reservar y pagar con el comprador de prueba: el turno se confirma solo (verifica H06: firma del webhook).
