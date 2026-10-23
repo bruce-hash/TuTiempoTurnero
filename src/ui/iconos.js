@@ -1,3 +1,4 @@
+// logo de TuTiempo (el reloj toma el color de la marca del rubro) y el de Google para ingresar
 export const LOGO =
   '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="currentColor"/><circle cx="16" cy="16" r="9" fill="none" style="stroke:var(--on-brand)" stroke-width="2.4"/><path d="M16 11v5.5l3.5 2.2" fill="none" style="stroke:var(--on-brand)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>TuTiempo';
 export const GLOGO =
