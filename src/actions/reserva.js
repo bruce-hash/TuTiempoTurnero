@@ -15,30 +15,32 @@ import { myStamps, setMyStamps, stampGoal, svcByKey } from "../ui/sellos.js";
 import { notif, toast } from "../ui/toast.js";
 import { pushNotice } from "../views/prestador/mensajes.js";
 
+// reserva en vivo: book() crea el turno en la base y, si hay que pagar, redirige a Mercado Pago.
+// Si el horario se ocupó mientras tanto, vuelve al perfil con los horarios actualizados.
 async function liveBook(form) {
-  const a = form.querySelector("button[type=submit]");
-  if (a) {
-    a.disabled = true;
-    a.textContent = "Procesando…";
+  const btn = form.querySelector("button[type=submit]");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Procesando…";
   }
   try {
-    const t = await api.book({
+    const res = await api.book({
       pid: S.pid,
       svcIdx: S.svc,
       date: S.slot.date,
       time: S.slot.time,
       rep: S.rep,
     });
-    if (!t || t.redirect) {
+    if (!res || res.redirect) {
       return;
     }
     if (S.payM === "reward") {
       S.payM = "mp";
     }
-    S.turnoId = t.id;
+    S.turnoId = res.id;
     S.seriesMsg =
-      t.count > 1
-        ? `También reservaste ${t.count - 1} turno${t.count > 2 ? "s" : ""} más${t.skipped ? ` (${t.skipped} se salteó por estar ocupado)` : ""}.`
+      res.count > 1
+        ? `También reservaste ${res.count - 1} turno${res.count > 2 ? "s" : ""} más${res.skipped ? ` (${res.skipped} se salteó por estar ocupado)` : ""}.`
         : "";
     S.slot = null;
     S.rep = 0;
@@ -47,56 +49,58 @@ async function liveBook(form) {
     render();
     window.scrollTo(0, 0);
     toast("Turno confirmado.");
-  } catch (t) {
-    const s = errMsg(t);
-    const n = $("#terr");
-    if (n) {
-      n.textContent = s;
+  } catch (err) {
+    const msg = errMsg(err);
+    const box = $("#terr");
+    if (box) {
+      box.textContent = msg;
     } else {
-      toast(s);
+      toast(msg);
     }
-    if (a) {
-      a.disabled = false;
-      a.textContent = "Reintentar";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Reintentar";
     }
-    if (/ocupar|disponible/.test(s)) {
+    if (/ocupar|disponible/.test(msg)) {
       try {
         await api.loadProvider(S.pid, true);
-      } catch (o) {}
+      } catch (ignored) {}
       S.slot = null;
       go("perfil", S.pid);
-      toast(s);
+      toast(msg);
     }
   }
 }
+// guarda en S.intake las respuestas a las preguntas previas al turno
 export function readIntake() {
-  document.querySelectorAll("[data-iq]").forEach((e) => {
+  document.querySelectorAll("[data-iq]").forEach((input) => {
     S.intake = S.intake || {};
-    const a = e.value.trim().slice(0, 200);
-    if (a) {
-      S.intake[e.dataset.iq] = a;
+    const value = input.value.trim().slice(0, 200);
+    if (value) {
+      S.intake[input.dataset.iq] = value;
     } else {
-      delete S.intake[e.dataset.iq];
+      delete S.intake[input.dataset.iq];
     }
   });
 }
-registerClick("useReward", (e, x, v) => {
-  const r = +x.dataset.id;
-  const m = x.dataset.sk;
-  const f = pr(r);
-  if (LIVE && (!f || !f.full)) {
+// “Reservar mi premio”: abre el perfil con el servicio del premio elegido
+registerClick("useReward", (ev, el, act) => {
+  const pid = +el.dataset.id;
+  const sk = el.dataset.sk;
+  const prov = pr(pid);
+  if (LIVE && (!prov || !prov.full)) {
     S.payM = "reward";
     S.rewardFor = {
-      pid: r,
-      sk: m,
+      pid: pid,
+      sk: sk,
     };
-    go("perfil", r);
+    go("perfil", pid);
     return;
   }
-  const u = svcByKey(f, m);
-  go("perfil", r);
-  if (u) {
-    S.svc = f.svcs.indexOf(u);
+  const svc = svcByKey(prov, sk);
+  go("perfil", pid);
+  if (svc) {
+    S.svc = prov.svcs.indexOf(svc);
     S.slot = null;
     S.day = null;
   }
@@ -104,30 +108,31 @@ registerClick("useReward", (e, x, v) => {
   render();
   return;
 });
-registerClick("rebook", (e, x, v) => {
-  const r = store.BOOK.find((N) => N.id === +x.dataset.id);
-  if (!r) {
+// volver a sacar un turno parecido (data-in = días después del anterior), dentro de los días habilitados
+registerClick("rebook", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === +el.dataset.id);
+  if (!booking) {
     return;
   }
-  if (r.byProv) {
-    r.rebooked = true;
+  if (booking.byProv) {
+    booking.rebooked = true;
   }
-  const m = pr(r.pid);
-  const f = m && m.svcs.findIndex((N) => N[0] === r.svc);
-  S.pctx = r.cat || null;
-  S.svc = f >= 0 ? f : 0;
+  const prov = pr(booking.pid);
+  const svcIndex = prov && prov.svcs.findIndex((row) => row[0] === booking.svc);
+  S.pctx = booking.cat || null;
+  S.svc = svcIndex >= 0 ? svcIndex : 0;
   S.adds = [];
-  S.intake = Object.assign({}, r.intake || {});
+  S.intake = Object.assign({}, booking.intake || {});
   S.slot = null;
-  const u = dkey(addDays(+x.dataset.in || 0, +x.dataset.in ? r.date : TODAY()));
-  const E = cfg(r.pid);
-  const O = dkey(addDays(E.ahead - 1));
-  S.day = u < TODAY() ? TODAY() : u > O ? O : u;
+  const wanted = dkey(addDays(+el.dataset.in || 0, +el.dataset.in ? booking.date : TODAY()));
+  const conf = cfg(booking.pid);
+  const lastDay = dkey(addDays(conf.ahead - 1));
+  S.day = wanted < TODAY() ? TODAY() : wanted > lastDay ? lastDay : wanted;
   S.wk = null;
-  go("perfil", r.pid);
+  go("perfil", booking.pid);
   return;
 });
-registerClick("reservarT", (e, x, v) => {
+registerClick("reservarT", (ev, el, act) => {
   if (!S.slot) {
     return;
   }
@@ -139,7 +144,7 @@ registerClick("reservarT", (e, x, v) => {
     go("login");
   }
 });
-registerClick("waitlist", (e, x, v) => {
+registerClick("waitlist", (ev, el, act) => {
   if (!S.user) {
     S.after = "perfil";
     go("login");
@@ -154,19 +159,19 @@ registerClick("waitlist", (e, x, v) => {
   toast("Listo. Si se libera un turno ese día, te avisamos con una notificación.");
   render();
 });
-registerClick("cancelAsk", (e, x, v) => {
+registerClick("cancelAsk", (ev, el, act) => {
   S.cancelAsk = true;
   render();
 });
-registerClick("cancelNo", (e, x, v) => {
+registerClick("cancelNo", (ev, el, act) => {
   S.cancelAsk = false;
   render();
 });
-registerClick("cancelYes", (e, x, v) => {
-  const r = store.BOOK.find((m) => m.id === S.turnoId);
+registerClick("cancelYes", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === S.turnoId);
   if (LIVE) {
     api.m
-      .cancelClient(r)
+      .cancelClient(booking)
       .then(() => Promise.all([api.myBookings(), api.myStamps()]))
       .then(() => {
         toast("Le avisamos al profesional. Lo pagado queda para el profesional.");
@@ -176,138 +181,140 @@ registerClick("cancelYes", (e, x, v) => {
       .catch(() => {});
     return;
   }
-  r.status = "cancelled";
-  r.refund = 0;
-  r.noGo = true;
+  booking.status = "cancelled";
+  booking.refund = 0;
+  booking.noGo = true;
   S.cancelAsk = false;
   S.justBooked = false;
-  freed(r);
-  if (r.pay === "reward" && !r.stampBack) {
-    r.stampBack = true;
-    const m = (pr(r.pid).svcs || []).find((f) => f[0] === r.svc);
-    if (m) {
-      setMyStamps(r.pid, m, myStamps(r.pid, m) + (r.rwGoal || stampGoal(r.pid, m)));
+  freed(booking);
+  if (booking.pay === "reward" && !booking.stampBack) {
+    booking.stampBack = true;
+    const svc = (pr(booking.pid).svcs || []).find((row) => row[0] === booking.svc);
+    if (svc) {
+      setMyStamps(booking.pid, svc, myStamps(booking.pid, svc) + (booking.rwGoal || stampGoal(booking.pid, svc)));
     }
   }
   toast("Le avisamos al profesional. Lo pagado queda para el profesional.");
   render();
 });
-registerClick("reprog", (e, x, v) => {
-  const r = store.BOOK.find((f) => f.id === S.turnoId);
-  S.reprog = r.id;
-  S.pid = r.pid;
-  const m = pr(r.pid);
+registerClick("reprog", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === S.turnoId);
+  S.reprog = booking.id;
+  S.pid = booking.pid;
+  const prov = pr(booking.pid);
   S.svc = Math.max(
     0,
-    m.svcs.findIndex((f) => f[0] === r.svc),
+    prov.svcs.findIndex((row) => row[0] === booking.svc),
   );
-  S.day = r.date;
+  S.day = booking.date;
   S.slot = null;
-  go("perfil", r.pid);
+  go("perfil", booking.pid);
 });
-registerClick("reprogCancel", (e, x, v) => {
-  const r = S.reprog;
+registerClick("reprogCancel", (ev, el, act) => {
+  const id = S.reprog;
   S.reprog = null;
-  S.turnoId = r;
+  S.turnoId = id;
   go("turnoOk");
 });
-registerSubmit("fTurno", (e) => {
-  const a = pr(S.pid);
-  const t = a.svcs[S.svc];
+// confirmar la reserva. En vivo, liveBook; en la demo se crea acá (o se mueve, si es una reprogramación),
+// con la serie si se repite (los ocupados se saltean) y el pago con seña, efectivo o premio de sellos
+registerSubmit("fTurno", (ev) => {
+  const prov = pr(S.pid);
+  const svc = prov.svcs[S.svc];
   if (!S.slot) {
-    go("perfil", a.id);
+    go("perfil", prov.id);
     return;
   }
   if (LIVE) {
-    liveBook(e.target);
+    liveBook(ev.target);
     return;
   }
   readIntake();
-  const s = selDur(a);
-  const n = selPrice(a);
-  const o = selAdds(a).map((l) => l.slice(0, 3));
-  if (!slotsFor(a.id, S.slot.date, s, S.reprog).list.some((l) => l.free && l.time === S.slot.time)) {
+  const dur = selDur(prov);
+  const base = selPrice(prov);
+  const addons = selAdds(prov).map((addon) => addon.slice(0, 3));
+  if (!slotsFor(prov.id, S.slot.date, dur, S.reprog).list.some((slot) => slot.free && slot.time === S.slot.time)) {
     S.slot = null;
     toast("Ese horario se acaba de ocupar. Elegí otro.");
-    go("perfil", a.id);
+    go("perfil", prov.id);
     return;
   }
   S.seriesMsg = "";
   if (S.reprog) {
-    const l = store.BOOK.find((c) => c.id === S.reprog);
-    l.date = S.slot.date;
-    l.time = S.slot.time;
-    l.disc = happyAt(a.id, l.date, toMin(l.time));
-    l.moved = true;
-    S.turnoId = l.id;
+    const booking = store.BOOK.find((item) => item.id === S.reprog);
+    booking.date = S.slot.date;
+    booking.time = S.slot.time;
+    booking.disc = happyAt(prov.id, booking.date, toMin(booking.time));
+    booking.moved = true;
+    S.turnoId = booking.id;
     S.reprog = null;
   } else {
-    const l = priceAt(a.id, n, S.slot.date, S.slot.time);
-    const c = uname();
-    const d = (j, b, g) => {
-      const M = {
+    const price = priceAt(prov.id, base, S.slot.date, S.slot.time);
+    const user = uname();
+    const makeBooking = (date, paid, series) => {
+      const booking = {
         id: store.BID++,
-        pid: a.id,
-        cat: t[3],
-        addons: o,
+        pid: prov.id,
+        cat: svc[3],
+        addons: addons,
         intake: Object.assign({}, S.intake),
-        buf: cfg(a.id).buffer || 0,
-        date: j,
+        buf: cfg(prov.id).buffer || 0,
+        date: date,
         time: S.slot.time,
-        dur: s,
-        svc: t[0],
-        price: priceAt(a.id, n, j, S.slot.time),
-        disc: happyAt(a.id, j, toMin(S.slot.time)),
-        cliente: c,
+        dur: dur,
+        svc: svc[0],
+        price: priceAt(prov.id, base, date, S.slot.time),
+        disc: happyAt(prov.id, date, toMin(S.slot.time)),
+        cliente: user,
         src: "app",
         type: "local",
         status: "confirmed",
-        paid: b,
+        paid: paid,
         mine: true,
         late: 0,
-        series: g,
+        series: series,
       };
-      M.fee = b > 0 ? feeFor(M.price) : 0;
-      store.BOOK.push(M);
-      return M;
+      booking.fee = paid > 0 ? feeFor(booking.price) : 0;
+      store.BOOK.push(booking);
+      return booking;
     };
-    const p = S.rep ? store.SID++ : 0;
-    const w = stampGoal(a.id, t);
-    const y = S.payM === "reward" && w > 0 && myStamps(a.id, t) >= w;
-    const k = !y && S.payM === "cash" && cfg(a.id).cash !== false && !mustPayTotal(a.id, c);
-    const h = d(S.slot.date, y ? 0 : payNow(a.id, l, c), p);
-    h.pay = y ? "reward" : k ? "cash" : "mp";
-    h.sk = skey(t);
-    if (y) {
-      h.list = h.price;
-      h.price = 0;
-      h.disc = 0;
-      h.rwGoal = w;
-      setMyStamps(a.id, t, myStamps(a.id, t) - w);
+    const seriesId = S.rep ? store.SID++ : 0;
+    const goal = stampGoal(prov.id, svc);
+    const redeem = S.payM === "reward" && goal > 0 && myStamps(prov.id, svc) >= goal;
+    const cash = !redeem && S.payM === "cash" && cfg(prov.id).cash !== false && !mustPayTotal(prov.id, user);
+    const first = makeBooking(S.slot.date, redeem ? 0 : payNow(prov.id, price, user), seriesId);
+    first.pay = redeem ? "reward" : cash ? "cash" : "mp";
+    first.sk = skey(svc);
+    if (redeem) {
+      first.list = first.price;
+      first.price = 0;
+      first.disc = 0;
+      first.rwGoal = goal;
+      setMyStamps(prov.id, svc, myStamps(prov.id, svc) - goal);
     }
-    S.turnoId = h.id;
+    S.turnoId = first.id;
     S.newT++;
     S.payInfo = {
-      b: h,
-      what: t[0] + " en " + a.name,
+      b: first,
+      what: svc[0] + " en " + prov.name,
     };
     if (S.rep) {
-      let j = 0;
-      let b = 0;
-      seriesDates(S.slot.date, S.rep, 3).forEach((g) => {
-        if (slotsFor(a.id, g, s, null, true).list.some((M) => M.free && M.time === S.slot.time)) {
-          const M = d(g, payNow(a.id, priceAt(a.id, n, g, S.slot.time), c), p);
-          M.pay = h.pay;
-          j++;
+      let made = 0;
+      let skipped = 0;
+      seriesDates(S.slot.date, S.rep, 3).forEach((date) => {
+        if (slotsFor(prov.id, date, dur, null, true).list.some((slot) => slot.free && slot.time === S.slot.time)) {
+          const booking = makeBooking(date, payNow(prov.id, priceAt(prov.id, base, date, S.slot.time), user), seriesId);
+          booking.pay = first.pay;
+          made++;
         } else {
-          b++;
+          skipped++;
         }
       });
-      S.seriesMsg = `También reservaste ${j} turno${j === 1 ? "" : "s"} más, cada ${S.rep} semanas${b ? ` (${b} se salteó por estar ocupado)` : ""}.`;
+      S.seriesMsg = `También reservaste ${made} turno${made === 1 ? "" : "s"} más, cada ${S.rep} semanas${skipped ? ` (${skipped} se salteó por estar ocupado)` : ""}.`;
     }
-    pushNotice(a.id, "conf", h);
+    pushNotice(prov.id, "conf", first);
     notif(
-      `<span class="mp" style="background:var(--brand)">🔔</span><div><b>${esc(a.name)}</b> ya tiene tu turno en su agenda.<br><span class="hint">En la demo, entrá como Prestador y abrí Agenda para verlo.</span></div>`,
+      `<span class="mp" style="background:var(--brand)">🔔</span><div><b>${esc(prov.name)}</b> ya tiene tu turno en su agenda.<br><span class="hint">En la demo, entrá como Prestador y abrí Agenda para verlo.</span></div>`,
     );
   }
   S.slot = null;
@@ -322,7 +329,7 @@ registerSubmit("fTurno", (e) => {
   render();
   window.scrollTo(0, 0);
   toast(
-    S.turnoId && store.BOOK.find((l) => l.id === S.turnoId && l.pay === "reward")
+    S.turnoId && store.BOOK.find((item) => item.id === S.turnoId && item.pay === "reward")
       ? "Turno confirmado."
       : "Seña pagada. Turno confirmado.",
   );
