@@ -13,123 +13,125 @@ import { toast } from "../ui/toast.js";
 import { fichaFields, realClients } from "../views/prestador/clientes.js";
 import { MSG_TPL, fillMsg2, inApp, msgGroup, myLink, updMsgCount } from "../views/prestador/mensajes.js";
 
-registerClick("msgOpen", (e, x, v) => {
-  const r = realClients();
-  const m = x.dataset.pre;
-  const f = {};
-  if (m === "recuperar") {
-    r.filter((u) => store.CLIENTS[u].last >= 35).forEach((u) => (f[u] = true));
+registerClick("msgOpen", (ev, el, act) => {
+  const names = realClients();
+  const preset = el.dataset.pre;
+  const sel = {};
+  if (preset === "recuperar") {
+    names.filter((name) => store.CLIENTS[name].last >= 35).forEach((name) => (sel[name] = true));
   }
   S.msg = {
     tpl: "extrano",
     txt: MSG_TPL[0][2],
-    sel: f,
+    sel: sel,
   };
   S.msgOpen = true;
   S.contactOpen = false;
   render();
   return;
 });
-registerClick("msgClose", (e, x, v) => {
+registerClick("msgClose", (ev, el, act) => {
   S.msgOpen = false;
   S.msg = null;
   render();
   return;
 });
-registerClick("msgTpl", (e, x, v) => {
-  const r = MSG_TPL.find((m) => m[0] === x.dataset.k);
-  S.msg.tpl = r[0];
-  S.msg.txt = r[2];
+registerClick("msgTpl", (ev, el, act) => {
+  const tpl = MSG_TPL.find((row) => row[0] === el.dataset.k);
+  S.msg.tpl = tpl[0];
+  S.msg.txt = tpl[2];
   render();
   return;
 });
-registerClick("msgPick", (e, x, v) => {
-  const r = x.dataset.k;
+registerClick("msgPick", (ev, el, act) => {
+  const group = el.dataset.k;
   S.msg.txt = ($("#msgTxt") || {}).value || S.msg.txt;
-  const m = msgGroup(r);
-  if (!m.length) {
+  const members = msgGroup(group);
+  if (!members.length) {
     toast("No hay clientes en ese grupo.");
     return;
   }
-  const f = m.every((u) => S.msg.sel[u]);
-  m.forEach((u) => {
-    if (f) {
-      delete S.msg.sel[u];
+  const allIn = members.every((name) => S.msg.sel[name]);
+  members.forEach((name) => {
+    if (allIn) {
+      delete S.msg.sel[name];
     } else {
-      S.msg.sel[u] = true;
+      S.msg.sel[name] = true;
     }
   });
-  toast(f ? `Sacaste ${m.length} de la lista.` : `Agregaste ${m.length} a la lista.`);
+  toast(allIn ? `Sacaste ${members.length} de la lista.` : `Agregaste ${members.length} a la lista.`);
   render();
   return;
 });
-registerClick("msgSend", (e, x, v) => {
-  const r = S.msg;
-  r.txt = (($("#msgTxt") || {}).value || r.txt).trim();
-  const m = $("#msgErr");
-  if (r.txt.length < 2 || r.txt.length > 500) {
-    if (m) {
-      m.textContent = "Escribí un mensaje (hasta 500 letras).";
+// mensaje a los clientes elegidos: solo les llega a los que tienen la app (en vivo, por la base;
+// en la demo, solo a la cuenta de ejemplo “Juan P.”)
+registerClick("msgSend", (ev, el, act) => {
+  const msg = S.msg;
+  msg.txt = (($("#msgTxt") || {}).value || msg.txt).trim();
+  const errBox = $("#msgErr");
+  if (msg.txt.length < 2 || msg.txt.length > 500) {
+    if (errBox) {
+      errBox.textContent = "Escribí un mensaje (hasta 500 letras).";
     }
     return;
   }
-  const f = realClients().filter((B) => r.sel[B]);
-  if (!f.length) {
+  const selected = realClients().filter((name) => msg.sel[name]);
+  if (!selected.length) {
     return;
   }
-  const u = f.filter(inApp);
-  const E = f.length - u.length;
-  const O = (B) => {
-    r.done = {
-      app: B,
-      none: f.length - B,
+  const withApp = selected.filter(inApp);
+  const withoutApp = selected.length - withApp.length;
+  const done = (sent) => {
+    msg.done = {
+      app: sent,
+      none: selected.length - sent,
     };
-    f.forEach((F) => (store.CLIENTS[F].contacted = true));
+    selected.forEach((name) => (store.CLIENTS[name].contacted = true));
     render();
   };
-  const N = r.txt.replace(/\{negocio\}/g, pr(ME()).name).replace(/\{link\}/g, myLink());
+  const body = msg.txt.replace(/\{negocio\}/g, pr(ME()).name).replace(/\{link\}/g, myLink());
   if (LIVE) {
-    const B = u.map((F) => store.CLIENTS[F].id).filter(Boolean);
-    if (!B.length) {
-      O(0);
+    const ids = withApp.map((name) => store.CLIENTS[name].id).filter(Boolean);
+    if (!ids.length) {
+      done(0);
       return;
     }
-    x.disabled = true;
+    el.disabled = true;
     api.m
-      .sendMessages(B, N)
-      .then((F) => O((F && F.sent) || 0))
+      .sendMessages(ids, body)
+      .then((res) => done((res && res.sent) || 0))
       .catch(() => {
-        x.disabled = false;
+        el.disabled = false;
       });
     return;
   }
-  u.forEach((B) => {
-    if (B === "Juan P.") {
+  withApp.forEach((name) => {
+    if (name === "Juan P.") {
       store.DEMO_INBOX.unshift({
         id: Date.now(),
         pid: ME(),
         name: pr(ME()).name,
         photo: pr(ME()).photo,
         hue: pr(ME()).hue,
-        body: fillMsg2(r.txt, B),
+        body: fillMsg2(msg.txt, name),
         d: "recién",
         read: false,
       });
     }
   });
-  O(u.length);
+  done(withApp.length);
   return;
 });
-registerClick("msgOne", (e, x, v) => {
-  const r = S.cli;
-  if (!r || !inApp(r)) {
+registerClick("msgOne", (ev, el, act) => {
+  const name = S.cli;
+  if (!name || !inApp(name)) {
     return;
   }
   S.msg = {
     tpl: "extrano",
     txt: MSG_TPL[0][2],
     sel: {
-      [r]: true,
+      [name]: true,
     },
   };
   S.msgOpen = true;
@@ -139,29 +141,29 @@ registerClick("msgOne", (e, x, v) => {
   window.scrollTo(0, 0);
   return;
 });
-registerClick("contactOpen", (e, x, v) => {
+registerClick("contactOpen", (ev, el, act) => {
   S.contactOpen = true;
   S.msgOpen = false;
   S.newC = {};
   render();
   return;
 });
-registerClick("contactClose", (e, x, v) => {
+registerClick("contactClose", (ev, el, act) => {
   S.contactOpen = false;
   render();
   return;
 });
-registerClick("pickContact", (e, x, v) => {
+registerClick("pickContact", (ev, el, act) => {
   navigator.contacts
     .select(["name", "tel"], {
       multiple: false,
     })
-    .then((r) => {
-      const m = r && r[0];
-      if (m) {
+    .then((picked) => {
+      const contact = picked && picked[0];
+      if (contact) {
         S.newC = {
-          n: ((m.name || [])[0] || "").slice(0, 80),
-          t: ((m.tel || [])[0] || "").slice(0, 20),
+          n: ((contact.name || [])[0] || "").slice(0, 80),
+          t: ((contact.tel || [])[0] || "").slice(0, 20),
         };
         render();
       }
@@ -169,52 +171,54 @@ registerClick("pickContact", (e, x, v) => {
     .catch(() => {});
   return;
 });
-registerClick("stampAdd", (e, x, v) => {
-  const r = S.cli;
-  const m = store.CLIENTS[r];
-  const f = svcByKey(pr(ME()), x.dataset.sk);
-  if (!r || !m || !f) {
+// sumar un sello a mano (en la demo, uno por día y servicio)
+registerClick("stampAdd", (ev, el, act) => {
+  const name = S.cli;
+  const client = store.CLIENTS[name];
+  const svc = svcByKey(pr(ME()), el.dataset.sk);
+  if (!name || !client || !svc) {
     return;
   }
-  const u = stampGoal(ME(), f);
+  const goal = stampGoal(ME(), svc);
   if (LIVE) {
-    x.disabled = true;
+    el.disabled = true;
     api.m
-      .giveStamp(m, f[4])
-      .then((N) => {
-        setCliStamps(r, f, (N && N.stamps) || cliStamps(r, f) + 1);
+      .giveStamp(client, svc[4])
+      .then((res) => {
+        setCliStamps(name, svc, (res && res.stamps) || cliStamps(name, svc) + 1);
         toast("Sello sumado");
         render();
       })
       .catch(() => {
-        x.disabled = false;
+        el.disabled = false;
       });
     return;
   }
   S.stampDay = S.stampDay || {};
-  const E = ME() + "|" + r + "|" + skey(f);
-  if (S.stampDay[E] === TODAY()) {
+  const dayKey = ME() + "|" + name + "|" + skey(svc);
+  if (S.stampDay[dayKey] === TODAY()) {
     toast("Ya le sumaste un sello a mano hoy en este servicio.");
     return;
   }
-  S.stampDay[E] = TODAY();
-  const O = cliStamps(r, f) + 1;
-  setCliStamps(r, f, O);
-  toast(`Sello sumado en ${f[0]}: ${Math.min(O, u)}/${u}${O >= u ? " · ¡ya tiene su premio!" : ""}`);
+  S.stampDay[dayKey] = TODAY();
+  const have = cliStamps(name, svc) + 1;
+  setCliStamps(name, svc, have);
+  toast(`Sello sumado en ${svc[0]}: ${Math.min(have, goal)}/${goal}${have >= goal ? " · ¡ya tiene su premio!" : ""}`);
   render();
   return;
 });
-registerClick("stampRedeem", (e, x, v) => {
-  const r = S.cli;
-  const m = store.CLIENTS[r];
-  const f = svcByKey(pr(ME()), x.dataset.sk);
-  if (!r || !m || !f) {
+// canjear el premio pide un segundo toque en menos de 3 segundos
+registerClick("stampRedeem", (ev, el, act) => {
+  const name = S.cli;
+  const client = store.CLIENTS[name];
+  const svc = svcByKey(pr(ME()), el.dataset.sk);
+  if (!name || !client || !svc) {
     return;
   }
-  const u = stampGoal(ME(), f);
-  const E = r + "|" + skey(f);
-  if (S.redeemAsk !== E) {
-    S.redeemAsk = E;
+  const goal = stampGoal(ME(), svc);
+  const askKey = name + "|" + skey(svc);
+  if (S.redeemAsk !== askKey) {
+    S.redeemAsk = askKey;
     toast("Tocá de nuevo para canjear el premio");
     setTimeout(() => {
       S.redeemAsk = null;
@@ -223,29 +227,29 @@ registerClick("stampRedeem", (e, x, v) => {
   }
   S.redeemAsk = null;
   if (LIVE) {
-    x.disabled = true;
+    el.disabled = true;
     api.m
-      .redeemStamps(m, f[4])
-      .then((O) => {
-        setCliStamps(r, f, (O && O.stamps) || 0);
+      .redeemStamps(client, svc[4])
+      .then((res) => {
+        setCliStamps(name, svc, (res && res.stamps) || 0);
         toast("Premio canjeado. ¡Que lo disfrute!");
         render();
       })
       .catch(() => {
-        x.disabled = false;
+        el.disabled = false;
       });
     return;
   }
-  setCliStamps(r, f, cliStamps(r, f) - u);
+  setCliStamps(name, svc, cliStamps(name, svc) - goal);
   toast("Premio canjeado. ¡Que lo disfrute!");
   render();
   return;
 });
-registerClick("cliBack", (e, x, v) => {
+registerClick("cliBack", (ev, el, act) => {
   S.cli = null;
   render();
 });
-registerClick("cliAgendar", (e, x, v) => {
+registerClick("cliAgendar", (ev, el, act) => {
   S.manName = S.cli;
   S.cli = null;
   S.btab = "agenda";
@@ -254,111 +258,112 @@ registerClick("cliAgendar", (e, x, v) => {
   S.blockOpen = false;
   S.manSvc = 0;
   render();
-  const r = $("#fManual");
-  if (r && r.scrollIntoView) {
-    r.scrollIntoView({
+  const form = $("#fManual");
+  if (form && form.scrollIntoView) {
+    form.scrollIntoView({
       block: "nearest",
     });
   }
 });
-registerClick("mEdit", (e, x, v) => {
-  const r = +x.dataset.i;
-  S.mEdit = S.mEdit === r ? null : r;
+registerClick("mEdit", (ev, el, act) => {
+  const index = +el.dataset.i;
+  S.mEdit = S.mEdit === index ? null : index;
   render();
 });
-registerClick("mSave", (e, x, v) => {
-  const r = +x.dataset.i;
-  const m = $("#mtx" + r).value.trim();
-  if (!m) {
+registerClick("mSave", (ev, el, act) => {
+  const index = +el.dataset.i;
+  const text = $("#mtx" + index).value.trim();
+  if (!text) {
     toast("El mensaje no puede quedar vacío");
     return;
   }
-  store.MSGS[r].txt = m;
-  api.m.saveTemplate(store.MSGS[r]);
+  store.MSGS[index].txt = text;
+  api.m.saveTemplate(store.MSGS[index]);
   S.mEdit = null;
   toast("Mensaje guardado");
   render();
 });
-registerChange("msgAll", (e) => {
-  const n = e.target.checked;
-  realClients().forEach((o) => {
-    S.msg.sel[o] = n;
+registerChange("msgAll", (ev) => {
+  const on = ev.target.checked;
+  realClients().forEach((name) => {
+    S.msg.sel[name] = on;
   });
-  document.querySelectorAll("[data-mc]").forEach((o) => (o.checked = n));
+  document.querySelectorAll("[data-mc]").forEach((box) => (box.checked = on));
   updMsgCount();
   return;
 });
-registerSubmit("fContact", (e) => {
-  const a = $("#nc_n").value.trim().replace(/\s+/g, " ").slice(0, 80);
-  const t = $("#nc_t").value.trim();
-  const s = $("#nc_b").value.trim();
-  const n = $("#nc_x").value.trim().slice(0, 300);
-  const o = (c) => {
-    $("#ncerr").textContent = c;
+// contacto agregado a mano; el cumpleaños DD/MM se guarda como MM-DD
+registerSubmit("fContact", (ev) => {
+  const name = $("#nc_n").value.trim().replace(/\s+/g, " ").slice(0, 80);
+  const tel = $("#nc_t").value.trim();
+  const bdayText = $("#nc_b").value.trim();
+  const notes = $("#nc_x").value.trim().slice(0, 300);
+  const showErr = (msg) => {
+    $("#ncerr").textContent = msg;
   };
-  if (a.length < 2) {
-    return o("Escribí el nombre.");
+  if (name.length < 2) {
+    return showErr("Escribí el nombre.");
   }
-  if (Object.keys(store.CLIENTS).some((c) => c.toLowerCase() === a.toLowerCase())) {
-    return o("Ya tenés un contacto con ese nombre.");
+  if (Object.keys(store.CLIENTS).some((other) => other.toLowerCase() === name.toLowerCase())) {
+    return showErr("Ya tenés un contacto con ese nombre.");
   }
-  if (t && !/^[+\d][\d\s()-]{7,19}$/.test(t)) {
-    return o("Ese celular no parece válido. Ejemplo: 2284 123456.");
+  if (tel && !/^[+\d][\d\s()-]{7,19}$/.test(tel)) {
+    return showErr("Ese celular no parece válido. Ejemplo: 2284 123456.");
   }
-  let i = "";
-  if (s) {
-    const c = s.match(/^(\d{1,2})\/(\d{1,2})$/);
-    if (!c || +c[1] < 1 || +c[1] > 31 || +c[2] < 1 || +c[2] > 12) {
-      return o("Cumpleaños con formato DD/MM, por ejemplo 22/03.");
+  let bday = "";
+  if (bdayText) {
+    const match = bdayText.match(/^(\d{1,2})\/(\d{1,2})$/);
+    if (!match || +match[1] < 1 || +match[1] > 31 || +match[2] < 1 || +match[2] > 12) {
+      return showErr("Cumpleaños con formato DD/MM, por ejemplo 22/03.");
     }
-    i = String(c[2]).padStart(2, "0") + "-" + String(c[1]).padStart(2, "0");
+    bday = String(match[2]).padStart(2, "0") + "-" + String(match[1]).padStart(2, "0");
   }
-  const l = (store.CLIENTS[a] = {
+  const client = (store.CLIENTS[name] = {
     v: 0,
     n: 0,
     last: null,
     spend: 0,
-    tel: t,
-    notes: n,
-    bday: i,
+    tel: tel,
+    notes: notes,
+    bday: bday,
     contacted: false,
     profile: {},
     manual: true,
   });
-  api.m.upsertClient(a, l).catch(() => {});
+  api.m.upsertClient(name, client).catch(() => {});
   S.contactOpen = false;
   S.newC = null;
   toast("Contacto guardado");
   render();
   return;
 });
-registerSubmit("fNotas", (e) => {
-  const a = store.CLIENTS[S.cli];
-  const t = $("#cbd").value.trim();
-  if (t && !/^\d{1,2}\/\d{1,2}$/.test(t)) {
+registerSubmit("fNotas", (ev) => {
+  const client = store.CLIENTS[S.cli];
+  const bdayText = $("#cbd").value.trim();
+  if (bdayText && !/^\d{1,2}\/\d{1,2}$/.test(bdayText)) {
     $("#nerr").textContent = "Escribí el cumpleaños como día/mes, por ejemplo 22/03.";
     return;
   }
-  if (t) {
-    const [s, n] = t.split("/").map(Number);
-    if (s < 1 || s > 31 || n < 1 || n > 12) {
+  if (bdayText) {
+    const [day, month] = bdayText.split("/").map(Number);
+    if (day < 1 || day > 31 || month < 1 || month > 12) {
       $("#nerr").textContent = "Esa fecha no existe.";
       return;
     }
-    a.bday = pad(n) + "-" + pad(s);
+    client.bday = pad(month) + "-" + pad(day);
   } else {
-    a.bday = "";
+    client.bday = "";
   }
-  a.profile = a.profile || {};
-  fichaFields().forEach(([s]) => {
-    const n = $("#cf-" + s);
-    if (n) {
-      a.profile[s] = n.value.trim().slice(0, 200);
+  client.profile = client.profile || {};
+  fichaFields().forEach(([key]) => {
+    const input = $("#cf-" + key);
+    if (input) {
+      client.profile[key] = input.value.trim().slice(0, 200);
     }
   });
-  a.notes = $("#cnotes").value.trim().slice(0, 1e3);
-  a.tel = $("#ctel").value.trim().slice(0, 40) || a.tel;
-  api.m.upsertClient(S.cli, a);
+  client.notes = $("#cnotes").value.trim().slice(0, 1e3);
+  client.tel = $("#ctel").value.trim().slice(0, 40) || client.tel;
+  api.m.upsertClient(S.cli, client);
   toast("Ficha guardada");
   render();
   return;
