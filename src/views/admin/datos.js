@@ -11,23 +11,24 @@ import { stampSvcs } from "../../ui/sellos.js";
 import { comm } from "../prestador/comunidad.js";
 import { feeOf } from "../prestador/finanzas.js";
 
-export function admFin(e) {
+// finanzas de la plataforma de un año: en vivo se piden una vez y se guardan en S.admFin
+export function admFin(year) {
   if (LIVE) {
     S.admFin = S.admFin || {};
-    if (S.admFin[e]) {
-      return S.admFin[e];
+    if (S.admFin[year]) {
+      return S.admFin[year];
     } else {
       if (!S.admFinL) {
         S.admFinL = true;
         api
-          .adminFinance(e)
+          .adminFinance(year)
           .then(() => {
             S.admFinL = false;
             render();
           })
           .catch(() => {
             S.admFinL = false;
-            S.admFin[e] = {
+            S.admFin[year] = {
               err: true,
               months: [],
               years: [],
@@ -39,9 +40,11 @@ export function admFin(e) {
       return null;
     }
   } else {
-    return admFinDemo(e);
+    return admFinDemo(year);
   }
 }
+// datos del panel del admin: en vivo los trae admin_load; en la demo se arman con los turnos de la demo
+// más un historial inventado (admHist) para que los totales del mes parezcan reales
 export function admData() {
   if (LIVE) {
     if (!S.adm && !S.admLoading) {
@@ -68,34 +71,36 @@ export function admData() {
     }
   }
   admDemo();
-  const e = TODAY();
-  const a = e.slice(0, 7);
-  const t = +e.slice(8);
-  const s = /* @__PURE__ */ new Date(e + "T12:00:00");
-  s.setDate(1);
-  s.setMonth(s.getMonth() - 1);
-  const n = dkey(s).slice(0, 7);
-  const o = new Date(s.getFullYear(), s.getMonth() + 1, 0).getDate();
-  const i = new Date(+a.slice(0, 4), +a.slice(5, 7), 0).getDate();
-  const l = (_) =>
-    _.src === "app" && _.type !== "block" && ["confirmed", "done", "noshow"].includes(_.status);
-  const c = admHist();
-  const d = (_) => {
-    const D = _ < e ? c[_] : null;
-    const q = store.BOOK.filter((C) => l(C) && C.date === _);
+  const today = TODAY();
+  const ym = today.slice(0, 7);
+  const dayN = +today.slice(8);
+  const prevDate = /* @__PURE__ */ new Date(today + "T12:00:00");
+  prevDate.setDate(1);
+  prevDate.setMonth(prevDate.getMonth() - 1);
+  const prevYm = dkey(prevDate).slice(0, 7);
+  const prevDays = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).getDate();
+  const monthDays = new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate();
+  // turnos que cuentan para la plataforma: reservados por la app y no cancelados
+  const counts = (booking) =>
+    booking.src === "app" && booking.type !== "block" && ["confirmed", "done", "noshow"].includes(booking.status);
+  const hist = admHist();
+  const dayStats = (day) => {
+    const past = day < today ? hist[day] : null;
+    const live = store.BOOK.filter((booking) => counts(booking) && booking.date === day);
     return {
-      n: (D ? D.n : 0) + q.length,
-      gross: (D ? D.gross : 0) + q.reduce((C, T) => C + (T.price || 0), 0),
-      fee: (D ? D.fee : 0) + q.reduce((C, T) => C + (T.fee || 0) + feeOf(T), 0),
-      dep: (D ? D.dep : 0) + q.reduce((C, T) => C + (T.paid || 0), 0),
-      ns: (D ? D.ns : 0) + q.filter((C) => C.status === "noshow").length,
+      n: (past ? past.n : 0) + live.length,
+      gross: (past ? past.gross : 0) + live.reduce((sum, booking) => sum + (booking.price || 0), 0),
+      fee: (past ? past.fee : 0) + live.reduce((sum, booking) => sum + (booking.fee || 0) + feeOf(booking), 0),
+      dep: (past ? past.dep : 0) + live.reduce((sum, booking) => sum + (booking.paid || 0), 0),
+      ns: (past ? past.ns : 0) + live.filter((booking) => booking.status === "noshow").length,
       cx:
-        (D ? D.cx : 0) +
-        store.BOOK.filter((C) => C.src === "app" && C.date === _ && C.status === "cancelled").length,
+        (past ? past.cx : 0) +
+        store.BOOK.filter((booking) => booking.src === "app" && booking.date === day && booking.status === "cancelled").length,
     };
   };
-  const p = (_, D) => {
-    const q = {
+  // suma de dayStats entre dos fechas
+  const rangeStats = (from, to) => {
+    const acc = {
       n: 0,
       gross: 0,
       fee: 0,
@@ -103,35 +108,35 @@ export function admData() {
       ns: 0,
       cx: 0,
     };
-    for (let C = _; C <= D; C = dkey(addDays(1, C))) {
-      const T = d(C);
-      for (const A in q) {
-        q[A] += T[A];
+    for (let day = from; day <= to; day = dkey(addDays(1, day))) {
+      const stats = dayStats(day);
+      for (const key in acc) {
+        acc[key] += stats[key];
       }
     }
-    return q;
+    return acc;
   };
-  const w = p(a + "-01", a + "-" + pad(i));
-  const y = p(n + "-01", n + "-" + pad(Math.min(t, o)));
-  const k = P.filter((_) => !_.deleted && (_.status || "active") === "active");
-  const h = P.filter((_) => !_.deleted)
-    .map((_) => ({
-      id: _.id,
-      name: _.name,
-      status: _.status || "active",
-      verified: _.verified !== false,
-      cats: _.cats,
-      month: store.BOOK.filter((D) => l(D) && D.pid == _.id && D.date.slice(0, 7) === a).length,
-      activity: activity(_),
-      mp: ![15, 26].includes(_.id),
-      rating: rating(comm(_.id)),
-      nrev: comm(_.id).reviews.length,
-      photo: _.photo,
-      hue: _.hue,
-      notes: store.DEMO_NOTES[_.id] || [],
+  const month = rangeStats(ym + "-01", ym + "-" + pad(monthDays));
+  const prev = rangeStats(prevYm + "-01", prevYm + "-" + pad(Math.min(dayN, prevDays)));
+  const active = P.filter((prov) => !prov.deleted && (prov.status || "active") === "active");
+  const list = P.filter((prov) => !prov.deleted)
+    .map((prov) => ({
+      id: prov.id,
+      name: prov.name,
+      status: prov.status || "active",
+      verified: prov.verified !== false,
+      cats: prov.cats,
+      month: store.BOOK.filter((booking) => counts(booking) && booking.pid == prov.id && booking.date.slice(0, 7) === ym).length,
+      activity: activity(prov),
+      mp: ![15, 26].includes(prov.id),
+      rating: rating(comm(prov.id)),
+      nrev: comm(prov.id).reviews.length,
+      photo: prov.photo,
+      hue: prov.hue,
+      notes: store.DEMO_NOTES[prov.id] || [],
     }))
     .concat(
-      store.DEMO_PENDING.map((_) =>
+      store.DEMO_PENDING.map((prov) =>
         Object.assign(
           {
             month: 0,
@@ -139,72 +144,72 @@ export function admData() {
             mp: false,
             rating: 0,
             nrev: 0,
-            notes: store.DEMO_NOTES[_.id] || [],
+            notes: store.DEMO_NOTES[prov.id] || [],
           },
-          _,
+          prov,
         ),
       ),
     );
-  const j = {};
-  const b = {};
-  const g = k.reduce((_, D) => _ + activity(D), 0) || 1;
-  k.forEach((_) => _.cats.forEach((D) => (j[D] = (j[D] || 0) + 1)));
-  k.forEach((_) => {
-    const D = _.cats[0];
-    b[D] = (b[D] || 0) + activity(_);
+  const byCat = {};
+  const byCatMonth = {};
+  const totalAct = active.reduce((sum, prov) => sum + activity(prov), 0) || 1;
+  active.forEach((prov) => prov.cats.forEach((cat) => (byCat[cat] = (byCat[cat] || 0) + 1)));
+  active.forEach((prov) => {
+    const cat = prov.cats[0];
+    byCatMonth[cat] = (byCatMonth[cat] || 0) + activity(prov);
   });
-  Object.keys(b).forEach((_) => (b[_] = Math.round((w.n * b[_]) / g)));
+  Object.keys(byCatMonth).forEach((cat) => (byCatMonth[cat] = Math.round((month.n * byCatMonth[cat]) / totalAct)));
   return {
     st: {
       commission_pct: Math.round(store.COMISION * 1e4) / 100,
-      providers_active: k.length,
+      providers_active: active.length,
       providers_pending: store.DEMO_PENDING.length,
-      providers_suspended: h.filter((_) => _.status === "suspended").length,
-      new_providers_month: store.DEMO_PENDING.length + P.filter((_) => !_.deleted && _.id >= 100).length,
+      providers_suspended: list.filter((prov) => prov.status === "suspended").length,
+      new_providers_month: store.DEMO_PENDING.length + P.filter((prov) => !prov.deleted && prov.id >= 100).length,
       clients: 1180 + Object.keys(store.DEMO_USERS).length,
       new_clients_month: 64 + Math.max(0, Object.keys(store.DEMO_USERS).length - 1),
-      bookings_month: w.n,
-      bookings_prev: y.n,
-      gross_month: w.gross,
-      gross_prev: y.gross,
-      deposits_month: w.dep,
-      commission_month: w.fee,
-      commission_prev: y.fee,
-      no_show_month: w.ns,
-      cancelled_month: w.cx,
-      mp_missing: h.filter((_) => _.status === "active" && !_.mp).length,
-      stamp_cards: k.filter((_) => stampSvcs(_).length).length,
-      by_category: j,
-      by_category_month: b,
+      bookings_month: month.n,
+      bookings_prev: prev.n,
+      gross_month: month.gross,
+      gross_prev: prev.gross,
+      deposits_month: month.dep,
+      commission_month: month.fee,
+      commission_prev: prev.fee,
+      no_show_month: month.ns,
+      cancelled_month: month.cx,
+      mp_missing: list.filter((prov) => prov.status === "active" && !prov.mp).length,
+      stamp_cards: active.filter((prov) => stampSvcs(prov).length).length,
+      by_category: byCat,
+      by_category_month: byCatMonth,
       by_day: Array.from(
         {
           length: 30,
         },
-        (_, D) => {
-          const q = dkey(addDays(D - 29));
-          const C = d(q);
+        (slot, index) => {
+          const day = dkey(addDays(index - 29));
+          const stats = dayStats(day);
           return {
-            day: q,
-            n: C.n,
-            gross: C.gross,
-            fee: C.fee,
+            day: day,
+            n: stats.n,
+            gross: stats.gross,
+            fee: stats.fee,
           };
         },
       ),
-      top: k
+      top: active
         .slice()
-        .sort((_, D) => activity(D) - activity(_))
+        .sort((one, other) => activity(other) - activity(one))
         .slice(0, 5)
-        .map((_) => ({
-          id: _.id,
-          name: _.name,
-          cats: _.cats,
-          photo: _.photo,
-          hue: _.hue,
-          activity: activity(_),
+        .map((prov) => ({
+          id: prov.id,
+          name: prov.name,
+          cats: prov.cats,
+          photo: prov.photo,
+          hue: prov.hue,
+          activity: activity(prov),
         })),
       demo: true,
     },
-    pv: h,
+    pv: list,
   };
 }
