@@ -2,6 +2,7 @@ import { esc } from "../../lib/dom.js";
 import { DOW, addDays, dkey } from "../../lib/fechas.js";
 import { ME, pr } from "../../lib/prestadores.js";
 import { R, cfg, freeCount } from "../../lib/turnero.js";
+import { profileLinkText } from "../../router.js";
 import { S } from "../../state.js";
 import { vDayBlocks } from "./bloqueo-dias.js";
 
@@ -93,7 +94,7 @@ export function vBHorarios() {
       conf.pay === "total" ? "total" : "sena" + conf.pct,
     )}<span class="hint">Lo pagado no se devuelve. Si el cliente no viene, te queda a vos.</span></div>
    </div>
-   <div class="panel" style="text-align:center"><p class="lbl">Tu link de turnos</p><p style="margin:0 0 8px;font-weight:700">tutiempo.com.ar/${esc(pr(ME()).slug || "p/" + ME())}</p><p class="note">Ponelo en tu bio de Instagram y compartilo con tus clientes.</p>
+   <div class="panel" style="text-align:center"><p class="lbl">Tu link de turnos</p><p style="margin:0 0 8px;font-weight:700">${esc(profileLinkText(pr(ME())))}</p><p class="note">Ponelo en tu bio de Instagram y compartilo con tus clientes.</p>
     <button type="button" class="btn btn-ghost btn-block" data-act="copiarLink">Copiar link</button></div>
    <p class="note">Con lo guardado, mañana te quedan <b>${freeTomorrow}</b> turnos libres de 30 min.</p>
    <button class="btn btn-pri btn-block" type="submit">Guardar horarios</button>

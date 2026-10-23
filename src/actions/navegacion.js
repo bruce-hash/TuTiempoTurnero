@@ -5,6 +5,7 @@ import { FOLLOW, ME, isFol, pr } from "../lib/prestadores.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { go, render } from "../ui/render.js";
+import { profileUrl } from "../router.js";
 import { toast } from "../ui/toast.js";
 import { comm } from "../views/prestador/comunidad.js";
 
@@ -94,7 +95,7 @@ registerClick("seguir", (ev, el, act) => {
   render();
 });
 registerClick("copiarLink", (ev, el, act) => {
-  const url = "https://tutiempo.com.ar/" + (pr(ME()).slug || "p/" + ME());
+  const url = profileUrl(pr(ME()));
   try {
     navigator.clipboard.writeText(url).then(
       () => toast("Link copiado"),
