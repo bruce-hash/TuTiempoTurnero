@@ -18,11 +18,22 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
 
 ## Estructura
 
-- `src/prototipo.html`: **única fuente del frontend** (CSS + HTML + JS en un archivo). Se edita acá, nunca en `dist/`.
-  Fue reconstruido desde el `app.cjs` minificado del cliente: las variables internas siguen con letras sueltas
-  (`e`, `a`, `t`). Cuando toques una función, renombrá sus variables con nombres claros en ese mismo cambio.
-- `src/static/`: archivos que se copian tal cual a Hostinger (`.htaccess`, fuentes, `vendor/supabase.js`, `config.example.js`).
-- `tools/build.mjs`: genera `dist/` (lo que se sube a Hostinger). `dist/` no se versiona.
+- Frontend: `index.html` + `src/` en módulos ES, con **Vite** (Node 22, ver `.nvmrc`). Se edita en `src/`, nunca en `dist/`.
+  - `src/main.js` arranque (`boot`); `src/config.js` (`CFG`, `LIVE`, `sb`); `src/state.js` (estado `S`);
+    `src/store.js`: datos en memoria compartidos entre módulos (`store.BOOK`, `store.CLIENTS`…) y `P` (prestadores cargados).
+  - `src/lib/` (fechas, dinero, rubros, turnero…), `src/api/` (`demo.js`, `live/`, `saved.js`), `src/ui/` (render, nav,
+    piezas compartidas), `src/views/` (cliente, auth, prestador, admin, legal), `src/styles/` (el CSS, en orden de cascada).
+  - `src/actions/`: `registro.js` (acción → función), `toques.js` / `formularios.js` / `cambios.js` (los listeners de
+    `document`) y un módulo por pantalla que registra sus acciones con `registerClick("act", (e, x, v) => …)`,
+    `registerSubmit("idForm", (e) => …)`, etc.
+  - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
+    llega al build de producción** (lo verifica `npm run test:sin-demo`).
+  - Viene del `app.cjs` minificado del cliente: las variables internas siguen con letras sueltas (`e`, `a`, `t`).
+    Cuando toques una función, renombrá sus variables con nombres claros en ese mismo cambio.
+- `public/`: archivos que se copian tal cual a Hostinger (`.htaccess`, fuentes, `vendor/supabase.js`, `config.example.js`).
+- `vite.config.mjs`: `npm run dev` (servidor local con demo), `npm run build` → `dist/` (lo que se sube a Hostinger: solo
+  en vivo, archivos con hash), `npm run build:test` → `dist-test/` (con demo y ganchos de prueba). No se versionan.
+- `tools/mudanza/`: script y verificación de la mudanza del Bloque A1 (se borra cuando se apruebe A1).
 - `supabase/migrations/`: migraciones idempotentes en orden, con el formato de la CLI de Supabase
   (`AAAAMMDDHHMMSS_nombre.sql`, por ejemplo `20261001000001_schema.sql`). `supabase/TODO_EN_UNO.sql` es su concatenación
   exacta: si cambiás o agregás una migración, regeneralo con `npm run sql:build` y verificá con `npm run sql:check`
@@ -33,10 +44,11 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
 
 ## Arquitectura del frontend (respetarla)
 
-Capas dentro del script de `prototipo.html`: (1) estado `S` y datos; (2) `demoApi` y `liveApi` con las mismas
-funciones, toda escritura pasa por `api.m.*` → `saved()`; (3) vistas `v*()` que solo arman HTML, con `esc()` para
-todo texto de usuario; (4) un manejador de toques por `data-act` / `data-go` / `data-btab` y uno de formularios por id.
-Una función nueva = vista + `data-act` + rama en el manejador + `api.m.*` en demo y en vivo.
+Capas: (1) estado `S` (`state.js`) y datos (`store.js`); (2) `demoApi` y `liveApi` con las mismas funciones, toda
+escritura pasa por `api.m.*` → `saved()`; (3) vistas `v*()` que solo arman HTML, con `esc()` para todo texto de usuario;
+(4) un listener de toques por `data-act` / `data-go` / `data-btab` y uno de formularios por id, que buscan la acción en
+el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en el módulo de acciones de su pantalla +
+`api.m.*` en demo y en vivo. Lo que sea solo de la demo va en `src/demo/` o detrás de `if (!LIVE)`.
 
 ## Reglas no negociables
 
@@ -58,10 +70,11 @@ Una función nueva = vista + `data-act` + rama en el manejador + `api.m.*` en de
   Nunca commit directo a `main`. Commits chicos, en español.
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
-  `npm run sql:check` y `pruebas/test_db.py` (base), `npm run test:crawl` y `npm run test:clicks` (frontend), `node tools/build.mjs`.
-  El workflow `.github/workflows/pruebas.yml` corre lo mismo en cada PR.
-- La cantidad de toques del crawl cambia con la fecha y la hora (la agenda de la demo depende de "hoy"): lo que importa
-  es 0 errores y 0 destinos equivocados.
+  `npm run sql:check` y `pruebas/test_db.py` (base); `npm run test:crawl`, `npm run test:clicks` y
+  `npm run test:sin-demo` (frontend); `npm run test:e2e` y `npm run test:comparar` (navegador real, necesitan Postgres y
+  PostgREST: ver abajo). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
+- El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
+  fecha (la agenda de la demo sale de "hoy"). Lo que importa es 0 errores y 0 destinos equivocados.
 - No inventes reglas de negocio: si algo no está en el SQL ni en `docs/01-decisiones.md`, preguntá.
 - Textos de interfaz en español rioplatense (voseo), con el tono actual de la app.
 
@@ -75,4 +88,14 @@ psql -v ON_ERROR_STOP=1 -d tt -f pruebas/supabase_emulation.sql     # imita lo q
 psql -v ON_ERROR_STOP=1 -d tt -f supabase/TODO_EN_UNO.sql
 python3 pruebas/test_db.py "host=... port=... dbname=tt user=postgres"
 python3 pruebas/reproducir_errores_cobro.py "host=... dbname=OTRA_BASE_LIMPIA user=postgres"
+```
+
+## Cómo correr las pruebas en navegador
+
+```bash
+npx playwright install chromium                  # una sola vez
+# PostgREST 12: https://github.com/PostgREST/postgrest/releases (binario en el PATH o en POSTGREST=/ruta/postgrest)
+export PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=...
+npm run test:e2e        # recorrido completo en vivo (base nueva + PostgREST + pruebas/e2e_server.js)
+npm run test:comparar   # versión anterior al Bloque A vs. la actual: demo y en vivo, texto y capturas
 ```

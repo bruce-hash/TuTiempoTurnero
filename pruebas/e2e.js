@@ -110,8 +110,12 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.evaluate((d) => { S.aday = d; render() }, d); await wait(300);
   ok("su agenda muestra la reserva de la app", (await pg.locator(".ev.app").count()) >= 1);
   // bloquear horario
+  // en un día hábil sin turnos: el día de la reserva de Ana chocaba con ella si su primer turno libre caía a las 20:00
+  const dBloq = await pg.evaluate(() => { for (let i = 9; ; i++) { const k = dkey(addDays(i)); if (![0, 6].includes(new Date(k + "T12:00:00").getDay())) return k } });
+  await pg.evaluate((x) => { S.aday = x; render() }, dBloq); await wait(300);
   await pg.click("[data-act=blockOpen]"); await pg.fill("#bkf", "20:00"); await pg.fill("#bkt", "21:00"); await pg.click("#fBlock button[type=submit]"); await wait(600);
   ok("bloqueo guardado en la base", (await q("select count(*)::int c from bookings where source='block'"))[0].c === 1);
+  await pg.evaluate((x) => { S.aday = x; render() }, d); await wait(300);
   // productos y gastos
   await pg.click("[data-btab=productos]"); await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Gel top coat"); await pg.fill("#pnp", "8000"); await pg.fill("#pns", "3");
   await pg.click("#fProd button[type=submit]"); await wait(600);

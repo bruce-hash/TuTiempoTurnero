@@ -42,9 +42,11 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
 
 ### 3. Hostinger (subdominio de prueba)
 1. hPanel → Dominios → Subdominios → crear `prueba.tutiempo.com.ar`. Activar SSL.
-2. En tu compu: `npm install` y `npm run build` → carpeta `dist/`.
+2. En tu compu (Node 22, ver `.nvmrc`): `npm ci` y `npm run build` → carpeta `dist/`.
 3. Editar `dist/config.js` con la URL y la clave `anon` del proyecto de prueba (nunca la `service_role`).
-4. Subir **el contenido** de `dist/` a la carpeta del subdominio, incluido `.htaccess` (archivo oculto).
+   El build no lo pisa: solo lo crea (desde `config.example.js`) si no existe. Sin `config.js` completo, el sitio
+   muestra "Falta configurar el sitio" (la demo no viaja en el build de producción).
+4. Subir **el contenido** de `dist/` a la carpeta del subdominio, incluido `.htaccess` (archivo oculto) y la carpeta `assets/`.
 5. Para que Google no indexe la prueba: en ese subdominio, `robots.txt` con `Disallow: /`.
 
 ### 4. Prueba de punta a punta (checklist)

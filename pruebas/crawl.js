@@ -1,8 +1,22 @@
-// Uso: node crawl.js prototipo.html  (con jsdom instalado)
+// Uso: node crawl.js dist-test   (build de prueba, con la demo: npm run test:crawl)
+//      node crawl.js prototipo.html (versión anterior, de un solo archivo; para comparar)
 // Recorre TODAS las pantallas y toca CADA botón/enlace interno, uno por uno, desde la misma pantalla.
 // Marca: errores de JS, pantallas de error, toques que no hacen nada, y destinos equivocados (data-go / data-btab).
-const {JSDOM}=require('jsdom');const fs=require('fs');
-const html=fs.readFileSync(process.argv[2],'utf8');
+// Reloj fijo (TT_AHORA, por defecto 2026-10-21T15:00:00-03:00): la demo arma su agenda desde "hoy", así que con el mismo
+// reloj la versión vieja y la nueva tienen que dar exactamente lo mismo. CRAWL_DETALLE=1 lista cada toque.
+const {JSDOM}=require('jsdom');const fs=require('fs');const path=require('path');
+const AHORA=Date.parse(process.env.TT_AHORA||'2026-10-21T15:00:00-03:00');
+const RELOJ='<script>(()=>{const R=Date,off='+(AHORA-Date.now())+';class D extends R{constructor(...a){super(...(a.length?a:[R.now()+off]))}static now(){return R.now()+off}};window.Date=D})()</script>';
+function leer(p){
+ if(!fs.statSync(p).isDirectory())return fs.readFileSync(p,'utf8');
+ // build de Vite: el JS y el CSS van en línea (jsdom no ejecuta módulos) y el script al final del body, como antes
+ let h=fs.readFileSync(path.join(p,'index.html'),'utf8');let js='';
+ h=h.replace(/<script type="module" crossorigin src="\/([^"]+)"><\/script>\n?/g,(m,f)=>{js+=fs.readFileSync(path.join(p,f),'utf8');return''});
+ h=h.replace(/<link rel="stylesheet" crossorigin href="\/([^"]+)">/g,(m,f)=>'<style>'+fs.readFileSync(path.join(p,f),'utf8')+'</style>');
+ // dentro de una función: como script clásico, los nombres minificados del módulo no tienen que salir a window
+ return h.replace('</body>',()=>'<script>(function(){'+js.replace(/<\/script/g,'<\\/script')+'\n})()</script>\n</body>');
+}
+const html=RELOJ+leer(process.argv[2]);
 const dom=new JSDOM('<!doctype html><body>'+html+'</body>',{runScripts:'dangerously',pretendToBeVisual:true,url:'https://demo.tutiempo.com.ar/'});
 const w=dom.window;w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.open=()=>null;w.HTMLElement.prototype.focus=function(){};const d=w.document;const errs=[];
 w.addEventListener('error',e=>errs.push(e.message));w.console.error=(...a)=>errs.push(a.map(x=>x&&x.stack||String(x)).join(' '));
@@ -53,7 +67,7 @@ const sel='#app button:not([disabled]),#app [data-go],#app [data-act],#app [data
    const before=snap();const e0=errs.length;const t0=d.getElementById('toast').textContent;d.getElementById('toast').textContent='';
    try{el.dispatchEvent(new w.MouseEvent('click',{bubbles:true}))}catch(e){errs.push(e.message)}
    await tick(3);total++;
-   const lbl=`${name} → [${s0.split('|')[1]}] "${s0.split('|')[2]}"`;
+   const lbl=`${name} → [${s0.split('|')[1]}] "${s0.split('|')[2]}"`;if(process.env.CRAWL_DETALLE)console.log('  toque '+lbl);
    if(errs.length>e0)broken.push(lbl+' · '+errs.slice(e0).join(' / ').slice(0,160));
    if(d.querySelector('.apperr'))broken.push(lbl+' · pantalla de error');
    const changed=snap()!==before||d.getElementById('toast').textContent!=='';

@@ -18,3 +18,4 @@ Lo marcado **Tomada** se implementa así. Lo marcado **Abierta** no se programa 
 | D12 | Dominio | Abierta | Primero en subdominio de prueba. Cuándo y cómo reemplazar tutiempo.com.ar (hoy corre Laravel con usuarios reales). |
 | D13 | Textos legales | Abierta | Términos, privacidad (Ley 25.326), política de cancelación: los redacta o revisa un abogado. |
 | D14 | Proveedor de email | Abierta | Recomendado: Resend o Brevo (SMTP para Supabase Auth y para recordatorios). |
+| D15 | Turnos que se repiten | Tomada | Una serie puede pasar los 31 días del turnero, pero ningún turno de la serie puede quedar a más de 90 días desde hoy: los que se pasen se saltean, como hoy los ocupados. Se implementa en el Bloque 1 (`book_slot`), con su prueba. |

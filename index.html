@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<meta name="description" content="TuTiempo: reservá turnos online en Olavarría. Barberías, peluquerías, masajes, pestañas, uñas y depilación. Pagás la seña por Mercado Pago y listo.">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>TuTiempo · Turnos online en Olavarría</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23121212'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='white' stroke-width='2.4'/%3E%3Cpath d='M16 11v5.5l3.5 2.2' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+</head>
+<body>
+<noscript><p style="padding:24px;font-family:sans-serif">Para usar TuTiempo necesitás tener JavaScript activado.</p></noscript>
+<header class="top"><div class="in">
+  <a href="#inicio" class="logo" data-go="home" id="logoLink"></a>
+  <nav class="nav" id="nav"></nav>
+</div></header>
+
+<main id="app"></main>
+
+<footer><div class="in">
+  <div><div class="logo" id="logoFoot"></div><p class="hint" style="margin:6px 0 0">Tu solución. Al instante.<br>Turnos online de belleza y bienestar en Olavarría.</p></div>
+  <div><h4>Plataforma</h4><ul><li><button class="lnk" data-go="home">Inicio</button></li><li><button class="lnk" data-go="login">Iniciar sesión</button></li><li><button class="lnk" data-go="loginBarbero">Acceso prestadores</button></li><li><button class="lnk" data-go="prestador">Sumate como prestador</button></li></ul></div>
+  <div><h4>Contacto</h4><ul><li>contacto@tutiempo.com.ar</li><li>@tutiempo.arg</li><li>2284 201181</li></ul></div>
+  <div><h4>Seguinos</h4><ul><li>Instagram · Facebook</li><li>YouTube · TikTok</li></ul></div>
+  <div class="legal"><button class="lnk" data-go="terminos">Términos y condiciones</button> · <button class="lnk" data-go="terminos">Guía de comunidad</button> · © 2026 TuTiempo. Olavarría, Buenos Aires, Argentina · Prototipo</div>
+</div></footer>
+
+<div class="notif" id="notif" hidden></div>
+<div class="toast" id="toast" hidden></div>
+<script src="config.js"></script>
+<script src="vendor/supabase.js"></script>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

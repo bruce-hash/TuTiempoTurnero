@@ -33,6 +33,10 @@ AddType application/javascript .js .cjs
   <FilesMatch "\.(woff2|css)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
+  # JS y CSS de assets/ (Vite): el nombre lleva un hash del contenido, así que nunca cambian; un año de caché
+  <FilesMatch "-[A-Za-z0-9_-]{8}\.(js|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
 </IfModule>
 
 <IfModule mod_deflate.c>
