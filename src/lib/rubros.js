@@ -1,5 +1,6 @@
 import { S } from "../state.js";
 
+// Rubros: [id, nombre en plural, en singular, ícono]. CAT los indexa por id; "n" es el genérico (sin rubro).
 export const CATS = [
   ["b", "Barberías", "Barbería", "💈"],
   ["p", "Peluquerías", "Peluquería", "✂"],
@@ -9,13 +10,13 @@ export const CATS = [
   ["d", "Depilación", "Depilación", "✨"],
 ];
 export const CAT = Object.fromEntries(
-  CATS.map((e) => [
-    e[0],
+  CATS.map((row) => [
+    row[0],
     {
-      id: e[0],
-      name: e[1],
-      one: e[2],
-      ic: e[3],
+      id: row[0],
+      name: row[1],
+      one: row[2],
+      ic: row[3],
     },
   ]),
 );
@@ -25,17 +26,22 @@ CAT.n = {
   one: "Servicios",
   ic: "•",
 };
-export const catInfo = (e) => CAT[e] || CAT.n;
-export const catName = (e) => catInfo(e).one;
-export const pcat = (e, a) => {
-  const t = a || S.cat;
-  if (e && e.cats && e.cats.includes(t)) {
-    return t;
+export const catInfo = (id) => CAT[id] || CAT.n;
+export const catName = (id) => catInfo(id).one;
+// Rubro con el que se muestra un prestador: el que se está mirando (ctx o el filtro del listado) si lo tiene; si no,
+// su rubro principal.
+export const pcat = (prov, ctx) => {
+  const want = ctx || S.cat;
+  if (prov && prov.cats && prov.cats.includes(want)) {
+    return want;
   } else {
-    return (e && e.cats && e.cats[0]) || "n";
+    return (prov && prov.cats && prov.cats[0]) || "n";
   }
 };
 export const RAMP = '<span class="ramp" aria-hidden="true">' + "<i></i>".repeat(10) + "</span>";
+// Valores de cada rubro: retoque sugerido en días (every), indicación y descanso de ejemplo, opciones de repetición
+// (reps), adicionales (add) y preguntas (q) de ejemplo, campos de la ficha del cliente, productos y mensaje para volver.
+// "n" (sin rubro) usa los de barbería.
 export const RUBRO = {
   b: {
     every: 21,
