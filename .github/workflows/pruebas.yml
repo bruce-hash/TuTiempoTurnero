@@ -60,13 +60,15 @@ jobs:
         run: python3 pruebas/test_db.py "host=localhost port=5432 dbname=tt user=postgres password=postgres"
 
   frontend:
-    name: Frontend (sin demo · crawl · clicks)
+    name: Frontend (legibilidad · sin demo · crawl · clicks)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # test:legibilidad compara con el merge de A1
 
       - uses: actions/setup-node@v5
         with:
@@ -75,6 +77,9 @@ jobs:
 
       - name: npm ci
         run: npm ci
+
+      - name: Legibilidad (A2 solo renombra y comenta: el código es el mismo que en A1)
+        run: npm run test:legibilidad
 
       - name: Build de producción sin nada de la demo
         run: npm run test:sin-demo

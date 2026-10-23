@@ -24,15 +24,17 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - `src/lib/` (fechas, dinero, rubros, turnero…), `src/api/` (`demo.js`, `live/`, `saved.js`), `src/ui/` (render, nav,
     piezas compartidas), `src/views/` (cliente, auth, prestador, admin, legal), `src/styles/` (el CSS, en orden de cascada).
   - `src/actions/`: `registro.js` (acción → función), `toques.js` / `formularios.js` / `cambios.js` (los listeners de
-    `document`) y un módulo por pantalla que registra sus acciones con `registerClick("act", (e, x, v) => …)`,
-    `registerSubmit("idForm", (e) => …)`, etc.
+    `document`) y un módulo por pantalla que registra sus acciones con `registerClick("act", (ev, el, act) => …)`
+    (evento, elemento tocado, nombre de la acción), `registerSubmit("idForm", (ev) => …)`, etc.
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
-  - Viene del `app.cjs` minificado del cliente: las variables internas siguen con letras sueltas (`e`, `a`, `t`).
-    Cuando toques una función, renombrá sus variables con nombres claros en ese mismo cambio.
+  - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en
+    inglés, como el resto del código) y los comentarios van en español; mantené ese estilo en lo que agregues.
 - `public/`: archivos que se copian tal cual a Hostinger (`.htaccess`, fuentes, `vendor/supabase.js`, `config.example.js`).
 - `vite.config.mjs`: `npm run dev` (servidor local con demo), `npm run build` → `dist/` (lo que se sube a Hostinger: solo
   en vivo, archivos con hash), `npm run build:test` → `dist-test/` (con demo y ganchos de prueba). No se versionan.
+- `tools/legibilidad/`: verificación del Bloque A2 (renombres y comentarios sin cambios de código: `npm run
+  test:legibilidad`) y el renombrador que se usó. Se borra cuando se apruebe A2.
 - `supabase/migrations/`: migraciones idempotentes en orden, con el formato de la CLI de Supabase
   (`AAAAMMDDHHMMSS_nombre.sql`, por ejemplo `20261001000001_schema.sql`). `supabase/TODO_EN_UNO.sql` es su concatenación
   exacta: si cambiás o agregás una migración, regeneralo con `npm run sql:build` y verificá con `npm run sql:check`
@@ -69,9 +71,9 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
   Nunca commit directo a `main`. Commits chicos, en español.
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
-  `npm run sql:check` y `pruebas/test_db.py` (base); `npm run test:crawl`, `npm run test:clicks` y
-  `npm run test:sin-demo` (frontend); `npm run test:e2e` y `npm run test:comparar` (navegador real, necesitan Postgres y
-  PostgREST: ver abajo). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
+  `npm run sql:check` y `pruebas/test_db.py` (base); `npm run test:crawl`, `npm run test:clicks`,
+  `npm run test:sin-demo` y, mientras exista, `npm run test:legibilidad` (frontend); `npm run test:e2e` y
+  `npm run test:comparar` (navegador real, necesitan Postgres y PostgREST: ver abajo). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
   fecha (la agenda de la demo sale de "hoy"). Lo que importa es 0 errores y 0 destinos equivocados.
 - No inventes reglas de negocio: si algo no está en el SQL ni en `docs/01-decisiones.md`, preguntá.
