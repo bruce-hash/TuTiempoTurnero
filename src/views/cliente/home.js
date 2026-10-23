@@ -10,53 +10,56 @@ import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
 import { cardInfo } from "../../ui/tarjetas.js";
 
+// turnos confirmados del cliente que todavía no pasaron, del más cercano al más lejano
 export function myUpcoming() {
   if (!S.user) {
     return [];
   }
-  const e = TODAY() + nowHM();
-  return store.BOOK.filter((a) => a.mine && a.status === "confirmed" && a.date + a.time >= e).sort((a, t) =>
-    (a.date + a.time).localeCompare(t.date + t.time),
+  const now = TODAY() + nowHM();
+  return store.BOOK.filter((booking) => booking.mine && booking.status === "confirmed" && booking.date + booking.time >= now).sort((one, other) =>
+    (one.date + one.time).localeCompare(other.date + other.time),
   );
 }
 const listKey = () => (S.cat || "todos") + "|" + (S.q || "");
+// listado de prestadores por rubro y búsqueda, por páginas (more = la página siguiente).
+// Si mientras tanto cambió el rubro o la búsqueda, la respuesta vieja se descarta.
 export async function loadList(more) {
-  const a = listKey();
-  if (S.listBusy !== a + (more ? "+" : "")) {
-    S.listBusy = a + (more ? "+" : "");
+  const key = listKey();
+  if (S.listBusy !== key + (more ? "+" : "")) {
+    S.listBusy = key + (more ? "+" : "");
     if (more) {
       S.list.loadingMore = true;
     } else {
       S.list = {
-        key: a,
+        key: key,
         items: [],
         next: null,
         loading: true,
       };
     }
     try {
-      const t = await api.listProviders({
+      const res = await api.listProviders({
         cat: S.cat || "todos",
         q: S.q,
         after: more ? S.list.next : null,
       });
-      if (listKey() !== a) {
+      if (listKey() !== key) {
         return;
       }
       S.list = {
-        key: a,
-        items: (more ? S.list.items : []).concat(t.items),
-        next: t.next,
+        key: key,
+        items: (more ? S.list.items : []).concat(res.items),
+        next: res.next,
         loading: false,
       };
-    } catch (t) {
-      if (listKey() === a) {
+    } catch (err) {
+      if (listKey() === key) {
         S.list = {
-          key: a,
+          key: key,
           items: more ? S.list.items : [],
           next: null,
           loading: false,
-          error: errMsg(t),
+          error: errMsg(err),
         };
       }
     } finally {
@@ -70,68 +73,69 @@ export async function loadList(more) {
 async function loadCounts() {
   try {
     S.counts = await api.counts();
-  } catch (e) {
+  } catch (err) {
     S.counts = S.counts || {};
   }
   if (S.role === "cliente" && S.view === "home") {
     render();
   }
 }
+// inicio: próximo turno, buscador, rubros con su cantidad de prestadores y el listado
 export function vHome() {
-  const e = S.cat || "todos";
-  const a = listKey();
+  const cat = S.cat || "todos";
+  const key = listKey();
   if (!S.counts) {
     loadCounts();
   }
-  if (!S.list || S.list.key !== a) {
+  if (!S.list || S.list.key !== key) {
     loadList(false);
   }
-  const t =
-    S.list && S.list.key === a
+  const list =
+    S.list && S.list.key === key
       ? S.list
       : {
           items: [],
           loading: true,
         };
-  const s = (c) => (S.counts ? S.counts[c] || 0 : "…");
-  const n = (c) => {
-    const d = pcat(c, e === "todos" ? null : e);
-    const p = cardInfo(c, e === "todos" ? null : d);
-    return `<article class="card seg-${d}">${ph(c, "")}<div class="cb"><div class="cchips">${c.cats.map((w) => `<span class="cchip seg-${w}">${CAT[w] ? catInfo(w).ic : ""} ${esc(catName(w))}</span>`).join("")}</div><h3>${esc(c.name)}</h3>
-    <div class="addr">${esc(c.addr)}</div>
-    <div class="pbox"><span class="plabel">Desde · ${esc(p.minName)}</span><span class="price">${money(p.min)}</span></div>
-    <div class="nextt">${p.next ? `Próximo turno: <b>${esc(dayLabel(p.next.date))} ${p.next.time}</b>` : "Sin turnos libres esta semana"}${p.happy ? `<span class="hhtag">-${p.happy}% happy hour</span>` : ""}</div>
-    <button class="btn btn-pri" data-go="perfil" data-id="${c.id}" data-ctx="${d}">Reservar turno</button></div></article>`;
+  const countOf = (catId) => (S.counts ? S.counts[catId] || 0 : "…");
+  const card = (prov) => {
+    const seg = pcat(prov, cat === "todos" ? null : cat);
+    const info = cardInfo(prov, cat === "todos" ? null : seg);
+    return `<article class="card seg-${seg}">${ph(prov, "")}<div class="cb"><div class="cchips">${prov.cats.map((catId) => `<span class="cchip seg-${catId}">${CAT[catId] ? catInfo(catId).ic : ""} ${esc(catName(catId))}</span>`).join("")}</div><h3>${esc(prov.name)}</h3>
+    <div class="addr">${esc(prov.addr)}</div>
+    <div class="pbox"><span class="plabel">Desde · ${esc(info.minName)}</span><span class="price">${money(info.min)}</span></div>
+    <div class="nextt">${info.next ? `Próximo turno: <b>${esc(dayLabel(info.next.date))} ${info.next.time}</b>` : "Sin turnos libres esta semana"}${info.happy ? `<span class="hhtag">-${info.happy}% happy hour</span>` : ""}</div>
+    <button class="btn btn-pri" data-go="perfil" data-id="${prov.id}" data-ctx="${seg}">Reservar turno</button></div></article>`;
   };
-  const o = myUpcoming()[0];
-  const i = (c) =>
-    `<button class="segtile seg-${c}" data-cat="${e === c ? "todos" : c}" aria-pressed="${e === c}"><span class="st-k">${catInfo(c).ic}</span><b>${catInfo(c).name}</b><span>${s(c)} con turnos online</span><em>${e === c ? "✓ Elegido" : "Ver"}</em>${RAMP}</button>`;
-  const l = S.q
+  const next = myUpcoming()[0];
+  const segTile = (catId) =>
+    `<button class="segtile seg-${catId}" data-cat="${cat === catId ? "todos" : catId}" aria-pressed="${cat === catId}"><span class="st-k">${catInfo(catId).ic}</span><b>${catInfo(catId).name}</b><span>${countOf(catId)} con turnos online</span><em>${cat === catId ? "✓ Elegido" : "Ver"}</em>${RAMP}</button>`;
+  const title = S.q
     ? `Resultados para “${esc(S.q)}”`
-    : e === "todos"
+    : cat === "todos"
       ? "Todos los profesionales"
-      : catInfo(e).name;
+      : catInfo(cat).name;
   return `${
-    o
+    next
       ? `<button class="nextbar seg-${
           (
-            pr(o.pid) || {
+            pr(next.pid) || {
               cats: ["n"],
             }
           ).cats[0]
-        }" data-act="verTurno" data-id="${o.id}"><span>📅</span><span class="nb-t">Tu próximo turno: <b>${esc(dayLabel(o.date, true))} · ${o.time}</b> en ${esc((pr(o.pid) || {}).name || "")}</span><span class="nb-go">Ver ›</span></button>`
+        }" data-act="verTurno" data-id="${next.id}"><span>📅</span><span class="nb-t">Tu próximo turno: <b>${esc(dayLabel(next.date, true))} · ${next.time}</b> en ${esc((pr(next.pid) || {}).name || "")}</span><span class="nb-go">Ver ›</span></button>`
       : ""
   }
-  <section class="hero"><span class="tag">Olavarría · ${e === "todos" ? "Turnos online" : esc(catInfo(e).name)}</span>
+  <section class="hero"><span class="tag">Olavarría · ${cat === "todos" ? "Turnos online" : esc(catInfo(cat).name)}</span>
   <h1>Reservá tu turno <em>en segundos</em></h1>
-  <p>${e === "todos" ? "Barberías, peluquerías, masajes, pestañas, uñas y depilación" : esc(catInfo(e).name)}. Elegí día y horario, pagá la seña con Mercado Pago y el resto como prefieras.</p>
+  <p>${cat === "todos" ? "Barberías, peluquerías, masajes, pestañas, uñas y depilación" : esc(catInfo(cat).name)}. Elegí día y horario, pagá la seña con Mercado Pago y el resto como prefieras.</p>
   <form class="srch" id="fSearch" role="search"><input id="q" type="search" placeholder="Buscá un servicio o un nombre" value="${esc(S.q)}" autocomplete="off" aria-label="Buscar"><button class="btn btn-pri" type="submit">Buscar</button></form>
-  <div class="segpick" role="group" aria-label="Rubros">${CATS.map((c) => i(c[0])).join("")}</div>
-  ${e !== "todos" || S.q ? `<button class="hero-all" data-act="verTodos">Ver todos los profesionales (${s("todos")})</button>` : ""}
+  <div class="segpick" role="group" aria-label="Rubros">${CATS.map((row) => segTile(row[0])).join("")}</div>
+  ${cat !== "todos" || S.q ? `<button class="hero-all" data-act="verTodos">Ver todos los profesionales (${countOf("todos")})</button>` : ""}
   </section>
   <section class="sec">
-   <div class="sec-h"><h2>${l}</h2></div>
-   <p class="note" style="margin:0 0 14px">${t.loading ? "Cargando…" : `${t.items.length}${t.next ? "+" : ""} con turnos online`} · primero los más activos: los que más servicios hicieron en los últimos 30 días.</p>
-   ${t.loading ? `<div class="grid">${'<div class="skel"></div>'.repeat(3)}</div>` : t.error ? `<p class="empty">${esc(t.error)} <button class="lnk" data-act="reloadList">Reintentar</button></p>` : t.items.length ? `<div class="grid">${t.items.map(n).join("")}</div>${t.next ? `<button class="btn btn-ghost more" data-act="moreList" ${t.loadingMore ? "disabled" : ""}>${t.loadingMore ? "Cargando…" : "Ver más"}</button>` : ""}` : `<p class="empty">${S.q ? "No encontramos profesionales con esa búsqueda." : "Todavía no hay profesionales en este rubro."}</p>`}
+   <div class="sec-h"><h2>${title}</h2></div>
+   <p class="note" style="margin:0 0 14px">${list.loading ? "Cargando…" : `${list.items.length}${list.next ? "+" : ""} con turnos online`} · primero los más activos: los que más servicios hicieron en los últimos 30 días.</p>
+   ${list.loading ? `<div class="grid">${'<div class="skel"></div>'.repeat(3)}</div>` : list.error ? `<p class="empty">${esc(list.error)} <button class="lnk" data-act="reloadList">Reintentar</button></p>` : list.items.length ? `<div class="grid">${list.items.map(card).join("")}</div>${list.next ? `<button class="btn btn-ghost more" data-act="moreList" ${list.loadingMore ? "disabled" : ""}>${list.loadingMore ? "Cargando…" : "Ver más"}</button>` : ""}` : `<p class="empty">${S.q ? "No encontramos profesionales con esa búsqueda." : "Todavía no hay profesionales en este rubro."}</p>`}
   </section>`;
 }
