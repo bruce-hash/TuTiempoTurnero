@@ -32,6 +32,10 @@ def q(sql, args=None, uid=None, role=None):
 def err(x, txt=None):
     return isinstance(x, Exception) and (txt is None or txt in str(x))
 
+def conectar_mp(provider_id):
+    """Cuenta de Mercado Pago activa (Bloque 1): sin ella no se puede reservar con seña."""
+    return q("select mp_connect(%s, %s, 'tok-prueba', 'ref-prueba', 15552000)", (provider_id, f"mp-{provider_id}"), role="service_role")
+
 def mkuser(email, name):
     uid = uuid.uuid4()
     q("insert into auth.users (id, email, raw_user_meta_data) values (%s, %s, %s)", (uid, email, json.dumps({"full_name": name})))
@@ -49,6 +53,7 @@ ok("prestador pendiente no aparece al público", q("select count(*) from provide
 ok("el dueño no puede activarse solo", err(q("update providers set status='active' where id=%s", (pid,), uid=prov)))
 ok("el dueño no puede marcar su DNI como verificado", err(q("update providers set dni_verified=true where id=%s", (pid,), uid=prov)))
 q("update providers set status='active', dni_verified=true where id=%s", (pid,))   # admin (postgres)
+conectar_mp(pid)
 q("update provider_settings set online=true, step_min=30, ahead_days=31, notice_min=0, pay_mode='deposit', deposit_pct=50 where provider_id=%s", (pid,))
 # servicios en 3 rubros
 for cat, nm, dur, pr in [("l", "Extensiones clásicas", 90, 30000), ("u", "Esmaltado semipermanente", 60, 12000), ("d", "Depilación de piernas", 30, 9000)]:
@@ -60,7 +65,7 @@ ok("un solo rubro principal", q("select count(*) from provider_categories where 
 
 # segundo prestador (barbería) activo
 pid2 = q("select register_provider('Barbería Max','Rivadavia 100', array['b'], '2284 333', '28111222')", uid=prov2)[0][0]
-q("update providers set status='active' where id=%s", (pid2,)); q("update provider_settings set online=true, notice_min=0 where provider_id=%s", (pid2,))
+q("update providers set status='active' where id=%s", (pid2,)); conectar_mp(pid2); q("update provider_settings set online=true, notice_min=0 where provider_id=%s", (pid2,))
 q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Corte',30,10000)", (pid2,), uid=prov2)
 
 # ---- Lectura pública ----
@@ -113,10 +118,9 @@ ok("otro prestador no lo ve", q("select count(*) from bookings where id=%s", (b1
 busy = q("select * from provider_busy(%s, %s, %s)", (pid, d1, d1), role="anon")
 ok("ocupados públicos sin datos del cliente (solo horario y si el día está bloqueado)", len(busy) == 1 and len(busy[0]) == 3 and busy[0][2] is False)
 ok("cliente no puede confirmar su pago", err(q("select confirm_payment(array[%s]::bigint[], 'x', 7200)", (b1,), uid=cli1)))
-ok("pago con monto menor rechazado", err(q("select confirm_payment(array[%s]::bigint[], 'pay-0', 100)", (b1,), role="service_role"), "amount_mismatch"))
-ok("pagar solo la seña (sin la comisión) no alcanza", err(q("select confirm_payment(array[%s]::bigint[], 'pay-00', 6000)", (b1,), role="service_role"), "amount_mismatch"))
-cp = q("select confirm_payment(array[%s]::bigint[], 'pay-1', 7200)", (b1,), role="service_role")
-ok("webhook confirma el pago", not err(cp) and cp[0][0]["status"] == "confirmed")
+# monto menor, mayor, series, contracargos…: pruebas/test_cobros.py (Bloque 1)
+cp = q("select confirm_payment(array[%s]::bigint[], 'pay-1', 7200, p_fee_mp => 1200)", (b1,), role="service_role")
+ok("webhook confirma el pago", not err(cp) and cp[0][0]["status"] == "processed" and cp[0][0]["confirmed"] == 1)
 ok("sin cashback: TuTiempo no acumula saldo", q("select balance from wallets where user_id=%s", (cli1,))[0][0] == 0 and q("select cashback from bookings where id=%s", (b1,))[0][0] == 0)
 ok("webhook repetido no duplica", q("select confirm_payment(array[%s]::bigint[], 'pay-1', 7200)", (b1,), role="service_role")[0][0]["status"] == "already_processed")
 ok("el cliente no puede cargarse saldo", err(q("insert into wallet_movements (user_id, kind, amount) values (%s,'adjust',99999)", (cli1,), uid=cli1)) and (err(q("update wallets set balance=99999 where user_id=%s", (cli1,), uid=cli1)) or q("select balance from wallets where user_id=%s", (cli1,))[0][0] == 0))
@@ -230,7 +234,7 @@ ok("no puede seguir en nombre de otro", err(q("insert into follows (user_id, pro
 # ---- funciones por rubro: adicionales, preguntas previas, descanso ----
 pid3 = q("select register_provider('Uñas Test','Hornos 1', array['u'], '2284 777', '31222333')", uid=mkuser("nails@test.ar","Nails"))
 nails_owner = q("select owner_id from providers where id=%s", (pid3[0][0],))[0][0]; pid3 = pid3[0][0]
-q("update providers set status='active' where id=%s", (pid3,)); q("update provider_settings set online=true, notice_min=0, buffer_min=15 where provider_id=%s", (pid3,))
+q("update providers set status='active' where id=%s", (pid3,)); conectar_mp(pid3); q("update provider_settings set online=true, notice_min=0, buffer_min=15 where provider_id=%s", (pid3,))
 sv = q("insert into services (provider_id, category_id, name, duration_min, price, repeat_days, prep_note) values (%s,'u','Semipermanente',60,12000,21,'Venir sin esmalte') returning id", (pid3,), uid=nails_owner)
 ok("servicio con retoque e indicaciones", not err(sv)); sv = sv[0][0]
 ad = q("insert into service_addons (service_id, name, price, duration_min) values (%s,'Retiro de semi',2000,15) returning id, provider_id", (sv,), uid=nails_owner)
@@ -466,10 +470,9 @@ ok("admin borra una nota", not err(q("select admin_delete_note(%s)", (n1[0][0],)
 # admin elimina un prestador: cancela turnos futuros y devuelve todo
 pz = q("select register_provider('Borrar Test','Sarmiento 9', array['b'], '2284 1', '30111222')", uid=mkuser("borrar@test.ar","Borrar"))[0][0]
 zo = q("select owner_id from providers where id=%s", (pz,))[0][0]
-q("update providers set status='active' where id=%s", (pz,))
+q("update providers set status='active' where id=%s", (pz,)); conectar_mp(pz)
 q("update provider_settings set online=true, step_min=30, ahead_days=31, notice_min=0, pay_mode='deposit', deposit_pct=50 where provider_id=%s", (pz,))
 q("insert into provider_hours (provider_id, dow, shift, opens, closes) select %s, g, 1, '09:00', '19:00' from generate_series(0,6) g on conflict do nothing", (pz,))
-q("insert into provider_secrets (provider_id, mp_access_token) values (%s, 'TEST-token') on conflict do nothing", (pz,))
 szv = q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Corte',30,20000) returning id", (pz,), uid=zo)[0][0]
 dz = next_weekday(3)
 rz = q("select book_slot(%s, %s)", (szv, dt.datetime.combine(dz, dt.time(11, 0), tz)), uid=cli2)
@@ -483,9 +486,14 @@ ok("admin elimina el prestador", not err(dz1) and dz1[0][0]["status"] == "delete
 ok("al cliente se le devuelve todo (seña + comisión) y le llega el aviso", q("select status, refund_pending from bookings where id=%s", (bz,))[0] == ("cancelled_provider", 12000)
    and any(m["kind"] == "cancel" and "$12.000" in m["body"] for m in q("select my_messages()", uid=cli2)[0][0]))
 ok("v31: PKCE: el intento de conexión guarda su verificador (solo el servidor lo lee)", not err(q("select code_verifier from mp_oauth_states limit 1")) and err(q("select * from mp_oauth_states", uid=cli2)))
-ok("la llave de Mercado Pago se guarda hasta hacer la devolución", q("select count(*) from provider_secrets where provider_id=%s", (pz,))[0][0] == 1)
-q("update bookings set refund_pending=0 where id=%s", (bz,))
-ok("después se borra sola", q("select purge_deleted_secrets()", role="service_role")[0][0] >= 1 and q("select count(*) from provider_secrets where provider_id=%s", (pz,))[0][0] == 0)
+ok("la llave de Mercado Pago se guarda hasta hacer la devolución", q("select purge_deleted_secrets()", role="service_role")[0][0] == 0
+   and q("select status, access_token is not null from mp_accounts where provider_id=%s", (pz,))[0] == ("refunds_only", True))
+rz_id = q("select id from refunds where booking_id=%s", (bz,))[0][0]
+q("select refund_result(%s, true, 'rf-z')", (rz_id,), role="service_role")
+ok("hecha la devolución, la llave sigue por los pagos de los últimos 180 días", q("select purge_deleted_secrets()", role="service_role")[0][0] == 0)
+q("update payments set created_at = now() - interval '181 days' where provider_id=%s", (pz,))
+ok("después se borra sola", q("select purge_deleted_secrets()", role="service_role")[0][0] >= 1
+   and q("select status, access_token, refresh_token from mp_accounts where provider_id=%s", (pz,))[0] == ("purged", None, None))
 ok("la app no puede limpiar llaves", err(q("select purge_deleted_secrets()", uid=cli2)))
 ok("ya no aparece ni se puede reservar", not any(r0[0] == pz for r0 in q("select id from list_providers('olavarria', null, null, null, null, 48)", role="anon"))
    and err(q("select book_slot(%s, %s)", (szv, dt.datetime.combine(dz, dt.time(15, 0), tz)), uid=cli2)))

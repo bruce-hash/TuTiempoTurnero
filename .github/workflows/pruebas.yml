@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   base:
-    name: Base (Postgres 16 · test_db.py)
+    name: Base (Postgres 16 · test_db.py · test_cobros.py)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -50,14 +50,19 @@ jobs:
       - name: Driver de Postgres para Python
         run: pip install "psycopg[binary]==3.3.*"
 
-      - name: Cargar la base (emulación de Supabase + TODO_EN_UNO.sql)
+      - name: Cargar las bases (emulación de Supabase + TODO_EN_UNO.sql; una limpia para cada prueba)
         run: |
-          createdb tt
-          psql -v ON_ERROR_STOP=1 -q -d tt -f pruebas/supabase_emulation.sql
-          psql -v ON_ERROR_STOP=1 -q -d tt -f supabase/TODO_EN_UNO.sql
+          for db in tt tt_cobros; do
+            createdb $db
+            psql -v ON_ERROR_STOP=1 -q -d $db -f pruebas/supabase_emulation.sql
+            psql -v ON_ERROR_STOP=1 -q -d $db -f supabase/TODO_EN_UNO.sql
+          done
 
       - name: test_db.py
         run: python3 pruebas/test_db.py "host=localhost port=5432 dbname=tt user=postgres password=postgres"
+
+      - name: test_cobros.py (pagos, devoluciones, cuentas de Mercado Pago)
+        run: python3 pruebas/test_cobros.py "host=localhost port=5432 dbname=tt_cobros user=postgres password=postgres"
 
   frontend:
     name: Frontend (sin demo · crawl · clicks)
