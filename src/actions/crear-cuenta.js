@@ -65,7 +65,7 @@ registerSubmit("fSignup", (ev) => {
             full_name: name,
             phone: tel || null,
           },
-          emailRedirectTo: location.origin + location.pathname,
+          emailRedirectTo: location.origin + "/",
         },
       })
       .then(async (res) => {

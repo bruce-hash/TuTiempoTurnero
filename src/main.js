@@ -33,6 +33,7 @@ import { CONFIG_OK, LIVE, sb } from "./config.js";
 import { errMsg } from "./lib/errores.js";
 import { S } from "./state.js";
 import { P, store } from "./store.js";
+import { startRouter } from "./router.js";
 import { render } from "./ui/render.js";
 import { toast } from "./ui/toast.js";
 import "./demo/index.js";
@@ -140,40 +141,33 @@ async function boot() {
       toast(errMsg(err));
     }
     api.commission().catch(() => {});
+    // dirección con la que arranca el enrutador: la actual, salvo que el arranque ya decida la pantalla
+    let start = location.href;
     if (S.recovering && S.user) {
       S.view = "newpass";
       S.npMode = "recover";
+      start = null;
     } else {
+      // vuelta de ingresar con Google: a la dirección que se había guardado (saveAfter)
       let after = null;
       try {
         after = JSON.parse(sessionStorage.getItem("tt_after") || "null");
         sessionStorage.removeItem("tt_after");
       } catch (ignored) {}
-      if (after && S.user) {
-        if (after.v === "panel") {
-          if (S.barberAuth) {
-            S.role = "barbero";
-            S.btab = "agenda";
-          } else {
-            toast("Esa cuenta todavía no tiene perfil de prestador. Podés sumarte desde “Sumate”.");
-          }
-        } else if ((after.v === "checkoutT" || after.v === "perfil") && /^\d{1,12}$/.test(String(after.pid))) {
-          S.pid = +after.pid;
-          S.view = "perfil";
-          toast("Ingresaste. Elegí tu horario y confirmá.");
-        } else if (after.v === "misturnos" || after.v === "cuenta") {
-          S.view = after.v;
-        }
+      if (after && S.user && typeof after.path === "string" && /^\/(?!\/)/.test(after.path)) {
+        start = after.path;
       }
     }
-    // vuelta de Mercado Pago: ?b=<turno>&mp=success
+    // vuelta de Mercado Pago: ?b=<turno>&mp=success (la dirección de vuelta la arma la Edge Function: no cambia)
     const params = new URLSearchParams(location.search);
     if (params.get("b") && /^\d+$/.test(params.get("b"))) {
       S.turnoId = +params.get("b");
       S.justBooked = params.get("mp") === "success";
       S.view = "turnoOk";
-      history.replaceState(null, "", location.pathname);
+      start = null;
     }
+    await startRouter(start);
+    return;
   } else {
     const bar = document.createElement("div");
     bar.className = "modebar";
@@ -184,7 +178,7 @@ async function boot() {
       demoBar.parentNode.insertBefore(bar, demoBar.nextSibling);
     }
   }
-  render();
+  await startRouter(location.href);
 }
 // Producción sin config.js completo: en vez de la demo, un aviso claro (la demo no viaja en el build de producción).
 function faltaConfig() {

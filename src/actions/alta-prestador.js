@@ -37,7 +37,7 @@ async function liveRegister(reg) {
           full_name: reg.nombre,
           provider_reg: providerReg,
         },
-        emailRedirectTo: location.origin + location.pathname,
+        emailRedirectTo: location.origin + "/",
       },
     });
     if (res.error) {

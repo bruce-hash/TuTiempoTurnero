@@ -27,6 +27,15 @@ CAT.n = {
   ic: "•",
 };
 export const catInfo = (id) => CAT[id] || CAT.n;
+// Rubro en la URL (/rubro/<slug>): los mismos slugs que la tabla categories de la base (test_db.py lo verifica).
+export const CAT_SLUGS = {
+  b: "barberias",
+  p: "peluquerias",
+  m: "masajes",
+  l: "pestanas",
+  u: "unas",
+  d: "depilacion",
+};
 export const catName = (id) => catInfo(id).one;
 // Rubro con el que se muestra un prestador: el que se está mirando (ctx o el filtro del listado) si lo tiene; si no,
 // su rubro principal.

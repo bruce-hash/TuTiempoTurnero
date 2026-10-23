@@ -68,6 +68,11 @@ export const liveLectura = {
   },
   // Ficha completa del prestador (se reusa si se cargó hace menos de un minuto, salvo force): servicios, agenda,
   // reseñas, trabajos y los horarios ocupados de los próximos días (sin datos de clientes) para pintar el turnero.
+  // id del prestador de una dirección /<slug> (null si no existe o no está activo: la política de la base no lo muestra)
+  async providerIdBySlug(slug) {
+    const row = await call(sb.from("providers").select("id").eq("slug", slug).maybeSingle());
+    return row ? row.id : null;
+  },
   async loadProvider(pid, force) {
     const cached = pr(pid);
     if (cached && cached.full && !force && Date.now() - cached.full < 6e4) {

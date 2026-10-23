@@ -49,6 +49,10 @@ export const demoApi = {
   async session() {
     return null;
   },
+  async providerIdBySlug(slug) {
+    const prov = P.find((item) => item.slug === slug);
+    return prov ? prov.id : null;
+  },
   m: new Proxy(
     {},
     {
