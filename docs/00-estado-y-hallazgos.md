@@ -91,6 +91,19 @@ Mercado Pago de TuTiempo (variable `MP_OWNER_USER_ID`) y rechazar.
 Olavarría. Esos perfiles se pueden reservar y fallan (no tienen Mercado Pago). Reemplazar por datos ficticios y
 no cargar ejemplos en producción.
 
+**Ampliado en el Bloque A2:** además de `src/demo/`, hay datos de ejemplo en funciones de producción que mezclan demo y
+vivo, y llegan a `dist/`:
+- `seedStore` y `demoClosings` (`src/views/prestador/panel.js`): clientes, fichas ("Koleston 7.1 + oxidante 20 vol",
+  "Trabajar cervicales; evitar lumbar"…), teléfonos "2284 4…", finanzas de 29 días, gastos ("Alquiler", "Insumos de …")
+  y cierres de caja. Viajan enteros en el build de producción. Solo se ejecutan desde `useProvider`, que en vivo solo
+  llama la acción `demoLogin` (su botón solo aparece en la demo), pero el código y los textos están.
+- `seedComm` (`src/views/prestador/comunidad.js`): en vivo devuelve una comunidad vacía. Sus reseñas y trabajos
+  inventados **no** llegan a `dist/` (el minificador los saca porque `LIVE` vale `true`); conviene moverlo igual.
+
+**En el Bloque 2:** mover todo eso a `src/demo/` (en vivo el panel arranca vacío y lo llena la base) y ampliar
+`test:sin-demo` para que lo detecte: buscar en `dist/` textos de esos datos (por ejemplo "Koleston 7.1") y que ninguna
+función de siembra (`seedStore`, `demoClosings`, `seedComm`) sobreviva en el build de producción.
+
 ### H15 · Baja · Contradicciones del LEEME
 - Clientes: "si el profesional bloquea el día se devuelve la seña y hay botón Reprogramar". Prestadores y pruebas
   (v31): TuTiempo **no** devuelve la seña en bloqueos de días; el prestador la arregla. Vale la segunda.
@@ -120,3 +133,26 @@ El pie dice "… Olavarría, Buenos Aires, Argentina · Prototipo" (`index.html`
 `pruebas/e2e.js` bloqueaba de 20:00 a 21:00 el día de la reserva de la clienta, que es su primer turno libre: corrida de
 tarde, la reserva caía a las 20:00 y el bloqueo chocaba ("bloqueo guardado en la base" fallaba también con la versión 31).
 Ahora bloquea un día hábil sin turnos. 107/107 con la versión 31 y con la nueva.
+
+### H21 · Media · Lógica de demo en código de producción (Bloque A2)
+- `realClients` (`src/views/prestador/clientes.js`) descarta con una expresión regular los nombres de relleno de la demo
+  (`Lucas|Matías|Bruno|Iván|Leo|Nahuel|Franco` + inicial A–G + punto) y el nombre "R". **Corre en vivo:** un cliente
+  real que se llame, por ejemplo, "Bruno F." no aparece en la lista de clientes ni en los mensajes del prestador.
+- `vBPerfil` (`src/views/prestador/perfil.js`): con Mercado Pago conectado, **en vivo** muestra la cuenta
+  "hidro.style.mp" (la de la demo). Y el botón "Desconectar" (`mpDesc`) solo cambia la pantalla (`S.mp = "none"`): no
+  desconecta nada en la base.
+- `occAt` (`estadisticas.js`) y `monthTotals` (`finanzas.js`) inventan ocupación e ingresos de días y meses pasados con
+  fórmulas cuando no es `LIVE`. En el build de producción esas ramas no quedan (el minificador las saca), así que hoy
+  solo afectan a la demo, pero mezclan demo y vivo en la misma función.
+
+**En el Bloque 2:** que `realClients` no filtre por nombre en vivo; mostrar la cuenta de Mercado Pago real (o ninguna) y
+resolver qué hace "Desconectar"; pasar las ramas de demo a `src/demo/`.
+
+### H22 · Baja · Código muerto y texto viejo (Bloque A2)
+- `misTurnosHtml` (`src/ui/bookbar.js`) no se usa (el build ya la descarta).
+- `const hours = hoursUntil(booking)` en `src/views/cliente/turno.js` no se usa.
+- La barra de la demo dice "completá config.cjs": el archivo ahora es `config.js`. Solo se ve en la demo (desarrollo y
+  pruebas); el build de producción no la incluye.
+
+**En el Bloque 2:** borrar lo muerto y corregir el texto.
+
