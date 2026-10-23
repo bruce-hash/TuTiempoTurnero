@@ -1,3 +1,5 @@
+// Mensajes para la gente: la clave es un código de error de la base (raise exception) o un pedazo del mensaje en
+// inglés de Supabase Auth; errMsg busca la primera que aparezca en el error.
 const ERRS = {
   login_required: "Ingresá para continuar.",
   slot_taken: "Ese horario se acaba de ocupar. Elegí otro.",
@@ -50,14 +52,14 @@ const ERRS = {
   empty_concept: "Escribí el concepto.",
   bad_day: "Fecha inválida.",
 };
-export function errMsg(e) {
-  const a = (e && (e.message || e.error_description || e.msg)) || String(e || "");
-  for (const t in ERRS) {
-    if (a.includes(t)) {
-      return ERRS[t];
+export function errMsg(err) {
+  const text = (err && (err.message || err.error_description || err.msg)) || String(err || "");
+  for (const key in ERRS) {
+    if (text.includes(key)) {
+      return ERRS[key];
     }
   }
-  if (/Failed to fetch|NetworkError|network/i.test(a)) {
+  if (/Failed to fetch|NetworkError|network/i.test(text)) {
     return "Sin conexión. Revisá internet y probá de nuevo.";
   } else {
     return "Algo salió mal. Probá de nuevo en un momento.";

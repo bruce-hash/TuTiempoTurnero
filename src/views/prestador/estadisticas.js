@@ -9,43 +9,46 @@ import { DNAME } from "./horarios.js";
 
 store.OCCD = {};
 store.MTOT = {};
+// horas (0 a 23) en las que el prestador trabaja algún día de la semana
 function workHours() {
-  const e = cfg(ME());
-  const a = /* @__PURE__ */ new Set();
-  for (let t = 0; t < 7; t++) {
-    ranges(e, t).forEach(([s, n]) => {
-      for (let o = Math.floor(s / 60); o * 60 < n; o++) {
-        a.add(o);
+  const conf = cfg(ME());
+  const hours = /* @__PURE__ */ new Set();
+  for (let dow = 0; dow < 7; dow++) {
+    ranges(conf, dow).forEach(([from, to]) => {
+      for (let hour = Math.floor(from / 60); hour * 60 < to; hour++) {
+        hours.add(hour);
       }
     });
   }
-  return [...a].sort((t, s) => t - s);
+  return [...hours].sort((one, other) => one - other);
 }
-function occAt(date, a) {
-  const t = cfg(ME());
-  const s = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
-  if (!ranges(t, s).some(([d, p]) => a * 60 >= d && a * 60 < p)) {
+// porcentaje ocupado de una hora de un día (null si no trabaja). Hoy y adelante, desde la agenda; en vivo, los días
+// pasados vienen de la base (store.OCCD); en la demo se inventan con una fórmula.
+function occAt(date, hour) {
+  const conf = cfg(ME());
+  const dow = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
+  if (!ranges(conf, dow).some(([from, to]) => hour * 60 >= from && hour * 60 < to)) {
     return null;
   }
-  const n = busy(ME(), date)
-    .filter((d) => d.type !== "block")
-    .reduce((d, p) => {
-      const w = toMin(p.time);
-      const y = w + p.dur;
-      return d + Math.max(0, Math.min(y, a * 60 + 60) - Math.max(w, a * 60));
+  const used = busy(ME(), date)
+    .filter((item) => item.type !== "block")
+    .reduce((sum, item) => {
+      const start = toMin(item.time);
+      const end = start + item.dur;
+      return sum + Math.max(0, Math.min(end, hour * 60 + 60) - Math.max(start, hour * 60));
     }, 0);
-  const o = Math.min(100, Math.round((n / 60) * 100));
+  const real = Math.min(100, Math.round((used / 60) * 100));
   if (date > TODAY()) {
-    return o;
+    return real;
   }
   if (LIVE) {
     if (date === TODAY()) {
-      return o;
+      return real;
     } else {
-      return Math.min(100, Math.round(((store.OCCD[date + "|" + a] || 0) / 60) * 100));
+      return Math.min(100, Math.round(((store.OCCD[date + "|" + hour] || 0) / 60) * 100));
     }
   }
-  const i = {
+  const dowFactor = {
     0: 0.5,
     1: 0.85,
     2: 0.8,
@@ -53,222 +56,227 @@ function occAt(date, a) {
     4: 1,
     5: 1.2,
     6: 1.1,
-  }[s];
-  const l = a < 12 ? 22 + (a - 9) * 10 : a < 15 ? 30 : a < 17 ? 32 + (a - 15) * 14 : 68 + (a - 17) * 7;
-  const c = ((+date.replace(/-/g, "") + a * 7) % 17) - 8;
-  return Math.max(0, Math.min(100, Math.max(o, Math.round(l * i + c))));
+  }[dow];
+  const base = hour < 12 ? 22 + (hour - 9) * 10 : hour < 15 ? 30 : hour < 17 ? 32 + (hour - 15) * 14 : 68 + (hour - 17) * 7;
+  const noise = ((+date.replace(/-/g, "") + hour * 7) % 17) - 8;
+  return Math.max(0, Math.min(100, Math.max(real, Math.round(base * dowFactor + noise))));
 }
-const dayOcc = (e) => {
-  const a = workHours()
-    .map((t) => occAt(e, t))
-    .filter((t) => t != null);
-  if (a.length) {
-    return Math.round(a.reduce((t, s) => t + s, 0) / a.length);
+const dayOcc = (date) => {
+  const occs = workHours()
+    .map((hour) => occAt(date, hour))
+    .filter((occ) => occ != null);
+  if (occs.length) {
+    return Math.round(occs.reduce((sum, occ) => sum + occ, 0) / occs.length);
   } else {
     return null;
   }
 };
-const occCls = (e) => (e == null ? "cl" : e < 35 ? "lo" : e < 60 ? "md" : e < 80 ? "hi" : "fu");
+const occCls = (pct) => (pct == null ? "cl" : pct < 35 ? "lo" : pct < 60 ? "md" : pct < 80 ? "hi" : "fu");
+// lunes de la semana actual (off = semanas para adelante o para atrás)
 function weekStart(off) {
-  const a = addDays(0);
-  const t = a.getDay();
-  a.setDate(a.getDate() - ((t + 6) % 7) + off * 7);
-  return a;
+  const monday = addDays(0);
+  const dow = monday.getDay();
+  monday.setDate(monday.getDate() - ((dow + 6) % 7) + off * 7);
+  return monday;
 }
-function patt(dow, a) {
-  let t = 0;
-  let s = 0;
-  const n = weekStart(0);
-  for (let o = 1; o <= 4; o++) {
-    const i = new Date(n);
-    i.setDate(i.getDate() - o * 7 + ((dow + 6) % 7));
-    const l = occAt(dkey(i), a);
-    if (l != null) {
-      t += l;
-      s++;
+// ocupación promedio de ese día de la semana y hora en las últimas 4 semanas
+function patt(dow, hour) {
+  let sum = 0;
+  let count = 0;
+  const monday = weekStart(0);
+  for (let weeksAgo = 1; weeksAgo <= 4; weeksAgo++) {
+    const date = new Date(monday);
+    date.setDate(date.getDate() - weeksAgo * 7 + ((dow + 6) % 7));
+    const occ = occAt(dkey(date), hour);
+    if (occ != null) {
+      sum += occ;
+      count++;
     }
   }
-  if (s) {
-    return Math.round(t / s);
+  if (count) {
+    return Math.round(sum / count);
   } else {
     return null;
   }
 }
+// franjas de 2 horas con su ocupación promedio; las 4 más tranquilas quedan marcadas como sugerencia
 function quietWindows() {
-  const e = cfg(ME());
-  const a = [];
-  [1, 2, 3, 4, 5, 6, 0].forEach((s) =>
-    ranges(e, s).forEach(([n, o]) => {
-      for (let i = Math.ceil(n / 60); i * 60 + 60 <= o; i += 2) {
-        const l = Math.min(i + 2, Math.floor(o / 60));
-        const c = [];
-        for (let d = i; d < l; d++) {
-          const p = patt(s, d);
-          if (p != null) {
-            c.push(p);
+  const conf = cfg(ME());
+  const windows = [];
+  [1, 2, 3, 4, 5, 6, 0].forEach((dow) =>
+    ranges(conf, dow).forEach(([from, to]) => {
+      for (let hour = Math.ceil(from / 60); hour * 60 + 60 <= to; hour += 2) {
+        const endHour = Math.min(hour + 2, Math.floor(to / 60));
+        const occs = [];
+        for (let slotHour = hour; slotHour < endHour; slotHour++) {
+          const occ = patt(dow, slotHour);
+          if (occ != null) {
+            occs.push(occ);
           }
         }
-        if (c.length) {
-          a.push({
-            key: s + "|" + pad(i),
-            dow: s,
-            h: i,
-            e: l,
-            v: Math.round(c.reduce((d, p) => d + p, 0) / c.length),
+        if (occs.length) {
+          windows.push({
+            key: dow + "|" + pad(hour),
+            dow: dow,
+            h: hour,
+            e: endHour,
+            v: Math.round(occs.reduce((sum, occ) => sum + occ, 0) / occs.length),
           });
         }
       }
     }),
   );
-  const t = [...a]
-    .sort((s, n) => s.v - n.v)
+  const quietest = [...windows]
+    .sort((one, other) => one.v - other.v)
     .slice(0, 4)
-    .map((s) => s.key);
-  a.forEach((s) => (s.sug = t.includes(s.key)));
-  return a;
+    .map((win) => win.key);
+  windows.forEach((win) => (win.sug = quietest.includes(win.key)));
+  return windows;
 }
 export const SMAX = () => (2028 - NOW().getFullYear()) * 12 + (11 - NOW().getMonth());
+// pestaña Estadísticas: mapa de calor de la semana, calendario del mes u ocupación del año, y horarios flojos
 export function vBStats() {
-  const e = S.sv || "semana";
-  const a = workHours();
-  const t = `<div class="seg3" role="group" aria-label="Vista"><button data-sv="semana" aria-pressed="${e === "semana"}">Semana</button><button data-sv="mes" aria-pressed="${e === "mes"}">Mes</button><button data-sv="anio" aria-pressed="${e === "anio"}">Año</button></div>`;
-  const s =
+  const view = S.sv || "semana";
+  const hours = workHours();
+  const tabs = `<div class="seg3" role="group" aria-label="Vista"><button data-sv="semana" aria-pressed="${view === "semana"}">Semana</button><button data-sv="mes" aria-pressed="${view === "mes"}">Mes</button><button data-sv="anio" aria-pressed="${view === "anio"}">Año</button></div>`;
+  const legend =
     '<div class="oleg"><span><i class="oc lo"></i>Libre</span><span><i class="oc md"></i>Medio</span><span><i class="oc hi"></i>Casi lleno</span><span><i class="oc fu"></i>Lleno</span><span><i class="oc cl"></i>No trabajás</span></div>';
-  let n = "";
-  if (e === "semana") {
-    const i = S.swk || 0;
-    const l = weekStart(i);
-    const c = Array.from(
+  let body = "";
+  if (view === "semana") {
+    const weekOff = S.swk || 0;
+    const monday = weekStart(weekOff);
+    const days = Array.from(
       {
         length: 7,
       },
-      (g, M) => {
-        const _ = new Date(l);
-        _.setDate(_.getDate() + M);
-        return dkey(_);
+      (slot, index) => {
+        const date = new Date(monday);
+        date.setDate(date.getDate() + index);
+        return dkey(date);
       },
     );
-    const d = (g) => {
-      const M = /* @__PURE__ */ new Date(g + "T12:00:00");
-      return M.getDate() + " " + MESES[M.getMonth()].slice(0, 3);
+    const shortDate = (date) => {
+      const jsDate = /* @__PURE__ */ new Date(date + "T12:00:00");
+      return jsDate.getDate() + " " + MESES[jsDate.getMonth()].slice(0, 3);
     };
-    const p = (g) => g > TODAY();
-    const y = c
-      .map((g) => (p(g) ? null : dayOcc(g)))
-      .map((g, M) => [g, M])
-      .filter((g) => g[0] != null);
-    const k = y.length ? y.reduce((g, M) => (M[0] < g[0] ? M : g)) : null;
-    const h = y.length ? y.reduce((g, M) => (M[0] > g[0] ? M : g)) : null;
-    const j = a
-      .map((g) => {
-        const M = c
-          .filter((_) => !p(_))
-          .map((_) => occAt(_, g))
-          .filter((_) => _ != null);
-        return [g, M.length ? M.reduce((_, D) => _ + D, 0) / M.length : null];
+    const isFuture = (date) => date > TODAY();
+    const occs = days
+      .map((date) => (isFuture(date) ? null : dayOcc(date)))
+      .map((occ, index) => [occ, index])
+      .filter((pair) => pair[0] != null);
+    const quietest = occs.length ? occs.reduce((best, pair) => (pair[0] < best[0] ? pair : best)) : null;
+    const busiest = occs.length ? occs.reduce((best, pair) => (pair[0] > best[0] ? pair : best)) : null;
+    const byHour = hours
+      .map((hour) => {
+        const occs = days
+          .filter((date) => !isFuture(date))
+          .map((date) => occAt(date, hour))
+          .filter((occ) => occ != null);
+        return [hour, occs.length ? occs.reduce((sum, occ) => sum + occ, 0) / occs.length : null];
       })
-      .filter((g) => g[1] != null);
-    const b = j.length ? j.reduce((g, M) => (M[1] < g[1] ? M : g)) : null;
-    n = `<div class="wnav"><button class="pk-nav" data-swk="-1" aria-label="Semana anterior">‹</button><div><b>${i === 0 ? "Esta semana" : i === -1 ? "Semana pasada" : "Hace " + -i + " semanas"}</b><span>Lunes ${d(c[0])} al domingo ${d(c[6])}</span></div><button class="pk-nav" data-swk="1" ${i >= 0 ? "disabled" : ""} aria-label="Semana siguiente">›</button></div>
-    ${k ? `<p class="insight">Tu día más tranquilo: <b>${DNAME[/* @__PURE__ */ new Date(c[k[1]] + "T12:00:00").getDay()].toLowerCase()}</b> (${k[0]}%). El más lleno: <b>${DNAME[/* @__PURE__ */ new Date(c[h[1]] + "T12:00:00").getDay()].toLowerCase()}</b> (${h[0]}%). La hora más floja: <b>${b[0]} h</b>.</p>` : ""}
-    <div class="hm2wrap"><table class="hm2"><thead><tr><th></th>${c
-      .map((g) => {
-        const M = /* @__PURE__ */ new Date(g + "T12:00:00");
-        return `<th class="${g === TODAY() ? "today" : ""}">${DOW[M.getDay()]}<span>${M.getDate()}</span></th>`;
+      .filter((pair) => pair[1] != null);
+    const quietHour = byHour.length ? byHour.reduce((best, pair) => (pair[1] < best[1] ? pair : best)) : null;
+    body = `<div class="wnav"><button class="pk-nav" data-swk="-1" aria-label="Semana anterior">‹</button><div><b>${weekOff === 0 ? "Esta semana" : weekOff === -1 ? "Semana pasada" : "Hace " + -weekOff + " semanas"}</b><span>Lunes ${shortDate(days[0])} al domingo ${shortDate(days[6])}</span></div><button class="pk-nav" data-swk="1" ${weekOff >= 0 ? "disabled" : ""} aria-label="Semana siguiente">›</button></div>
+    ${quietest ? `<p class="insight">Tu día más tranquilo: <b>${DNAME[/* @__PURE__ */ new Date(days[quietest[1]] + "T12:00:00").getDay()].toLowerCase()}</b> (${quietest[0]}%). El más lleno: <b>${DNAME[/* @__PURE__ */ new Date(days[busiest[1]] + "T12:00:00").getDay()].toLowerCase()}</b> (${busiest[0]}%). La hora más floja: <b>${quietHour[0]} h</b>.</p>` : ""}
+    <div class="hm2wrap"><table class="hm2"><thead><tr><th></th>${days
+      .map((date) => {
+        const jsDate = /* @__PURE__ */ new Date(date + "T12:00:00");
+        return `<th class="${date === TODAY() ? "today" : ""}">${DOW[jsDate.getDay()]}<span>${jsDate.getDate()}</span></th>`;
       })
       .join("")}</tr></thead>
-     <tbody>${a
+     <tbody>${hours
        .map(
-         (g) =>
-           `<tr><th>${g} h</th>${c
-             .map((M) => {
-               const _ = occAt(M, g);
-               const D = p(M) && _ != null;
-               return `<td><span class="oc ${D ? "fut" : occCls(_)}" title="${dayLabel(M)} ${g} h: ${_ == null ? "no trabajás" : D ? "todavía no pasó" : _ + "% ocupado"}"></span></td>`;
+         (hour) =>
+           `<tr><th>${hour} h</th>${days
+             .map((date) => {
+               const occ = occAt(date, hour);
+               const future = isFuture(date) && occ != null;
+               return `<td><span class="oc ${future ? "fut" : occCls(occ)}" title="${dayLabel(date)} ${hour} h: ${occ == null ? "no trabajás" : future ? "todavía no pasó" : occ + "% ocupado"}"></span></td>`;
              })
              .join("")}</tr>`,
        )
        .join("")}
      </tbody></table></div>
     <p class="note" style="margin-top:6px">El color muestra qué tan ocupada estuvo cada hora: cuanto más oscuro, más gente. Los días que todavía no pasaron quedan en blanco.</p>`;
-  } else if (e === "mes") {
-    const i = S.smo || 0;
-    const l = NOW();
-    l.setDate(1);
-    l.setMonth(l.getMonth() + i);
-    const c = l.getFullYear();
-    const d = l.getMonth();
-    const p = new Date(c, d + 1, 0).getDate();
-    const w = (new Date(c, d, 1).getDay() + 6) % 7;
-    const y = [];
-    for (let h = 0; h < w; h++) {
-      y.push('<span class="cal-e"></span>');
+  } else if (view === "mes") {
+    const monthOff = S.smo || 0;
+    const first = NOW();
+    first.setDate(1);
+    first.setMonth(first.getMonth() + monthOff);
+    const year = first.getFullYear();
+    const month = first.getMonth();
+    const nDays = new Date(year, month + 1, 0).getDate();
+    const lead = (new Date(year, month, 1).getDay() + 6) % 7;
+    const cells = [];
+    for (let index = 0; index < lead; index++) {
+      cells.push('<span class="cal-e"></span>');
     }
-    const k = [];
-    for (let h = 1; h <= p; h++) {
-      const j = c + "-" + pad(d + 1) + "-" + pad(h);
-      const b = j > TODAY();
-      const g = b ? null : dayOcc(j);
-      if (g != null) {
-        k.push(g);
+    const occs = [];
+    for (let dayN = 1; dayN <= nDays; dayN++) {
+      const date = year + "-" + pad(month + 1) + "-" + pad(dayN);
+      const future = date > TODAY();
+      const occ = future ? null : dayOcc(date);
+      if (occ != null) {
+        occs.push(occ);
       }
-      y.push(
-        `<span class="cal-d ${b ? "fut" : occCls(g)} ${j === TODAY() ? "today" : ""}" title="${h}: ${b ? "todavía no pasó" : g == null ? "no trabajás" : g + "% ocupado"}"><b>${h}</b><i>${b || g == null ? "" : g + "%"}</i></span>`,
+      cells.push(
+        `<span class="cal-d ${future ? "fut" : occCls(occ)} ${date === TODAY() ? "today" : ""}" title="${dayN}: ${future ? "todavía no pasó" : occ == null ? "no trabajás" : occ + "% ocupado"}"><b>${dayN}</b><i>${future || occ == null ? "" : occ + "%"}</i></span>`,
       );
     }
-    n = `<div class="wnav"><button class="pk-nav" data-smo="-1" aria-label="Mes anterior">‹</button><div><b style="text-transform:capitalize">${MESES[d]} ${c}</b><span>Promedio: ${k.length ? Math.round(k.reduce((h, j) => h + j, 0) / k.length) + "% ocupado" : "sin datos"}</span></div><button class="pk-nav" data-smo="1" ${i >= SMAX() ? "disabled" : ""} aria-label="Mes siguiente">›</button></div>
-    <div class="cal">${["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((h) => `<span class="cal-h">${h}</span>`).join("")}${y.join("")}</div>`;
+    body = `<div class="wnav"><button class="pk-nav" data-smo="-1" aria-label="Mes anterior">‹</button><div><b style="text-transform:capitalize">${MESES[month]} ${year}</b><span>Promedio: ${occs.length ? Math.round(occs.reduce((sum, occ) => sum + occ, 0) / occs.length) + "% ocupado" : "sin datos"}</span></div><button class="pk-nav" data-smo="1" ${monthOff >= SMAX() ? "disabled" : ""} aria-label="Mes siguiente">›</button></div>
+    <div class="cal">${["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((label) => `<span class="cal-h">${label}</span>`).join("")}${cells.join("")}</div>`;
   } else {
-    const i = S.syr || NOW().getFullYear();
-    const l = NOW().getFullYear();
-    const c = NOW().getMonth();
-    const d = Array.from(
+    const year = S.syr || NOW().getFullYear();
+    const nowYear = NOW().getFullYear();
+    const nowMonth = NOW().getMonth();
+    const months = Array.from(
       {
         length: 12,
       },
-      (p, w) => {
-        if (i > l || (i === l && w > c)) {
+      (slot, month) => {
+        if (year > nowYear || (year === nowYear && month > nowMonth)) {
           return null;
         }
-        const y = new Date(i, w + 1, 0).getDate();
-        const k = [];
-        for (let h = 1; h <= y; h += 2) {
-          const j = i + "-" + pad(w + 1) + "-" + pad(h);
-          if (j > TODAY()) {
+        const nDays = new Date(year, month + 1, 0).getDate();
+        const occs = [];
+        for (let dayN = 1; dayN <= nDays; dayN += 2) {
+          const date = year + "-" + pad(month + 1) + "-" + pad(dayN);
+          if (date > TODAY()) {
             break;
           }
-          const b = dayOcc(j);
-          if (b != null) {
-            k.push(b);
+          const occ = dayOcc(date);
+          if (occ != null) {
+            occs.push(occ);
           }
         }
-        if (k.length) {
-          return Math.round(k.reduce((h, j) => h + j, 0) / k.length);
+        if (occs.length) {
+          return Math.round(occs.reduce((sum, occ) => sum + occ, 0) / occs.length);
         } else {
           return null;
         }
       },
     );
-    n = `<div class="yearsel">${YEARS()
-      .map((p) => `<button data-syr="${p}" aria-pressed="${i === p}">${p}</button>`)
+    body = `<div class="yearsel">${YEARS()
+      .map((option) => `<button data-syr="${option}" aria-pressed="${year === option}">${option}</button>`)
       .join("")}</div>
-    <div class="bars ybars occb">${d.map((p, w) => `<div class="bar-c" title="${MESES[w]}: ${p == null ? "sin datos" : p + "% ocupado"}"><em>${p == null ? "" : p + "%"}</em><i class="${occCls(p)}" style="height:${p || 0}%"></i><span>${MESES[w].slice(0, 3)}</span></div>`).join("")}</div>
+    <div class="bars ybars occb">${months.map((occ, month) => `<div class="bar-c" title="${MESES[month]}: ${occ == null ? "sin datos" : occ + "% ocupado"}"><em>${occ == null ? "" : occ + "%"}</em><i class="${occCls(occ)}" style="height:${occ || 0}%"></i><span>${MESES[month].slice(0, 3)}</span></div>`).join("")}</div>
     <p class="note" style="margin-top:6px">Ocupación promedio de cada mes, en tus horas de trabajo.</p>`;
   }
-  const o = quietWindows()
-    .filter((i) => i.sug)
-    .sort((i, l) => i.v - l.v);
-  return `${t}<div class="panel"><p class="lbl">¿Cuándo tenés más gente?</p>${n}${s}</div>
+  const quiet = quietWindows()
+    .filter((win) => win.sug)
+    .sort((one, other) => one.v - other.v);
+  return `${tabs}<div class="panel"><p class="lbl">¿Cuándo tenés más gente?</p>${body}${legend}</div>
   ${
-    o.length
+    quiet.length
       ? `<div class="panel"><p class="lbl">Tus horarios más flojos</p><p style="margin:0 0 10px;font-size:14px;text-align:left">Según las últimas 4 semanas. Llenalos con un happy hour o avisando a tus seguidores.</p>
-   <ul class="ag">${o.map((i) => `<li><span class="ag-t">${i.h}–${i.e} h</span><div><b>${DNAME[i.dow]}</b><span>${i.v}% ocupado</span></div><span class="chip ${i.v < 35 ? "ok" : "gray"}">${i.v < 35 ? "Libre" : "Medio"}</span></li>`).join("")}</ul>
+   <ul class="ag">${quiet.map((win) => `<li><span class="ag-t">${win.h}–${win.e} h</span><div><b>${DNAME[win.dow]}</b><span>${win.v}% ocupado</span></div><span class="chip ${win.v < 35 ? "ok" : "gray"}">${win.v < 35 ? "Libre" : "Medio"}</span></li>`).join("")}</ul>
    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn btn-ghost" data-btab="horarios">Armar happy hour</button><button class="btn btn-ghost" data-btab="comunidad">Avisar a seguidores</button></div></div>`
       : ""
   }`;
 }
+// las 6 franjas más tranquilas (para sugerir el happy hour)
 export function lowWindows() {
   return quietWindows()
-    .sort((a, t) => a.v - t.v)
+    .sort((one, other) => one.v - other.v)
     .slice(0, 6);
 }

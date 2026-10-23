@@ -1,5 +1,7 @@
 import { pctTxt } from "../../lib/dinero.js";
 
+// términos y condiciones en versión resumida (la pantalla misma dice “Resumen para la demo”); el porcentaje de
+// comisión es el vigente
 export function vTerminos() {
   return `<div class="narrow stack" style="margin-top:20px"><div class="panel">
    <h1 class="h1">Términos y condiciones</h1><p class="lead">Resumen para la demo</p>

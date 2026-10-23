@@ -12,35 +12,35 @@ import { toast } from "../ui/toast.js";
 import { loadList } from "../views/cliente/home.js";
 import { comm } from "../views/prestador/comunidad.js";
 
-registerClick("inboxAll", (e, x, v) => {
+registerClick("inboxAll", (ev, el, act) => {
   S.inboxAll = true;
   render();
   return;
 });
-registerClick("ptab", (e, x, v) => {
-  S.ptab = x.dataset.t;
+registerClick("ptab", (ev, el, act) => {
+  S.ptab = el.dataset.t;
   S.rateFor = null;
   render();
   return;
 });
-registerClick("story", (e, x, v) => {
-  const r = S.view === "perfil" ? S.pid : ME();
+registerClick("story", (ev, el, act) => {
+  const pid = S.view === "perfil" ? S.pid : ME();
   S.story = {
-    pid: r,
-    i: +x.dataset.i || 0,
+    pid: pid,
+    i: +el.dataset.i || 0,
   };
   render();
   return;
 });
-registerClick("storyClose", (e, x, v) => {
+registerClick("storyClose", (ev, el, act) => {
   S.story = null;
   clearTimeout(store.STORY_T);
   render();
   return;
 });
-registerClick("storyNext", (e, x, v) => {
-  const r = comm(S.story.pid).media;
-  if (S.story.i < r.length - 1) {
+registerClick("storyNext", (ev, el, act) => {
+  const media = comm(S.story.pid).media;
+  if (S.story.i < media.length - 1) {
     S.story.i++;
   } else {
     S.story = null;
@@ -48,13 +48,13 @@ registerClick("storyNext", (e, x, v) => {
   render();
   return;
 });
-registerClick("storyPrev", (e, x, v) => {
+registerClick("storyPrev", (ev, el, act) => {
   S.story.i = Math.max(0, S.story.i - 1);
   render();
   return;
 });
-registerClick("storyBook", (e, x, v) => {
-  const r = S.story.pid;
+registerClick("storyBook", (ev, el, act) => {
+  const pid = S.story.pid;
   S.story = null;
   clearTimeout(store.STORY_T);
   S.ptab = "svc";
@@ -62,50 +62,51 @@ registerClick("storyBook", (e, x, v) => {
     render();
     return;
   }
-  go("perfil", r);
+  go("perfil", pid);
   return;
 });
-registerClick("verTodos", (e, x, v) => {
+registerClick("verTodos", (ev, el, act) => {
   S.cat = "todos";
   S.q = "";
   render();
   return;
 });
-registerClick("rateOpen", (e, x, v) => {
-  S.rateFor = +x.dataset.id;
+registerClick("rateOpen", (ev, el, act) => {
+  S.rateFor = +el.dataset.id;
   S.rateN = 0;
   render();
   return;
 });
-registerClick("sendReview", (e, x, v) => {
-  const r = store.BOOK.find((u) => u.id === +x.dataset.id);
-  const m = (($("#rateTxt") || {}).value || "").trim().slice(0, 600);
-  if (!r || !S.rateN) {
+// reseña de un turno hecho; en vivo, el perfil se vuelve a pedir completo para que aparezca
+registerClick("sendReview", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === +el.dataset.id);
+  const body = (($("#rateTxt") || {}).value || "").trim().slice(0, 600);
+  if (!booking || !S.rateN) {
     return;
   }
-  const f = S.rateN;
-  r.reviewed = true;
+  const stars = S.rateN;
+  booking.reviewed = true;
   S.rateFor = null;
   S.rateN = 0;
   if (LIVE) {
     api.m
-      .review(r, f, m)
+      .review(booking, stars, body)
       .then(() => {
-        const u = pr(r.pid);
-        if (u) {
-          u.full = 0;
+        const prov = pr(booking.pid);
+        if (prov) {
+          prov.full = 0;
         }
         toast("¡Gracias! Tu reseña ya está publicada.");
       })
       .catch(() => {
-        r.reviewed = false;
+        booking.reviewed = false;
         render();
       });
   } else {
-    comm(r.pid).reviews.unshift({
+    comm(booking.pid).reviews.unshift({
       n: uname() || "Cliente",
-      s: f,
-      t: m,
+      s: stars,
+      t: body,
       d: "hoy",
       reply: "",
     });
@@ -114,48 +115,49 @@ registerClick("sendReview", (e, x, v) => {
   render();
   return;
 });
-registerClick("moreList", (e, x, v) => {
+registerClick("moreList", (ev, el, act) => {
   loadList(true);
   render();
   return;
 });
-registerClick("reloadList", (e, x, v) => {
+registerClick("reloadList", (ev, el, act) => {
   S.list = null;
   render();
   return;
 });
-registerClick("refreshMine", (e, x, v) => {
+registerClick("refreshMine", (ev, el, act) => {
   api
     .myBookings()
     .then(render)
-    .catch((r) => toast(errMsg(r)));
+    .catch((err) => toast(errMsg(err)));
   return;
 });
-registerClick("verTurno", (e, x, v) => {
-  S.turnoId = +x.dataset.id;
+registerClick("verTurno", (ev, el, act) => {
+  S.turnoId = +el.dataset.id;
   S.justBooked = false;
   go("turnoOk");
 });
-registerClick("goLocal", (e, x, v) => {
+registerClick("goLocal", (ev, el, act) => {
   go("home");
 });
-registerInput("csearch", (e) => {
-  const a = e.target.value.trim().toLowerCase();
-  let t = 0;
-  document.querySelectorAll(".clist li").forEach((n) => {
-    const o = !a || n.dataset.name.includes(a);
-    n.hidden = !o;
-    if (o) {
-      t++;
+// filtra la lista de clientes del panel mientras se escribe, sin volver a dibujar
+registerInput("csearch", (ev) => {
+  const query = ev.target.value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll(".clist li").forEach((row) => {
+    const match = !query || row.dataset.name.includes(query);
+    row.hidden = !match;
+    if (match) {
+      shown++;
     }
   });
-  const s = $("#cnone");
-  if (s) {
-    s.hidden = t > 0;
+  const none = $("#cnone");
+  if (none) {
+    none.hidden = shown > 0;
   }
   return;
 });
-registerSubmit("fSearch", (e) => {
+registerSubmit("fSearch", (ev) => {
   S.q = ($("#q").value || "").trim().slice(0, 60);
   S.list = null;
   render();

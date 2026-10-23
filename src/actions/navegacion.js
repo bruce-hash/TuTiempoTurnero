@@ -8,7 +8,8 @@ import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { comm } from "../views/prestador/comunidad.js";
 
-registerClick("recover", (e, x, v) => {
+// “Volver al inicio” desde la pantalla de error
+registerClick("recover", (ev, el, act) => {
   S.view = "home";
   S.role = S.barberAuth && S.role === "barbero" ? "barbero" : "cliente";
   S.preview = false;
@@ -19,14 +20,14 @@ registerClick("recover", (e, x, v) => {
   window.scrollTo(0, 0);
   return;
 });
-registerClick("salirAdmin", (e, x, v) => {
+registerClick("salirAdmin", (ev, el, act) => {
   S.role = "cliente";
   S.view = "home";
   render();
   window.scrollTo(0, 0);
   return;
 });
-registerClick("preview", (e, x, v) => {
+registerClick("preview", (ev, el, act) => {
   S.preview = true;
   S.pid = ME();
   S.pctx = null;
@@ -36,12 +37,12 @@ registerClick("preview", (e, x, v) => {
   render();
   window.scrollTo(0, 0);
 });
-registerClick("exitPreview", (e, x, v) => {
+registerClick("exitPreview", (ev, el, act) => {
   S.preview = false;
   render();
   window.scrollTo(0, 0);
 });
-registerClick("verPublicoLocal", (e, x, v) => {
+registerClick("verPublicoLocal", (ev, el, act) => {
   S.preview = true;
   S.pid = ME();
   S.day = null;
@@ -49,20 +50,20 @@ registerClick("verPublicoLocal", (e, x, v) => {
   render();
   window.scrollTo(0, 0);
 });
-registerClick("volver", (e, x, v) => {
+registerClick("volver", (ev, el, act) => {
   go(S.prev || "home");
 });
-registerClick("toast", (e, x, v) => {
-  toast(x.dataset.msg);
+registerClick("toast", (ev, el, act) => {
+  toast(el.dataset.msg);
 });
-registerClick("salirBarbero", (e, x, v) => {
+registerClick("salirBarbero", (ev, el, act) => {
   if (LIVE) {
     sb.auth.signOut();
     S.user = null;
-    store.BOOK = store.BOOK.filter((m) => m.pid != S.me);
-    const r = pr(S.me);
-    if (r) {
-      r.full = 0;
+    store.BOOK = store.BOOK.filter((booking) => booking.pid != S.me);
+    const prov = pr(S.me);
+    if (prov) {
+      prov.full = 0;
     }
   }
   S.barberAuth = false;
@@ -74,36 +75,36 @@ registerClick("salirBarbero", (e, x, v) => {
   render();
   window.scrollTo(0, 0);
 });
-registerClick("seguir", (e, x, v) => {
-  const r = S.pid || ME();
+registerClick("seguir", (ev, el, act) => {
+  const pid = S.pid || ME();
   if (!S.user && S.role !== "barbero") {
     S.after = "perfil";
     go("login");
     return;
   }
-  const m = !isFol(r);
+  const on = !isFol(pid);
   if (LIVE) {
-    FOLLOW[r] = m;
+    FOLLOW[pid] = on;
   } else {
-    S.followingBy[r] = m;
+    S.followingBy[pid] = on;
   }
-  comm(r).followers += m ? 1 : -1;
-  api.m.follow(r, m);
-  toast(m ? "Ahora seguís a " + pr(r).name + ". Te avisamos cuando tenga lugar." : "Dejaste de seguirlo");
+  comm(pid).followers += on ? 1 : -1;
+  api.m.follow(pid, on);
+  toast(on ? "Ahora seguís a " + pr(pid).name + ". Te avisamos cuando tenga lugar." : "Dejaste de seguirlo");
   render();
 });
-registerClick("copiarLink", (e, x, v) => {
-  const r = "https://tutiempo.com.ar/" + (pr(ME()).slug || "p/" + ME());
+registerClick("copiarLink", (ev, el, act) => {
+  const url = "https://tutiempo.com.ar/" + (pr(ME()).slug || "p/" + ME());
   try {
-    navigator.clipboard.writeText(r).then(
+    navigator.clipboard.writeText(url).then(
       () => toast("Link copiado"),
-      () => toast(r),
+      () => toast(url),
     );
-  } catch (m) {
-    toast(r);
+  } catch (err) {
+    toast(url);
   }
 });
-registerClick("verPublico", (e, x, v) => {
+registerClick("verPublico", (ev, el, act) => {
   S.preview = true;
   S.pid = ME();
   render();

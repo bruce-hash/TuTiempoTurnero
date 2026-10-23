@@ -13,7 +13,7 @@ import { store } from "../store.js";
 import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
-registerClick("toAdmin", (e, x, v) => {
+registerClick("toAdmin", (ev, el, act) => {
   S.role = "admin";
   S.adm = null;
   S.admFin = null;
@@ -21,11 +21,11 @@ registerClick("toAdmin", (e, x, v) => {
   window.scrollTo(0, 0);
   return;
 });
-registerClick("changePass", (e, x, v) => {
+registerClick("changePass", (ev, el, act) => {
   S.npMode = "change";
   go("newpass");
 });
-registerClick("toPanel", (e, x, v) => {
+registerClick("toPanel", (ev, el, act) => {
   if (!S.barberAuth) {
     return;
   }
@@ -34,30 +34,32 @@ registerClick("toPanel", (e, x, v) => {
   render();
   window.scrollTo(0, 0);
 });
-registerClick("delAsk", (e, x, v) => {
-  S.delAsk = x.dataset.who;
+registerClick("delAsk", (ev, el, act) => {
+  S.delAsk = el.dataset.who;
   render();
-  const r = $(".delpanel");
-  if (r && r.scrollIntoView) {
-    r.scrollIntoView({
+  const box = $(".delpanel");
+  if (box && box.scrollIntoView) {
+    box.scrollIntoView({
       block: "center",
     });
   }
 });
-registerClick("delNo", (e, x, v) => {
+registerClick("delNo", (ev, el, act) => {
   S.delAsk = null;
   render();
 });
-registerClick("delYes", (e, x, v) => {
+// eliminar cuenta o perfil. En vivo lo hace la base; en la demo: si es el cliente, sus turnos se cancelan sin
+// devolución; si es el prestador, sus turnos futuros se cancelan devolviendo seña y comisión
+registerClick("delYes", (ev, el, act) => {
   if (!$("#delOk") || !$("#delOk").checked) {
     return;
   }
   S.delAsk = null;
   if (LIVE) {
-    (x.dataset.who === "cli" ? api.m.deleteAccount() : api.m.deleteProvider())
+    (el.dataset.who === "cli" ? api.m.deleteAccount() : api.m.deleteProvider())
       .then(() => sb.auth.signOut())
       .then(() => {
-        toast(x.dataset.who === "cli" ? "Tu cuenta fue eliminada." : "Tu perfil fue eliminado.");
+        toast(el.dataset.who === "cli" ? "Tu cuenta fue eliminada." : "Tu perfil fue eliminado.");
         S.user = null;
         S.barberAuth = false;
         S.role = "cliente";
@@ -69,16 +71,16 @@ registerClick("delYes", (e, x, v) => {
       .catch(() => {});
     return;
   }
-  if (x.dataset.who === "cli") {
-    store.BOOK.forEach((r) => {
-      if (r.mine && r.status === "confirmed") {
-        r.status = "cancelled";
-        r.refund = 0;
-        freed(r);
+  if (el.dataset.who === "cli") {
+    store.BOOK.forEach((booking) => {
+      if (booking.mine && booking.status === "confirmed") {
+        booking.status = "cancelled";
+        booking.refund = 0;
+        freed(booking);
       }
-      if (r.mine) {
-        r.mine = false;
-        r.cliente = "Cliente eliminado";
+      if (booking.mine) {
+        booking.mine = false;
+        booking.cliente = "Cliente eliminado";
       }
     });
     S.user = null;
@@ -92,24 +94,24 @@ registerClick("delYes", (e, x, v) => {
     toast("Tu cuenta fue eliminada. Gracias por usar TuTiempo.");
     go("home");
   } else {
-    const r = pr(ME());
-    r.deleted = true;
+    const prov = pr(ME());
+    prov.deleted = true;
     S.list = null;
     S.counts = null;
-    let m = 0;
-    store.BOOK.forEach((f) => {
+    let cancelled = 0;
+    store.BOOK.forEach((booking) => {
       if (
-        f.pid == ME() &&
-        f.status === "confirmed" &&
-        f.type !== "block" &&
-        f.date + f.time >= TODAY() + nowHM()
+        booking.pid == ME() &&
+        booking.status === "confirmed" &&
+        booking.type !== "block" &&
+        booking.date + booking.time >= TODAY() + nowHM()
       ) {
-        f.status = "cancelled";
-        f.refund = (f.paid || 0) + (f.fee || 0);
-        if (f.mine) {
-          refundPay(f, f.svc + " en " + pr(f.pid).name);
+        booking.status = "cancelled";
+        booking.refund = (booking.paid || 0) + (booking.fee || 0);
+        if (booking.mine) {
+          refundPay(booking, booking.svc + " en " + pr(booking.pid).name);
         }
-        m++;
+        cancelled++;
       }
     });
     S.barberAuth = false;
@@ -117,13 +119,13 @@ registerClick("delYes", (e, x, v) => {
     S.view = "home";
     S.preview = false;
     toast(
-      `Tu perfil fue eliminado.${m ? ` Cancelamos ${m} turno${m > 1 ? "s" : ""} y les devolvemos lo pagado a los clientes.` : ""}`,
+      `Tu perfil fue eliminado.${cancelled ? ` Cancelamos ${cancelled} turno${cancelled > 1 ? "s" : ""} y les devolvemos lo pagado a los clientes.` : ""}`,
     );
     render();
     window.scrollTo(0, 0);
   }
 });
-registerClick("logout", (e, x, v) => {
+registerClick("logout", (ev, el, act) => {
   if (LIVE) {
     sb.auth.signOut();
   } else {
@@ -131,29 +133,29 @@ registerClick("logout", (e, x, v) => {
   }
   S.user = null;
   S.followingBy = {};
-  store.BOOK = store.BOOK.filter((r) => !r.mine || !LIVE);
+  store.BOOK = store.BOOK.filter((booking) => !booking.mine || !LIVE);
   S.wallet = LIVE ? 0 : S.wallet;
   toast("Cerraste sesión");
   go("home");
 });
-registerChange("delOk", (e) => {
-  const n = $("#delBtn");
-  if (n) {
-    n.disabled = !e.target.checked;
+registerChange("delOk", (ev) => {
+  const btn = $("#delBtn");
+  if (btn) {
+    btn.disabled = !ev.target.checked;
   }
   return;
 });
-registerChange("upAv", (e) => {
-  onPhoto(e.target, "me");
+registerChange("upAv", (ev) => {
+  onPhoto(ev.target, "me");
   return;
 });
-registerSubmit("fCuenta", (e) => {
-  const a = $("#un").value.trim();
-  if (!a) {
+registerSubmit("fCuenta", (ev) => {
+  const name = $("#un").value.trim();
+  if (!name) {
     $("#uerr").textContent = "El nombre no puede quedar vacío.";
     return;
   }
-  S.user.name = a.slice(0, 120);
+  S.user.name = name.slice(0, 120);
   S.form.tel = $("#ut").value.trim().slice(0, 40);
   api.m.saveMe(S.user.name, S.form.tel);
   toast("Datos guardados");

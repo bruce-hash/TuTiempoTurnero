@@ -8,97 +8,98 @@ import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
-registerClick("stk", (e, x, v) => {
-  const r = store.PRODS[+x.dataset.i];
-  r.stock = Math.max(0, r.stock + +x.dataset.d);
-  api.m.setStock(r);
+registerClick("stk", (ev, el, act) => {
+  const prod = store.PRODS[+el.dataset.i];
+  prod.stock = Math.max(0, prod.stock + +el.dataset.d);
+  api.m.setStock(prod);
   render();
 });
-registerClick("buyOpen", (e, x, v) => {
-  S.buyI = +x.dataset.i;
+registerClick("buyOpen", (ev, el, act) => {
+  S.buyI = +el.dataset.i;
   S.prodOpen = false;
   render();
-  const r = $("#bq");
-  if (r) {
-    r.focus();
+  const input = $("#bq");
+  if (input) {
+    input.focus();
   }
 });
-registerClick("buyClose", (e, x, v) => {
+registerClick("buyClose", (ev, el, act) => {
   S.buyI = null;
   render();
 });
-registerClick("prodOpen", (e, x, v) => {
+registerClick("prodOpen", (ev, el, act) => {
   S.prodOpen = true;
   S.buyI = null;
   render();
-  const r = $("#pnn");
-  if (r) {
-    r.focus();
+  const input = $("#pnn");
+  if (input) {
+    input.focus();
   }
 });
-registerClick("prodClose", (e, x, v) => {
+registerClick("prodClose", (ev, el, act) => {
   S.prodOpen = false;
   render();
 });
-registerSubmit("fBuy", (e) => {
-  const a = store.PRODS[S.buyI];
-  const t = parseInt(($("#bq").value || "").replace(/\D/g, "")) || 0;
-  const s = parseInt(($("#bc").value || "").replace(/\D/g, "")) || 0;
-  if (t <= 0) {
+// compra de un producto: suma al stock y se carga sola como gasto del mes
+registerSubmit("fBuy", (ev) => {
+  const prod = store.PRODS[S.buyI];
+  const qty = parseInt(($("#bq").value || "").replace(/\D/g, "")) || 0;
+  const cost = parseInt(($("#bc").value || "").replace(/\D/g, "")) || 0;
+  if (qty <= 0) {
     $("#berr2").textContent = "Ingresá cuántas unidades compraste.";
     return;
   }
-  if (s <= 0) {
+  if (cost <= 0) {
     $("#berr2").textContent = "Ingresá cuánto pagaste: se carga solo en los gastos del mes.";
     return;
   }
-  a.stock += t;
-  api.m.setStock(a);
+  prod.stock += qty;
+  api.m.setStock(prod);
   {
-    const n = {
+    const expense = {
       id: store.GID++,
-      c: `Compra: ${a.n} × ${t}`.slice(0, 80),
-      m: s,
+      c: `Compra: ${prod.n} × ${qty}`.slice(0, 80),
+      m: cost,
       cat: "Productos",
       d: TODAY(),
     };
-    store.GASTOS.push(n);
-    api.m.addExpense(n);
+    store.GASTOS.push(expense);
+    api.m.addExpense(expense);
   }
   S.buyI = null;
-  toast(`Sumaste ${t} u. de ${a.n}. Stock: ${a.stock}.${s ? " Gasto cargado: " + money(s) : ""}`);
+  toast(`Sumaste ${qty} u. de ${prod.n}. Stock: ${prod.stock}.${cost ? " Gasto cargado: " + money(cost) : ""}`);
   render();
   return;
 });
-registerSubmit("fProd", (e) => {
-  const a = $("#pnn").value.trim();
-  const t = parseInt(($("#pnp").value || "").replace(/\D/g, "")) || 0;
-  const s = parseInt(($("#pns").value || "0").replace(/\D/g, "")) || 0;
-  const n = parseInt(($("#pnm").value || "0").replace(/\D/g, "")) || 0;
-  if (!a) {
+registerSubmit("fProd", (ev) => {
+  const name = $("#pnn").value.trim();
+  const price = parseInt(($("#pnp").value || "").replace(/\D/g, "")) || 0;
+  const stock = parseInt(($("#pns").value || "0").replace(/\D/g, "")) || 0;
+  const min = parseInt(($("#pnm").value || "0").replace(/\D/g, "")) || 0;
+  if (!name) {
     $("#perr2").textContent = "Escribí el nombre del producto.";
     return;
   }
-  if (store.PRODS.some((o) => o.n.toLowerCase() === a.toLowerCase())) {
+  if (store.PRODS.some((item) => item.n.toLowerCase() === name.toLowerCase())) {
     $("#perr2").textContent = "Ya tenés un producto con ese nombre.";
     return;
   }
-  if (t <= 0) {
+  if (price <= 0) {
     $("#perr2").textContent = "Ingresá el precio de venta.";
     return;
   }
   {
-    const o = {
-      n: a.slice(0, 80),
-      p: t,
-      stock: s,
-      min: n,
+    const prod = {
+      n: name.slice(0, 80),
+      p: price,
+      stock: stock,
+      min: min,
     };
-    store.PRODS.push(o);
-    api.m.addProduct(o);
+    store.PRODS.push(prod);
+    api.m.addProduct(prod);
   }
   S.prodOpen = false;
-  toast(`Agregaste ${a}. Ya lo podés vender desde la caja.`);
+  toast(`Agregaste ${name}. Ya lo podés vender desde la caja.`);
   render();
   return;
 });

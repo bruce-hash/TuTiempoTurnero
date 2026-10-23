@@ -10,73 +10,77 @@ import { avatarUrl, mediaUrl } from "../../ui/fotos.js";
 export const liveLectura = {
   live: true,
   async counts() {
-    const e = await call(
+    const rows = await call(
       sb.rpc("category_counts", {
         p_city: CITY,
       }),
     );
-    const a = {
+    const counts = {
       todos: 0,
     };
-    (e || []).forEach((t) => {
-      a[t.category_id] = Number(t.providers);
+    (rows || []).forEach((row) => {
+      counts[row.category_id] = Number(row.providers);
     });
-    return a;
+    return counts;
   },
-  async listProviders({ cat: e, q: a, after: t }) {
-    const s = await call(
+  // Una página del listado (por cursor: after = [sort_key, id] del último). Guarda cada prestador en P y, por rubro, el
+  // precio mínimo, el happy hour y el próximo horario libre para su tarjeta.
+  async listProviders({ cat: cat, q: query, after: after }) {
+    const rows = await call(
       sb.rpc("list_providers", {
         p_city: CITY,
-        p_category: e === "todos" ? null : e,
-        p_q: a || null,
-        p_after_key: t ? t[0] : null,
-        p_after_id: t ? t[1] : null,
+        p_category: cat === "todos" ? null : cat,
+        p_q: query || null,
+        p_after_key: after ? after[0] : null,
+        p_after_id: after ? after[1] : null,
         p_limit: PAGE,
       }),
     );
-    const n = (s || []).map((i) => {
-      const l = upsertP({
-        id: i.id,
-        slug: i.slug,
-        name: i.name,
-        addr: i.address || "",
-        hue: i.hue,
-        photo: avatarUrl(i.photo_path),
-        cats: i.categories || ["n"],
-        rating: Number(i.rating_avg),
-        nrev: i.rating_count,
-        activity: +i.activity || 0,
+    const items = (rows || []).map((row) => {
+      const prov = upsertP({
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        addr: row.address || "",
+        hue: row.hue,
+        photo: avatarUrl(row.photo_path),
+        cats: row.categories || ["n"],
+        rating: Number(row.rating_avg),
+        nrev: row.rating_count,
+        activity: +row.activity || 0,
       });
-      l.svcs ||= [];
-      l.card = Object.assign(l.card || {}, {
-        [e]: {
-          min: i.min_price,
-          minName: i.min_service,
-          happy: i.happy_pct,
-          next: i.next_free ? isoToLocal(i.next_free) : null,
+      prov.svcs ||= [];
+      prov.card = Object.assign(prov.card || {}, {
+        [cat]: {
+          min: row.min_price,
+          minName: row.min_service,
+          happy: row.happy_pct,
+          next: row.next_free ? isoToLocal(row.next_free) : null,
         },
       });
-      return l;
+      return prov;
     });
-    const o = s && s[s.length - 1];
+    const last = rows && rows[rows.length - 1];
     return {
-      items: n,
-      next: s && s.length === PAGE && o ? [o.sort_key, o.id] : null,
+      items: items,
+      next: rows && rows.length === PAGE && last ? [last.sort_key, last.id] : null,
     };
   },
-  async loadProvider(e, a) {
-    const t = pr(e);
-    if (t && t.full && !a && Date.now() - t.full < 6e4) {
-      return t;
+  // Ficha completa del prestador (se reusa si se cargó hace menos de un minuto, salvo force): servicios, agenda,
+  // reseñas, trabajos y los horarios ocupados de los próximos días (sin datos de clientes) para pintar el turnero.
+  async loadProvider(pid, force) {
+    const cached = pr(pid);
+    if (cached && cached.full && !force && Date.now() - cached.full < 6e4) {
+      return cached;
     }
-    const s = await call(
+    const data = await call(
       sb.rpc("get_provider", {
-        pid: +e,
+        pid: +pid,
       }),
     );
-    if (!s) {
+    if (!data) {
       upsertP({
-        id: +e,
+        id: +pid,
         deleted: true,
         cats: ["n"],
         svcs: [],
@@ -85,75 +89,75 @@ export const liveLectura = {
       });
       return null;
     }
-    const n = upsertP({
-      id: s.id,
-      slug: s.slug,
-      name: s.name,
-      bio: s.bio || "",
-      addr: s.address || "",
-      ig: s.instagram || "",
-      hue: s.hue,
-      photo: avatarUrl(s.photo_path),
-      cats: s.categories.length ? s.categories : ["n"],
-      svcs: svcsFromDb(s.services),
-      rating: Number(s.rating_avg),
-      nrev: s.rating_count,
-      verified: !!s.dni_verified,
+    const prov = upsertP({
+      id: data.id,
+      slug: data.slug,
+      name: data.name,
+      bio: data.bio || "",
+      addr: data.address || "",
+      ig: data.instagram || "",
+      hue: data.hue,
+      photo: avatarUrl(data.photo_path),
+      cats: data.categories.length ? data.categories : ["n"],
+      svcs: svcsFromDb(data.services),
+      rating: Number(data.rating_avg),
+      nrev: data.rating_count,
+      verified: !!data.dni_verified,
       full: Date.now(),
       deleted: false,
     });
-    store.CFGS[n.id] = cfgFromDb(s.settings, s.hours);
-    (s.services || []).forEach((l) => {
-      if (l.stamp_goal) {
-        store.CFGS[n.id].stamps.goals[l.id] = l.stamp_goal;
+    store.CFGS[prov.id] = cfgFromDb(data.settings, data.hours);
+    (data.services || []).forEach((svc) => {
+      if (svc.stamp_goal) {
+        store.CFGS[prov.id].stamps.goals[svc.id] = svc.stamp_goal;
       }
     });
-    store.COMMBY[n.id] = {
-      followers: s.followers,
-      reviews: (s.reviews || []).map((l) => ({
-        id: l.id,
-        n: l.author,
-        s: l.stars,
-        t: l.body || "",
-        d: relDate(l.created_at),
-        reply: l.reply || "",
+    store.COMMBY[prov.id] = {
+      followers: data.followers,
+      reviews: (data.reviews || []).map((review) => ({
+        id: review.id,
+        n: review.author,
+        s: review.stars,
+        t: review.body || "",
+        d: relDate(review.created_at),
+        reply: review.reply || "",
       })),
-      media: (s.media || []).map((l) => ({
-        id: l.id,
-        label: l.label || "",
-        url: mediaUrl(l.storage_path),
-        video: l.kind === "video",
-        hue: n.hue,
+      media: (data.media || []).map((item) => ({
+        id: item.id,
+        label: item.label || "",
+        url: mediaUrl(item.storage_path),
+        video: item.kind === "video",
+        hue: prov.hue,
       })),
     };
-    FOLLOW[n.id] = !!s.following;
+    FOLLOW[prov.id] = !!data.following;
     S.myStampsBy = S.myStampsBy || {};
-    S.myStampsBy[n.id] = s.my_stamps && typeof s.my_stamps == "object" ? s.my_stamps : {};
-    const o = store.CFGS[n.id];
-    const i = await call(
+    S.myStampsBy[prov.id] = data.my_stamps && typeof data.my_stamps == "object" ? data.my_stamps : {};
+    const conf = store.CFGS[prov.id];
+    const busy = await call(
       sb.rpc("provider_busy", {
-        pid: n.id,
+        pid: prov.id,
         p_from: TODAY(),
-        p_to: dkey(addDays(Math.min(91, o.ahead + 84))),
+        p_to: dkey(addDays(Math.min(91, conf.ahead + 84))),
       }),
     );
-    store.BOOK = store.BOOK.filter((l) => l.pid != n.id || !l.busy).concat(
-      (i || []).map((l, c) =>
+    store.BOOK = store.BOOK.filter((booking) => booking.pid != prov.id || !booking.busy).concat(
+      (busy || []).map((row, idx) =>
         Object.assign(
           {
-            id: "busy" + n.id + "_" + c,
-            pid: n.id,
-            dur: minsBetween(l.starts_at, l.ends_at),
+            id: "busy" + prov.id + "_" + idx,
+            pid: prov.id,
+            dur: minsBetween(row.starts_at, row.ends_at),
             status: "confirmed",
             type: "busy",
             busy: true,
             cliente: "",
-            dayBlock: !!l.day_block,
+            dayBlock: !!row.day_block,
           },
-          isoToLocal(l.starts_at),
+          isoToLocal(row.starts_at),
         ),
       ),
     );
-    return n;
+    return prov;
   },
 };

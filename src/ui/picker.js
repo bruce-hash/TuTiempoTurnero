@@ -6,105 +6,108 @@ import { cfg, cli, freeCount, nextFree, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 
+// etiqueta del cliente para el prestador según sus faltas (n) y visitas (v)
 export function relBadge(name) {
-  const a = cli(name);
-  if (a.n >= 2) {
-    return `<span class="rb bad">⚠ ${a.n} faltas</span>`;
-  } else if (a.n === 1) {
+  const stats = cli(name);
+  if (stats.n >= 2) {
+    return `<span class="rb bad">⚠ ${stats.n} faltas</span>`;
+  } else if (stats.n === 1) {
     return '<span class="rb warn">1 falta</span>';
-  } else if (a.v >= 5) {
-    return `<span class="rb ok">★ Fiel · ${a.v}</span>`;
-  } else if (a.v === 0) {
+  } else if (stats.v >= 5) {
+    return `<span class="rb ok">★ Fiel · ${stats.v}</span>`;
+  } else if (stats.v === 0) {
     return '<span class="rb new">Nuevo</span>';
   } else {
     return "";
   }
 }
-export function vPicker(e) {
-  const a = cfg(e.id);
-  const t = selDur(e);
-  if (!a.on) {
+// selector de día y horario: semanas de 7 días hasta conf.ahead, horarios libres por franja,
+// primer turno libre, happy hour y lista de espera si el día está lleno
+export function vPicker(prov) {
+  const conf = cfg(prov.id);
+  const dur = selDur(prov);
+  if (!conf.on) {
     return '<div class="panel" style="text-align:center"><b>Este profesional todavía no tiene turnos online.</b><p class="note">Podés seguirlo para enterarte cuando los active.</p></div>';
   }
-  const s = [];
-  for (let b = 0; b < a.ahead; b++) {
-    s.push(dkey(addDays(b)));
+  const days = [];
+  for (let offset = 0; offset < conf.ahead; offset++) {
+    days.push(dkey(addDays(offset)));
   }
-  if (!S.day || !s.includes(S.day)) {
-    S.day = s.find((b) => freeCount(e.id, b, t, S.reprog) > 0) || s[0];
-    S.wk = Math.floor(s.indexOf(S.day) / 7);
+  if (!S.day || !days.includes(S.day)) {
+    S.day = days.find((day) => freeCount(prov.id, day, dur, S.reprog) > 0) || days[0];
+    S.wk = Math.floor(days.indexOf(S.day) / 7);
   }
-  const n = Math.ceil(s.length / 7);
-  if (S.wk == null || S.wk >= n) {
-    S.wk = Math.floor(s.indexOf(S.day) / 7);
+  const weeks = Math.ceil(days.length / 7);
+  if (S.wk == null || S.wk >= weeks) {
+    S.wk = Math.floor(days.indexOf(S.day) / 7);
   }
-  const o = s.slice(S.wk * 7, S.wk * 7 + 7);
-  const i = /* @__PURE__ */ new Date(o[0] + "T12:00:00");
-  const l = /* @__PURE__ */ new Date(o[o.length - 1] + "T12:00:00");
-  const c =
-    i.getMonth() === l.getMonth()
-      ? MESES[i.getMonth()] + " " + i.getFullYear()
-      : MESES[i.getMonth()].slice(0, 3) + " – " + MESES[l.getMonth()].slice(0, 3) + " " + l.getFullYear();
-  const d = slotsFor(e.id, S.day, t, S.reprog);
-  const p = d.list.filter((b) => b.free);
-  const w = d.list.length - p.length;
-  if (S.slot && (S.slot.date !== S.day || !p.some((b) => b.time === S.slot.time))) {
+  const weekDays = days.slice(S.wk * 7, S.wk * 7 + 7);
+  const first = /* @__PURE__ */ new Date(weekDays[0] + "T12:00:00");
+  const last = /* @__PURE__ */ new Date(weekDays[weekDays.length - 1] + "T12:00:00");
+  const monthLabel =
+    first.getMonth() === last.getMonth()
+      ? MESES[first.getMonth()] + " " + first.getFullYear()
+      : MESES[first.getMonth()].slice(0, 3) + " – " + MESES[last.getMonth()].slice(0, 3) + " " + last.getFullYear();
+  const daySlots = slotsFor(prov.id, S.day, dur, S.reprog);
+  const free = daySlots.list.filter((slot) => slot.free);
+  const taken = daySlots.list.length - free.length;
+  if (S.slot && (S.slot.date !== S.day || !free.some((slot) => slot.time === S.slot.time))) {
     S.slot = null;
   }
-  const y = nextFree(e.id, t, S.reprog);
-  const k = store.WAIT.some((b) => {
-    var g;
-    return b.pid == e.id && b.date === S.day && b.user === ((g = S.user) == null ? void 0 : g.email);
+  const firstFree = nextFree(prov.id, dur, S.reprog);
+  const onWaitlist = store.WAIT.some((wait) => {
+    var user;
+    return wait.pid == prov.id && wait.date === S.day && wait.user === ((user = S.user) == null ? void 0 : user.email);
   });
-  const h = [
+  const groups = [
     ["Mañana", "☀️", 0, 720],
     ["Tarde", "🌤️", 720, 1080],
     ["Noche", "🌙", 1080, 1440],
   ]
-    .map(([b, g, M, _]) => [
-      b,
-      g,
-      p.filter((D) => {
-        const q = toMin(D.time);
-        return q >= M && q < _;
+    .map(([label, icon, from, to]) => [
+      label,
+      icon,
+      free.filter((slot) => {
+        const min = toMin(slot.time);
+        return min >= from && min < to;
       }),
     ])
-    .filter((b) => b[2].length);
-  const j = p.some((b) => b.disc);
+    .filter((group) => group[2].length);
+  const anyHappy = free.some((slot) => slot.disc);
   return `<section class="picker">
-   <div class="pk-head"><p class="lbl" style="margin:0">2 · Elegí día y horario <span class="hint">· próximos ${a.ahead} días</span></p>
-    ${y ? `<button class="quick" data-quick="${y.date}|${y.time}">⚡ Primer turno: <b>${esc(dayLabel(y.date))} ${y.time}</b>${y.disc ? ` <i>-${y.disc}%</i>` : ""}</button>` : ""}</div>
-   <div class="pk-month"><button class="pk-nav" data-wk="-1" ${S.wk === 0 ? "disabled" : ""} aria-label="Semana anterior">‹</button><b>${c}</b><button class="pk-nav" data-wk="1" ${S.wk >= n - 1 ? "disabled" : ""} aria-label="Semana siguiente">›</button></div>
-   <div class="wk" role="listbox" aria-label="Días">${o
-     .map((b) => {
-       const g = slotsFor(e.id, b, t, S.reprog);
-       const M = g.list.filter((T) => T.free).length;
-       const _ = g.list.length || 1;
-       const D = /* @__PURE__ */ new Date(b + "T12:00:00");
-       const q = g.list.some((T) => T.free && T.disc);
-       return `<button class="wd ${g.closed ? "closed" : M === 0 ? "full" : M / _ < 0.25 ? "low" : ""} ${b === TODAY() ? "today" : ""}" data-day="${b}" aria-selected="${S.day === b}" ${g.closed ? "disabled" : ""}><span>${DOW[D.getDay()]}</span><b>${D.getDate()}</b><i class="av-bar"><i style="width:${g.closed ? 0 : Math.round((M / _) * 100)}%"></i></i><small>${g.closed ? "Cerrado" : M ? M + '<span class="sm-l"> libres</span>' : "Lleno"}</small>${q ? "<em>%</em>" : ""}</button>`;
+   <div class="pk-head"><p class="lbl" style="margin:0">2 · Elegí día y horario <span class="hint">· próximos ${conf.ahead} días</span></p>
+    ${firstFree ? `<button class="quick" data-quick="${firstFree.date}|${firstFree.time}">⚡ Primer turno: <b>${esc(dayLabel(firstFree.date))} ${firstFree.time}</b>${firstFree.disc ? ` <i>-${firstFree.disc}%</i>` : ""}</button>` : ""}</div>
+   <div class="pk-month"><button class="pk-nav" data-wk="-1" ${S.wk === 0 ? "disabled" : ""} aria-label="Semana anterior">‹</button><b>${monthLabel}</b><button class="pk-nav" data-wk="1" ${S.wk >= weeks - 1 ? "disabled" : ""} aria-label="Semana siguiente">›</button></div>
+   <div class="wk" role="listbox" aria-label="Días">${weekDays
+     .map((day) => {
+       const slots = slotsFor(prov.id, day, dur, S.reprog);
+       const freeN = slots.list.filter((slot) => slot.free).length;
+       const total = slots.list.length || 1;
+       const date = /* @__PURE__ */ new Date(day + "T12:00:00");
+       const hasHappy = slots.list.some((slot) => slot.free && slot.disc);
+       return `<button class="wd ${slots.closed ? "closed" : freeN === 0 ? "full" : freeN / total < 0.25 ? "low" : ""} ${day === TODAY() ? "today" : ""}" data-day="${day}" aria-selected="${S.day === day}" ${slots.closed ? "disabled" : ""}><span>${DOW[date.getDay()]}</span><b>${date.getDate()}</b><i class="av-bar"><i style="width:${slots.closed ? 0 : Math.round((freeN / total) * 100)}%"></i></i><small>${slots.closed ? "Cerrado" : freeN ? freeN + '<span class="sm-l"> libres</span>' : "Lleno"}</small>${hasHappy ? "<em>%</em>" : ""}</button>`;
      })
      .join("")}</div>
    <div class="pk-body">
-    <div class="pk-day"><b>${esc(longLabel(S.day))}</b>${!d.closed && p.length ? `<span>${p.length} libres${w ? " · " + w + " ocupados" : ""}</span>` : ""}</div>
+    <div class="pk-day"><b>${esc(longLabel(S.day))}</b>${!daySlots.closed && free.length ? `<span>${free.length} libres${taken ? " · " + taken + " ocupados" : ""}</span>` : ""}</div>
     ${
-      d.closed
-        ? `<p class="note">${esc(d.reason)}</p>`
-        : p.length
-          ? h
+      daySlots.closed
+        ? `<p class="note">${esc(daySlots.reason)}</p>`
+        : free.length
+          ? groups
               .map(
-                ([b, g, M]) =>
-                  `<div class="pk-grp"><p class="pk-gl">${g} ${b} <span>${M.length}</span></p><div class="slots">${M.map((_) => `<button class="slot ${_.disc ? "hh" : ""}" data-slot="${_.time}" aria-pressed="${S.slot && S.slot.time === _.time}"><b>${_.time}</b>${_.disc ? `<i>-${_.disc}%</i>` : ""}</button>`).join("")}</div></div>`,
+                ([label, icon, slots]) =>
+                  `<div class="pk-grp"><p class="pk-gl">${icon} ${label} <span>${slots.length}</span></p><div class="slots">${slots.map((slot) => `<button class="slot ${slot.disc ? "hh" : ""}" data-slot="${slot.time}" aria-pressed="${S.slot && S.slot.time === slot.time}"><b>${slot.time}</b>${slot.disc ? `<i>-${slot.disc}%</i>` : ""}</button>`).join("")}</div></div>`,
               )
               .join("") +
-            (j
-              ? `<p class="hh-leg"><span class="slot hh mini"><i>-${a.happy.pct}%</i></span> Happy hour: ${a.happy.pct}% menos en horarios tranquilos</p>`
+            (anyHappy
+              ? `<p class="hh-leg"><span class="slot hh mini"><i>-${conf.happy.pct}%</i></span> Happy hour: ${conf.happy.pct}% menos en horarios tranquilos</p>`
               : "")
           : `<div class="pk-full"><div style="font-size:30px">😕</div><b>No quedan turnos este día</b><p class="note">Te avisamos al instante si alguien cancela.</p>
-       <button class="btn ${k ? "btn-ghost" : "btn-pri"} btn-block" data-act="waitlist" ${k ? "disabled" : ""}>${k ? "✓ Estás en la lista de espera" : "🔔 Avisame si se libera un turno"}</button>
-       ${y ? `<button class="btn btn-ghost btn-block" style="margin-top:8px" data-quick="${y.date}|${y.time}">Ver el primer turno libre: ${esc(dayLabel(y.date))} ${y.time}</button>` : ""}</div>`
+       <button class="btn ${onWaitlist ? "btn-ghost" : "btn-pri"} btn-block" data-act="waitlist" ${onWaitlist ? "disabled" : ""}>${onWaitlist ? "✓ Estás en la lista de espera" : "🔔 Avisame si se libera un turno"}</button>
+       ${firstFree ? `<button class="btn btn-ghost btn-block" style="margin-top:8px" data-quick="${firstFree.date}|${firstFree.time}">Ver el primer turno libre: ${esc(dayLabel(firstFree.date))} ${firstFree.time}</button>` : ""}</div>`
     }
    </div>
-   <p class="note pk-pol">⏱ ${t} min · ${a.pay === "total" ? "Pagás el total al reservar" : "Seña del " + a.pct + "% al reservar"} + comisión TuTiempo (${pctTxt()}%) con Mercado Pago${a.cash !== false && a.pay !== "total" ? " · el resto en efectivo o Mercado Pago" : ""}</p>
+   <p class="note pk-pol">⏱ ${dur} min · ${conf.pay === "total" ? "Pagás el total al reservar" : "Seña del " + conf.pct + "% al reservar"} + comisión TuTiempo (${pctTxt()}%) con Mercado Pago${conf.cash !== false && conf.pay !== "total" ? " · el resto en efectivo o Mercado Pago" : ""}</p>
   </section>`;
 }

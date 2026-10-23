@@ -17,68 +17,71 @@ import { MSG_DEF } from "./mensajes.js";
 import { vBPerfil } from "./perfil.js";
 import { vBProductos } from "./productos.js";
 
-export function demoClosings(e) {
-  const a = {};
-  const t = TODAY();
-  const s = e.filter(
-    (n) => n.date.slice(0, 7) === t.slice(0, 7) && n.date < t && n.app + n.man + n.walk + n.prod > 0,
+// cierres de caja de ejemplo: todos los días del mes con movimientos, menos los dos últimos
+export function demoClosings(fin) {
+  const closings = {};
+  const today = TODAY();
+  const days = fin.filter(
+    (day) => day.date.slice(0, 7) === today.slice(0, 7) && day.date < today && day.app + day.man + day.walk + day.prod > 0,
   );
-  s.slice(0, Math.max(0, s.length - 2)).forEach((n) => {
-    const o = n.app + n.man + n.walk + n.prod;
-    a["day|" + n.date] = {
-      income: o,
-      cash: Math.round(o * 0.55),
-      mp: o - Math.round(o * 0.55),
+  days.slice(0, Math.max(0, days.length - 2)).forEach((day) => {
+    const income = day.app + day.man + day.walk + day.prod;
+    closings["day|" + day.date] = {
+      income: income,
+      cash: Math.round(income * 0.55),
+      mp: income - Math.round(income * 0.55),
       counted: null,
-      at: "21:0" + (n.date.slice(-1) % 10),
+      at: "21:0" + (day.date.slice(-1) % 10),
     };
   });
-  return a;
+  return closings;
 }
 export const STORE = {};
+// datos de ejemplo del panel de un prestador (clientes, últimos 29 días de finanzas, productos, gastos, avisos).
+// No está en src/demo y llega al build de producción: ver el informe de A2.
 function seedStore(pid) {
-  const a = {};
-  store.BOOK.filter((i) => i.pid == pid && i.cliente && i.type !== "block").forEach((i, l) => {
-    a[i.cliente] = {
-      v: 2 + (l % 5),
+  const clients = {};
+  store.BOOK.filter((booking) => booking.pid == pid && booking.cliente && booking.type !== "block").forEach((booking, index) => {
+    clients[booking.cliente] = {
+      v: 2 + (index % 5),
       n: 0,
-      last: 7 + l * 3,
-      spend: i.price,
-      tel: "2284 4" + String(1e4 + l * 731).slice(-5),
+      last: 7 + index * 3,
+      spend: booking.price,
+      tel: "2284 4" + String(1e4 + index * 731).slice(-5),
       notes: "",
       bday: "",
     };
   });
-  const t = [];
-  for (let i = 29; i >= 1; i--) {
-    const l = dkey(addDays(-i));
-    const c = /* @__PURE__ */ new Date(l + "T12:00:00").getDay();
-    const d = ((i * pid) % 11) / 10;
-    t.push(
-      c === 0
+  const fin = [];
+  for (let daysAgo = 29; daysAgo >= 1; daysAgo--) {
+    const date = dkey(addDays(-daysAgo));
+    const dow = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
+    const factor = ((daysAgo * pid) % 11) / 10;
+    fin.push(
+      dow === 0
         ? {
-            date: l,
+            date: date,
             app: 0,
             man: 0,
             walk: 0,
             prod: 0,
           }
         : {
-            date: l,
-            app: Math.round((18e3 + d * 15e3) / 100) * 100,
-            man: Math.round((9e3 + d * 7e3) / 100) * 100,
-            walk: Math.round((6e3 + (1 - d) * 9e3) / 100) * 100,
-            prod: i % 4 === 0 ? 6e3 : 0,
+            date: date,
+            app: Math.round((18e3 + factor * 15e3) / 100) * 100,
+            man: Math.round((9e3 + factor * 7e3) / 100) * 100,
+            walk: Math.round((6e3 + (1 - factor) * 9e3) / 100) * 100,
+            prod: daysAgo % 4 === 0 ? 6e3 : 0,
           },
     );
   }
-  const s = (
+  const cat = (
     pr(pid) || {
       cats: ["b"],
     }
   ).cats[0];
-  const n = RUBRO[s] || RUBRO.b;
-  const o = {
+  const rubro = RUBRO[cat] || RUBRO.b;
+  const profileByCat = {
     b: {
       corte: "Fade 1 a los costados, tijera arriba",
       barba: "Perfilada, sin degradé",
@@ -107,20 +110,20 @@ function seedStore(pid) {
       reacciones: "Leve enrojecimiento",
     },
   };
-  Object.keys(a)
+  Object.keys(clients)
     .slice(0, 2)
-    .forEach((i) => {
-      a[i].profile = Object.assign({}, o[s] || {});
-      a[i].notes = "";
+    .forEach((name) => {
+      clients[name].profile = Object.assign({}, profileByCat[cat] || {});
+      clients[name].notes = "";
     });
   return {
-    CLOSINGS: demoClosings(t),
-    CLIENTS: a,
-    PRODS: n.prods.map((i) => ({
-      n: i[0],
-      p: i[1],
-      stock: i[2],
-      min: i[3],
+    CLOSINGS: demoClosings(fin),
+    CLIENTS: clients,
+    PRODS: rubro.prods.map((row) => ({
+      n: row[0],
+      p: row[1],
+      stock: row[2],
+      min: row[3],
     })),
     GASTOS: [
       {
@@ -132,20 +135,21 @@ function seedStore(pid) {
       },
       {
         id: store.GID++,
-        c: "Insumos de " + catName(s).toLowerCase(),
+        c: "Insumos de " + catName(cat).toLowerCase(),
         m: 35e3,
         cat: "Insumos",
         d: dkey(addDays(-4)),
       },
     ],
-    FIN: t,
-    MSGS: MSG_DEF(s),
+    FIN: fin,
+    MSGS: MSG_DEF(cat),
     walk: [],
     earn: 0,
     jobs: 0,
     mp: "none",
   };
 }
+// cambia el prestador activo del panel: guarda los datos del anterior en STORE y carga (o siembra) los del nuevo
 export function useProvider(pid) {
   pid = +pid;
   if (S.me === pid && store.COMMBY[pid] === store.COMM) {
@@ -166,17 +170,17 @@ export function useProvider(pid) {
     };
   }
   S.me = pid;
-  const a = STORE[pid] || seedStore(pid);
-  store.CLIENTS = a.CLIENTS;
-  store.PRODS = a.PRODS;
-  store.GASTOS = a.GASTOS;
-  store.FIN = a.FIN;
-  store.MSGS = a.MSGS;
-  store.CLOSINGS = a.CLOSINGS || {};
-  S.walk = a.walk;
-  S.earnToday = a.earn;
-  S.jobsToday = a.jobs;
-  S.mp = a.mp;
+  const kept = STORE[pid] || seedStore(pid);
+  store.CLIENTS = kept.CLIENTS;
+  store.PRODS = kept.PRODS;
+  store.GASTOS = kept.GASTOS;
+  store.FIN = kept.FIN;
+  store.MSGS = kept.MSGS;
+  store.CLOSINGS = kept.CLOSINGS || {};
+  S.walk = kept.walk;
+  S.earnToday = kept.earn;
+  S.jobsToday = kept.jobs;
+  S.mp = kept.mp;
   store.COMM = comm(pid);
 }
 export const BTABS = [
@@ -190,15 +194,16 @@ export const BTABS = [
   ["comunidad", "Trabajos"],
   ["perfil", "Perfil"],
 ];
-export function selectBtab(e) {
-  S.btab = e;
+// cambia de pestaña del panel y cierra lo que hubiera abierto
+export function selectBtab(tab) {
+  S.btab = tab;
   S.delAsk = null;
   S.cli = null;
   S.buyI = null;
   S.prodOpen = false;
   S.gOpen = false;
   S.mEdit = null;
-  if (e === "agenda") {
+  if (tab === "agenda") {
     S.newT = 0;
   }
   S.hErr = null;
@@ -206,29 +211,30 @@ export function selectBtab(e) {
   S.blockOpen = false;
   render();
 }
+// panel del prestador: cabecera (rubros, turnos online), pestañas y la sección elegida
 export function vBarbero() {
-  const e = pr(ME());
-  const a = BTABS;
-  const t = Math.max(
+  const prov = pr(ME());
+  const tabs = BTABS;
+  const tabIndex = Math.max(
     0,
-    a.findIndex((l) => l[0] === S.btab),
+    tabs.findIndex((tab) => tab[0] === S.btab),
   );
-  const s = cfg(ME());
-  const n = `<div class="panel bhead"><div class="contact">${avatar(e)}<div><b>${esc(e.name)}</b><div class="cchips" style="justify-content:flex-start;margin-top:4px">${e.cats.map((l) => `<button class="cchip seg-${l}" data-pctx="${l}" aria-pressed="${l === pcat(e, S.pctx)}">${CAT[l] ? catInfo(l).ic : ""} ${esc(catName(l))}</button>`).join("")}</div></div></div>
-   <div class="swrow"><div><b>📅 Turnos online</b><div class="hint">${s.on ? "🟢 Tus clientes pueden reservar y pagar" : "⚪ Nadie puede reservar online"}</div></div><button class="tg" data-act="turnosOn" aria-pressed="${s.on}" aria-label="Turnos online"></button></div></div><button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
-  const o = `<div class="btabw"><button class="tabarr" data-act="tabPrev" aria-label="Sección anterior" ${t === 0 ? "disabled" : ""}>‹</button><div class="btabs" role="tablist">${a.map(([l, c]) => `<button role="tab" data-btab="${l}" aria-selected="${S.btab === l}">${c}${l === "agenda" && S.newT ? ' <i class="dotn"></i>' : ""}</button>`).join("")}</div><button class="tabarr" data-act="tabNext" aria-label="Sección siguiente" ${t >= a.length - 1 ? "disabled" : ""}>›</button></div>`;
-  const i = (
+  const conf = cfg(ME());
+  const head = `<div class="panel bhead"><div class="contact">${avatar(prov)}<div><b>${esc(prov.name)}</b><div class="cchips" style="justify-content:flex-start;margin-top:4px">${prov.cats.map((cat) => `<button class="cchip seg-${cat}" data-pctx="${cat}" aria-pressed="${cat === pcat(prov, S.pctx)}">${CAT[cat] ? catInfo(cat).ic : ""} ${esc(catName(cat))}</button>`).join("")}</div></div></div>
+   <div class="swrow"><div><b>📅 Turnos online</b><div class="hint">${conf.on ? "🟢 Tus clientes pueden reservar y pagar" : "⚪ Nadie puede reservar online"}</div></div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div><button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
+  const tabBar = `<div class="btabw"><button class="tabarr" data-act="tabPrev" aria-label="Sección anterior" ${tabIndex === 0 ? "disabled" : ""}>‹</button><div class="btabs" role="tablist">${tabs.map(([id, label]) => `<button role="tab" data-btab="${id}" aria-selected="${S.btab === id}">${label}${id === "agenda" && S.newT ? ' <i class="dotn"></i>' : ""}</button>`).join("")}</div><button class="tabarr" data-act="tabNext" aria-label="Sección siguiente" ${tabIndex >= tabs.length - 1 ? "disabled" : ""}>›</button></div>`;
+  const body = (
     {
-      caja: () => vCaja(e),
+      caja: () => vCaja(prov),
       agenda: () => vBAgendaT(),
       clientes: () => vBClientes(),
       finanzas: () => vBFinanzas(),
       horarios: () => vBHorarios(),
       productos: () => vBProductos(),
       stats: () => vBStats(),
-      comunidad: () => vBComunidad(e),
-      perfil: () => vBPerfil(e),
+      comunidad: () => vBComunidad(prov),
+      perfil: () => vBPerfil(prov),
     }[S.btab] || (() => vBAgendaT())
   )();
-  return `<div class="narrow stack" style="margin-top:20px">${n}${o}${i}</div>`;
+  return `<div class="narrow stack" style="margin-top:20px">${head}${tabBar}${body}</div>`;
 }

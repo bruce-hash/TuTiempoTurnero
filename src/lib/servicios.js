@@ -4,6 +4,7 @@ import { RUBRO } from "./rubros.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 
+// Retoque sugerido (días), indicación previa y adicionales de ejemplo de algunos servicios, por nombre.
 const META = {
   "Corte premium": [
     21,
@@ -50,105 +51,110 @@ const META = {
     [["Zona extra", 6e3, 15]],
   ],
 };
-export function svcMeta(e) {
-  if (e[5]) {
-    return e[5];
+// Cada servicio es [nombre, minutos, precio, rubro, id, meta]; meta = { every, note, add } se completa la primera vez
+// con lo del servicio o, si no tiene, con lo de su rubro.
+export function svcMeta(svc) {
+  if (svc[5]) {
+    return svc[5];
   }
-  const a = RUBRO[e[3]] || RUBRO.b;
-  const t = META[e[0]] || [];
-  e[5] = {
-    every: t[0] ?? a.every,
-    note: t[1] ?? a.note,
-    add: (t[2] || a.add).map((s) => s.slice(0, 3).concat([null])),
+  const rubro = RUBRO[svc[3]] || RUBRO.b;
+  const meta = META[svc[0]] || [];
+  svc[5] = {
+    every: meta[0] ?? rubro.every,
+    note: meta[1] ?? rubro.note,
+    add: (meta[2] || rubro.add).map((addon) => addon.slice(0, 3).concat([null])),
   };
-  return e[5];
+  return svc[5];
 }
-const rq = (e) => (RUBRO[e] || RUBRO.b).q;
-export function selAdds(e) {
-  const a = e && e.svcs[S.svc];
-  if (!a) {
+const rq = (cat) => (RUBRO[cat] || RUBRO.b).q;
+// Adicionales elegidos (S.adds) del servicio seleccionado (S.svc), y su precio y duración totales.
+export function selAdds(prov) {
+  const svc = prov && prov.svcs[S.svc];
+  if (!svc) {
     return [];
   }
-  const t = svcMeta(a).add;
-  return (S.adds || []).filter((s) => t[s]).map((s) => t[s]);
+  const addons = svcMeta(svc).add;
+  return (S.adds || []).filter((idx) => addons[idx]).map((idx) => addons[idx]);
 }
-export const selPrice = (e) => {
-  const a = e.svcs[S.svc];
-  if (a) {
-    return a[2] + selAdds(e).reduce((t, s) => t + s[1], 0);
+export const selPrice = (prov) => {
+  const svc = prov.svcs[S.svc];
+  if (svc) {
+    return svc[2] + selAdds(prov).reduce((sum, addon) => sum + addon[1], 0);
   } else {
     return 0;
   }
 };
-export const selDur = (e) => {
-  const a = e.svcs[S.svc];
-  if (a) {
-    return a[1] + selAdds(e).reduce((t, s) => t + s[2], 0);
+export const selDur = (prov) => {
+  const svc = prov.svcs[S.svc];
+  if (svc) {
+    return svc[1] + selAdds(prov).reduce((sum, addon) => sum + addon[2], 0);
   } else {
     return 30;
   }
 };
+// Turnos ya hechos cuyo retoque vence en los próximos 7 días (o ya venció), sin otro turno reservado con ese prestador.
 function dueRetouches() {
   if (!S.user) {
     return [];
   }
-  const e = TODAY();
-  const a = [];
-  const t = {};
-  store.BOOK.filter((s) => s.mine && s.status === "done")
-    .sort((s, n) => (n.date + n.time).localeCompare(s.date + s.time))
-    .forEach((s) => {
-      const n = s.pid + "|" + s.svc;
-      if (t[n]) {
+  const today = TODAY();
+  const due = [];
+  const seen = {};
+  store.BOOK.filter((booking) => booking.mine && booking.status === "done")
+    .sort((left, right) => (right.date + right.time).localeCompare(left.date + left.time))
+    .forEach((booking) => {
+      const key = booking.pid + "|" + booking.svc;
+      if (seen[key]) {
         return;
       }
-      t[n] = 1;
-      const o = pr(s.pid);
-      if (!o || o.deleted) {
+      seen[key] = 1;
+      const prov = pr(booking.pid);
+      if (!prov || prov.deleted) {
         return;
       }
-      const i = o.svcs.find((d) => d[0] === s.svc);
-      const l = i ? svcMeta(i).every : s.every || 0;
-      if (!l) {
+      const svc = prov.svcs.find((item) => item[0] === booking.svc);
+      const every = svc ? svcMeta(svc).every : booking.every || 0;
+      if (!every) {
         return;
       }
-      const c = dkey(addDays(l, s.date));
+      const dueDate = dkey(addDays(every, booking.date));
       if (
-        c <= dkey(addDays(7)) &&
-        !store.BOOK.some((d) => d.mine && d.pid == s.pid && d.status === "confirmed" && d.date >= e)
+        dueDate <= dkey(addDays(7)) &&
+        !store.BOOK.some((other) => other.mine && other.pid == booking.pid && other.status === "confirmed" && other.date >= today)
       ) {
-        a.push({
-          b: s,
-          p: o,
-          due: c < e ? e : c,
-          late: c < e,
+        due.push({
+          b: booking,
+          p: prov,
+          due: dueDate < today ? today : dueDate,
+          late: dueDate < today,
         });
       }
     });
-  return a;
+  return due;
 }
-export const PREP = (e, a) => (a ? svcMeta(a).note : "");
-function intakeAlerts(cat, a) {
-  const t = [];
-  if (a) {
-    if (cat === "l" && a.primera === "Sí") {
-      t.push("Primera vez: hacé la prueba de alergia al adhesivo");
+export const PREP = (cat, svc) => (svc ? svcMeta(svc).note : "");
+// Avisos para el prestador según las respuestas previas del cliente.
+function intakeAlerts(cat, answers) {
+  const alerts = [];
+  if (answers) {
+    if (cat === "l" && answers.primera === "Sí") {
+      alerts.push("Primera vez: hacé la prueba de alergia al adhesivo");
     }
-    if (cat === "m" && a.embarazo === "Sí") {
-      t.push("Embarazada: adaptá posición y técnica");
+    if (cat === "m" && answers.embarazo === "Sí") {
+      alerts.push("Embarazada: adaptá posición y técnica");
     }
-    if (cat === "d" && a.sol === "Sí") {
-      t.push("Tomó sol hace poco: no hacer láser");
+    if (cat === "d" && answers.sol === "Sí") {
+      alerts.push("Tomó sol hace poco: no hacer láser");
     }
-    if (cat === "d" && a.medica && a.medica !== "No") {
-      t.push("Revisar medicación antes del láser");
+    if (cat === "d" && answers.medica && answers.medica !== "No") {
+      alerts.push("Revisar medicación antes del láser");
     }
-    if (cat === "p" && a.alergia === "Sí") {
-      t.push("Alergia a tintes: hacer prueba de mechón 48 h antes");
+    if (cat === "p" && answers.alergia === "Sí") {
+      alerts.push("Alergia a tintes: hacer prueba de mechón 48 h antes");
     }
-    if (cat === "l" && a.sensible === "Sí") {
-      t.push("Ojos sensibles: usar adhesivo para piel sensible");
+    if (cat === "l" && answers.sensible === "Sí") {
+      alerts.push("Ojos sensibles: usar adhesivo para piel sensible");
     }
   }
-  return t;
+  return alerts;
 }

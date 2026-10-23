@@ -11,12 +11,12 @@ import { avatarUrl } from "../../ui/fotos.js";
 
 export const liveAdmin = {
   async adminCheck() {
-    const e = await call(sb.rpc("is_admin")).catch(() => false);
-    S.isAdmin = !!e;
+    const isAdmin = await call(sb.rpc("is_admin")).catch(() => false);
+    S.isAdmin = !!isAdmin;
     return S.isAdmin;
   },
   async adminLoad() {
-    const [e, a] = await Promise.all([
+    const [stats, providers] = await Promise.all([
       call(sb.rpc("admin_stats")),
       call(
         sb.rpc("admin_providers", {
@@ -25,99 +25,103 @@ export const liveAdmin = {
       ),
     ]);
     S.adm = {
-      stats: e,
-      providers: (a || []).map((t) => ({
-        id: t.id,
-        name: t.name,
-        status: t.status,
-        verified: t.dni_verified,
-        owner: t.owner_id,
-        cats: t.categories || [],
-        month: t.bookings_month,
-        activity: +t.activity || 0,
-        mp: !!t.mp_connected,
-        rating: +t.rating_avg,
-        nrev: t.rating_count,
-        created: t.created_at,
-        notes: (t.notes || []).map((s) => {
-          const n = isoToLocal(s.at);
+      stats: stats,
+      providers: (providers || []).map((prov) => ({
+        id: prov.id,
+        name: prov.name,
+        status: prov.status,
+        verified: prov.dni_verified,
+        owner: prov.owner_id,
+        cats: prov.categories || [],
+        month: prov.bookings_month,
+        activity: +prov.activity || 0,
+        mp: !!prov.mp_connected,
+        rating: +prov.rating_avg,
+        nrev: prov.rating_count,
+        created: prov.created_at,
+        notes: (prov.notes || []).map((note) => {
+          const at = isoToLocal(note.at);
           return {
-            id: s.id,
-            body: s.body,
-            d: n.date,
-            t: n.time,
+            id: note.id,
+            body: note.body,
+            d: at.date,
+            t: at.time,
           };
         }),
       })),
     };
-    store.COMISION = isFinite(parseFloat(e.commission_pct)) ? parseFloat(e.commission_pct) / 100 : 0.1;
+    store.COMISION = isFinite(parseFloat(stats.commission_pct)) ? parseFloat(stats.commission_pct) / 100 : 0.1;
     return S.adm;
   },
-  async adminFinance(e) {
-    const a = await call(
+  async adminFinance(year) {
+    const data = await call(
       sb.rpc("admin_finance", {
-        p_year: e,
+        p_year: year,
       }),
     );
     S.admFin = S.admFin || {};
-    S.admFin[e] = a;
-    return a;
+    S.admFin[year] = data;
+    return data;
   },
   async myMessages() {
     if (!S.user) {
       return;
     }
-    const e = await call(sb.rpc("my_messages")).catch(() => []);
-    S.inbox = (e || []).map((a) => ({
-      id: a.id,
-      pid: a.provider_id,
-      name: a.provider_name,
-      photo: avatarUrl(a.photo_path),
-      hue: a.hue,
-      body: a.body,
-      d: relDate(a.created_at),
-      read: !!a.read,
-      auto: a.kind && a.kind !== "msg",
+    const rows = await call(sb.rpc("my_messages")).catch(() => []);
+    S.inbox = (rows || []).map((msg) => ({
+      id: msg.id,
+      pid: msg.provider_id,
+      name: msg.provider_name,
+      photo: avatarUrl(msg.photo_path),
+      hue: msg.hue,
+      body: msg.body,
+      d: relDate(msg.created_at),
+      read: !!msg.read,
+      auto: msg.kind && msg.kind !== "msg",
     }));
   },
-  async book({ pid: e, svcIdx: a, date: t, time: s, rep: n }) {
-    const o = pr(e);
-    const i = o.svcs[a];
-    const l = selAdds(o)
-      .map((p) => p[3])
+  // Reserva: book_slot crea el turno (y los repetidos) en espera de pago con los montos que calcula la base. Si no hay
+  // nada que pagar queda confirmado; si no, se crea el cobro en Mercado Pago y se va a pagar. Si Mercado Pago falla,
+  // se libera la reserva.
+  async book({ pid: pid, svcIdx: svcIdx, date: date, time: time, rep: rep }) {
+    const prov = pr(pid);
+    const svc = prov.svcs[svcIdx];
+    const addonIds = selAdds(prov)
+      .map((addon) => addon[3])
       .filter(Boolean);
-    const c = await call(
+    const res = await call(
       sb.rpc("book_slot", {
-        p_service: i[4],
-        p_start: localToIso(t, s),
-        p_repeat_weeks: n || 0,
-        p_extra: n ? 3 : 0,
+        p_service: svc[4],
+        p_start: localToIso(date, time),
+        p_repeat_weeks: rep || 0,
+        // rep = cada cuántas semanas: siempre 3 turnos más además del primero
+        p_extra: rep ? 3 : 0,
         p_pay: S.payM === "cash" ? "cash" : S.payM === "reward" ? "reward" : "mp",
-        p_addons: l,
+        p_addons: addonIds,
         p_intake: {},
       }),
     );
-    if (c.status === "confirmed") {
-      await Promise.all([liveApi.myBookings(), liveApi.loadProvider(e, true), liveApi.myStamps()]);
+    if (res.status === "confirmed") {
+      await Promise.all([liveApi.myBookings(), liveApi.loadProvider(pid, true), liveApi.myStamps()]);
       return {
-        id: c.booking_ids[0],
-        skipped: c.skipped,
-        count: c.booking_ids.length,
-        cash: c.pay === "cash",
+        id: res.booking_ids[0],
+        skipped: res.skipped,
+        count: res.booking_ids.length,
+        cash: res.pay === "cash",
       };
     }
-    const d = await sb.functions.invoke("mp-create-preference", {
+    const pref = await sb.functions.invoke("mp-create-preference", {
       body: {
-        booking_ids: c.booking_ids,
+        booking_ids: res.booking_ids,
       },
     });
-    if (d.error || !d.data || !d.data.init_point) {
+    if (pref.error || !pref.data || !pref.data.init_point) {
       await sb.rpc("cancel_by_client", {
-        p_booking: c.booking_ids[0],
+        p_booking: res.booking_ids[0],
       });
       throw new Error("No pudimos abrir Mercado Pago. Probá de nuevo.");
     }
-    safeRedirect(d.data.init_point);
+    safeRedirect(pref.data.init_point);
     return {
       redirect: true,
     };

@@ -4,55 +4,58 @@ import { sb } from "../../config.js";
 import { S } from "../../state.js";
 import { avatarUrl } from "../../ui/fotos.js";
 
+// Escrituras de la cuenta del cliente (reseñas, cancelaciones, favoritos, lista de espera, perfil, foto) y del
+// cierre de caja y los días bloqueados del prestador.
 Object.assign(LM, {
-  review: (e, a, t) =>
+  review: (booking, stars, body) =>
     saved(
       sb.from("reviews").insert({
-        provider_id: e.pid,
-        booking_id: e.id,
+        provider_id: booking.pid,
+        booking_id: booking.id,
         author: "-",
-        stars: a,
-        body: t || null,
+        stars: stars,
+        body: body || null,
       }),
     ),
-  cancelClient: (e) =>
+  // la devolución de la seña la decide cancel_by_client en la base
+  cancelClient: (booking) =>
     saved(
       sb.rpc("cancel_by_client", {
-        p_booking: e.id,
+        p_booking: booking.id,
       }),
     ),
-  follow: (e, a) =>
+  follow: (providerId, on) =>
     saved(
-      a
+      on
         ? sb.from("follows").insert({
             user_id: S.user.id,
-            provider_id: e,
+            provider_id: providerId,
           })
-        : sb.from("follows").delete().eq("provider_id", e).eq("user_id", S.user.id),
+        : sb.from("follows").delete().eq("provider_id", providerId).eq("user_id", S.user.id),
     ),
-  waitlist: (e, a) =>
+  waitlist: (providerId, day) =>
     saved(
       sb.from("waitlist").insert({
         user_id: S.user.id,
-        provider_id: e,
-        day: a,
+        provider_id: providerId,
+        day: day,
       }),
     ),
-  saveMe: (e, a) =>
+  saveMe: (fullName, phone) =>
     saved(
       sb
         .from("profiles")
         .update({
-          full_name: e,
-          phone: a || null,
+          full_name: fullName,
+          phone: phone || null,
         })
         .eq("id", S.user.id),
     ),
   deleteAccount: () => saved(sb.rpc("delete_my_account")),
-  setAvatar: async (e) => {
-    const a = `${S.user.id}/a-${Date.now()}.jpg`;
+  setAvatar: async (blob) => {
+    const path = `${S.user.id}/a-${Date.now()}.jpg`;
     await saved(
-      sb.storage.from("avatars").upload(a, e, {
+      sb.storage.from("avatars").upload(path, blob, {
         contentType: "image/jpeg",
         upsert: false,
       }),
@@ -61,16 +64,16 @@ Object.assign(LM, {
       sb
         .from("profiles")
         .update({
-          avatar_path: a,
+          avatar_path: path,
         })
         .eq("id", S.user.id),
     );
-    return avatarUrl(a);
+    return avatarUrl(path);
   },
-  setProviderPhoto: async (e) => {
-    const a = `${S.user.id}/p-${Date.now()}.jpg`;
+  setProviderPhoto: async (blob) => {
+    const path = `${S.user.id}/p-${Date.now()}.jpg`;
     await saved(
-      sb.storage.from("avatars").upload(a, e, {
+      sb.storage.from("avatars").upload(path, blob, {
         contentType: "image/jpeg",
         upsert: false,
       }),
@@ -79,54 +82,56 @@ Object.assign(LM, {
       sb
         .from("providers")
         .update({
-          photo_path: a,
+          photo_path: path,
         })
         .eq("id", S.me),
     );
-    return avatarUrl(a);
+    return avatarUrl(path);
   },
-  delMedia: async (e) => {
-    if (!e.id) {
+  // si falla el borrado del archivo queda huérfano en el bucket, pero la foto ya no se muestra
+  delMedia: async (media) => {
+    if (!media.id) {
       return;
     }
-    const a = await saved(sb.from("media").delete().eq("id", e.id).select("storage_path"));
-    const t = a && a[0] && a[0].storage_path;
-    if (t) {
+    const rows = await saved(sb.from("media").delete().eq("id", media.id).select("storage_path"));
+    const path = rows && rows[0] && rows[0].storage_path;
+    if (path) {
       sb.storage
         .from("media")
-        .remove([t])
+        .remove([path])
         .catch(() => {});
     }
   },
-  closeCash: (e, a, t) =>
+  // kind "day" o "month"; el período de un mes se guarda como su día 1
+  closeCash: (kind, period, totals) =>
     saved(
       sb.from("cash_closings").upsert({
         provider_id: S.me,
-        kind: e,
-        period: e === "month" ? a + "-01" : a,
-        income: Math.round(t.income || 0),
-        expenses: Math.round(t.expenses || 0),
-        cash: Math.round(t.cash || 0),
-        mp: Math.round(t.mp || 0),
-        counted: t.counted == null ? null : Math.round(t.counted),
+        kind: kind,
+        period: kind === "month" ? period + "-01" : period,
+        income: Math.round(totals.income || 0),
+        expenses: Math.round(totals.expenses || 0),
+        cash: Math.round(totals.cash || 0),
+        mp: Math.round(totals.mp || 0),
+        counted: totals.counted == null ? null : Math.round(totals.counted),
         closed_at: /* @__PURE__ */ new Date().toISOString(),
       }),
     ),
-  reopenCash: (e, a) =>
+  reopenCash: (kind, period) =>
     saved(
       sb
         .from("cash_closings")
         .delete()
         .eq("provider_id", S.me)
-        .eq("kind", e)
-        .eq("period", e === "month" ? a + "-01" : a),
+        .eq("kind", kind)
+        .eq("period", kind === "month" ? period + "-01" : period),
     ),
-  blockDays: (e, a, t) =>
+  blockDays: (from, to, reason) =>
     saved(
       sb.rpc("block_days", {
-        p_from: e,
-        p_to: a,
-        p_reason: t,
+        p_from: from,
+        p_to: to,
+        p_reason: reason,
       }),
     ),
 });

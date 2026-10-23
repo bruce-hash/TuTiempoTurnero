@@ -9,14 +9,14 @@ import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
-registerClick("admY", (e, x, v) => {
-  S.admY = +x.dataset.y;
+registerClick("admY", (ev, el, act) => {
+  S.admY = +el.dataset.y;
   S.admM = null;
   render();
   return;
 });
-registerClick("admM", (e, x, v) => {
-  S.admM = x.dataset.m || null;
+registerClick("admM", (ev, el, act) => {
+  S.admM = el.dataset.m || null;
   if (S.admM) {
     S.admY = +S.admM.slice(0, 4);
   }
@@ -24,29 +24,31 @@ registerClick("admM", (e, x, v) => {
   window.scrollTo(0, 0);
   return;
 });
-registerClick("admMn", (e, x, v) => {
+// mes anterior o siguiente en el balance (nunca después del mes en curso)
+registerClick("admMn", (ev, el, act) => {
   if (!S.admM) {
     return;
   }
-  const [r, m] = S.admM.split("-").map(Number);
-  const f = new Date(r, m - 1 + +x.dataset.d, 15);
-  const u = f.getFullYear() + "-" + pad(f.getMonth() + 1);
-  if (u > TODAY().slice(0, 7)) {
+  const [year, month] = S.admM.split("-").map(Number);
+  const date = new Date(year, month - 1 + +el.dataset.d, 15);
+  const ym = date.getFullYear() + "-" + pad(date.getMonth() + 1);
+  if (ym > TODAY().slice(0, 7)) {
     return;
   }
-  S.admM = u;
-  S.admY = f.getFullYear();
+  S.admM = ym;
+  S.admY = date.getFullYear();
   render();
   return;
 });
-registerClick(["admClose", "admReopen"], (e, x, v) => {
-  const r = x.dataset.k;
-  const m = x.dataset.p;
-  const f = v === "admClose";
-  const u = r === "year" ? "el año " + m.slice(0, 4) : MESES[+m.slice(5, 7) - 1];
-  if (f && S.admCloseAsk !== r + m) {
-    S.admCloseAsk = r + m;
-    toast(`Tocá de nuevo para cerrar ${u}: los números quedan fijos.`);
+// cerrar (con doble toque de confirmación) o reabrir un mes o un año del balance
+registerClick(["admClose", "admReopen"], (ev, el, act) => {
+  const kind = el.dataset.k;
+  const period = el.dataset.p;
+  const closing = act === "admClose";
+  const label = kind === "year" ? "el año " + period.slice(0, 4) : MESES[+period.slice(5, 7) - 1];
+  if (closing && S.admCloseAsk !== kind + period) {
+    S.admCloseAsk = kind + period;
+    toast(`Tocá de nuevo para cerrar ${label}: los números quedan fijos.`);
     setTimeout(() => {
       S.admCloseAsk = null;
     }, 3500);
@@ -54,34 +56,34 @@ registerClick(["admClose", "admReopen"], (e, x, v) => {
   }
   S.admCloseAsk = null;
   if (LIVE) {
-    x.disabled = true;
-    (f ? api.m.adminClose(r, m) : api.m.adminReopen(r, m))
+    el.disabled = true;
+    (closing ? api.m.adminClose(kind, period) : api.m.adminReopen(kind, period))
       .then(() => {
         if (S.admFin) {
-          delete S.admFin[+m.slice(0, 4)];
+          delete S.admFin[+period.slice(0, 4)];
         }
-        toast(f ? `Cerraste ${u}.` : `Reabriste ${u}.`);
+        toast(closing ? `Cerraste ${label}.` : `Reabriste ${label}.`);
         render();
       })
       .catch(() => {
-        x.disabled = false;
+        el.disabled = false;
       });
     return;
   }
-  if (!f && r === "month" && store.DEMO_ACL["year|" + m.slice(0, 4)]) {
+  if (!closing && kind === "month" && store.DEMO_ACL["year|" + period.slice(0, 4)]) {
     toast("El año está cerrado: reabrí el año primero.");
     return;
   }
-  admCloseDemo(f, r, m);
-  toast(f ? `Cerraste ${u}. Los números quedaron fijos.` : `Reabriste ${u}.`);
+  admCloseDemo(closing, kind, period);
+  toast(closing ? `Cerraste ${label}. Los números quedaron fijos.` : `Reabriste ${label}.`);
   render();
   return;
 });
-registerClick("admExpDel", (e, x, v) => {
-  const r = +x.dataset.id;
+registerClick("admExpDel", (ev, el, act) => {
+  const id = +el.dataset.id;
   if (LIVE) {
     api.m
-      .adminDelExp(r)
+      .adminDelExp(id)
       .then(() => {
         S.admFin = null;
         toast("Gasto borrado.");
@@ -90,39 +92,40 @@ registerClick("admExpDel", (e, x, v) => {
       .catch(() => {});
     return;
   }
-  const m = store.DEMO_AEXP.find((f) => f.id === r);
-  if (!m) {
+  const exp = store.DEMO_AEXP.find((item) => item.id === id);
+  if (!exp) {
     return;
   }
-  if (store.DEMO_ACL["month|" + m.day.slice(0, 7)]) {
+  if (store.DEMO_ACL["month|" + exp.day.slice(0, 7)]) {
     toast("El mes está cerrado: reabrilo para cambiarlo.");
     return;
   }
-  store.DEMO_AEXP = store.DEMO_AEXP.filter((f) => f.id !== r);
+  store.DEMO_AEXP = store.DEMO_AEXP.filter((item) => item.id !== id);
   toast("Gasto borrado.");
   render();
   return;
 });
-registerSubmit("fAdmExp", (e) => {
-  const a = e.target.dataset.m;
-  const t = String($("#aec").value || "")
+// gasto de la plataforma: en el mes en curso se fecha hoy, en meses pasados el día 1
+registerSubmit("fAdmExp", (ev) => {
+  const ym = ev.target.dataset.m;
+  const concept = String($("#aec").value || "")
     .replace(/[<>\u0000-\u001f]/g, "")
     .trim()
     .slice(0, 80);
-  const s = parseInt(String($("#aem").value).replace(/\D/g, ""), 10);
-  const n = (i) => {
-    $("#aeerr").textContent = i;
+  const amount = parseInt(String($("#aem").value).replace(/\D/g, ""), 10);
+  const showErr = (msg) => {
+    $("#aeerr").textContent = msg;
   };
-  if (!t) {
-    return n("Escribí el concepto.");
+  if (!concept) {
+    return showErr("Escribí el concepto.");
   }
-  if (!(s >= 1) || !(s <= 2e9)) {
-    return n("Escribí el monto.");
+  if (!(amount >= 1) || !(amount <= 2e9)) {
+    return showErr("Escribí el monto.");
   }
-  const o = a === TODAY().slice(0, 7) ? TODAY() : a + "-01";
+  const day = ym === TODAY().slice(0, 7) ? TODAY() : ym + "-01";
   if (LIVE) {
     api.m
-      .adminAddExp(o, t, s)
+      .adminAddExp(day, concept, amount)
       .then(() => {
         S.admFin = null;
         toast("Gasto cargado.");
@@ -131,14 +134,14 @@ registerSubmit("fAdmExp", (e) => {
       .catch(() => {});
     return;
   }
-  if (store.DEMO_ACL["month|" + a]) {
-    return n("El mes está cerrado: reabrilo para cambiarlo.");
+  if (store.DEMO_ACL["month|" + ym]) {
+    return showErr("El mes está cerrado: reabrilo para cambiarlo.");
   }
   store.DEMO_AEXP.push({
     id: store.AEID++,
-    day: o,
-    concept: t,
-    amount: s,
+    day: day,
+    concept: concept,
+    amount: amount,
   });
   toast("Gasto cargado.");
   render();

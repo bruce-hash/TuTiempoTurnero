@@ -38,17 +38,20 @@ import { toast } from "./ui/toast.js";
 import "./demo/index.js";
 
 if (typeof window != "undefined") {
-  window.addEventListener("unhandledrejection", (e) => {
-    if (e.reason && e.reason.__shown) {
-      e.preventDefault();
+  // los errores que ya se mostraron en un aviso (saved) no vuelven a aparecer en la consola
+  window.addEventListener("unhandledrejection", (ev) => {
+    if (ev.reason && ev.reason.__shown) {
+      ev.preventDefault();
     }
   });
 }
+// arranque. En vivo: vacía los datos de la demo, escucha la sesión, procesa los links de los emails
+// (confirmación, recuperación), recupera adónde iba el usuario antes de ingresar y la vuelta de Mercado Pago (?b=).
 async function boot() {
   if (LIVE) {
-    const e = document.querySelector(".demo");
-    if (e) {
-      e.hidden = true;
+    const demoBar = document.querySelector(".demo");
+    if (demoBar) {
+      demoBar.hidden = true;
     }
     P.length = 0;
     store.BOOK = [];
@@ -64,120 +67,121 @@ async function boot() {
     S.walk = [];
     S.me = null;
     render();
-    sb.auth.onAuthStateChange((t) => {
-      if (t === "PASSWORD_RECOVERY") {
+    sb.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
         S.recovering = true;
         S.npMode = "recover";
         S.role = "cliente";
         S.view = "newpass";
         setTimeout(render, 0);
       }
-      if (t === "SIGNED_OUT") {
+      if (event === "SIGNED_OUT") {
         S.user = null;
         S.barberAuth = false;
         if (S.role === "barbero") {
           S.role = "cliente";
           S.view = "home";
         }
-        store.BOOK = store.BOOK.filter((s) => !s.mine);
+        store.BOOK = store.BOOK.filter((booking) => !booking.mine);
         S.wallet = 0;
         S.wmov = [];
         render();
       }
     });
     {
-      const t = new URLSearchParams(location.search);
-      const s = new URLSearchParams(location.hash.replace(/^#/, ""));
-      const n = t.get("token_hash");
-      const o = t.get("type");
-      const i = t.get("error_description") || s.get("error_description");
-      if (n || i || t.get("error") || s.get("error")) {
+      const query = new URLSearchParams(location.search);
+      const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+      const tokenHash = query.get("token_hash");
+      const type = query.get("type");
+      const errDesc = query.get("error_description") || hash.get("error_description");
+      if (tokenHash || errDesc || query.get("error") || hash.get("error")) {
         history.replaceState(null, "", location.pathname);
       }
-      if (i) {
+      if (errDesc) {
         toast(
-          /expired|invalid/i.test(i)
+          /expired|invalid/i.test(errDesc)
             ? "El link venció o ya se usó. Pedí uno nuevo."
             : "No pudimos completar el ingreso. Probá de nuevo.",
         );
       }
       if (
-        n &&
-        /^[A-Za-z0-9_-]{10,200}$/.test(n) &&
-        /^(signup|recovery|email|email_change|invite|magiclink)$/.test(o || "")
+        tokenHash &&
+        /^[A-Za-z0-9_-]{10,200}$/.test(tokenHash) &&
+        /^(signup|recovery|email|email_change|invite|magiclink)$/.test(type || "")
       ) {
         try {
-          const l = await sb.auth.verifyOtp({
-            token_hash: n,
-            type: o,
+          const res = await sb.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type,
           });
-          if (l.error) {
-            throw l.error;
+          if (res.error) {
+            throw res.error;
           }
-          if (o === "recovery") {
+          if (type === "recovery") {
             S.recovering = true;
             S.npMode = "recover";
           } else {
             toast(
-              o === "email_change" ? "Tu email nuevo quedó confirmado." : "¡Listo! Tu cuenta quedó activada.",
+              type === "email_change" ? "Tu email nuevo quedó confirmado." : "¡Listo! Tu cuenta quedó activada.",
             );
           }
-        } catch (l) {
+        } catch (err) {
           toast(
-            /expired|invalid/i.test(l.message || "")
+            /expired|invalid/i.test(err.message || "")
               ? "El link venció o ya se usó. Pedí uno nuevo."
-              : errMsg(l),
+              : errMsg(err),
           );
         }
       }
     }
     try {
       await api.session();
-    } catch (t) {
-      toast(errMsg(t));
+    } catch (err) {
+      toast(errMsg(err));
     }
     api.commission().catch(() => {});
     if (S.recovering && S.user) {
       S.view = "newpass";
       S.npMode = "recover";
     } else {
-      let t = null;
+      let after = null;
       try {
-        t = JSON.parse(sessionStorage.getItem("tt_after") || "null");
+        after = JSON.parse(sessionStorage.getItem("tt_after") || "null");
         sessionStorage.removeItem("tt_after");
-      } catch (s) {}
-      if (t && S.user) {
-        if (t.v === "panel") {
+      } catch (ignored) {}
+      if (after && S.user) {
+        if (after.v === "panel") {
           if (S.barberAuth) {
             S.role = "barbero";
             S.btab = "agenda";
           } else {
             toast("Esa cuenta todavía no tiene perfil de prestador. Podés sumarte desde “Sumate”.");
           }
-        } else if ((t.v === "checkoutT" || t.v === "perfil") && /^\d{1,12}$/.test(String(t.pid))) {
-          S.pid = +t.pid;
+        } else if ((after.v === "checkoutT" || after.v === "perfil") && /^\d{1,12}$/.test(String(after.pid))) {
+          S.pid = +after.pid;
           S.view = "perfil";
           toast("Ingresaste. Elegí tu horario y confirmá.");
-        } else if (t.v === "misturnos" || t.v === "cuenta") {
-          S.view = t.v;
+        } else if (after.v === "misturnos" || after.v === "cuenta") {
+          S.view = after.v;
         }
       }
     }
-    const a = new URLSearchParams(location.search);
-    if (a.get("b") && /^\d+$/.test(a.get("b"))) {
-      S.turnoId = +a.get("b");
-      S.justBooked = a.get("mp") === "success";
+    // vuelta de Mercado Pago: ?b=<turno>&mp=success
+    const params = new URLSearchParams(location.search);
+    if (params.get("b") && /^\d+$/.test(params.get("b"))) {
+      S.turnoId = +params.get("b");
+      S.justBooked = params.get("mp") === "success";
       S.view = "turnoOk";
       history.replaceState(null, "", location.pathname);
     }
   } else {
-    const e = document.createElement("div");
-    e.className = "modebar";
-    e.innerHTML =
+    const bar = document.createElement("div");
+    bar.className = "modebar";
+    bar.innerHTML =
       "<b>Modo demo:</b> datos de ejemplo, nada se guarda. Para conectar tu base, completá config.cjs con tu proyecto de Supabase.";
-    const a = document.querySelector(".demo");
-    if (a && a.parentNode) {
-      a.parentNode.insertBefore(e, a.nextSibling);
+    const demoBar = document.querySelector(".demo");
+    if (demoBar && demoBar.parentNode) {
+      demoBar.parentNode.insertBefore(bar, demoBar.nextSibling);
     }
   }
   render();

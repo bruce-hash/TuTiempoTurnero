@@ -10,30 +10,31 @@ export function afterLogin() {
     err: "",
   };
   toast("Hola, " + S.user.name.split(" ")[0] + ". Ya ingresaste.");
-  const e = S.after || "home";
+  const next = S.after || "home";
   S.after = null;
-  go(e);
+  go(next);
 }
-export function saveAfter(e) {
+// Recuerda a qué pantalla volver después de ingresar con Google (la página se recarga al volver).
+export function saveAfter(view) {
   try {
     sessionStorage.setItem(
       "tt_after",
       JSON.stringify({
-        v: e,
+        v: view,
         pid: S.pid,
       }),
     );
-  } catch (a) {}
+  } catch (err) {}
 }
-export const authErr = (e, a) => {
-  const t = $("#aerr");
-  if (t) {
-    t.textContent = e;
+export const authErr = (msg, fieldId) => {
+  const box = $("#aerr");
+  if (box) {
+    box.textContent = msg;
   }
-  if (a) {
-    const s = $("#" + a);
-    if (s) {
-      s.focus();
+  if (fieldId) {
+    const field = $("#" + fieldId);
+    if (field) {
+      field.focus();
     }
   }
 };

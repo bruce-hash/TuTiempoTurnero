@@ -15,10 +15,12 @@ import { ymk } from "../views/prestador/finanzas.js";
 import { PRESETS } from "../views/prestador/horarios.js";
 import { selectBtab } from "../views/prestador/panel.js";
 
-document.addEventListener("click", (e) => {
-  const a = e.target.closest("[data-role-view]");
-  if (a) {
-    S.role = a.dataset.roleView;
+// un solo listener de toques: primero los atributos de navegación y selección (data-go, data-svc, data-day,
+// data-slot…), que cambian el estado y vuelven a dibujar; al final, data-act busca la acción en el registro
+document.addEventListener("click", (ev) => {
+  const roleBtn = ev.target.closest("[data-role-view]");
+  if (roleBtn) {
+    S.role = roleBtn.dataset.roleView;
     if (S.role === "barbero") {
       S.barberAuth = true;
     }
@@ -26,255 +28,255 @@ document.addEventListener("click", (e) => {
     window.scrollTo(0, 0);
     return;
   }
-  const t = e.target.closest("[data-go]");
-  if (t) {
-    e.preventDefault();
-    if (t.dataset.go === "perfil") {
-      S.pctx = t.dataset.ctx || null;
+  const goEl = ev.target.closest("[data-go]");
+  if (goEl) {
+    ev.preventDefault();
+    if (goEl.dataset.go === "perfil") {
+      S.pctx = goEl.dataset.ctx || null;
       S.svc = 0;
       S.day = null;
       S.slot = null;
     }
-    go(t.dataset.go, t.dataset.id);
+    go(goEl.dataset.go, goEl.dataset.id);
     return;
   }
-  const s = e.target.closest("[data-pctx]");
-  if (s) {
-    S.pctx = s.dataset.pctx;
+  const pctxEl = ev.target.closest("[data-pctx]");
+  if (pctxEl) {
+    S.pctx = pctxEl.dataset.pctx;
     if (S.view === "perfil" && S.role === "cliente") {
-      const r = pr(S.pid);
-      const m = r.svcs.findIndex((f) => f[3] === S.pctx);
-      if (m >= 0 && r.svcs[S.svc] && r.svcs[S.svc][3] !== S.pctx) {
-        S.svc = m;
+      const prov = pr(S.pid);
+      const idx = prov.svcs.findIndex((svc) => svc[3] === S.pctx);
+      if (idx >= 0 && prov.svcs[S.svc] && prov.svcs[S.svc][3] !== S.pctx) {
+        S.svc = idx;
       }
     }
     render();
     return;
   }
-  const n = e.target.closest("[data-svc]");
-  if (n) {
-    if (S.svc !== +n.dataset.svc) {
+  const svcEl = ev.target.closest("[data-svc]");
+  if (svcEl) {
+    if (S.svc !== +svcEl.dataset.svc) {
       S.adds = [];
       S.intake = {};
     }
-    S.svc = +n.dataset.svc;
+    S.svc = +svcEl.dataset.svc;
     render();
     return;
   }
-  const o = e.target.closest("[data-iqk]");
-  if (o) {
+  const iqEl = ev.target.closest("[data-iqk]");
+  if (iqEl) {
     readIntake();
     S.intake = S.intake || {};
-    const r = o.dataset.iqk;
-    S.intake[r] = S.intake[r] === o.dataset.iqv ? void 0 : o.dataset.iqv;
-    if (S.intake[r] === void 0) {
-      delete S.intake[r];
+    const key = iqEl.dataset.iqk;
+    S.intake[key] = S.intake[key] === iqEl.dataset.iqv ? void 0 : iqEl.dataset.iqv;
+    if (S.intake[key] === void 0) {
+      delete S.intake[key];
     }
     render();
     return;
   }
   {
-    const r = e.target.closest("[data-paym]");
-    if (r) {
-      S.payM = r.dataset.paym;
+    const payEl = ev.target.closest("[data-paym]");
+    if (payEl) {
+      S.payM = payEl.dataset.paym;
       render();
       return;
     }
   }
-  const i = e.target.closest("[data-rate]");
-  if (i) {
-    S.rateN = +i.dataset.rate;
-    const r = ($("#rateTxt") || {}).value || "";
+  const rateEl = ev.target.closest("[data-rate]");
+  if (rateEl) {
+    S.rateN = +rateEl.dataset.rate;
+    const text = ($("#rateTxt") || {}).value || "";
     render();
-    const m = $("#rateTxt");
-    if (m) {
-      m.value = r;
+    const box = $("#rateTxt");
+    if (box) {
+      box.value = text;
     }
     return;
   }
-  const l = e.target.closest("[data-btab]");
-  if (l) {
-    selectBtab(l.dataset.btab);
+  const tabEl = ev.target.closest("[data-btab]");
+  if (tabEl) {
+    selectBtab(tabEl.dataset.btab);
     return;
   }
-  const c = e.target.closest("[data-cf]");
-  if (c) {
-    S.cf = S.cf === c.dataset.cf && c.dataset.cf !== "todos" ? "todos" : c.dataset.cf;
+  const cfEl = ev.target.closest("[data-cf]");
+  if (cfEl) {
+    S.cf = S.cf === cfEl.dataset.cf && cfEl.dataset.cf !== "todos" ? "todos" : cfEl.dataset.cf;
     render();
     return;
   }
-  const d = e.target.closest("[data-cli]");
-  if (d) {
-    S.cli = d.dataset.cli;
+  const cliEl = ev.target.closest("[data-cli]");
+  if (cliEl) {
+    S.cli = cliEl.dataset.cli;
     S.btab = "clientes";
     render();
     window.scrollTo(0, 0);
     return;
   }
-  const p = e.target.closest("[data-fp]");
-  if (p) {
-    S.fp = p.dataset.fp;
-    if (p.dataset.fp === "dia" && S.btab !== "finanzas") {
+  const fpEl = ev.target.closest("[data-fp]");
+  if (fpEl) {
+    S.fp = fpEl.dataset.fp;
+    if (fpEl.dataset.fp === "dia" && S.btab !== "finanzas") {
       S.btab = "finanzas";
     }
     render();
     return;
   }
-  const w = e.target.closest("[data-cat]");
-  if (w) {
-    S.cat = w.dataset.cat;
+  const catEl = ev.target.closest("[data-cat]");
+  if (catEl) {
+    S.cat = catEl.dataset.cat;
     S.q = "";
     render();
     return;
   }
-  const y = e.target.closest("[data-preset]");
-  if (y) {
-    const r = PRESETS.find((f) => f[0] === y.dataset.preset);
-    const m = cfg(ME());
-    [1, 2, 3, 4, 5].forEach((f) => {
-      m.days[f] = {
+  const presetEl = ev.target.closest("[data-preset]");
+  if (presetEl) {
+    const preset = PRESETS.find((row) => row[0] === presetEl.dataset.preset);
+    const conf = cfg(ME());
+    [1, 2, 3, 4, 5].forEach((dow) => {
+      conf.days[dow] = {
         on: true,
-        m: H({}, r[3]),
-        t: H({}, r[4]),
+        m: H({}, preset[3]),
+        t: H({}, preset[4]),
       };
     });
-    api.m.saveSettings(m);
+    api.m.saveSettings(conf);
     S.hErr = null;
-    toast(`Lunes a viernes: ${r[1].toLowerCase()} (${r[2]}). Ya se ve en tu agenda.`);
+    toast(`Lunes a viernes: ${preset[1].toLowerCase()} (${preset[2]}). Ya se ve en tu agenda.`);
     render();
     return;
   }
-  const k = e.target.closest("[data-hhp]");
-  if (k) {
-    $("#hhp").value = k.dataset.hhp;
-    document.querySelectorAll("[data-hhp]").forEach((r) => r.setAttribute("aria-pressed", r === k));
+  const hhpEl = ev.target.closest("[data-hhp]");
+  if (hhpEl) {
+    $("#hhp").value = hhpEl.dataset.hhp;
+    document.querySelectorAll("[data-hhp]").forEach((btn) => btn.setAttribute("aria-pressed", btn === hhpEl));
     return;
   }
-  const h = e.target.closest("[data-sv]");
-  if (h) {
-    S.sv = h.dataset.sv;
+  const svEl = ev.target.closest("[data-sv]");
+  if (svEl) {
+    S.sv = svEl.dataset.sv;
     render();
     return;
   }
-  const j = e.target.closest("[data-swk]");
-  if (j) {
-    S.swk = Math.min(0, (S.swk || 0) + +j.dataset.swk);
+  const swkEl = ev.target.closest("[data-swk]");
+  if (swkEl) {
+    S.swk = Math.min(0, (S.swk || 0) + +swkEl.dataset.swk);
     render();
     return;
   }
-  const b = e.target.closest("[data-smo]");
-  if (b) {
-    S.smo = Math.min(SMAX(), (S.smo || 0) + +b.dataset.smo);
+  const smoEl = ev.target.closest("[data-smo]");
+  if (smoEl) {
+    S.smo = Math.min(SMAX(), (S.smo || 0) + +smoEl.dataset.smo);
     render();
     return;
   }
-  const g = e.target.closest("[data-syr]");
-  if (g) {
-    S.syr = +g.dataset.syr;
+  const syrEl = ev.target.closest("[data-syr]");
+  if (syrEl) {
+    S.syr = +syrEl.dataset.syr;
     render();
     return;
   }
-  const M = e.target.closest("[data-fm]");
-  if (M) {
-    const r = ymk(TODAY());
-    let [m, f] = (S.fm && S.fm <= r ? S.fm : r).split("-").map(Number);
-    f += +M.dataset.fm;
-    if (f < 1) {
-      f = 12;
-      m--;
+  const fmEl = ev.target.closest("[data-fm]");
+  if (fmEl) {
+    const current = ymk(TODAY());
+    let [year, month] = (S.fm && S.fm <= current ? S.fm : current).split("-").map(Number);
+    month += +fmEl.dataset.fm;
+    if (month < 1) {
+      month = 12;
+      year--;
     }
-    if (f > 12) {
-      f = 1;
-      m++;
+    if (month > 12) {
+      month = 1;
+      year++;
     }
-    const u = m + "-" + pad(f);
-    S.fm = u > r ? r : u;
+    const ym = year + "-" + pad(month);
+    S.fm = ym > current ? current : ym;
     render();
     return;
   }
-  const _ = e.target.closest("[data-fy]");
-  if (_) {
-    S.fy = +_.dataset.fy;
+  const fyEl = ev.target.closest("[data-fy]");
+  if (fyEl) {
+    S.fy = +fyEl.dataset.fy;
     render();
     return;
   }
-  const D = e.target.closest("[data-day]");
-  if (D) {
-    S.day = D.dataset.day;
+  const dayEl = ev.target.closest("[data-day]");
+  if (dayEl) {
+    S.day = dayEl.dataset.day;
     S.slot = null;
     render();
     return;
   }
-  const q = e.target.closest("[data-quick]");
-  if (q) {
-    const [r, m] = q.dataset.quick.split("|");
-    const f = [];
-    for (let u = 0; u < cfg(S.pid).ahead; u++) {
-      f.push(dkey(addDays(u)));
+  const quickEl = ev.target.closest("[data-quick]");
+  if (quickEl) {
+    const [date, time] = quickEl.dataset.quick.split("|");
+    const days = [];
+    for (let offset = 0; offset < cfg(S.pid).ahead; offset++) {
+      days.push(dkey(addDays(offset)));
     }
-    S.day = r;
-    S.wk = Math.floor(f.indexOf(r) / 7);
+    S.day = date;
+    S.wk = Math.floor(days.indexOf(date) / 7);
     S.slot = {
-      date: r,
-      time: m,
+      date: date,
+      time: time,
     };
     render();
     return;
   }
-  const C = e.target.closest("[data-wk]");
-  if (C) {
-    S.wk = Math.max(0, (S.wk || 0) + +C.dataset.wk);
-    const r = cfg(S.pid);
-    const m = [];
-    for (let E = 0; E < r.ahead; E++) {
-      m.push(dkey(addDays(E)));
+  const wkEl = ev.target.closest("[data-wk]");
+  if (wkEl) {
+    S.wk = Math.max(0, (S.wk || 0) + +wkEl.dataset.wk);
+    const conf = cfg(S.pid);
+    const days = [];
+    for (let offset = 0; offset < conf.ahead; offset++) {
+      days.push(dkey(addDays(offset)));
     }
-    const f = m.slice(S.wk * 7, S.wk * 7 + 7);
-    const u = selDur(pr(S.pid));
+    const week = days.slice(S.wk * 7, S.wk * 7 + 7);
+    const dur = selDur(pr(S.pid));
     S.day =
-      f.find((E) => freeCount(S.pid, E, u, S.reprog) > 0) ||
-      f.find((E) => !slotsFor(S.pid, E, u).closed) ||
-      f[0];
+      week.find((day) => freeCount(S.pid, day, dur, S.reprog) > 0) ||
+      week.find((day) => !slotsFor(S.pid, day, dur).closed) ||
+      week[0];
     S.slot = null;
     render();
     return;
   }
-  const T = e.target.closest("[data-slot]");
-  if (T) {
+  const slotEl = ev.target.closest("[data-slot]");
+  if (slotEl) {
     S.slot = {
       date: S.day,
-      time: T.dataset.slot,
+      time: slotEl.dataset.slot,
     };
     render();
     return;
   }
-  const A = e.target.closest("[data-rep]");
-  if (A) {
-    S.rep = +A.dataset.rep;
+  const repEl = ev.target.closest("[data-rep]");
+  if (repEl) {
+    S.rep = +repEl.dataset.rep;
     render();
     return;
   }
-  const L = e.target.closest("[data-sel]");
-  if (L) {
-    S.sel = String(S.sel) === L.dataset.sel ? null : L.dataset.sel;
+  const selEl = ev.target.closest("[data-sel]");
+  if (selEl) {
+    S.sel = String(S.sel) === selEl.dataset.sel ? null : selEl.dataset.sel;
     S.bAsk = null;
     render();
-    const r = $(".detail");
-    if (r && r.scrollIntoView) {
-      r.scrollIntoView({
+    const detail = $(".detail");
+    if (detail && detail.scrollIntoView) {
+      detail.scrollIntoView({
         block: "nearest",
       });
     }
     return;
   }
-  const I = e.target.closest("[data-awk]");
-  if (I) {
-    const r = [];
-    for (let m = 0; m < 31; m++) {
-      r.push(dkey(addDays(m)));
+  const awkEl = ev.target.closest("[data-awk]");
+  if (awkEl) {
+    const days = [];
+    for (let offset = 0; offset < 31; offset++) {
+      days.push(dkey(addDays(offset)));
     }
-    S.awk = Math.max(0, Math.min(Math.ceil(r.length / 7) - 1, (S.awk || 0) + +I.dataset.awk));
-    S.aday = r[S.awk * 7];
+    S.awk = Math.max(0, Math.min(Math.ceil(days.length / 7) - 1, (S.awk || 0) + +awkEl.dataset.awk));
+    S.aday = days[S.awk * 7];
     S.bAsk = null;
     S.sel = null;
     S.manOpen = false;
@@ -282,9 +284,9 @@ document.addEventListener("click", (e) => {
     render();
     return;
   }
-  const z = e.target.closest("[data-aday]");
-  if (z) {
-    S.aday = z.dataset.aday;
+  const adayEl = ev.target.closest("[data-aday]");
+  if (adayEl) {
+    S.aday = adayEl.dataset.aday;
     S.bAsk = null;
     S.sel = null;
     S.manOpen = false;
@@ -292,28 +294,29 @@ document.addEventListener("click", (e) => {
     render();
     return;
   }
-  const G = e.target.closest("[data-medio]");
-  if (G) {
-    S.walkMedio = G.dataset.medio;
-    document.querySelectorAll("[data-medio]").forEach((r) => r.setAttribute("aria-pressed", r === G));
+  const medioEl = ev.target.closest("[data-medio]");
+  if (medioEl) {
+    S.walkMedio = medioEl.dataset.medio;
+    document.querySelectorAll("[data-medio]").forEach((btn) => btn.setAttribute("aria-pressed", btn === medioEl));
     return;
   }
-  const x = e.target.closest("[data-act]");
-  if (!x) {
+  const actEl = ev.target.closest("[data-act]");
+  if (!actEl) {
     return;
   }
+  // en la vista previa del perfil solo se puede salir
   if (
     S.role === "barbero" &&
     S.preview &&
-    x.dataset.act !== "exitPreview" &&
-    x.dataset.act !== "salirBarbero"
+    actEl.dataset.act !== "exitPreview" &&
+    actEl.dataset.act !== "salirBarbero"
   ) {
     toast("Es una vista previa: así lo ve un cliente. Para volver, tocá “Volver al panel”.");
     return;
   }
-  const v = x.dataset.act;
-  const accion = CLICK.get(v);
+  const act = actEl.dataset.act;
+  const accion = CLICK.get(act);
   if (accion) {
-    accion(e, x, v);
+    accion(ev, actEl, act);
   }
 });

@@ -5,154 +5,158 @@ import { cfg, skey, uname } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { P, store } from "../store.js";
 
-export const stampCfg = (e) => {
-  const a = cfg(e);
-  return (a.stamps ||= {
+// Tarjeta de sellos: cada servicio puede dar un sello por visita; con la meta (15 a 20) el siguiente es gratis.
+// En vivo los sellos vienen de la base; en la demo se guardan en store.DEMO_STAMPS[prestador][cliente][servicio].
+export const stampCfg = (pid) => {
+  const conf = cfg(pid);
+  return (conf.stamps ||= {
     on: false,
     goals: {},
   });
 };
-export function stampGoal(e, a) {
-  const t = stampCfg(e);
-  if (!t.on || !a) {
+export function stampGoal(pid, svc) {
+  const conf = stampCfg(pid);
+  if (!conf.on || !svc) {
     return 0;
   }
-  const s = +((t.goals || {})[skey(a)] || 0);
-  if (s >= 15 && s <= 20) {
-    return s;
+  const goal = +((conf.goals || {})[skey(svc)] || 0);
+  if (goal >= 15 && goal <= 20) {
+    return goal;
   } else {
     return 0;
   }
 }
-export function stampEarns(e, a) {
-  return stampGoal(e, a) > 0;
+export function stampEarns(pid, svc) {
+  return stampGoal(pid, svc) > 0;
 }
-export const stampSvcs = (e) => (e && e.svcs ? e.svcs.filter((a) => stampEarns(e.id, a)) : []);
-export const svcByKey = (e, a) => (e && e.svcs ? e.svcs.find((t) => String(skey(t)) === String(a)) : null);
-export function myStamps(e, a) {
-  if (!S.user || !a) {
+export const stampSvcs = (prov) => (prov && prov.svcs ? prov.svcs.filter((svc) => stampEarns(prov.id, svc)) : []);
+export const svcByKey = (prov, key) => (prov && prov.svcs ? prov.svcs.find((svc) => String(skey(svc)) === String(key)) : null);
+export function myStamps(pid, svc) {
+  if (!S.user || !svc) {
     return 0;
   }
-  const t = String(skey(a));
+  const key = String(skey(svc));
   if (LIVE) {
-    return +(((S.myStampsBy || {})[e] || {})[t] || 0);
+    return +(((S.myStampsBy || {})[pid] || {})[key] || 0);
   } else {
-    return +(((store.DEMO_STAMPS[e] || {})[uname()] || {})[t] || 0);
+    return +(((store.DEMO_STAMPS[pid] || {})[uname()] || {})[key] || 0);
   }
 }
-export function setMyStamps(e, a, t) {
-  const s = String(skey(a));
+export function setMyStamps(pid, svc, count) {
+  const key = String(skey(svc));
   if (LIVE) {
-    const o = (S.myStampsBy ||= {});
-    (o[e] ||= {})[s] = t;
+    const byProv = (S.myStampsBy ||= {});
+    (byProv[pid] ||= {})[key] = count;
     return;
   }
-  const n = (store.DEMO_STAMPS[e] ||= {});
-  (n[uname()] ||= {})[s] = t;
+  const provStamps = (store.DEMO_STAMPS[pid] ||= {});
+  (provStamps[uname()] ||= {})[key] = count;
 }
-export function cliStamps(e, a, t = ME()) {
-  if (!a) {
+// en la demo, la primera vez se siembran desde las visitas del cliente (sin llegar a la meta)
+export function cliStamps(client, svc, pid = ME()) {
+  if (!svc) {
     return 0;
   }
-  const s = String(skey(a));
+  const key = String(skey(svc));
   if (LIVE) {
-    return +(((store.CLIENTS[e] && store.CLIENTS[e].stamps) || {})[s] || 0);
+    return +(((store.CLIENTS[client] && store.CLIENTS[client].stamps) || {})[key] || 0);
   }
-  const n = (store.DEMO_STAMPS[t] ||= {});
-  const o = (n[e] ||= {});
-  if (o[s] === void 0) {
-    const i = stampGoal(t, a) || 15;
-    o[s] = a === stampSvcs(pr(t))[0] && store.CLIENTS[e] ? Math.min(i - 1, store.CLIENTS[e].v || 0) : 0;
+  const provStamps = (store.DEMO_STAMPS[pid] ||= {});
+  const clientStamps = (provStamps[client] ||= {});
+  if (clientStamps[key] === void 0) {
+    const goal = stampGoal(pid, svc) || 15;
+    clientStamps[key] = svc === stampSvcs(pr(pid))[0] && store.CLIENTS[client] ? Math.min(goal - 1, store.CLIENTS[client].v || 0) : 0;
   }
-  return o[s];
+  return clientStamps[key];
 }
-export function setCliStamps(e, a, t, s = ME()) {
-  const n = String(skey(a));
+export function setCliStamps(client, svc, count, pid = ME()) {
+  const key = String(skey(svc));
   if (LIVE) {
-    if (store.CLIENTS[e]) {
-      store.CLIENTS[e].stamps = store.CLIENTS[e].stamps || {};
-      store.CLIENTS[e].stamps[n] = t;
+    if (store.CLIENTS[client]) {
+      store.CLIENTS[client].stamps = store.CLIENTS[client].stamps || {};
+      store.CLIENTS[client].stamps[key] = count;
     }
     return;
   }
-  const o = (store.DEMO_STAMPS[s] ||= {});
-  (o[e] ||= {})[n] = t;
+  const provStamps = (store.DEMO_STAMPS[pid] ||= {});
+  (provStamps[client] ||= {})[key] = count;
 }
-export function cliBest(e, a = ME()) {
-  let t = null;
-  stampSvcs(pr(a)).forEach((s) => {
-    const n = stampGoal(a, s);
-    const o = Math.min(cliStamps(e, s, a), n);
-    if (!t || o / n > t.n / t.g) {
-      t = {
-        sv: s,
-        n: o,
-        g: n,
+// la tarjeta del cliente más cerca del premio
+export function cliBest(client, pid = ME()) {
+  let best = null;
+  stampSvcs(pr(pid)).forEach((svc) => {
+    const goal = stampGoal(pid, svc);
+    const have = Math.min(cliStamps(client, svc, pid), goal);
+    if (!best || have / goal > best.n / best.g) {
+      best = {
+        sv: svc,
+        n: have,
+        g: goal,
       };
     }
   });
-  return t;
+  return best;
 }
-export const stampGrid = (e, a, t = "") =>
-  `<div class="stamps ${t}" role="img" aria-label="${e} de ${a} sellos">${Array.from(
+export const stampGrid = (have, goal, cls = "") =>
+  `<div class="stamps ${cls}" role="img" aria-label="${have} de ${goal} sellos">${Array.from(
     {
-      length: a,
+      length: goal,
     },
-    (s, n) => `<i class="${n < e ? "on" : ""}">${n < e ? "✓" : n === a - 1 ? "🎁" : ""}</i>`,
+    (cell, index) => `<i class="${index < have ? "on" : ""}">${index < have ? "✓" : index === goal - 1 ? "🎁" : ""}</i>`,
   ).join("")}</div>`;
-export function stampBox(e) {
-  const a = stampCfg(e.id);
-  const t = stampSvcs(e);
-  if (!a.on || !t.length) {
+export function stampBox(prov) {
+  const conf = stampCfg(prov.id);
+  const svcs = stampSvcs(prov);
+  if (!conf.on || !svcs.length) {
     return "";
   }
-  const s = e.svcs[S.svc];
-  if (!s) {
+  const svc = prov.svcs[S.svc];
+  if (!svc) {
     return "";
   }
-  const n = stampGoal(e.id, s);
-  if (!n) {
-    return `<div class="panel stampban off" id="stampBox"><div class="sb-h"><span class="sb-ic">🎟️</span><div><b>${esc(s[0])} no suma sellos</b><span class="hint">Tienen tarjeta de sellos: ${t.map((i) => esc(i[0])).join(", ")}.</span></div></div></div>`;
+  const goal = stampGoal(prov.id, svc);
+  if (!goal) {
+    return `<div class="panel stampban off" id="stampBox"><div class="sb-h"><span class="sb-ic">🎟️</span><div><b>${esc(svc[0])} no suma sellos</b><span class="hint">Tienen tarjeta de sellos: ${svcs.map((other) => esc(other[0])).join(", ")}.</span></div></div></div>`;
   }
-  const o = myStamps(e.id, s);
-  return `<div class="panel stampban" id="stampBox"><div class="sb-h"><span class="sb-ic">🎟️</span><div><b>Tu tarjeta de ${esc(s[0])}</b><span class="hint">Cada vez que te lo hacés suma 1 sello. Con ${n} sellos, el próximo es gratis.</span></div>${S.user ? `<b class="sb-n">${Math.min(o, n)}/${n}</b>` : ""}</div>
-   ${S.user ? `${stampGrid(Math.min(o, n), n, "sm")}<p class="note" style="text-align:left;margin:6px 0 0">${o >= n ? "🎁 ¡Tarjeta llena! Elegí horario y en el pago tocá “Usar mi premio”." : `Te faltan ${n - o} para un ${esc(s[0])} gratis.`}</p>` : '<p class="note" style="text-align:left;margin:6px 0 0">Ingresá para ver tus sellos.</p>'}</div>`;
+  const have = myStamps(prov.id, svc);
+  return `<div class="panel stampban" id="stampBox"><div class="sb-h"><span class="sb-ic">🎟️</span><div><b>Tu tarjeta de ${esc(svc[0])}</b><span class="hint">Cada vez que te lo hacés suma 1 sello. Con ${goal} sellos, el próximo es gratis.</span></div>${S.user ? `<b class="sb-n">${Math.min(have, goal)}/${goal}</b>` : ""}</div>
+   ${S.user ? `${stampGrid(Math.min(have, goal), goal, "sm")}<p class="note" style="text-align:left;margin:6px 0 0">${have >= goal ? "🎁 ¡Tarjeta llena! Elegí horario y en el pago tocá “Usar mi premio”." : `Te faltan ${goal - have} para un ${esc(svc[0])} gratis.`}</p>` : '<p class="note" style="text-align:left;margin:6px 0 0">Ingresá para ver tus sellos.</p>'}</div>`;
 }
 export function myCards() {
   if (!S.user) {
     return [];
   }
   if (LIVE) {
-    return (S.cards || []).filter((a) => a.on && a.goal);
+    return (S.cards || []).filter((card) => card.on && card.goal);
   }
-  const e = [];
-  P.filter((a) => !a.deleted).forEach((a) =>
-    stampSvcs(a).forEach((t) => {
-      const s = myStamps(a.id, t);
-      const n = store.BOOK.filter((o) => o.mine && o.pid == a.id && o.svc === t[0] && o.status === "done").length;
-      if (s > 0 || n > 0) {
-        e.push({
-          pid: a.id,
-          sid: skey(t),
-          svc: t[0],
-          name: a.name,
-          photo: a.photo,
-          hue: a.hue,
-          cat: t[3] || a.cats[0],
-          n: s,
-          goal: stampGoal(a.id, t),
+  const cards = [];
+  P.filter((prov) => !prov.deleted).forEach((prov) =>
+    stampSvcs(prov).forEach((svc) => {
+      const have = myStamps(prov.id, svc);
+      const done = store.BOOK.filter((booking) => booking.mine && booking.pid == prov.id && booking.svc === svc[0] && booking.status === "done").length;
+      if (have > 0 || done > 0) {
+        cards.push({
+          pid: prov.id,
+          sid: skey(svc),
+          svc: svc[0],
+          name: prov.name,
+          photo: prov.photo,
+          hue: prov.hue,
+          cat: svc[3] || prov.cats[0],
+          n: have,
+          goal: stampGoal(prov.id, svc),
           on: true,
-          done: n,
+          done: done,
         });
       }
     }),
   );
-  return e;
+  return cards;
 }
-export function stampCard(e) {
-  const a = e.n >= e.goal;
-  return `<div class="panel stampcard seg-${e.cat || "n"}"><div class="sc-h">${avatar(e)}<div><b>${esc(e.svc)}</b><span class="hint">${esc(e.name)} · ${Math.min(e.n, e.goal)} de ${e.goal} sellos · ${e.done} hecho${e.done === 1 ? "" : "s"}</span></div></div>
-   ${stampGrid(Math.min(e.n, e.goal), e.goal)}
-   <p class="sc-r">${a ? `🎁 <b>¡Premio listo!</b> Tu próximo ${esc(e.svc)} es gratis.` : `Te faltan <b>${e.goal - e.n}</b> para un ${esc(e.svc)} gratis.`}</p>
-   ${a ? `<button class="btn btn-pri btn-block" data-act="useReward" data-id="${e.pid}" data-sk="${esc(String(e.sid))}">Reservar mi premio</button>` : `<button class="btn btn-ghost btn-block btn-sm" data-go="perfil" data-id="${e.pid}">Ver perfil</button>`}</div>`;
+export function stampCard(card) {
+  const full = card.n >= card.goal;
+  return `<div class="panel stampcard seg-${card.cat || "n"}"><div class="sc-h">${avatar(card)}<div><b>${esc(card.svc)}</b><span class="hint">${esc(card.name)} · ${Math.min(card.n, card.goal)} de ${card.goal} sellos · ${card.done} hecho${card.done === 1 ? "" : "s"}</span></div></div>
+   ${stampGrid(Math.min(card.n, card.goal), card.goal)}
+   <p class="sc-r">${full ? `🎁 <b>¡Premio listo!</b> Tu próximo ${esc(card.svc)} es gratis.` : `Te faltan <b>${card.goal - card.n}</b> para un ${esc(card.svc)} gratis.`}</p>
+   ${full ? `<button class="btn btn-pri btn-block" data-act="useReward" data-id="${card.pid}" data-sk="${esc(String(card.sid))}">Reservar mi premio</button>` : `<button class="btn btn-ghost btn-block btn-sm" data-go="perfil" data-id="${card.pid}">Ver perfil</button>`}</div>`;
 }

@@ -13,8 +13,8 @@
     "test:crawl": "vite build --mode test --logLevel warn && node pruebas/crawl.js dist-test",
     "test:clicks": "python3 pruebas/audit_clicks.py src",
     "test:sin-demo": "vite build --logLevel warn && node pruebas/sin_demo.mjs",
-    "test:mudanza": "node tools/mudanza/verificar.mjs",
     "test:e2e": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/e2e.js {url} {pg}",
+    "test:legibilidad": "node tools/legibilidad/equivalente.mjs",
     "test:comparar": "vite build --logLevel warn && vite build --mode test --logLevel warn && node pruebas/comparar.mjs",
     "sql:build": "node tools/todo_en_uno.mjs",
     "sql:check": "node tools/todo_en_uno.mjs --check"

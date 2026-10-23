@@ -11,7 +11,7 @@ import { store } from "../store.js";
 import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
-registerClick("google", (e, x, v) => {
+registerClick("google", (ev, el, act) => {
   if (LIVE) {
     saveAfter(S.after || "home");
     sb.auth
@@ -21,9 +21,9 @@ registerClick("google", (e, x, v) => {
           redirectTo: location.origin + location.pathname,
         },
       })
-      .then((r) => {
-        if (r.error) {
-          toast(errMsg(r.error));
+      .then((res) => {
+        if (res.error) {
+          toast(errMsg(res.error));
         }
       });
     return;
@@ -31,15 +31,15 @@ registerClick("google", (e, x, v) => {
   demoSignIn("juan.perez@gmail.com", "Juan Pérez");
   afterLogin();
 });
-registerClick("authMode", (e, x, v) => {
-  const r = (
+registerClick("authMode", (ev, el, act) => {
+  const email = (
     ($("#ai_e") || $("#au_e") || $("#af_e") || $("#le") || {}).value ||
     S.login.email ||
     ""
   ).trim();
   S.login = {
-    mode: x.dataset.m,
-    email: r,
+    mode: el.dataset.m,
+    email: email,
     err: "",
     fails: S.login.fails || 0,
   };
@@ -49,25 +49,25 @@ registerClick("authMode", (e, x, v) => {
     return;
   }
   render();
-  const m = $("#ai_e,#au_n,#af_e,#le");
-  if (m && !m.value) {
-    m.focus();
+  const field = $("#ai_e,#au_n,#af_e,#le");
+  if (field && !field.value) {
+    field.focus();
   }
 });
-registerClick("pwShow", (e, x, v) => {
-  const r = document.getElementById(x.dataset.for);
-  if (r) {
-    const m = r.type === "password";
-    r.type = m ? "text" : "password";
-    x.textContent = m ? "Ocultar" : "Mostrar";
+registerClick("pwShow", (ev, el, act) => {
+  const input = document.getElementById(el.dataset.for);
+  if (input) {
+    const hidden = input.type === "password";
+    input.type = hidden ? "text" : "password";
+    el.textContent = hidden ? "Ocultar" : "Mostrar";
   }
 });
-registerClick("demoRecoveryLink", (e, x, v) => {
+registerClick("demoRecoveryLink", (ev, el, act) => {
   S.recoverEmail = S.login.email.toLowerCase();
   S.npMode = "recover";
   go("newpass");
 });
-registerClick("resendConfirm", (e, x, v) => {
+registerClick("resendConfirm", (ev, el, act) => {
   if (LIVE) {
     sb.auth
       .resend({
@@ -77,12 +77,12 @@ registerClick("resendConfirm", (e, x, v) => {
           emailRedirectTo: location.origin + location.pathname,
         },
       })
-      .then((r) => toast(r.error ? errMsg(r.error) : "Te lo reenviamos a " + S.login.email));
+      .then((res) => toast(res.error ? errMsg(res.error) : "Te lo reenviamos a " + S.login.email));
   } else {
     toast("Te lo reenviamos a " + S.login.email);
   }
 });
-registerClick("loginBack", (e, x, v) => {
+registerClick("loginBack", (ev, el, act) => {
   S.login = {
     mode: "code",
     email: S.login.email,
@@ -90,149 +90,153 @@ registerClick("loginBack", (e, x, v) => {
   };
   render();
 });
-registerClick("reenviar", (e, x, v) => {
+registerClick("reenviar", (ev, el, act) => {
   S.login.err = "";
   if (LIVE) {
     sb.auth
       .signInWithOtp({
         email: S.login.email,
       })
-      .then((r) => {
-        if (r.error) {
-          toast(errMsg(r.error));
+      .then((res) => {
+        if (res.error) {
+          toast(errMsg(res.error));
         }
       });
   }
   toast("Te reenviamos el código a " + S.login.email);
   render();
 });
-registerInput(["au_p", "np1"], (e) => {
-  const a = pwScore(e.target.value);
-  const t = $("#" + e.target.id + "_m");
-  if (t) {
-    t.style.width = a * 25 + "%";
-    t.style.background = a < 2 ? "var(--bad)" : a < 3 ? "var(--warn)" : "var(--ok)";
+// barra de fuerza de la contraseña mientras se escribe
+registerInput(["au_p", "np1"], (ev) => {
+  const score = pwScore(ev.target.value);
+  const meter = $("#" + ev.target.id + "_m");
+  if (meter) {
+    meter.style.width = score * 25 + "%";
+    meter.style.background = score < 2 ? "var(--bad)" : score < 3 ? "var(--warn)" : "var(--ok)";
   }
-  const s = $("#" + e.target.id + "_h");
-  if (s) {
-    s.textContent =
-      e.target.value && pwOk(e.target.value) ? (a >= 4 ? "Muy segura ✓" : "Segura ✓") : PWRULE;
+  const hint = $("#" + ev.target.id + "_h");
+  if (hint) {
+    hint.textContent =
+      ev.target.value && pwOk(ev.target.value) ? (score >= 4 ? "Muy segura ✓" : "Segura ✓") : PWRULE;
   }
   return;
 });
-registerSubmit("fLogin", (e) => {
-  const a = S.login;
-  const t = $("#ai_e").value.trim().toLowerCase();
-  const s = $("#ai_p").value;
-  a.email = t;
-  if (a.locked) {
+// ingreso con email y contraseña; 5 intentos fallidos bloquean 30 segundos
+registerSubmit("fLogin", (ev) => {
+  const login = S.login;
+  const email = $("#ai_e").value.trim().toLowerCase();
+  const pass = $("#ai_p").value;
+  login.email = email;
+  if (login.locked) {
     return;
   }
-  if (!t || !s) {
-    return authErr("Completá tu email y tu contraseña.", t ? "ai_p" : "ai_e");
+  if (!email || !pass) {
+    return authErr("Completá tu email y tu contraseña.", email ? "ai_p" : "ai_e");
   }
-  if (!EMAIL.test(t)) {
+  if (!EMAIL.test(email)) {
     return authErr("Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com", "ai_e");
   }
-  const n = (i) => {
-    a.fails = (a.fails || 0) + 1;
-    if (a.fails >= 5) {
-      a.locked = true;
-      a.err = "Demasiados intentos. Esperá 30 segundos o recuperá tu contraseña.";
+  const fail = (msg) => {
+    login.fails = (login.fails || 0) + 1;
+    if (login.fails >= 5) {
+      login.locked = true;
+      login.err = "Demasiados intentos. Esperá 30 segundos o recuperá tu contraseña.";
       render();
       setTimeout(() => {
-        a.locked = false;
-        a.fails = 0;
-        a.err = "";
+        login.locked = false;
+        login.fails = 0;
+        login.err = "";
         if (S.view === "login") {
           render();
         }
       }, 3e4);
       return;
     }
-    a.err = i;
+    login.err = msg;
     render();
-    const l = $("#ai_p");
-    if (l) {
-      l.focus();
+    const field = $("#ai_p");
+    if (field) {
+      field.focus();
     }
   };
   if (LIVE) {
-    const i = e.target.querySelector("button[type=submit]");
-    if (i) {
-      i.disabled = true;
+    const btn = ev.target.querySelector("button[type=submit]");
+    if (btn) {
+      btn.disabled = true;
     }
     sb.auth
       .signInWithPassword({
-        email: t,
-        password: s,
+        email: email,
+        password: pass,
       })
-      .then(async (l) => {
-        if (l.error) {
-          if (/Email not confirmed/.test(l.error.message || "")) {
+      .then(async (res) => {
+        if (res.error) {
+          if (/Email not confirmed/.test(res.error.message || "")) {
             S.login = {
               mode: "confirm",
-              email: t,
+              email: email,
               err: "",
             };
             render();
             return;
           }
-          return n(errMsg(l.error));
+          return fail(errMsg(res.error));
         }
         await api.session();
         afterLogin();
       })
-      .catch((l) => n(errMsg(l)));
+      .catch((err) => fail(errMsg(err)));
     return;
   }
-  const o = store.DEMO_USERS[t];
-  if (!o || o.pass !== s) {
-    return n("Email o contraseña incorrectos.");
+  const user = store.DEMO_USERS[email];
+  if (!user || user.pass !== pass) {
+    return fail("Email o contraseña incorrectos.");
   }
-  demoSignIn(t, o.name);
+  demoSignIn(email, user.name);
   afterLogin();
   return;
 });
-registerSubmit("fForgot", (e) => {
-  const a = $("#af_e").value.trim().toLowerCase();
-  S.login.email = a;
-  if (!EMAIL.test(a)) {
+// recuperar contraseña: siempre dice “te mandamos el link” (salvo error de red o de límite), para no revelar
+// qué emails tienen cuenta
+registerSubmit("fForgot", (ev) => {
+  const email = $("#af_e").value.trim().toLowerCase();
+  S.login.email = email;
+  if (!EMAIL.test(email)) {
     return authErr("Ingresá un email válido.", "af_e");
   }
-  const t = () => {
+  const showSent = () => {
     S.login = {
       mode: "sent",
-      email: a,
+      email: email,
       err: "",
     };
     render();
   };
   if (LIVE) {
     sb.auth
-      .resetPasswordForEmail(a, {
+      .resetPasswordForEmail(email, {
         redirectTo: location.origin + location.pathname,
       })
-      .then((s) => {
-        if (s.error && /rate|security purposes|Failed to fetch/i.test(s.error.message || "")) {
-          return authErr(errMsg(s.error));
+      .then((res) => {
+        if (res.error && /rate|security purposes|Failed to fetch/i.test(res.error.message || "")) {
+          return authErr(errMsg(res.error));
         }
-        t();
+        showSent();
       });
     return;
   }
-  t();
+  showSent();
   return;
 });
-registerSubmit("fMail", (e) => {
-  const a = $("#le").value.trim();
-  S.login.email = a;
-  if (!a) {
+registerSubmit("fMail", (ev) => {
+  const email = $("#le").value.trim();
+  S.login.email = email;
+  if (!email) {
     S.login.err = "Ingresá tu email.";
     render();
     return;
   }
-  if (!EMAIL.test(a)) {
+  if (!EMAIL.test(email)) {
     S.login.err = "Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com";
     render();
     return;
@@ -240,39 +244,40 @@ registerSubmit("fMail", (e) => {
   if (LIVE) {
     sb.auth
       .signInWithOtp({
-        email: a,
+        email: email,
         options: {
           shouldCreateUser: true,
         },
       })
-      .then((t) => {
-        if (t.error) {
-          S.login.err = errMsg(t.error);
+      .then((res) => {
+        if (res.error) {
+          S.login.err = errMsg(res.error);
           render();
           return;
         }
         S.login = {
           mode: "codeSent",
-          email: a,
+          email: email,
           err: "",
         };
-        toast("Código enviado a " + a);
+        toast("Código enviado a " + email);
         render();
       });
     return;
   }
   S.login = {
     mode: "codeSent",
-    email: a,
+    email: email,
     err: "",
   };
-  toast("Código enviado a " + a);
+  toast("Código enviado a " + email);
   render();
   return;
 });
-registerSubmit("fCode", (e) => {
-  const a = $("#lc").value.replace(/\D/g, "");
-  if (a.length !== 6) {
+// ingreso con código por email (en la demo el código es 123456)
+registerSubmit("fCode", (ev) => {
+  const code = $("#lc").value.replace(/\D/g, "");
+  if (code.length !== 6) {
     S.login.err = "El código tiene 6 dígitos.";
     render();
     return;
@@ -281,12 +286,12 @@ registerSubmit("fCode", (e) => {
     sb.auth
       .verifyOtp({
         email: S.login.email,
-        token: a,
+        token: code,
         type: "email",
       })
-      .then(async (n) => {
-        if (n.error) {
-          S.login.err = errMsg(n.error);
+      .then(async (res) => {
+        if (res.error) {
+          S.login.err = errMsg(res.error);
           render();
           return;
         }
@@ -297,27 +302,27 @@ registerSubmit("fCode", (e) => {
           err: "",
         };
         toast("Ingresaste como " + S.user.name);
-        const o = S.after || "home";
+        const next = S.after || "home";
         S.after = null;
-        go(o);
+        go(next);
       })
-      .catch((n) => {
-        S.login.err = errMsg(n);
+      .catch((err) => {
+        S.login.err = errMsg(err);
         render();
       });
     return;
   }
-  if (a !== "123456") {
+  if (code !== "123456") {
     S.login.err = "Código incorrecto. Revisá el email o pedí uno nuevo.";
     render();
     return;
   }
-  const t = S.login.email
+  const name = S.login.email
     .split("@")[0]
     .replace(/[._-]+/g, " ")
-    .replace(/\b\w/g, (n) => n.toUpperCase());
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
   S.user = {
-    name: t,
+    name: name,
     email: S.login.email,
   };
   S.login = {
@@ -325,9 +330,9 @@ registerSubmit("fCode", (e) => {
     email: "",
     err: "",
   };
-  toast("Ingresaste como " + t);
-  const s = S.after || "home";
+  toast("Ingresaste como " + name);
+  const next = S.after || "home";
   S.after = null;
-  go(s);
+  go(next);
   return;
 });

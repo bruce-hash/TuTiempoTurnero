@@ -15,9 +15,9 @@ const COMM0 = JSON.stringify(store.COMM);
 $("#reset").addEventListener("click", () => {
   if (!LIVE) {
     P.length = 0;
-    JSON.parse(P0).forEach((e) => P.push(e));
-    for (const e in STORE) {
-      delete STORE[e];
+    JSON.parse(P0).forEach((prov) => P.push(prov));
+    for (const pid in STORE) {
+      delete STORE[pid];
     }
     resetState();
     store.DEMO_PENDING = demoPending0();

@@ -10,37 +10,39 @@ import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
 
-registerSubmit("fSignup", (e) => {
-  const a = $("#au_n").value.trim().replace(/\s+/g, " ");
-  const t = $("#au_e").value.trim().toLowerCase();
-  const s = $("#au_t").value.trim();
-  const n = $("#au_p").value;
-  const o = $("#au_p2").value;
+// crear cuenta de cliente: valida y, en vivo, la crea en Supabase Auth (si pide confirmar el email, muestra
+// ese paso); en la demo entra directo
+registerSubmit("fSignup", (ev) => {
+  const name = $("#au_n").value.trim().replace(/\s+/g, " ");
+  const email = $("#au_e").value.trim().toLowerCase();
+  const tel = $("#au_t").value.trim();
+  const pass = $("#au_p").value;
+  const pass2 = $("#au_p2").value;
   Object.assign(S.login, {
-    nombre: a,
-    email: t,
-    tel: s,
+    nombre: name,
+    email: email,
+    tel: tel,
   });
-  if (a.length < 2 || !/[a-záéíóúñü]/i.test(a)) {
+  if (name.length < 2 || !/[a-záéíóúñü]/i.test(name)) {
     return authErr("Escribí tu nombre.", "au_n");
   }
-  if (!EMAIL.test(t)) {
+  if (!EMAIL.test(email)) {
     return authErr("Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com", "au_e");
   }
-  if (s && !/^[+\d][\d\s()-]{7,19}$/.test(s)) {
+  if (tel && !/^[+\d][\d\s()-]{7,19}$/.test(tel)) {
     return authErr("Ese celular no parece válido. Ejemplo: 2284 123456.", "au_t");
   }
-  if (!pwOk(n)) {
+  if (!pwOk(pass)) {
     return authErr(
       "La contraseña tiene que tener " +
         PWRULE.toLowerCase().replace("mínimo ", "al menos ").replace(".", ""),
       "au_p",
     );
   }
-  if (n.toLowerCase().includes(t.split("@")[0]) && t.split("@")[0].length >= 4) {
+  if (pass.toLowerCase().includes(email.split("@")[0]) && email.split("@")[0].length >= 4) {
     return authErr("La contraseña no puede contener tu email.", "au_p");
   }
-  if (n !== o) {
+  if (pass !== pass2) {
     return authErr("Las contraseñas no coinciden.", "au_p2");
   }
   if (!$("#au_ok").checked) {
@@ -50,59 +52,59 @@ registerSubmit("fSignup", (e) => {
     );
   }
   if (LIVE) {
-    const i = e.target.querySelector("button[type=submit]");
-    if (i) {
-      i.disabled = true;
+    const btn = ev.target.querySelector("button[type=submit]");
+    if (btn) {
+      btn.disabled = true;
     }
     sb.auth
       .signUp({
-        email: t,
-        password: n,
+        email: email,
+        password: pass,
         options: {
           data: {
-            full_name: a,
-            phone: s || null,
+            full_name: name,
+            phone: tel || null,
           },
           emailRedirectTo: location.origin + location.pathname,
         },
       })
-      .then(async (l) => {
-        if (l.error) {
-          if (i) {
-            i.disabled = false;
+      .then(async (res) => {
+        if (res.error) {
+          if (btn) {
+            btn.disabled = false;
           }
-          return authErr(errMsg(l.error));
+          return authErr(errMsg(res.error));
         }
-        if (l.data && l.data.session) {
+        if (res.data && res.data.session) {
           await api.session();
           afterLogin();
           return;
         }
         S.login = {
           mode: "confirm",
-          email: t,
+          email: email,
           err: "",
         };
         render();
       })
-      .catch((l) => {
-        if (i) {
-          i.disabled = false;
+      .catch((err) => {
+        if (btn) {
+          btn.disabled = false;
         }
-        authErr(errMsg(l));
+        authErr(errMsg(err));
       });
     return;
   }
-  if (store.DEMO_USERS[t]) {
+  if (store.DEMO_USERS[email]) {
     return authErr("Ese email ya tiene cuenta. Ingresá o recuperá tu contraseña.", "au_e");
   }
-  store.DEMO_USERS[t] = {
-    name: a,
-    pass: n,
-    tel: s,
+  store.DEMO_USERS[email] = {
+    name: name,
+    pass: pass,
+    tel: tel,
   };
-  demoSignIn(t, a);
-  S.form.tel = s;
+  demoSignIn(email, name);
+  S.form.tel = tel;
   afterLogin();
   return;
 });

@@ -3,39 +3,41 @@ import { activity, norm, rot } from "../lib/prestadores.js";
 import { CATS, catInfo } from "../lib/rubros.js";
 import { P } from "../store.js";
 
+// Modo demo: el listado y los conteos salen de los datos de ejemplo en memoria; el resto no hace nada (api.m.* son
+// funciones vacías y las pantallas cambian los datos directamente cuando no es LIVE).
 export const demoApi = {
   live: false,
   async counts() {
-    const e = (t) => !t.deleted && (t.status || "active") === "active";
-    const a = {};
-    CATS.forEach(([t]) => (a[t] = P.filter((s) => e(s) && s.cats.includes(t)).length));
-    a.todos = P.filter(e).length;
-    return a;
+    const isActive = (prov) => !prov.deleted && (prov.status || "active") === "active";
+    const counts = {};
+    CATS.forEach(([cat]) => (counts[cat] = P.filter((prov) => isActive(prov) && prov.cats.includes(cat)).length));
+    counts.todos = P.filter(isActive).length;
+    return counts;
   },
-  async listProviders({ cat: e, q: a, after: t }) {
-    const s = norm(a || "");
-    let n = P.filter(
-      (i) => !i.deleted && (i.status || "active") === "active" && (e === "todos" || i.cats.includes(e)),
+  async listProviders({ cat: cat, q: query, after: offset }) {
+    const needle = norm(query || "");
+    let list = P.filter(
+      (prov) => !prov.deleted && (prov.status || "active") === "active" && (cat === "todos" || prov.cats.includes(cat)),
     );
-    if (s) {
-      n = n.filter((i) =>
+    if (needle) {
+      list = list.filter((prov) =>
         norm(
-          i.name +
+          prov.name +
             " " +
-            i.addr +
+            prov.addr +
             " " +
-            i.svcs.map((l) => l[0]).join(" ") +
+            prov.svcs.map((svc) => svc[0]).join(" ") +
             " " +
-            i.cats.map((l) => catInfo(l).name).join(" "),
-        ).includes(s),
+            prov.cats.map((id) => catInfo(id).name).join(" "),
+        ).includes(needle),
       );
     }
-    n = n.sort((i, l) => activity(l) - activity(i) || rot(i.id) - rot(l.id));
-    const o = t || 0;
+    list = list.sort((left, right) => activity(right) - activity(left) || rot(left.id) - rot(right.id));
+    const from = offset || 0;
     return {
-      items: n.slice(o, o + PAGE),
-      next: o + PAGE < n.length ? o + PAGE : null,
-      total: n.length,
+      items: list.slice(from, from + PAGE),
+      next: from + PAGE < list.length ? from + PAGE : null,
+      total: list.length,
     };
   },
   async loadProvider() {},

@@ -7,20 +7,22 @@ import { happyAt, priceAt, uname } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 
-export function bookBar(e) {
-  const a = e.svcs[S.svc];
-  const t = selPrice(e);
-  const s = S.slot ? priceAt(e.id, t, S.slot.date, S.slot.time) : t;
-  const n = S.slot ? happyAt(e.id, S.slot.date, toMin(S.slot.time)) : 0;
-  const o = payNow(e.id, s, uname());
-  const i = feeFor(s);
+// barra fija de la reserva: horario elegido, precio (con happy hour tachado), seña y comisión
+export function bookBar(prov) {
+  const svc = prov.svcs[S.svc];
+  const base = selPrice(prov);
+  const price = S.slot ? priceAt(prov.id, base, S.slot.date, S.slot.time) : base;
+  const happy = S.slot ? happyAt(prov.id, S.slot.date, toMin(S.slot.time)) : 0;
+  const deposit = payNow(prov.id, price, uname());
+  const fee = feeFor(price);
   return `<div class="bookbar">
-   <div class="bb-info">${S.slot ? `<b>${esc(dayLabel(S.slot.date, true))} · ${S.slot.time}</b><span>${esc(a[0])}${selAdds(e).length ? " + " + selAdds(e).length : ""} · ${n ? `<s>${money(t)}</s> ` : ""}${money(s)}${S.reprog ? "" : (o < s ? ` · seña ${money(o)}` : "") + (i ? ` + ${money(i)} comisión` : "")}</span>` : `<b>Elegí un horario</b><span>${esc(a[0])} · ${money(t)}</span>`}</div>
+   <div class="bb-info">${S.slot ? `<b>${esc(dayLabel(S.slot.date, true))} · ${S.slot.time}</b><span>${esc(svc[0])}${selAdds(prov).length ? " + " + selAdds(prov).length : ""} · ${happy ? `<s>${money(base)}</s> ` : ""}${money(price)}${S.reprog ? "" : (deposit < price ? ` · seña ${money(deposit)}` : "") + (fee ? ` + ${money(fee)} comisión` : "")}</span>` : `<b>Elegí un horario</b><span>${esc(svc[0])} · ${money(base)}</span>`}</div>
    <button class="btn btn-pri" data-act="reservarT" ${S.slot ? "" : "disabled"}>${S.reprog ? "Cambiar" : "Reservar"}</button></div>`;
 }
+// no se usa (código muerto heredado del original)
 function misTurnosHtml() {
-  const e = store.BOOK.filter((a) => a.mine && a.status === "confirmed").sort((a, t) =>
-    (a.date + a.time).localeCompare(t.date + t.time),
+  const list = store.BOOK.filter((booking) => booking.mine && booking.status === "confirmed").sort((one, other) =>
+    (one.date + one.time).localeCompare(other.date + other.time),
   );
-  return `<div class="panel"><p class="lbl">Mis turnos</p>${e.length ? `<ul class="ag">${e.map((a) => `<li><span class="ag-t">${a.time}</span><div><b>${esc(dayLabel(a.date))} · ${esc(pr(a.pid).name)}</b><span>${esc(a.svc)}${a.series ? " · se repite" : ""}${a.att ? " · ✓ confirmado" : ""}</span></div><button class="btn btn-ghost" data-act="verTurno" data-id="${a.id}">Ver</button></li>`).join("")}</ul>` : '<p class="note">No tenés turnos reservados.</p>'}</div>`;
+  return `<div class="panel"><p class="lbl">Mis turnos</p>${list.length ? `<ul class="ag">${list.map((booking) => `<li><span class="ag-t">${booking.time}</span><div><b>${esc(dayLabel(booking.date))} · ${esc(pr(booking.pid).name)}</b><span>${esc(booking.svc)}${booking.series ? " · se repite" : ""}${booking.att ? " · ✓ confirmado" : ""}</span></div><button class="btn btn-ghost" data-act="verTurno" data-id="${booking.id}">Ver</button></li>`).join("")}</ul>` : '<p class="note">No tenés turnos reservados.</p>'}</div>`;
 }

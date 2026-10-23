@@ -1,38 +1,40 @@
-export const $ = (e) => document.querySelector(e);
-export const esc = (e) =>
-  String(e ?? "").replace(
+export const $ = (selector) => document.querySelector(selector);
+export const esc = (value) =>
+  String(value ?? "").replace(
     /[&<>"]/g,
-    (a) =>
+    (ch) =>
       ({
         "&": "&amp;",
         "<": "&lt;",
         ">": "&gt;",
         '"': "&quot;",
-      })[a],
+      })[ch],
   );
-export const ini = (e) =>
-  String(e || "")
+// Iniciales para los avatares sin foto (hasta dos letras; "?" si no hay nombre).
+export const ini = (name) =>
+  String(name || "")
     .replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñ ]/g, " ")
     .trim()
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((a) => a[0].toUpperCase())
+    .map((word) => word[0].toUpperCase())
     .join("") || "?";
-export function safeRedirect(e) {
-  let a;
+// Solo redirige al propio sitio o a Mercado Pago / Mercado Libre, y solo por http(s).
+export function safeRedirect(target) {
+  let url;
   try {
-    a = new URL(e, location.href);
-  } catch (s) {
+    url = new URL(target, location.href);
+  } catch (err) {
     throw new Error("Dirección inválida");
   }
   if (
-    (a.origin !== location.origin &&
-      !/(^|\.)mercadopago\.com(\.ar)?$/.test(a.hostname) &&
-      !/(^|\.)mercadolibre\.com(\.ar)?$/.test(a.hostname)) ||
-    !/^https?:$/.test(a.protocol)
+    (url.origin !== location.origin &&
+      !/(^|\.)mercadopago\.com(\.ar)?$/.test(url.hostname) &&
+      !/(^|\.)mercadolibre\.com(\.ar)?$/.test(url.hostname)) ||
+    !/^https?:$/.test(url.protocol)
   ) {
     throw new Error("Redirección no permitida");
   }
-  location.assign(a.href);
+  location.assign(url.href);
 }
