@@ -5,168 +5,175 @@ import { safeRedirect } from "../../lib/dom.js";
 import { S } from "../../state.js";
 import { mediaUrl } from "../../ui/fotos.js";
 
+// Escrituras del perfil del prestador: datos, rubros, servicios con sus adicionales, posteos, respuestas a reseñas,
+// fotos, DNI y conexión con Mercado Pago.
 Object.assign(LM, {
-  saveProfile: async (e, a) => {
+  // prof.svcs: servicios en formato svcMeta [nombre, minutos, precio, rubro, id, meta]; prof.before: cómo estaban.
+  // Los servicios y adicionales que se sacan no se borran: quedan inactivos (los turnos viejos los siguen nombrando).
+  saveProfile: async (prof, removedSvcIds) => {
     await saved(
       sb
         .from("providers")
         .update({
-          name: e.name,
-          bio: e.bio || null,
-          address: e.addr,
-          instagram: e.ig || null,
+          name: prof.name,
+          bio: prof.bio || null,
+          address: prof.addr,
+          instagram: prof.ig || null,
         })
-        .eq("id", e.id),
+        .eq("id", prof.id),
     );
     await saved(
       sb
         .from("provider_private")
         .update({
-          phone: e.tel || null,
+          phone: prof.tel || null,
         })
-        .eq("provider_id", e.id),
+        .eq("provider_id", prof.id),
     );
-    const s = (
-      (await call(sb.from("provider_categories").select("category_id").eq("provider_id", e.id))) || []
-    ).map((n) => n.category_id);
-    for (const n of e.cats) {
-      if (!s.includes(n)) {
+    const currentCats = (
+      (await call(sb.from("provider_categories").select("category_id").eq("provider_id", prof.id))) || []
+    ).map((row) => row.category_id);
+    for (const catId of prof.cats) {
+      if (!currentCats.includes(catId)) {
         await saved(
           sb.from("provider_categories").insert({
-            provider_id: e.id,
-            category_id: n,
+            provider_id: prof.id,
+            category_id: catId,
           }),
         );
       }
     }
-    for (const n of a || []) {
+    for (const svcId of removedSvcIds || []) {
       await saved(
         sb
           .from("services")
           .update({
             active: false,
           })
-          .eq("id", n),
+          .eq("id", svcId),
       );
     }
-    for (const [n, o] of e.svcs.entries()) {
-      const i = o[5] || {
+    for (const [index, svc] of prof.svcs.entries()) {
+      const meta = svc[5] || {
         every: 0,
         note: "",
         add: [],
       };
-      const l = {
-        provider_id: e.id,
-        category_id: o[3],
-        name: o[0],
-        duration_min: o[1],
-        price: o[2],
-        sort: n,
+      const svcRow = {
+        provider_id: prof.id,
+        category_id: svc[3],
+        name: svc[0],
+        duration_min: svc[1],
+        price: svc[2],
+        sort: index,
         active: true,
-        repeat_days: i.every || 0,
-        prep_note: i.note || null,
+        repeat_days: meta.every || 0,
+        prep_note: meta.note || null,
       };
-      if (o[4]) {
-        await saved(sb.from("services").update(l).eq("id", o[4]));
+      if (svc[4]) {
+        await saved(sb.from("services").update(svcRow).eq("id", svc[4]));
       } else {
-        const p = await saved(sb.from("services").insert(l).select("id").single());
-        o[4] = p.id;
+        const inserted = await saved(sb.from("services").insert(svcRow).select("id").single());
+        svc[4] = inserted.id;
       }
-      const c = ((e.before || []).find((p) => p[4] === o[4]) || [])[5];
-      const d = c ? c.add.map((p) => p[3]).filter(Boolean) : [];
-      for (const p of d) {
-        if (!i.add.some((w) => w[3] === p)) {
+      const metaBefore = ((prof.before || []).find((old) => old[4] === svc[4]) || [])[5];
+      // adicionales que estaban antes y ya no están: se desactivan
+      const oldAddonIds = metaBefore ? metaBefore.add.map((addon) => addon[3]).filter(Boolean) : [];
+      for (const addonId of oldAddonIds) {
+        if (!meta.add.some((addon) => addon[3] === addonId)) {
           await saved(
             sb
               .from("service_addons")
               .update({
                 active: false,
               })
-              .eq("id", p),
+              .eq("id", addonId),
           );
         }
       }
-      for (const [p, w] of i.add.entries()) {
-        const y = {
-          service_id: o[4],
-          name: w[0],
-          price: w[1],
-          duration_min: w[2],
-          sort: p,
+      for (const [addonIndex, addon] of meta.add.entries()) {
+        const addonRow = {
+          service_id: svc[4],
+          name: addon[0],
+          price: addon[1],
+          duration_min: addon[2],
+          sort: addonIndex,
           active: true,
         };
-        if (w[3]) {
-          await saved(sb.from("service_addons").update(y).eq("id", w[3]));
+        if (addon[3]) {
+          await saved(sb.from("service_addons").update(addonRow).eq("id", addon[3]));
         } else {
-          const k = await saved(sb.from("service_addons").insert(y).select("id").single());
-          w[3] = k.id;
+          const insertedAddon = await saved(sb.from("service_addons").insert(addonRow).select("id").single());
+          addon[3] = insertedAddon.id;
         }
       }
     }
-    for (const n of s) {
-      if (!e.cats.includes(n)) {
-        await saved(sb.from("provider_categories").delete().eq("provider_id", e.id).eq("category_id", n));
+    // rubros que se sacaron
+    for (const catId of currentCats) {
+      if (!prof.cats.includes(catId)) {
+        await saved(sb.from("provider_categories").delete().eq("provider_id", prof.id).eq("category_id", catId));
       }
     }
   },
-  post: (e) =>
+  post: (body) =>
     saved(
       sb.from("posts").insert({
         provider_id: S.me,
-        body: e,
+        body: body,
       }),
     ),
-  reply: (e) =>
+  reply: (review) =>
     saved(
       sb
         .from("reviews")
         .update({
-          reply: e.reply,
+          reply: review.reply,
         })
-        .eq("id", e.id),
+        .eq("id", review.id),
     ),
-  upload: async (e, a) => {
-    const t = (e.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const s = `${S.me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${t}`;
+  // sube la foto o el video al bucket media y completa media.id y media.url con lo guardado
+  upload: async (file, media) => {
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const storagePath = `${S.me}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     await saved(
-      sb.storage.from("media").upload(s, e, {
-        contentType: e.type,
+      sb.storage.from("media").upload(storagePath, file, {
+        contentType: file.type,
         upsert: false,
       }),
     );
-    const n = await saved(
+    const row = await saved(
       sb
         .from("media")
         .insert({
           provider_id: S.me,
-          storage_path: s,
-          kind: e.type.startsWith("video") ? "video" : "image",
-          label: e.name.slice(0, 80),
+          storage_path: storagePath,
+          kind: file.type.startsWith("video") ? "video" : "image",
+          label: file.name.slice(0, 80),
         })
         .select("id")
         .single(),
     );
-    a.id = n.id;
-    a.url = mediaUrl(s);
+    media.id = row.id;
+    media.url = mediaUrl(storagePath);
   },
-  uploadDni: async (e) => {
-    for (const a of e) {
-      const t = (a.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+  uploadDni: async (files) => {
+    for (const file of files) {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
       await saved(
-        sb.storage.from("dni").upload(`${S.user.id}/${Date.now()}.${t}`, a, {
-          contentType: a.type,
+        sb.storage.from("dni").upload(`${S.user.id}/${Date.now()}.${ext}`, file, {
+          contentType: file.type,
         }),
       );
     }
   },
   deleteProvider: () => saved(sb.rpc("delete_my_provider")),
   mpConnect: async () => {
-    const e = await sb.functions.invoke("mp-oauth", {
+    const res = await sb.functions.invoke("mp-oauth", {
       body: {},
     });
-    if (e.error || !e.data || !e.data.url) {
+    if (res.error || !res.data || !res.data.url) {
       throw new Error("No se pudo abrir Mercado Pago");
     }
-    safeRedirect(e.data.url);
+    safeRedirect(res.data.url);
   },
 });
