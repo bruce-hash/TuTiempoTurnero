@@ -6,59 +6,61 @@ import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
-async function shrinkImage(e, a = 640) {
-  if (!e || !/^image\/(jpeg|png|webp|heic|heif)$/i.test(e.type)) {
+// Achica la foto a maxSide px de lado mayor y la vuelve JPEG: pesa poco y no lleva la ubicación del celular.
+async function shrinkImage(file, maxSide = 640) {
+  if (!file || !/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)) {
     throw new Error("Elegí una foto JPG, PNG o WEBP.");
   }
-  if (e.size > 15e6) {
+  if (file.size > 15e6) {
     throw new Error("La foto es muy pesada (máximo 15 MB).");
   }
-  const t = URL.createObjectURL(e);
+  const url = URL.createObjectURL(file);
   try {
-    const s = await new Promise((c, d) => {
-      const p = new Image();
-      p.onload = () => c(p);
-      p.onerror = () => d(new Error("No pudimos leer esa foto."));
-      p.src = t;
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("No pudimos leer esa foto."));
+      image.src = url;
     });
-    const n = Math.min(1, a / Math.max(s.width, s.height));
-    const o = document.createElement("canvas");
-    o.width = Math.round(s.width * n);
-    o.height = Math.round(s.height * n);
-    const i = o.getContext("2d");
-    if (!i) {
+    const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
       throw new Error("Tu navegador no pudo procesar la foto.");
     }
-    i.drawImage(s, 0, 0, o.width, o.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     return {
-      blob: await new Promise((c) => o.toBlob(c, "image/jpeg", 0.85)),
-      data: o.toDataURL("image/jpeg", 0.85),
+      blob: await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85)),
+      data: canvas.toDataURL("image/jpeg", 0.85),
     };
   } finally {
-    URL.revokeObjectURL(t);
+    URL.revokeObjectURL(url);
   }
 }
-export async function onPhoto(e, a) {
-  const t = e.files && e.files[0];
-  e.value = "";
-  if (t) {
+// Foto de perfil del usuario (target "me") o del prestador: en vivo se sube; en la demo queda como data URL.
+export async function onPhoto(input, target) {
+  const file = input.files && input.files[0];
+  input.value = "";
+  if (file) {
     try {
-      const { blob: s, data: n } = await shrinkImage(t);
-      if (a === "me") {
-        const o = LIVE ? await api.m.setAvatar(s) : n;
-        S.user.photo = o;
+      const { blob: blob, data: dataUrl } = await shrinkImage(file);
+      if (target === "me") {
+        const photo = LIVE ? await api.m.setAvatar(blob) : dataUrl;
+        S.user.photo = photo;
         if (!LIVE && store.DEMO_USERS[S.user.email]) {
-          store.DEMO_USERS[S.user.email].photo = o;
+          store.DEMO_USERS[S.user.email].photo = photo;
         }
       } else {
-        const o = LIVE ? await api.m.setProviderPhoto(s) : n;
-        pr(ME()).photo = o;
+        const photo = LIVE ? await api.m.setProviderPhoto(blob) : dataUrl;
+        pr(ME()).photo = photo;
       }
       toast("Foto actualizada");
       render();
-    } catch (s) {
-      if (!s.__shown) {
-        toast(s.message || "No pudimos subir la foto.");
+    } catch (err) {
+      if (!err.__shown) {
+        toast(err.message || "No pudimos subir la foto.");
       }
     }
   }
