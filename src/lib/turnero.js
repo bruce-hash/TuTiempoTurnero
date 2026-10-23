@@ -7,23 +7,26 @@ import { S } from "../state.js";
 import { store } from "../store.js";
 import { notif } from "../ui/toast.js";
 
-export const R = (e, a, t) => ({
-  on: e,
-  from: a,
-  to: t,
+// Franja horaria de un turno de atención (mañana o tarde).
+export const R = (enabled, start, end) => ({
+  on: enabled,
+  from: start,
+  to: end,
 });
-const dayCfg = (e, a, t) => ({
-  on: e,
-  m: a,
-  t,
+const dayCfg = (enabled, morning, afternoon) => ({
+  on: enabled,
+  m: morning,
+  t: afternoon,
 });
-export function skey(e) {
-  if (e) {
-    return e[4] || e[0];
+// Clave estable de un servicio: su id (en vivo) o su nombre (en la demo).
+export function skey(svc) {
+  if (svc) {
+    return svc[4] || svc[0];
   } else {
     return "";
   }
 }
+// Configuración de agenda de un prestador cuando todavía no se cargó la suya (en vivo la trae la base).
 export const defCfg = () => ({
   on: true,
   cash: true,
@@ -55,42 +58,44 @@ export const defCfg = () => ({
   },
   strict: false,
 });
-export function ranges(e, dow) {
-  const t = e.days[dow];
-  if (!t || !t.on) {
+// Franjas de atención de un día de la semana, en minutos desde las 0 h, de la más temprana a la más tarde.
+export function ranges(conf, dow) {
+  const day = conf.days[dow];
+  if (!day || !day.on) {
     return [];
   } else {
-    return [t.m, t.t]
-      .filter((s) => s && s.on && s.from && s.to && toMin(s.to) > toMin(s.from))
-      .map((s) => [toMin(s.from), toMin(s.to)])
-      .sort((s, n) => s[0] - n[0]);
+    return [day.m, day.t]
+      .filter((shift) => shift && shift.on && shift.from && shift.to && toMin(shift.to) > toMin(shift.from))
+      .map((shift) => [toMin(shift.from), toMin(shift.to)])
+      .sort((left, right) => left[0] - right[0]);
   }
 }
-export const rangesTxt = (e) => e.map(([a, t]) => fromMin(a) + "–" + fromMin(t)).join(" y ");
+export const rangesTxt = (list) => list.map(([from, to]) => fromMin(from) + "–" + fromMin(to)).join(" y ");
 store.CFGS = {};
 store.BOOK = [];
 store.WAIT = [];
 store.BID = 1;
 store.CLIENTS = {};
 store.SID = 1;
-export const cfg = (e) =>
-  (store.CFGS[e] ||= (() => {
-    const a = defCfg();
-    if (!LIVE && pr(e)) {
-      a.buffer = (RUBRO[pr(e).cats[0]] || RUBRO.b).buffer;
+// Configuración de agenda de cada prestador, creada la primera vez que se pide (en la demo, con valores de ejemplo).
+export const cfg = (pid) =>
+  (store.CFGS[pid] ||= (() => {
+    const conf = defCfg();
+    if (!LIVE && pr(pid)) {
+      conf.buffer = (RUBRO[pr(pid).cats[0]] || RUBRO.b).buffer;
     }
-    if (+e != 7 && +e != 21) {
-      a.happy.on = false;
+    if (+pid != 7 && +pid != 21) {
+      conf.happy.on = false;
     }
-    if (!LIVE && pr(e)) {
-      pr(e).svcs.forEach((t) => {
-        if (+e != 7 || t[0] !== "Arreglo de barba") {
-          a.stamps.goals[skey(t)] = +e == 21 ? 20 : 15;
+    if (!LIVE && pr(pid)) {
+      pr(pid).svcs.forEach((svc) => {
+        if (+pid != 7 || svc[0] !== "Arreglo de barba") {
+          conf.stamps.goals[skey(svc)] = +pid == 21 ? 20 : 15;
         }
       });
     }
-    if (+e == 21) {
-      a.happy = {
+    if (+pid == 21) {
+      conf.happy = {
         on: true,
         pct: 15,
         days: [2, 3],
@@ -98,10 +103,10 @@ export const cfg = (e) =>
         to: "12:00",
       };
     }
-    return a;
+    return conf;
   })());
-export const cli = (e) =>
-  (store.CLIENTS[e] ||= {
+export const cli = (name) =>
+  (store.CLIENTS[name] ||= {
     v: 0,
     n: 0,
     last: null,
@@ -112,115 +117,118 @@ export const cli = (e) =>
   });
 export const uname = () =>
   S.user ? (S.user.name.split(" ")[0] + " " + (S.user.name.split(" ")[1] || "").charAt(0) + ".").trim() : "";
-export const isDayBlock = (e) => e.type === "block" && String(e.svc || "").startsWith("🏖️");
-export const busy = (e, a) => store.BOOK.filter((t) => t.pid == e && t.date === a && t.status !== "cancelled");
+export const isDayBlock = (booking) => booking.type === "block" && String(booking.svc || "").startsWith("🏖️");
+export const busy = (pid, date) => store.BOOK.filter((booking) => booking.pid == pid && booking.date === date && booking.status !== "cancelled");
 export function overlaps(a1, a2, b1, b2) {
   return a1 < b2 && b1 < a2;
 }
 export function happyAt(pid, date, min) {
-  const s = cfg(pid).happy;
-  if (!s.on) {
+  const happy = cfg(pid).happy;
+  if (!happy.on) {
     return 0;
   }
-  const n = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
-  if (s.days.includes(n) && min >= toMin(s.from) && min < toMin(s.to)) {
-    return s.pct;
+  const dow = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
+  if (happy.days.includes(dow) && min >= toMin(happy.from) && min < toMin(happy.to)) {
+    return happy.pct;
   } else {
     return 0;
   }
 }
+// Horarios de un día para un servicio de `dur` minutos: libres u ocupados (contando el descanso entre turnos) y con
+// el descuento de happy hour. Si el día está cerrado, devuelve el motivo.
 export function slotsFor(pid, date, dur, ignoreId, anyDate) {
-  const o = cfg(pid);
-  const i = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
-  if (!o.on) {
+  const conf = cfg(pid);
+  const dow = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
+  if (!conf.on) {
     return {
       closed: true,
       reason: "El profesional no tiene turnos online activos",
       list: [],
     };
   }
-  const l = ranges(o, i);
-  if (!l.length) {
+  const shifts = ranges(conf, dow);
+  if (!shifts.length) {
     return {
       closed: true,
       reason: "Cerrado",
       list: [],
     };
   }
-  if (busy(pid, date).some((y) => isDayBlock(y) || y.dayBlock)) {
+  if (busy(pid, date).some((booking) => isDayBlock(booking) || booking.dayBlock)) {
     return {
       closed: true,
       reason: "El profesional no atiende este día",
       list: [],
     };
   }
-  if (!anyDate && date > dkey(addDays(o.ahead - 1))) {
+  if (!anyDate && date > dkey(addDays(conf.ahead - 1))) {
     return {
       closed: true,
       reason: "Todavía no abrió la agenda",
       list: [],
     };
   }
-  const c = NOW();
-  const d = c.getHours() * 60 + c.getMinutes();
-  const p = busy(pid, date).filter((y) => y.id !== ignoreId);
-  const w = [];
-  for (const [y, k] of l) {
-    for (let h = y; h + dur <= k; h += o.step) {
-      if (date === TODAY() && h <= d + o.notice) {
+  const now = NOW();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const taken = busy(pid, date).filter((booking) => booking.id !== ignoreId);
+  const list = [];
+  for (const [from, to] of shifts) {
+    for (let start = from; start + dur <= to; start += conf.step) {
+      if (date === TODAY() && start <= nowMin + conf.notice) {
         continue;
       }
-      const j = p.some((b) =>
+      const clash = taken.some((booking) =>
         overlaps(
-          h,
-          h + dur + (o.buffer || 0),
-          toMin(b.time),
-          toMin(b.time) + b.dur + (b.busy ? 0 : (b.buf ?? (o.buffer || 0))),
+          start,
+          start + dur + (conf.buffer || 0),
+          toMin(booking.time),
+          toMin(booking.time) + booking.dur + (booking.busy ? 0 : (booking.buf ?? (conf.buffer || 0))),
         ),
       );
-      w.push({
-        time: fromMin(h),
-        free: !j,
-        disc: happyAt(pid, date, h),
+      list.push({
+        time: fromMin(start),
+        free: !clash,
+        disc: happyAt(pid, date, start),
       });
     }
   }
   return {
     closed: false,
-    list: w,
+    list: list,
   };
 }
-export const freeCount = (e, a, t, s) => slotsFor(e, a, t, s).list.filter((n) => n.free).length;
+export const freeCount = (pid, date, dur, ignoreId) => slotsFor(pid, date, dur, ignoreId).list.filter((slot) => slot.free).length;
 export function nextFree(pid, dur, ig) {
-  const s = cfg(pid);
-  for (let n = 0; n < s.ahead; n++) {
-    const o = dkey(addDays(n));
-    const i = slotsFor(pid, o, dur, ig).list.find((l) => l.free);
-    if (i) {
+  const conf = cfg(pid);
+  for (let day = 0; day < conf.ahead; day++) {
+    const date = dkey(addDays(day));
+    const slot = slotsFor(pid, date, dur, ig).list.find((item) => item.free);
+    if (slot) {
       return {
-        date: o,
-        time: i.time,
-        disc: i.disc,
+        date: date,
+        time: slot.time,
+        disc: slot.disc,
       };
     }
   }
   return null;
 }
-export const priceAt = (e, a, t, s) => Math.round(a * (1 - happyAt(e, t, toMin(s)) / 100));
-export function seriesDates(date, weeks, t) {
-  const s = [];
-  for (let n = 1; n <= t; n++) {
-    s.push(dkey(addDays(weeks * 7 * n, date)));
+export const priceAt = (pid, price, date, time) => Math.round(price * (1 - happyAt(pid, date, toMin(time)) / 100));
+export function seriesDates(date, weeks, count) {
+  const dates = [];
+  for (let rep = 1; rep <= count; rep++) {
+    dates.push(dkey(addDays(weeks * 7 * rep, date)));
   }
-  return s;
+  return dates;
 }
-export function freed(e) {
-  const a = store.WAIT.filter((t) => t.pid == e.pid && t.date === e.date);
-  if (a.length) {
-    store.WAIT = store.WAIT.filter((t) => t.pid != e.pid || t.date !== e.date);
+// Se liberó un horario: saca de la lista de espera a los de ese día y avisa.
+export function freed(booking) {
+  const waiting = store.WAIT.filter((entry) => entry.pid == booking.pid && entry.date === booking.date);
+  if (waiting.length) {
+    store.WAIT = store.WAIT.filter((entry) => entry.pid != booking.pid || entry.date !== booking.date);
     notif(
-      `<span class="mp" style="background:var(--ok)">🔔</span><div><b>Se liberó un turno</b><br><span class="hint">${esc(pr(e.pid).name)} · ${esc(dayLabel(e.date))} ${e.time}. Avisamos a quienes estaban en lista de espera.</span></div>`,
+      `<span class="mp" style="background:var(--ok)">🔔</span><div><b>Se liberó un turno</b><br><span class="hint">${esc(pr(booking.pid).name)} · ${esc(dayLabel(booking.date))} ${booking.time}. Avisamos a quienes estaban en lista de espera.</span></div>`,
     );
   }
-  return a.length;
+  return waiting.length;
 }
