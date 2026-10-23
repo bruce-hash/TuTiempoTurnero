@@ -14,6 +14,8 @@ Auditoría de Bruno (con Claude) sobre el paquete del cliente, octubre 2026.
 | `src/prototipo.html` (reconstruido) | Mismo comportamiento que el `app.cjs` del cliente: crawl (465 toques, 0 errores), audit_clicks y recorrido en navegador idénticos |
 | `tools/build.mjs` → `dist/` | Mismo comportamiento que el paquete del cliente en navegador real |
 | Edge Functions de Mercado Pago | Bien diseñadas, con los errores de abajo |
+| Bloque A1: `src/prototipo.html` → módulos de `src/` con Vite (`1368349` → merge `9899126`) | Mudanza pura: cada declaración de la referencia, idéntica en su módulo (`tools/mudanza/`, borrado al aprobar A1). Crawl idéntico toque por toque, e2e 107/107, comparación en navegador 36/36 |
+| Bloque A2: nombres claros y comentarios (merge `9899126` → merge `6d7b5a0`) | Código idéntico módulo por módulo: árbol de sintaxis con las variables locales en nombres canónicos y sin comentarios (`tools/legibilidad/`, borrado al aprobar A2). Variables locales de una letra: 2834 → 0. Crawl idéntico toque por toque, e2e 107/107, comparación 36/36 |
 
 ## Hallazgos
 
@@ -96,7 +98,7 @@ no cargar ejemplos en producción.
 
 ### H16 · Baja · Mantenimiento
 - `vendor/supabase.js` 2.45.4 es viejo: actualizar en un bloque propio, con todas las pruebas.
-- Variables internas con letras sueltas (hoy en los módulos de `src/`, que vienen de `prototipo.html`): se renombran en el Bloque A2.
+- Variables internas con letras sueltas: resuelto en el Bloque A2 (ver la tabla de arriba).
 
 ### H17 · Baja · Código muerto de saldo y cashback (Bloque A1)
 TuTiempo ya no maneja saldo ni cashback (v25), pero el código sigue: `src/lib/saldo.js` (`CASHBACK = 0`, `cbOf`, `wMove`,
