@@ -4,10 +4,11 @@ import { store } from "../store.js";
 import { MSG_DEF } from "../views/prestador/mensajes.js";
 import { demoClosings } from "../views/prestador/panel.js";
 
+// comisión de los turnos de ejemplo pagados por la app, para que las finanzas y el admin la descuenten
 export function seedFees() {
-  store.BOOK.forEach((e) => {
-    if (e.src === "app" && e.type !== "block" && e.fee == null && (e.paid || 0) > 0) {
-      e.fee = feeFor(e.price);
+  store.BOOK.forEach((booking) => {
+    if (booking.src === "app" && booking.type !== "block" && booking.fee == null && (booking.paid || 0) > 0) {
+      booking.fee = feeFor(booking.price);
     }
   });
 }
@@ -138,39 +139,39 @@ export function seedExtra() {
       notes: "",
       bday: "",
     },
-  }).forEach(([a, t]) => {
-    store.CLIENTS[a] = Object.assign(
+  }).forEach(([name, data]) => {
+    store.CLIENTS[name] = Object.assign(
       {
         v: 0,
         n: 0,
       },
-      store.CLIENTS[a] || {},
-      t,
+      store.CLIENTS[name] || {},
+      data,
     );
   });
-  Object.keys(store.CLIENTS).forEach((a) => {
-    const t = store.CLIENTS[a];
-    if (t.last === void 0) {
-      t.last = 7 + ((a.length * 13) % 20);
+  Object.keys(store.CLIENTS).forEach((name) => {
+    const client = store.CLIENTS[name];
+    if (client.last === void 0) {
+      client.last = 7 + ((name.length * 13) % 20);
     }
-    t.spend ||= 12500;
-    t.tel ||= "2284 5" + String(1e4 + a.length * 731).slice(-5);
-    if (t.notes === void 0) {
-      t.notes = "";
+    client.spend ||= 12500;
+    client.tel ||= "2284 5" + String(1e4 + name.length * 731).slice(-5);
+    if (client.notes === void 0) {
+      client.notes = "";
     }
-    if (t.bday === void 0) {
-      t.bday = "";
+    if (client.bday === void 0) {
+      client.bday = "";
     }
   });
   store.CLOSINGS = {};
   store.FIN = [];
-  for (let a = 29; a >= 1; a--) {
-    const t = dkey(addDays(-a));
-    const s = /* @__PURE__ */ new Date(t + "T12:00:00").getDay();
-    const n = ((a * 37) % 11) / 10;
-    if (s === 0) {
+  for (let daysAgo = 29; daysAgo >= 1; daysAgo--) {
+    const date = dkey(addDays(-daysAgo));
+    const dow = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
+    const factor = ((daysAgo * 37) % 11) / 10;
+    if (dow === 0) {
       store.FIN.push({
-        date: t,
+        date: date,
         app: 0,
         man: 0,
         walk: 0,
@@ -178,13 +179,13 @@ export function seedExtra() {
       });
       continue;
     }
-    const o = s === 6 ? 0.55 : s === 5 ? 1.25 : 1;
+    const dayFactor = dow === 6 ? 0.55 : dow === 5 ? 1.25 : 1;
     store.FIN.push({
-      date: t,
-      app: Math.round(((22e3 + n * 18e3) * o) / 100) * 100,
-      man: Math.round(((15e3 + n * 9e3) * o) / 100) * 100,
-      walk: Math.round(((12e3 + (1 - n) * 15e3) * o) / 100) * 100,
-      prod: a % 3 === 0 ? 9e3 : 0,
+      date: date,
+      app: Math.round(((22e3 + factor * 18e3) * dayFactor) / 100) * 100,
+      man: Math.round(((15e3 + factor * 9e3) * dayFactor) / 100) * 100,
+      walk: Math.round(((12e3 + (1 - factor) * 15e3) * dayFactor) / 100) * 100,
+      prod: daysAgo % 3 === 0 ? 9e3 : 0,
     });
   }
   store.CLOSINGS = demoClosings(store.FIN);
