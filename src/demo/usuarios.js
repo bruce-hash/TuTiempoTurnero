@@ -52,16 +52,16 @@ export function demoSignIn(email, name) {
     if (!S.stashed) {
       demoStash();
     }
-    store.BOOK.forEach((s) => {
-      if (s.mine) {
-        s.mine = false;
-        s.demoOwner = store.DEMO_OWNER;
+    store.BOOK.forEach((booking) => {
+      if (booking.mine) {
+        booking.mine = false;
+        booking.demoOwner = store.DEMO_OWNER;
       }
     });
-    store.BOOK.forEach((s) => {
-      if (s.demoOwner === email) {
-        s.mine = true;
-        delete s.demoOwner;
+    store.BOOK.forEach((booking) => {
+      if (booking.demoOwner === email) {
+        booking.mine = true;
+        delete booking.demoOwner;
       }
     });
     store.DEMO_OWNER = email;
@@ -72,12 +72,12 @@ export function demoSignIn(email, name) {
       tel: (store.DEMO_USERS[email] || {}).tel || "",
     };
   }
-  const t = store.DEMO_ST[email];
-  if (t) {
-    S.wallet = t.wallet;
-    S.wmov = t.wmov;
-    S.followingBy = t.followingBy;
-    S.form.tel = t.tel;
+  const st = store.DEMO_ST[email];
+  if (st) {
+    S.wallet = st.wallet;
+    S.wmov = st.wmov;
+    S.followingBy = st.followingBy;
+    S.form.tel = st.tel;
   }
   S.stashed = false;
   S.user = {
