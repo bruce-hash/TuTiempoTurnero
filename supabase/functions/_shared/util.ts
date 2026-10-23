@@ -53,29 +53,63 @@ export function safeEqual(a: string, b: string): boolean {
 }
 
 export const COMMISSION = 0.10; // solo si no se puede leer la comisión de la base
-export const MP_API = "https://api.mercadopago.com";
+// API de Mercado Pago. Solo para pruebas se cambia con el secreto MP_API_URL de la función (un Mercado Pago falso);
+// sin ese secreto, siempre la real.
+export const MP_API = (Deno.env.get("MP_API_URL") ?? "").replace(/\/+$/, "") || "https://api.mercadopago.com";
 
-// Llave de Mercado Pago del PRESTADOR (OAuth). Con ella se crea el cobro: la plata entra a SU cuenta y la comisión
-// (marketplace_fee) va a la cuenta de TuTiempo, dueña de la aplicación (MP_CLIENT_ID). Las llaves duran 180 días:
-// si faltan menos de `days` días, se renueva con el refresh_token y se guarda la nueva (MP entrega un refresh_token nuevo cada vez).
-export async function sellerToken(db: SupabaseClient, pid: number, days = 15): Promise<string | null> {
-  const { data: sec } = await db.from("provider_secrets").select("mp_access_token, mp_refresh_token, mp_expires_at").eq("provider_id", pid).maybeSingle();
-  if (!sec?.mp_access_token) return null;
-  const left = sec.mp_expires_at ? new Date(sec.mp_expires_at).getTime() - Date.now() : Infinity;
-  if (left > days * 864e5 || !sec.mp_refresh_token) return left > 0 ? sec.mp_access_token : null;
+// Cuenta de Mercado Pago de un prestador (tabla mp_accounts, Bloque 1). Una sola "active" por prestador: la única que
+// crea cobros. Las "refunds_only" (desconectadas o reemplazadas) sirven solo para devoluciones y consultas.
+export type MpAccount = {
+  id: number; provider_id: number; mp_user_id: string | null; status: "active" | "refunds_only" | "purged";
+  access_token: string | null; refresh_token: string | null; expires_at: string | null;
+};
+const ACCOUNT_COLS = "id, provider_id, mp_user_id, status, access_token, refresh_token, expires_at";
+
+export async function activeAccount(db: SupabaseClient, pid: number): Promise<MpAccount | null> {
+  const { data } = await db.from("mp_accounts").select(ACCOUNT_COLS).eq("provider_id", pid).eq("status", "active").maybeSingle();
+  return (data as MpAccount) ?? null;
+}
+export async function accountById(db: SupabaseClient, id: number): Promise<MpAccount | null> {
+  const { data } = await db.from("mp_accounts").select(ACCOUNT_COLS).eq("id", id).maybeSingle();
+  return (data as MpAccount) ?? null;
+}
+// Cuentas de un prestador que todavía tienen llave (la activa primero): para avisos viejos que no dicen la cuenta.
+export async function providerAccounts(db: SupabaseClient, pid: number): Promise<MpAccount[]> {
+  const { data } = await db.from("mp_accounts").select(ACCOUNT_COLS).eq("provider_id", pid).neq("status", "purged")
+    .order("status", { ascending: true }).order("connected_at", { ascending: false });
+  return (data as MpAccount[]) ?? [];
+}
+
+// Llave de una cuenta. Las llaves duran 180 días: si faltan menos de `days` días, se renueva con el refresh_token y se
+// guarda la nueva (MP entrega un refresh_token nuevo cada vez). `charge`: solo sirve la cuenta activa (crear cobros).
+export async function accountToken(db: SupabaseClient, acc: MpAccount | null, opts: { days?: number; charge?: boolean } = {}): Promise<string | null> {
+  const days = opts.days ?? 15;
+  if (!acc?.access_token || acc.status === "purged") return null;
+  if (opts.charge && acc.status !== "active") return null;
+  const left = acc.expires_at ? new Date(acc.expires_at).getTime() - Date.now() : Infinity;
+  if (left > days * 864e5 || !acc.refresh_token) return left > 0 ? acc.access_token : null;
   const r = await fetch(`${MP_API}/oauth/token`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: env("MP_CLIENT_ID"), client_secret: env("MP_CLIENT_SECRET"), grant_type: "refresh_token", refresh_token: sec.mp_refresh_token }),
+    body: JSON.stringify({ client_id: env("MP_CLIENT_ID"), client_secret: env("MP_CLIENT_SECRET"), grant_type: "refresh_token", refresh_token: acc.refresh_token }),
   });
   const tok = await r.json().catch(() => ({}));
   if (!r.ok || !tok.access_token) {
-    console.error("MP refresh", pid, r.status);
-    if (left <= 0) await db.from("provider_private").update({ mp_connected: false }).eq("provider_id", pid);   // venció: tiene que reconectar
-    return left > 0 ? sec.mp_access_token : null;
+    console.error("MP refresh", acc.id, r.status);
+    // venció y no se pudo renovar: si era la activa, deja de cobrar (tiene que reconectar)
+    await db.rpc("mp_account_error", { p_account: acc.id, p_error: `No se pudo renovar la llave (${r.status})`, p_expired: left <= 0 });
+    return left > 0 ? acc.access_token : null;
   }
-  await db.from("provider_secrets").update({
-    mp_access_token: tok.access_token, mp_refresh_token: tok.refresh_token ?? sec.mp_refresh_token,
-    mp_expires_at: tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000).toISOString() : null,
-  }).eq("provider_id", pid);
+  await db.from("mp_accounts").update({
+    access_token: tok.access_token, refresh_token: tok.refresh_token ?? acc.refresh_token, refreshed_at: new Date().toISOString(), last_error: null,
+    expires_at: tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000).toISOString() : null,
+  }).eq("id", acc.id);
   return tok.access_token;
+}
+
+// Respuesta de Mercado Pago sin datos de tarjeta ni del documento del pagador (la base vuelve a limpiarla).
+export function mpClean(pay: Record<string, unknown>): Record<string, unknown> {
+  const { card: _card, barcode: _barcode, transaction_details: _td, ...rest } = pay ?? {};
+  const payer = rest.payer && typeof rest.payer === "object" ? { ...(rest.payer as Record<string, unknown>) } : null;
+  if (payer) { delete payer.identification; delete payer.phone; delete payer.first_name; delete payer.last_name; rest.payer = payer; }
+  return rest;
 }

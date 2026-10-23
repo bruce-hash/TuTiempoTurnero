@@ -149,6 +149,54 @@ jobs:
           path: .build/comparar/
           if-no-files-found: ignore
 
+  funciones:
+    name: Edge Functions (Deno · Mercado Pago falso)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.1.4
+
+      - name: PostgREST 12.2.3
+        run: |
+          curl -sSfL https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz | tar xJ -C "$RUNNER_TEMP"
+          echo "POSTGREST=$RUNNER_TEMP/postgrest" >> "$GITHUB_ENV"
+
+      - name: Tipos de las Edge Functions (deno check)
+        run: deno check --config pruebas/funciones/deno.json supabase/functions/*/index.ts
+
+      - name: Funciones reales contra la base, PostgREST y un Mercado Pago falso
+        run: npm run test:funciones
+
   apache:
     name: Apache (.htaccess real · fallback, HTTPS, CSP)
     runs-on: ubuntu-24.04

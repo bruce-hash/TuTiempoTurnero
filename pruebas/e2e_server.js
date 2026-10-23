@@ -68,12 +68,14 @@ async function functions(req, res, url) {
   LOG.push({ fn: name, body: j });
   if (!claims || !claims.sub) return send(res, 401, { error: "login_required" });
   if (name === "mp-create-preference") {
-    const r = await db.query("select coalesce(sum(deposit + client_fee - paid_wallet),0)::int as amount from public.bookings where id = any($1::bigint[]) and client_id = $2 and status = 'hold'", [j.booking_ids, claims.sub]);
-    // simula que Mercado Pago aprobó el pago y llamó al webhook
-    await db.query("select public.confirm_payment($1::bigint[], $2, $3)", [j.booking_ids, "mp-test-" + Date.now(), r.rows[0].amount]);
+    const r = await db.query("select coalesce(sum(deposit + client_fee - paid_wallet),0)::int as amount, coalesce(sum(client_fee),0)::int as fee, min(provider_id) as pid from public.bookings where id = any($1::bigint[]) and client_id = $2 and status = 'hold'", [j.booking_ids, claims.sub]);
+    // como la función real: solo cobra la cuenta activa del prestador
+    if (!(await db.query("select public.provider_can_charge($1) as ok", [r.rows[0].pid])).rows[0].ok) return send(res, 409, { error: "provider_mp_not_connected" });
+    // simula que Mercado Pago aprobó el pago y llamó al webhook (con la comisión que informa MP)
+    await db.query("select public.confirm_payment($1::bigint[], $2, $3, p_provider => $4, p_fee_mp => $5)", [j.booking_ids, "mp-test-" + Date.now(), r.rows[0].amount, r.rows[0].pid, r.rows[0].fee]);
     return send(res, 200, { init_point: `${req.headers.origin || "http://localhost:" + PORT}/?mp=success&b=${j.booking_ids[0]}` });
   }
-  if (name === "mp-oauth") { await db.query("update public.provider_private set mp_connected=true where provider_id = (select id from public.providers where owner_id=$1)", [claims.sub]); return send(res, 200, { url: `/?mp_connected=1` }) }
+  if (name === "mp-oauth") { await db.query("select public.mp_connect(id, 'mp-test-' || id, 'TEST-token', null, 15552000) from public.providers where owner_id=$1 and status<>'deleted'", [claims.sub]); return send(res, 200, { url: `/?mp_connected=1` }) }
   send(res, 404, {});
 }
 
