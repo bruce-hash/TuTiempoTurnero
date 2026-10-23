@@ -11,20 +11,20 @@ import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { useProvider } from "../views/prestador/panel.js";
 
-registerClick("demoLogin", (e, x, v) => {
-  const r = +x.dataset.id;
-  useProvider(r);
+registerClick("demoLogin", (ev, el, act) => {
+  const pid = +el.dataset.id;
+  useProvider(pid);
   S.barberAuth = true;
   S.role = "barbero";
   S.btab = "agenda";
   S.pctx = null;
   S.edSvcs = null;
-  toast("Entraste como " + pr(r).name);
+  toast("Entraste como " + pr(pid).name);
   render();
   window.scrollTo(0, 0);
   return;
 });
-registerClick("googleProv", (e, x, v) => {
+registerClick("googleProv", (ev, el, act) => {
   if (LIVE) {
     saveAfter("panel");
     sb.auth
@@ -34,9 +34,9 @@ registerClick("googleProv", (e, x, v) => {
           redirectTo: location.origin + location.pathname,
         },
       })
-      .then((r) => {
-        if (r.error) {
-          toast(errMsg(r.error));
+      .then((res) => {
+        if (res.error) {
+          toast(errMsg(res.error));
         }
       });
     return;
@@ -50,13 +50,13 @@ registerClick("googleProv", (e, x, v) => {
   render();
   window.scrollTo(0, 0);
 });
-registerClick("bShow", (e, x, v) => {
+registerClick("bShow", (ev, el, act) => {
   S.blogin.email = $("#be").value;
   S.blogin.pass = $("#bp").value;
   S.blogin.show = !S.blogin.show;
   render();
 });
-registerClick("bRecover", (e, x, v) => {
+registerClick("bRecover", (ev, el, act) => {
   S.login = {
     mode: "forgot",
     email: (($("#be") || {}).value || S.blogin.email || "").trim(),
@@ -65,21 +65,21 @@ registerClick("bRecover", (e, x, v) => {
   S.keepLogin = true;
   go("login");
 });
-registerClick("bBack", (e, x, v) => {
+registerClick("bBack", (ev, el, act) => {
   S.blogin.step = "form";
   S.blogin.err = "";
   render();
 });
-registerSubmit("fRecover", (e) => {
-  const a = $("#re").value.trim();
-  S.blogin.email = a;
-  if (!EMAIL.test(a)) {
+registerSubmit("fRecover", (ev) => {
+  const email = $("#re").value.trim();
+  S.blogin.email = email;
+  if (!EMAIL.test(email)) {
     S.blogin.err = "Ingresá un email válido.";
     render();
     return;
   }
   if (LIVE) {
-    sb.auth.resetPasswordForEmail(a, {
+    sb.auth.resetPasswordForEmail(email, {
       redirectTo: location.origin + location.pathname,
     });
   }
@@ -88,61 +88,62 @@ registerSubmit("fRecover", (e) => {
   render();
   return;
 });
-registerSubmit("fBarb", (e) => {
-  const a = S.blogin;
-  a.email = $("#be").value.trim();
-  a.pass = $("#bp").value;
-  if (!a.email || !a.pass) {
-    a.err = "Completá tu email y tu contraseña.";
+// ingreso de prestadores. En vivo, Supabase Auth; en la demo, cuentas fijas (H18) y bloqueo de 30 s a los 5 intentos
+registerSubmit("fBarb", (ev) => {
+  const login = S.blogin;
+  login.email = $("#be").value.trim();
+  login.pass = $("#bp").value;
+  if (!login.email || !login.pass) {
+    login.err = "Completá tu email y tu contraseña.";
     render();
     return;
   }
-  if (!EMAIL.test(a.email)) {
-    a.err = "Ese email no es válido.";
+  if (!EMAIL.test(login.email)) {
+    login.err = "Ese email no es válido.";
     render();
     return;
   }
   if (LIVE) {
-    a.locked = true;
+    login.locked = true;
     render();
     sb.auth
       .signInWithPassword({
-        email: a.email,
-        password: a.pass,
+        email: login.email,
+        password: login.pass,
       })
-      .then(async (t) => {
-        a.locked = false;
-        if (t.error) {
-          a.fails++;
-          a.err = errMsg(t.error);
-          a.pass = "";
+      .then(async (res) => {
+        login.locked = false;
+        if (res.error) {
+          login.fails++;
+          login.err = errMsg(res.error);
+          login.pass = "";
           render();
           return;
         }
         await api.session();
         if (!S.barberAuth) {
-          a.err = "Esta cuenta no tiene perfil de prestador. Registrate en “Sumate”.";
+          login.err = "Esta cuenta no tiene perfil de prestador. Registrate en “Sumate”.";
           render();
           return;
         }
-        a.err = "";
-        a.fails = 0;
+        login.err = "";
+        login.fails = 0;
         S.role = "barbero";
         S.btab = "agenda";
         toast("Bienvenido, " + pr(S.me).name);
         render();
         window.scrollTo(0, 0);
       })
-      .catch((t) => {
-        a.locked = false;
-        a.err = errMsg(t);
+      .catch((err) => {
+        login.locked = false;
+        login.err = errMsg(err);
         render();
       });
     return;
   }
-  if (a.email.toLowerCase() === "sofia@tutiempo.demo" && a.pass === "prestador123") {
-    a.err = "";
-    a.fails = 0;
+  if (login.email.toLowerCase() === "sofia@tutiempo.demo" && login.pass === "prestador123") {
+    login.err = "";
+    login.fails = 0;
     useProvider(21);
     S.barberAuth = true;
     S.role = "barbero";
@@ -153,14 +154,14 @@ registerSubmit("fBarb", (e) => {
     window.scrollTo(0, 0);
     return;
   }
-  if (a.email.toLowerCase() === "hidro.style@tutiempo.demo" && pr(7).deleted) {
-    a.err = "Esta cuenta fue eliminada. Si querés volver, creá un perfil nuevo.";
+  if (login.email.toLowerCase() === "hidro.style@tutiempo.demo" && pr(7).deleted) {
+    login.err = "Esta cuenta fue eliminada. Si querés volver, creá un perfil nuevo.";
     render();
     return;
   }
-  if (a.email.toLowerCase() === "hidro.style@tutiempo.demo" && a.pass === "barbero123") {
-    a.err = "";
-    a.fails = 0;
+  if (login.email.toLowerCase() === "hidro.style@tutiempo.demo" && login.pass === "barbero123") {
+    login.err = "";
+    login.fails = 0;
     useProvider(7);
     S.pctx = null;
     S.barberAuth = true;
@@ -171,27 +172,27 @@ registerSubmit("fBarb", (e) => {
     window.scrollTo(0, 0);
     return;
   }
-  a.fails++;
-  if (a.fails >= 5) {
-    a.locked = true;
-    a.err = "Demasiados intentos. Esperá 30 segundos o recuperá tu contraseña.";
-    a.pass = "";
+  login.fails++;
+  if (login.fails >= 5) {
+    login.locked = true;
+    login.err = "Demasiados intentos. Esperá 30 segundos o recuperá tu contraseña.";
+    login.pass = "";
     render();
     setTimeout(() => {
-      a.locked = false;
-      a.fails = 0;
-      a.err = "";
+      login.locked = false;
+      login.fails = 0;
+      login.err = "";
       if (S.view === "loginBarbero" && S.role === "cliente") {
         render();
       }
     }, 3e4);
     return;
   }
-  a.err =
-    a.email.toLowerCase() === "hidro.style@tutiempo.demo"
-      ? `Contraseña incorrecta. Te quedan ${5 - a.fails} intentos.`
+  login.err =
+    login.email.toLowerCase() === "hidro.style@tutiempo.demo"
+      ? `Contraseña incorrecta. Te quedan ${5 - login.fails} intentos.`
       : "No encontramos una cuenta con ese email.";
-  a.pass = "";
+  login.pass = "";
   render();
   return;
 });
