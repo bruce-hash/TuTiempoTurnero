@@ -1,6 +1,7 @@
 import { api } from "../../api/index.js";
 import { LIVE } from "../../config.js";
 import { money } from "../../lib/dinero.js";
+import { cap, notByProvider, refundText } from "../../lib/devoluciones.js";
 import { esc } from "../../lib/dom.js";
 import { dayLabel, fromMin, hoursUntil, longLabel, toMin } from "../../lib/fechas.js";
 import { pr } from "../../lib/prestadores.js";
@@ -52,9 +53,19 @@ export function vTurnoOk() {
     "00&location=" +
     encodeURIComponent(prov.addr + ", Olavarría");
   const mapUrl = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(prov.addr + ", Olavarría");
+  if (booking.status === "cancelled" && booking.byRefund) {
+    return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px">💳</div><h1 class="h1">Tu pago se devolvió</h1>
+    <p class="lead">${esc(booking.svc)} · ${esc(longLabel(booking.date))} a las ${booking.time}. Mercado Pago te devolvió el pago, así que el turno en ${esc(prov.name)} quedó cancelado.</p>
+    <button class="btn btn-pri btn-block" data-act="rebook" data-id="${booking.id}">Reservar de nuevo</button><button class="btn btn-ghost btn-block" style="margin-top:8px" data-go="misturnos">Ver mis turnos</button></div></div>`;
+  }
+  if (booking.status === "cancelled" && booking.byProv && notByProvider(booking)) {
+    return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px">💳</div><h1 class="h1">No pudimos confirmar tu turno</h1>
+    <p class="lead">${esc(booking.svc)} · ${esc(longLabel(booking.date))} a las ${booking.time} en ${esc(prov.name)}: ${esc(refundText(booking))} a tu Mercado Pago.</p>
+    <button class="btn btn-pri btn-block" data-act="rebook" data-id="${booking.id}">Elegir otro horario</button><button class="btn btn-ghost btn-block" style="margin-top:8px" data-go="misturnos">Ver mis turnos</button></div></div>`;
+  }
   if (booking.status === "cancelled" && booking.byProv) {
     return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px">📅</div><h1 class="h1">${esc(prov.name)} canceló tu turno</h1>
-    <p class="lead">${esc(booking.svc)} · ${esc(longLabel(booking.date))} a las ${booking.time}.${booking.self ? (booking.paid ? ` ${esc(prov.name)} se va a comunicar con vos para devolverte la seña (${money(booking.paid)}) o pasarte el turno a otro día.` : "") : booking.paid ? ` Te devolvemos todo lo que pagaste (${money(booking.paid + (booking.fee || 0))}) a tu Mercado Pago.` : ""}</p>
+    <p class="lead">${esc(booking.svc)} · ${esc(longLabel(booking.date))} a las ${booking.time}.${booking.self ? (booking.paid ? ` ${esc(prov.name)} se va a comunicar con vos para devolverte la seña (${money(booking.paid)}) o pasarte el turno a otro día.` : "") : booking.refund ? ` ${esc(cap(refundText(booking)))} a tu Mercado Pago.` : booking.paid ? ` Te devolvemos todo lo que pagaste (${money(booking.paid + (booking.fee || 0))}) a tu Mercado Pago.` : ""}</p>
     ${booking.self ? "" : `<button class="btn btn-pri btn-block" data-act="rebook" data-id="${booking.id}">Reprogramar mi turno</button>`}<button class="btn btn-ghost btn-block" style="margin-top:8px" data-go="misturnos">Ver mis turnos</button></div></div>`;
   }
   if (booking.status === "cancelled") {

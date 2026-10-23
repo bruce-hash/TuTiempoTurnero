@@ -32,6 +32,8 @@ Object.assign(LM, {
         p_id: noteId,
       }),
     ),
+  adminRefundRetry: (refundId) => saved(sb.rpc("admin_refund_retry", { p_refund: refundId })),
+  adminResolve: (kind, id, note) => saved(sb.rpc("admin_resolve", { p_kind: kind, p_id: id, p_note: note })),
   adminDeleteProvider: (providerId) =>
     saved(
       sb.rpc("admin_delete_provider", {

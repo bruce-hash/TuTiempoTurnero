@@ -1,5 +1,6 @@
+import { LIVE } from "../../config.js";
 import { esc } from "../../lib/dom.js";
-import { TODAY, addDays, dkey } from "../../lib/fechas.js";
+import { TODAY, addDays, dkey, relDate } from "../../lib/fechas.js";
 import { ME, avatar, pr } from "../../lib/prestadores.js";
 import { CAT, RUBRO, catInfo, catName, pcat } from "../../lib/rubros.js";
 import { cfg } from "../../lib/turnero.js";
@@ -214,6 +215,17 @@ export function setBtab(tab) {
   S.manOpen = false;
   S.blockOpen = false;
 }
+// avisos de cobros sin leer (Bloque 1): pagos devueltos desde Mercado Pago, contracargos y reclamos
+function noticesPanel() {
+  const unread = (S.notices || []).filter((notice) => !notice.read);
+  if (!unread.length) {
+    return "";
+  }
+  return `<div class="panel inbox"><p class="lbl">🔔 Avisos de cobros <span class="cnt">${unread.length}</span></p><ul class="ag">${unread
+    .slice(0, 5)
+    .map((notice) => `<li class="unread"><div><span class="msgb">${esc(notice.body)}</span><span class="hint">${esc(relDate(notice.at))}</span></div></li>`)
+    .join("")}</ul><button class="btn btn-ghost btn-sm" data-act="noticesRead">Entendido</button></div>`;
+}
 // panel del prestador: cabecera (rubros, turnos online), pestañas y la sección elegida
 export function vBarbero() {
   const prov = pr(ME());
@@ -224,7 +236,7 @@ export function vBarbero() {
   );
   const conf = cfg(ME());
   const head = `<div class="panel bhead"><div class="contact">${avatar(prov)}<div><b>${esc(prov.name)}</b><div class="cchips" style="justify-content:flex-start;margin-top:4px">${prov.cats.map((cat) => `<button class="cchip seg-${cat}" data-pctx="${cat}" aria-pressed="${cat === pcat(prov, S.pctx)}">${CAT[cat] ? catInfo(cat).ic : ""} ${esc(catName(cat))}</button>`).join("")}</div></div></div>
-   <div class="swrow"><div><b>📅 Turnos online</b><div class="hint">${conf.on ? "🟢 Tus clientes pueden reservar y pagar" : "⚪ Nadie puede reservar online"}</div></div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div><button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
+   <div class="swrow"><div><b>📅 Turnos online</b><div class="hint">${!conf.on ? "⚪ Nadie puede reservar online" : LIVE && S.mp !== "ok" ? "⚠ Sin Mercado Pago conectado: hoy nadie puede reservarte online" : "🟢 Tus clientes pueden reservar y pagar"}</div>${conf.on && LIVE && S.mp !== "ok" ? '<button class="lnk" data-btab="perfil">Conectar Mercado Pago</button>' : ""}</div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div><button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
   const tabBar = `<div class="btabw"><button class="tabarr" data-act="tabPrev" aria-label="Sección anterior" ${tabIndex === 0 ? "disabled" : ""}>‹</button><div class="btabs" role="tablist">${tabs.map(([id, label]) => `<button role="tab" data-btab="${id}" aria-selected="${S.btab === id}">${label}${id === "agenda" && S.newT ? ' <i class="dotn"></i>' : ""}</button>`).join("")}</div><button class="tabarr" data-act="tabNext" aria-label="Sección siguiente" ${tabIndex >= tabs.length - 1 ? "disabled" : ""}>›</button></div>`;
   const body = (
     {
@@ -239,5 +251,5 @@ export function vBarbero() {
       perfil: () => vBPerfil(prov),
     }[S.btab] || (() => vBAgendaT())
   )();
-  return `<div class="narrow stack" style="margin-top:20px">${head}${tabBar}${body}</div>`;
+  return `<div class="narrow stack" style="margin-top:20px">${head}${noticesPanel()}${tabBar}${body}</div>`;
 }

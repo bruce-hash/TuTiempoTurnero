@@ -257,6 +257,60 @@ registerSubmit("fCom", (ev) => {
   render();
   return;
 });
+// "Para revisar · cobros" (Bloque 1, D20): Reintentar una devolución y "Resuelto a mano" (con nota; no devuelve nada)
+registerClick("admRetry", (ev, el, act) => {
+  const id = +el.dataset.id;
+  if (LIVE) {
+    api.m
+      .adminRefundRetry(id)
+      .then(() => api.adminReview())
+      .then(() => {
+        toast("La devolución vuelve a intentarse en los próximos minutos.");
+        render();
+      })
+      .catch(() => {});
+    return;
+  }
+  store.DEMO_REV.refunds = store.DEMO_REV.refunds.filter((refund) => refund.id !== id);
+  toast("La devolución vuelve a intentarse en los próximos minutos.");
+  render();
+});
+registerClick("admResolveOpen", (ev, el, act) => {
+  S.admResolve = { k: el.dataset.k, id: +el.dataset.id };
+  render();
+});
+registerClick("admResolveNo", (ev, el, act) => {
+  S.admResolve = null;
+  render();
+});
+registerSubmit("fResolve", (ev) => {
+  const kind = ev.target.dataset.k;
+  const id = +ev.target.dataset.id;
+  const note = String($("#rsNote").value || "")
+    .replace(/[\u0000-\u001f]/g, " ")
+    .trim()
+    .slice(0, 500);
+  if (note.length < 3) {
+    $("#rserr").textContent = "Escribí cómo se resolvió.";
+    return;
+  }
+  const done = () => {
+    S.admResolve = null;
+    toast("Marcado como resuelto a mano.");
+    render();
+  };
+  if (LIVE) {
+    api.m
+      .adminResolve(kind, id, note)
+      .then(() => api.adminReview())
+      .then(done)
+      .catch(() => {});
+    return;
+  }
+  const list = kind === "refund" ? "refunds" : "payments";
+  store.DEMO_REV[list] = store.DEMO_REV[list].filter((item) => item.id !== id);
+  done();
+});
 registerSubmit("fNote", (ev) => {
   const pid = +ev.target.dataset.p;
   const body = String($("#admNote").value || "")

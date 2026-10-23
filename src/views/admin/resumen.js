@@ -3,6 +3,7 @@ import { esc } from "../../lib/dom.js";
 import { dm } from "../../lib/fechas.js";
 import { CATS } from "../../lib/rubros.js";
 import { admIc } from "./admin.js";
+import { admReview } from "./revisar.js";
 
 // resumen del admin: comisión del mes, alertas, hoy y ayer, últimas 4 semanas, indicadores, más activos y rubros
 export function admRes(data) {
@@ -79,6 +80,7 @@ export function admRes(data) {
   const trend = thisWeek && lastWeek && lastWeek.n ? Math.round(((thisWeek.n - lastWeek.n) / lastWeek.n) * 100) : null;
   return `<div class="kpi big admhero"><span>Comisión de TuTiempo este mes (${pctTxt(pct)}%)</span><b>${money(+st.commission_month || 0)}</b>${delta(st.commission_month, st.commission_prev)}</div>
    ${alerts.length ? `<div class="panel admalert"><p class="lbl">Para revisar</p><ul class="adml">${alerts.map((alert) => `<li>${alert}</li>`).join("")}</ul></div>` : ""}
+   ${admReview()}
    <div class="admday"><div><span>Hoy</span><b>${today.n} turno${today.n === 1 ? "" : "s"}</b><small>Comisión ${money(today.fee)}</small></div><div><span>Ayer</span><b>${yesterday.n} turno${yesterday.n === 1 ? "" : "s"}</b><small>Comisión ${money(yesterday.fee)}</small></div></div>
    <div class="panel"><p class="lbl">Cómo vienen las semanas</p>
     <div class="wks">${weeks

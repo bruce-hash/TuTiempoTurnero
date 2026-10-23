@@ -53,6 +53,11 @@ export const liveAdmin = {
     store.COMISION = isFinite(parseFloat(stats.commission_pct)) ? parseFloat(stats.commission_pct) / 100 : 0.1;
     return S.adm;
   },
+  // "Para revisar · cobros" (Bloque 1): devoluciones que fallan o se reintentan y pagos en revisión
+  async adminReview() {
+    S.admRev = (await call(sb.rpc("admin_review"))) || { refunds: [], payments: [] };
+    return S.admRev;
+  },
   async adminFinance(year) {
     const data = await call(
       sb.rpc("admin_finance", {

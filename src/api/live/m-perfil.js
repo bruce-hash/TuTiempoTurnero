@@ -167,6 +167,9 @@ Object.assign(LM, {
     }
   },
   deleteProvider: () => saved(sb.rpc("delete_my_provider")),
+  // desconecta de verdad (la cuenta queda solo para devoluciones) y devuelve el estado nuevo (my_mp_status)
+  mpDisconnect: () => saved(sb.rpc("mp_disconnect")),
+  readNotices: () => saved(sb.rpc("mark_provider_notices_read")),
   mpConnect: async () => {
     const res = await sb.functions.invoke("mp-oauth", {
       body: {},

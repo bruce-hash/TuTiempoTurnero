@@ -114,7 +114,7 @@ registerClick("rebook", (ev, el, act) => {
   if (!booking) {
     return;
   }
-  if (booking.byProv) {
+  if (booking.byProv || booking.byRefund) {
     booking.rebooked = true;
   }
   const prov = pr(booking.pid);

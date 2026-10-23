@@ -111,21 +111,37 @@ export function readSvcEditor() {
     }
   });
 }
+// Bloque 1: qué pasa con los turnos ya pagados si desconecta o si ya desconectó (S.mpSt sale de my_mp_status)
+function mpPaidNote(st, past) {
+  const n = +st.future_paid || 0;
+  if (!n) {
+    return "";
+  }
+  return `<p class="note" style="text-align:left;margin:8px 0 0">Tenés ${n} turno${n === 1 ? "" : "s"} futuro${n === 1 ? "" : "s"} con la seña pagada: ${n === 1 ? "sigue" : "siguen"} en pie y, si hay que devolver una seña, se devuelve desde ${past ? "tu cuenta anterior" : "esta cuenta"}.</p>`;
+}
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
-// El texto “hidro.style.mp” de la cuenta conectada es de la demo (H14).
+// En vivo muestra el número de la cuenta conectada; “hidro.style.mp” es solo de la demo.
 export function vBPerfil(prov) {
   const mp = S.mp;
+  const st = S.mpSt || {};
   return `<div class="panel"><p class="lbl">Cobros</p>
    ${
      mp === "ok"
-       ? `<div class="paym" style="border-color:var(--ok);background:var(--ok-soft)"><span class="mp">MP</span><span>Mercado Pago conectado<br><small class="hint">hidro.style.mp · Las señas se acreditan en tu cuenta al reservar.</small></span></div>
-     <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="mpDesc">Desconectar</button>`
+       ? `<div class="paym" style="border-color:var(--ok);background:var(--ok-soft)"><span class="mp">MP</span><span>Mercado Pago conectado<br><small class="hint">${LIVE ? (st.account ? `Cuenta n° ${esc(st.account)} · ` : "") : "hidro.style.mp · "}Las señas se acreditan en tu cuenta al reservar.</small></span></div>
+     ${
+       S.mpAsk
+         ? `<div class="mpask" role="alertdialog" aria-label="Desconectar Mercado Pago"><b>¿Desconectar Mercado Pago?</b>
+     <p class="note" style="text-align:left;margin:6px 0 0">• No vas a poder recibir reservas nuevas con seña hasta que lo vuelvas a conectar.<br>• Tus turnos ya confirmados siguen en pie.<br>• Si hay que devolver la seña de alguno, se devuelve desde esta cuenta.</p>${mpPaidNote(st, false)}
+     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button class="btn btn-ghost" data-act="mpAskNo">Cancelar</button><button class="btn btn-pri" data-act="mpDescOk">Desconectar</button></div></div>`
+         : `<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="mpDesc">Desconectar</button>`
+     }`
        : mp === "auth"
          ? `<div class="mpauth"><div class="mp" style="width:44px;height:44px;font-size:14px;margin:0 auto">MP</div>
      <b>Mercado Pago</b><p class="note" style="margin:6px 0 12px">TuTiempo quiere acceder a tu cuenta para:<br>• Cobrar los servicios a tu nombre<br>• Sumar al cobro la comisión de TuTiempo (${pctTxt()}%), que paga el cliente: tu seña te llega completa</p>
      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-ghost" data-act="mpCancel">Cancelar</button><button class="btn btn-pri" style="background:#009ee3" data-act="mpOk">Autorizar</button></div>
      <p class="note" style="margin-top:8px">Simulación de la pantalla de Mercado Pago.</p></div>`
-         : `<div class="paym" style="border-color:var(--warn);background:var(--warn-soft)"><span class="mp">MP</span><span>Mercado Pago sin conectar<br><small class="hint">Sin esto tus clientes no pueden pagar la seña al reservar.</small></span></div>
+         : `<div class="paym" style="border-color:var(--warn);background:var(--warn-soft)"><span class="mp">MP</span><span>Mercado Pago sin conectar<br><small class="hint">${LIVE ? "Hoy no podés cobrar señas: nadie puede reservarte online hasta que lo conectes." : "Sin esto tus clientes no pueden pagar la seña al reservar."}</small></span></div>
+     ${st.expired ? '<p class="note" style="text-align:left;margin:8px 0 0">Venció la conexión con tu cuenta de Mercado Pago: volvé a conectarla.</p>' : ""}${mpPaidNote(st, true)}
      <button class="btn btn-pri btn-block" style="margin-top:10px;background:#009ee3" data-act="mpConnect">Conectar Mercado Pago</button>`
    }
   </div>

@@ -24,6 +24,19 @@ export const demoPending0 = () => [
   },
 ];
 export const ADM_LAUNCH = "2025-03-01";
+// "Para revisar · cobros" de la demo: una devolución que se está reintentando y un pago con la comisión distinta
+export function admReviewDemo() {
+  store.DEMO_REV ||= {
+    refunds: [
+      { id: 1, amount: 7200, reason: "slot_taken", status: "pending", attempts: 2, last_error: "400 insufficient_amount",
+        next_attempt_at: dkey(addDays(1)), mp_payment_id: "1324567890", provider_name: "Barbería de ejemplo", client_name: "Cliente de ejemplo" },
+    ],
+    payments: [
+      { id: 2, mp_payment_id: "1324567999", amount: 6000, review_reasons: ["fee_mismatch"], provider_name: "Barbería de ejemplo", client_name: "Cliente de ejemplo" },
+    ],
+  };
+  return store.DEMO_REV;
+}
 // historial inventado de la plataforma desde ADM_LAUNCH hasta ayer (turnos, facturado, comisión del 10 %, señas
 // del 50 %), por día y por mes; se calcula una vez por día
 export function admHist() {

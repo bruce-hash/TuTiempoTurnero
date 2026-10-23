@@ -324,6 +324,11 @@ ok("D20: un pago en revisión también se resuelve con nota", not err(q("select 
 ok("D20: el prestador no puede resolver", err(q("select admin_resolve('refund', %s, 'nota larga')", (rf,), uid=owner), "forbidden"))
 ok("una devolución hecha descuenta lo pendiente del turno", svc_role("select refund_result(%s, true, 'R-1')", (rf,)) == "done"
    and bk(b1)[1] == 0 and q("select status, mp_refund_id from refunds where id = %s", (rf,))[0] == ("done", "R-1"))
+mine = {b["id"]: b for b in one("select my_bookings()", uid=cli)}
+ok("Mis turnos: el cliente ve su devolución hecha, con monto, fecha y motivo",
+   (mine[b1]["refund_amount"], mine[b1]["refund_status"], mine[b1]["refund_reason"]) == (6000, "done", "slot_taken") and mine[b1]["refund_done_at"])
+ok("Mis turnos: y la que todavía está en curso", (mine[s_ids[1]]["refund_amount"], mine[s_ids[1]]["refund_status"]) == (6000, "pending")
+   and mine[b0]["refund_amount"] is None)
 
 # ---------- e) Turnos viejos (antes del Bloque 1): mp_payment_id sin payment_id ----------
 q("alter table bookings disable trigger bookings_activity")
