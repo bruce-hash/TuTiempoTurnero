@@ -1,6 +1,7 @@
 import { pctTxt } from "../lib/dinero.js";
 import { esc } from "../lib/dom.js";
 import { DOW, MESES, TODAY, addDays, dayLabel, dkey, longLabel, toMin } from "../lib/fechas.js";
+import { isFol } from "../lib/prestadores.js";
 import { selDur } from "../lib/servicios.js";
 import { cfg, cli, freeCount, nextFree, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
@@ -21,13 +22,17 @@ export function relBadge(name) {
     return "";
   }
 }
+// ¿Se puede reservar online? Tiene los turnos online prendidos y puede cobrar la seña (cuenta de Mercado Pago
+// activa: la base lo informa en get_provider, Bloque 1). Si no, el perfil no deja elegir horario.
+export const bookable = (prov) => cfg(prov.id).on && prov.canCharge !== false;
 // selector de día y horario: semanas de 7 días hasta conf.ahead, horarios libres por franja,
 // primer turno libre, happy hour y lista de espera si el día está lleno
 export function vPicker(prov) {
   const conf = cfg(prov.id);
   const dur = selDur(prov);
-  if (!conf.on) {
-    return '<div class="panel" style="text-align:center"><b>Este profesional todavía no tiene turnos online.</b><p class="note">Podés seguirlo para enterarte cuando los active.</p></div>';
+  if (!bookable(prov)) {
+    const following = isFol(prov.id);
+    return `<div class="panel" style="text-align:center"><b>Todavía no toma turnos online.</b><p class="note">Seguilo para enterarte cuando los active.</p><button class="btn btn-sm ${following ? "btn-ghost" : "btn-pri"}" data-act="seguir" aria-pressed="${following}">${following ? "✓ Siguiendo" : "+ Seguir"}</button></div>`;
   }
   const days = [];
   for (let offset = 0; offset < conf.ahead; offset++) {

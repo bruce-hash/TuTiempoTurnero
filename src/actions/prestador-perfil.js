@@ -129,8 +129,37 @@ registerClick("mpOk", (ev, el, act) => {
   toast("Mercado Pago conectado");
   render();
 });
+// Desconectar (Bloque 1, H23): primero se explica qué pasa; recién al confirmar se desconecta de verdad en la base
 registerClick("mpDesc", (ev, el, act) => {
+  S.mpAsk = true;
+  render();
+});
+registerClick("mpAskNo", (ev, el, act) => {
+  S.mpAsk = false;
+  render();
+});
+registerClick("mpDescOk", (ev, el, act) => {
+  S.mpAsk = false;
+  if (LIVE) {
+    api.m
+      .mpDisconnect()
+      .then((st) => {
+        S.mpSt = st || {};
+        S.mp = st && st.can_charge ? "ok" : "none";
+        toast("Mercado Pago desconectado: no recibís reservas nuevas con seña hasta reconectar");
+        render();
+      })
+      .catch(() => {}); // saved() ya avisó el error
+    return;
+  }
   S.mp = "none";
+  toast("Mercado Pago desconectado: no recibís reservas nuevas con seña hasta reconectar");
+  render();
+});
+// avisos de cobros del panel: "Entendido" los marca leídos
+registerClick("noticesRead", (ev, el, act) => {
+  (S.notices || []).forEach((notice) => (notice.read = true));
+  api.m.readNotices();
   render();
 });
 registerChange("useW", (ev) => {

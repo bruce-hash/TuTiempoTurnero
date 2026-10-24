@@ -16,7 +16,7 @@ export const livePanel = {
     await liveApi.loadProvider(pid, true);
     const from = dkey(addDays(-60));
     const to = dkey(addDays(120));
-    const [bookings, clients, products, expenses, walkins, templates, finance, priv, occupancy, cards, closings] = await Promise.all([
+    const [bookings, clients, products, expenses, walkins, templates, finance, priv, occupancy, cards, closings, mpSt, notices] = await Promise.all([
       call(
         sb
           .from("bookings")
@@ -72,6 +72,9 @@ export const livePanel = {
           .eq("provider_id", pid)
           .gte("period", dkey(addDays(-800))),
       ),
+      // Bloque 1: si hoy puede cobrar y qué depende de cuentas anteriores; avisos de pagos devueltos o contracargos
+      call(sb.rpc("my_mp_status")),
+      call(sb.rpc("my_provider_notices")),
     ]);
     const statusMap = {
       confirmed: "confirmed",
@@ -189,7 +192,9 @@ export const livePanel = {
       store.OCCD[row.day + "|" + row.hour] = row.busy_min;
     });
     store.MTOT = {};
-    S.mp = priv && priv.mp_connected ? "ok" : "none";
+    S.mpSt = mpSt || {};
+    S.mp = S.mpSt.can_charge ? "ok" : "none";
+    S.notices = notices || [];
     const prov = pr(pid);
     // reseñas y trabajos de su perfil (los cargó loadProvider)
     store.COMM = store.COMMBY[pid];

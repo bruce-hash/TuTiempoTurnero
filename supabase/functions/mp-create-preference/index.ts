@@ -1,7 +1,7 @@
 // Crea el cobro en Mercado Pago, a nombre del prestador: la seña (para el prestador) + la comisión de TuTiempo
 // que paga el cliente aparte (marketplace_fee: va directo a la cuenta de TuTiempo).
 // El monto SIEMPRE sale de la base (turnos en estado 'hold' del usuario), nunca del navegador.
-import { admin, caller, cors, env, json, sellerToken, MP_API } from "../_shared/util.ts";
+import { accountToken, activeAccount, admin, caller, cors, env, json, MP_API } from "../_shared/util.ts";
 
 Deno.serve(async (req) => {
   const h = cors(req);
@@ -29,9 +29,11 @@ Deno.serve(async (req) => {
     const amount = ok.reduce((a, b) => a + b.deposit - b.paid_wallet, 0) + fee;
     if (amount <= 0) return json({ error: "nothing_to_pay" }, 409, h);
 
-    // Se cobra con la llave del PRESTADOR: la seña entra directo a su cuenta de Mercado Pago.
-    const [token, { data: prov }] = await Promise.all([sellerToken(db, pid), db.from("providers").select("name").eq("id", pid).single()]);
-    if (!token) return json({ error: "provider_mp_not_connected" }, 409, h);
+    // Se cobra con la llave de la cuenta ACTIVA del prestador: la seña entra directo a su cuenta de Mercado Pago.
+    // Una cuenta desconectada (solo devoluciones y consultas) nunca crea cobros.
+    const [acc, { data: prov }] = await Promise.all([activeAccount(db, pid), db.from("providers").select("name").eq("id", pid).single()]);
+    const token = await accountToken(db, acc, { charge: true });
+    if (!acc || !token) return json({ error: "provider_mp_not_connected" }, 409, h);
 
     const site = env("SITE_URL");
     const expires = ok.map((b) => b.hold_expires_at).sort()[0];
@@ -41,7 +43,8 @@ Deno.serve(async (req) => {
       marketplace_fee: fee,                 // comisión de TuTiempo: va a la cuenta de TuTiempo (dueña de MP_CLIENT_ID)
       binary_mode: true,                    // aprobado o rechazado al instante (nada de pagos "pendientes" que vencen el horario)
       payment_methods: { excluded_payment_types: [{ id: "ticket" }, { id: "atm" }] },   // sin efectivo en Rapipago/Pago Fácil
-      notification_url: `${env("SUPABASE_URL")}/functions/v1/mp-webhook?provider=${pid}`,
+      // el aviso dice qué cuenta cobró: así se consulta (y se devuelve) con su llave aunque el prestador reconecte otra
+      notification_url: `${env("SUPABASE_URL")}/functions/v1/mp-webhook?provider=${pid}&account=${acc.id}`,
       back_urls: {
         success: `${site}/?mp=success&b=${ids[0]}`,
         pending: `${site}/?mp=pending&b=${ids[0]}`,

@@ -108,6 +108,7 @@ export const liveLectura = {
       rating: Number(data.rating_avg),
       nrev: data.rating_count,
       verified: !!data.dni_verified,
+      canCharge: data.can_charge !== false,
       full: Date.now(),
       deleted: false,
     });

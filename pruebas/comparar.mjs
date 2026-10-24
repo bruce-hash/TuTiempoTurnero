@@ -75,6 +75,16 @@ async function normalizar(page) {
       const qr = box.querySelector(".qr");
       if (qr) qr.innerHTML = '<svg width="132" height="132"><rect width="132" height="132" fill="#ccc"/></svg>';
     });
+    // Bloque 1 (cambios a propósito): el panel admin suma "Para revisar · cobros" y, en vivo, la tarjeta de Mercado Pago
+    // muestra el número de cuenta en lugar del "hidro.style.mp" de la demo
+    document.querySelectorAll("#app p.lbl").forEach((label) => {
+      if (/^Para revisar · cobros/i.test(label.textContent.trim())) label.parentElement.remove();
+    });
+    // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
+    document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
+    document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
+      hint.textContent = hint.textContent.replace(/^(hidro\.style\.mp|Cuenta n° \S+) · /, "CUENTA · ");
+    });
   });
 }
 async function foto(page, pasos, nombre) {

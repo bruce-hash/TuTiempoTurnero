@@ -11,7 +11,7 @@ import { cfg } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { bookBar } from "../../ui/bookbar.js";
-import { vPicker } from "../../ui/picker.js";
+import { bookable, vPicker } from "../../ui/picker.js";
 import { render } from "../../ui/render.js";
 import { rating, reviewsHtml } from "../../ui/resenas.js";
 import { myStamps, stampBox, stampEarns, stampGoal, svcByKey } from "../../ui/sellos.js";
@@ -121,7 +121,7 @@ export function vPerfil() {
      }
    })()}
    ${vPicker(prov)}
-   ${bookBar(prov)}`
+   ${bookable(prov) ? bookBar(prov) : ""}`
       : '<div class="panel" style="text-align:center"><p class="note">Todavía no cargó sus servicios. Seguilo para enterarte cuando abra su agenda.</p></div>';
   }
   return `<button class="back" data-go="home">← Volver</button>

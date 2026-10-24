@@ -114,7 +114,7 @@ registerClick("rebook", (ev, el, act) => {
   if (!booking) {
     return;
   }
-  if (booking.byProv) {
+  if (booking.byProv || booking.byRefund || (booking.status === "expired" && booking.refund)) {
     booking.rebooked = true;
   }
   const prov = pr(booking.pid);
