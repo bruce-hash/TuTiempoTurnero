@@ -70,7 +70,10 @@ async function openProfile(pid, parts, params, path) {
   }
   S.pid = pid;
   const reprog = params.get("reprogramar");
-  S.reprog = reprog && store.BOOK.some((booking) => booking.mine && booking.id == reprog) ? +reprog : null;
+  // mover un turno existente es solo de la demo y de un turno confirmado; en vivo, "otro horario" es siempre una reserva
+  // nueva con su pago (un turno con la plata devuelta o en devolución no conserva la seña)
+  S.reprog =
+    !LIVE && reprog && store.BOOK.some((booking) => booking.mine && booking.id == reprog && booking.status === "confirmed") ? +reprog : null;
   const sub = parts[1];
   if (parts.length > 2 || (sub && sub !== "reservar" && !keyOf(PROFILE_TABS, sub))) {
     return showNotFound(path);

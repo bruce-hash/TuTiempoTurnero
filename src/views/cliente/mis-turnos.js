@@ -76,7 +76,7 @@ function vMisTurnosBase() {
                : booking.paid
                  ? ` · te devolvemos ${money(booking.paid + (booking.fee || 0))}`
                  : "";
-       return `<div class="panel delpanel"><p class="lbl" style="margin:0 0 6px">⚠ ${byProvOnly ? "Turnos que canceló el profesional" : "Turnos cancelados"}</p><ul class="ag">${cancelled.map((booking) => `<li><span class="ag-t">${booking.time}</span><div><b>${esc(pr(booking.pid).name)}</b><span>${esc(booking.svc)} · ${esc(dayLabel(booking.date))}${esc(refundNote(booking))}</span></div>${booking.self ? "<span></span>" : `<button class="btn btn-pri btn-sm" data-act="rebook" data-id="${booking.id}">Reprogramar</button>`}</li>`).join("")}</ul></div>`;
+       return `<div class="panel delpanel"><p class="lbl" style="margin:0 0 6px">⚠ ${byProvOnly ? "Turnos que canceló el profesional" : "Turnos cancelados"}</p><ul class="ag">${cancelled.map((booking) => `<li><span class="ag-t">${booking.time}</span><div><b>${esc(pr(booking.pid).name)}</b><span>${esc(booking.svc)} · ${esc(dayLabel(booking.date))}${esc(refundNote(booking))}</span></div>${booking.self ? "<span></span>" : `<button class="btn btn-pri btn-sm" data-act="rebook" data-id="${booking.id}">${booking.byRefund || booking.status === "expired" ? "Reservar de nuevo" : "Reprogramar"}</button>`}</li>`).join("")}</ul></div>`;
      } else {
        return "";
      }

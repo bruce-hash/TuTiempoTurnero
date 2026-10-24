@@ -190,6 +190,30 @@ el perfil no se llega.
 **En el Bloque 2 (D22):** con la cuenta desconectada, el perfil deja canjear el premio (solo los servicios con la tarjeta
 llena del cliente) y muestra "Solo podés canjear tu premio" en lugar de "Todavía no toma turnos online".
 
+### H26 · Baja · Cuentas activas sin `mp_user_id` y `provider_secrets` (Bloque 1 → Bloque 2)
+Desde el Bloque 1, una cuenta sin `mp_user_id` no puede confirmar pagos (el webhook la trata como cobrador equivocado).
+`mp_connect` ya lo exige; solo pueden quedar sin id las llaves viejas copiadas de `provider_secrets`.
+**En el Bloque 2:** `check (status <> 'active' or mp_user_id is not null)` en `mp_accounts` (antes, pasar a
+`refunds_only` las activas sin id y avisar al prestador que reconecte) y borrar `provider_secrets` (D21, junto con H13).
+
+### H27 · Baja · "Reprocesar" pagos en revisión por un error inesperado (Bloque 1 → Bloque 2)
+Si `confirm_payment` falla por un error inesperado, el pago queda en "Para revisar" (no se pierde) y hoy el admin solo
+puede devolverlo o marcarlo resuelto a mano.
+**En el Bloque 2:** botón "Reprocesar" que vuelva a correr `confirm_payment_core` sobre ese pago, solo para motivos
+`error: …`, solo si sus turnos siguen en `hold`/`expired` sin pago, y en la misma transacción que borra el registro de
+revisión (con nota de quién y cuándo).
+
+### H28 · Baja · El prestador no se entera de un pago tardío que se devuelve (Bloque 1 → Bloque 2)
+Cuando un pago llega tarde y se devuelve (horario ocupado, monto de menos, turno ya cancelado), el prestador ve en su
+Mercado Pago un cobro y una devolución sin ninguna explicación en la app.
+**En el Bloque 2:** un aviso en `provider_notices` ("El pago de X llegó cuando el horario ya no estaba libre: se le
+devuelve $Y desde tu cuenta"), una vez por pago.
+
+### H29 · Baja · Retención de `mp_webhook_events` y `mp_oauth_states` (Bloque 1 → Bloque 2)
+`mp_webhook_events` crece con cada aviso descartado y no se limpia.
+**En el Bloque 2:** borrar los de más de 180 días que no estén ligados a un pago en revisión sin resolver, en la misma
+tarea programada que limpia `mp_oauth_states` (H13).
+
 ## Mejoras futuras (no son hallazgos; después del lanzamiento)
 
 ### F01 · Vista previa de los links de prestadores (WhatsApp, Instagram)

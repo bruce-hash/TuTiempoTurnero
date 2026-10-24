@@ -528,6 +528,39 @@ svc_role("select mp_account_error(%s, 'No se pudo renovar', false)", (acc1,))
 ok("un error también la libera (y no desconecta si la llave no venció)", q("select refreshing_until, status from mp_accounts where id = %s", (acc1,))[0] == (None, "active"))
 ok("la app no puede reservar ni guardar llaves", err(q("select mp_account_refresh_claim(%s)", (acc1,), uid=owner)) and err(q("select mp_account_refreshed(%s, 'a', 'b', 1)", (acc1,), uid=adm)))
 
+# ---------- Un turno con la plata devuelta no vuelve a confirmarse sin un pago nuevo ----------
+for bid, estado in ((b1, "expired"), (e_ids[1], "cancelled_refunded")):
+    n_before = one("select count(*) from refunds where booking_id = %s", (bid,))
+    res = pay([bid], f"P-OTRA-VEZ-{bid}", 6000, 1000, pid)
+    ok(f"un turno '{estado}' no se confirma con otro pago de ese mismo turno: se devuelve", bk(bid)[0] == estado and res["confirmed"] == 0
+       and one("select count(*) from refunds where booking_id = %s and reason = 'booking_unavailable'", (bid,)) >= 1
+       and one("select count(*) from refunds where booking_id = %s", (bid,)) == n_before + 1)
+    ok(f"…ni el cliente lo puede volver a confirmar por su cuenta ('{estado}')",
+       err(q("update bookings set status = 'confirmed' where id = %s", (bid,), uid=cli)) or bk(bid)[0] == estado)
+nr = book(sv, at(13, 15), cli)[0][0]   # el horario de b1 lo tomó otro cliente (H01): "Reservar de nuevo" elige otro
+ok("\"Reservar de nuevo\" es una reserva nueva con su pago (otro turno, otra seña): el turno devuelto no cambia",
+   nr["status"] == "pending_payment" and nr["booking_ids"][0] != b1 and nr["amount_due"] == 6000 and bk(b1)[0] == "expired")
+
+# ---------- cancel_by_provider con un pago que llega justo (dos conexiones de verdad) ----------
+import threading, time
+r = book(sv, at(13, 14), cli)[0][0]
+hb = r["booking_ids"][0]
+c2 = psycopg.connect(DSN)
+cur2 = c2.cursor()
+cur2.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps({"role": "service_role"}),))
+cur2.execute("set local role service_role")
+cur2.execute("select confirm_payment(%s::bigint[], 'P-JUSTO', 6000, p_provider => %s, p_fee_mp => 1000)", ([hb], pid))   # sin commit todavía
+out = {}
+th = threading.Thread(target=lambda: out.update(r=q("select cancel_by_provider(%s)", (hb,), uid=owner)))
+th.start()
+time.sleep(0.8)
+ok("la cancelación espera al pago que se está confirmando", th.is_alive())
+c2.commit(); c2.close()
+th.join(10)
+pj = one("select id from payments where mp_payment_id = 'P-JUSTO'")
+ok("2) cancelar un hold que se pagó justo: devuelve lo cobrado, ligado a ese pago", not err(out.get("r")) and out["r"][0][0]["refund_mp"] == 6000
+   and bk(hb)[0] == "cancelled_provider" and q("select amount, payment_id, reason from refunds where booking_id = %s", (hb,)) == [(6000, pj, "provider_cancelled")])
+
 # ---------- Seguridad ----------
 ok("nadie de la app lee las llaves", err(q("select access_token from mp_accounts", uid=owner)) and err(q("select * from mp_accounts", role="anon")))
 ok("el cliente ve sus pagos y no los ajenos", one("select count(*) from payments where client_id = %s", (cli,), uid=cli) > 0

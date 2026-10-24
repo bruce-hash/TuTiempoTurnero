@@ -42,8 +42,9 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
    (`MP_OWNER_USER_ID` lo agrega Claude Code en el bloque 2: id de usuario de Mercado Pago de TuTiempo.)
    **Nunca** cargues `MP_API_URL` en Supabase: existe solo para las pruebas (un Mercado Pago falso). Sin ese secreto las
    funciones usan la API real. Si alguna vez aparece en `supabase secrets list`, borralo (`supabase secrets unset MP_API_URL`).
-   Bloque 1: las 4 funciones cambian juntas con las migraciones `20261023215124_cobros.sql` y
-   `20261024043027_cobros_ajustes.sql` (llaves en `mp_accounts`, pagos en `payments`): primero las migraciones, después
+   Bloque 1: las 4 funciones cambian juntas con las migraciones `20261023215124_cobros.sql`,
+   `20261024043027_cobros_ajustes.sql` y `20261024142729_cancelar_con_pago_bloqueado.sql` (llaves en `mp_accounts`,
+   pagos en `payments`): primero las migraciones, después
    el deploy de las 4. **Hasta terminar el Bloque 2 esto va solo al entorno de prueba:** las devoluciones automáticas
    dependen del cron de `mp-refunds` con la clave en Vault (H13). Las llaves que ya estuvieran en
    `provider_secrets` se copian solas a `mp_accounts`; `provider_secrets` queda sin uso hasta el Bloque 2 (D21).
