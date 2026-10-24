@@ -212,6 +212,15 @@ const SOFIA = "sofia-benitez-studio";
   await page.reload();
   await wait(page, 1200);
   ok("recarga en /turno/<id>: el detalle del turno", (await st(page)).view === "turnoOk" && here(page) === turno);
+  // Bloque 1: en vivo no se puede mover un turno; ?reprogramar=<id> lleva al detalle del turno, sin "Cambiar" ni reserva
+  const idTurno = turno.split("/").pop();
+  const antesR = +(await q("select count(*) from bookings"))[0].count;
+  s = await go(page, "/" + SOFIA + "?reprogramar=" + idTurno);
+  ok("?reprogramar=<id> en vivo → /turno/<id>, sin modo “Cambiar”", s.view === "turnoOk" && here(page) === turno
+     && !(await page.evaluate(() => S.reprog)) && !/Cambiar|Elegí el nuevo horario/.test(await page.locator("#app").innerText()), here(page));
+  ok("…y no crea ninguna reserva", +(await q("select count(*) from bookings"))[0].count === antesR);
+  s = await go(page, "/" + SOFIA + "?reprogramar=abc");
+  ok("?reprogramar= inválido en vivo → inicio, sin error", s.view === "home" && here(page) === "/", here(page));
   await page.context().close();
 
   // ---------- 6. Panel: recarga en cada pestaña, ficha de cliente, QR y link ----------

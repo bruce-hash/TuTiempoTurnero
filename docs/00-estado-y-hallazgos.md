@@ -223,3 +223,12 @@ JavaScript: al compartir `/<slug>` se ve el título genérico del sitio. Hosting
 escribir en el HTML el título, la descripción y la imagen (`og:title`, `og:description`, `og:image`) y devolver el mismo
 `index.html` de siempre. Requiere cambiar el fallback del `.htaccess` para esas rutas y una prueba propia.
 
+
+### F02 · Cambiar turno (mover un turno confirmado conservando la seña)
+Hoy no existe: en vivo, "otro horario" es siempre una reserva nueva con su pago. El modo "Cambiar" de la v31 solo movía el
+turno en la demo; en vivo reservaba y cobraba otro turno y dejaba el original (desde el Bloque 1, `?reprogramar=<id>`
+en vivo lleva al detalle del turno, `/turno/<id>`, sin ese modo; lo prueba `pruebas/rutas.js`). Para hacerlo bien:
+- una función SQL (`move_booking`) que mueva el mismo turno en una transacción (horario libre, misma duración y precio
+  recalculado por la base) y conserve `payment_id`, seña y comisión;
+- reglas de negocio a decidir: hasta cuánto antes del turno se puede cambiar, cuántas veces, y qué pasa con la seña si
+  el horario nuevo tiene otro precio (happy hour, adicionales).

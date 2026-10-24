@@ -60,6 +60,19 @@ function setStory(params, pid) {
   }
 }
 async function openProfile(pid, parts, params, path) {
+  // En vivo no se puede mover un turno (no hay función en la base: F02). Un link viejo con ?reprogramar=<id> lleva al
+  // detalle de ese turno, sin modo "Cambiar" (que reservaba y cobraba otro turno dejando el original).
+  const moving = params.get("reprogramar");
+  if (LIVE && moving != null) {
+    if (/^\d{1,12}$/.test(moving) && needUser("/turno/" + moving)) {
+      S.turnoId = +moving;
+      S.justBooked = false;
+      showClient("turnoOk");
+    } else if (!/^\d{1,12}$/.test(moving)) {
+      showClient("home");
+    }
+    return;
+  }
   if (S.pid !== pid) {
     S.svc = 0;
     S.day = null;
@@ -70,10 +83,8 @@ async function openProfile(pid, parts, params, path) {
   }
   S.pid = pid;
   const reprog = params.get("reprogramar");
-  // mover un turno existente es solo de la demo y de un turno confirmado; en vivo, "otro horario" es siempre una reserva
-  // nueva con su pago (un turno con la plata devuelta o en devolución no conserva la seña)
-  S.reprog =
-    !LIVE && reprog && store.BOOK.some((booking) => booking.mine && booking.id == reprog && booking.status === "confirmed") ? +reprog : null;
+  // mover un turno existente es solo de la demo y de un turno confirmado (en vivo, ver arriba)
+  S.reprog = reprog && store.BOOK.some((booking) => booking.mine && booking.id == reprog && booking.status === "confirmed") ? +reprog : null;
   const sub = parts[1];
   if (parts.length > 2 || (sub && sub !== "reservar" && !keyOf(PROFILE_TABS, sub))) {
     return showNotFound(path);
