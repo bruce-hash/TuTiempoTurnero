@@ -52,7 +52,6 @@ export function safeEqual(a: string, b: string): boolean {
   return r === 0;
 }
 
-export const COMMISSION = 0.10; // solo si no se puede leer la comisión de la base
 // API de Mercado Pago. Solo para pruebas se cambia con el secreto MP_API_URL de la función (un Mercado Pago falso);
 // sin ese secreto, siempre la real.
 export const MP_API = (Deno.env.get("MP_API_URL") ?? "").replace(/\/+$/, "") || "https://api.mercadopago.com";
@@ -81,35 +80,59 @@ export async function providerAccounts(db: SupabaseClient, pid: number): Promise
 }
 
 // Llave de una cuenta. Las llaves duran 180 días: si faltan menos de `days` días, se renueva con el refresh_token y se
-// guarda la nueva (MP entrega un refresh_token nuevo cada vez). `charge`: solo sirve la cuenta activa (crear cobros).
+// guarda la nueva (MP entrega un refresh_token nuevo cada vez y el viejo deja de servir). `charge`: solo sirve la cuenta
+// activa (crear cobros). Una sola renovación a la vez por cuenta (mp_account_refresh_claim): los demás siguen con la
+// llave actual mientras no venza.
+const msLeft = (acc: MpAccount) => (acc.expires_at ? new Date(acc.expires_at).getTime() - Date.now() : Infinity);
+function usable(acc: MpAccount | null, charge?: boolean): string | null {
+  if (!acc?.access_token || acc.status === "purged" || (charge && acc.status !== "active")) return null;
+  return msLeft(acc) > 0 ? acc.access_token : null;
+}
 export async function accountToken(db: SupabaseClient, acc: MpAccount | null, opts: { days?: number; charge?: boolean } = {}): Promise<string | null> {
   const days = opts.days ?? 15;
-  if (!acc?.access_token || acc.status === "purged") return null;
-  if (opts.charge && acc.status !== "active") return null;
-  const left = acc.expires_at ? new Date(acc.expires_at).getTime() - Date.now() : Infinity;
-  if (left > days * 864e5 || !acc.refresh_token) return left > 0 ? acc.access_token : null;
+  if (!acc || acc.status === "purged" || (opts.charge && acc.status !== "active")) return null;
+  if (msLeft(acc) > days * 864e5 || !acc.refresh_token) return usable(acc, opts.charge);
+  const { data: claimed } = await db.rpc("mp_account_refresh_claim", { p_account: acc.id });
+  // otro proceso la está renovando: la llave que haya guardada (la actual o la nueva), si sirve
+  if (!claimed) return usable(await accountById(db, acc.id), opts.charge);
+  const release = () => db.rpc("mp_account_refresh_release", { p_account: acc.id });
+  // se relee: puede que otro la haya renovado entre la lectura y la reserva
+  const cur = await accountById(db, acc.id);
+  if (!cur?.refresh_token || cur.status === "purged" || msLeft(cur) > days * 864e5) {
+    await release();
+    return usable(cur, opts.charge);
+  }
   const r = await fetch(`${MP_API}/oauth/token`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: env("MP_CLIENT_ID"), client_secret: env("MP_CLIENT_SECRET"), grant_type: "refresh_token", refresh_token: acc.refresh_token }),
-  });
-  const tok = await r.json().catch(() => ({}));
-  if (!r.ok || !tok.access_token) {
-    console.error("MP refresh", acc.id, r.status);
-    // venció y no se pudo renovar: si era la activa, deja de cobrar (tiene que reconectar)
-    await db.rpc("mp_account_error", { p_account: acc.id, p_error: `No se pudo renovar la llave (${r.status})`, p_expired: left <= 0 });
-    return left > 0 ? acc.access_token : null;
+    body: JSON.stringify({ client_id: env("MP_CLIENT_ID"), client_secret: env("MP_CLIENT_SECRET"), grant_type: "refresh_token", refresh_token: cur.refresh_token }),
+  }).catch(() => null);
+  const tok = r ? await r.json().catch(() => ({})) : {};
+  if (r?.ok && tok.access_token) {
+    await db.rpc("mp_account_refreshed", { p_account: cur.id, p_access: tok.access_token, p_refresh: tok.refresh_token ?? null, p_expires_in: Number(tok.expires_in) || 0 });
+    return opts.charge && cur.status !== "active" ? null : tok.access_token;
   }
-  await db.from("mp_accounts").update({
-    access_token: tok.access_token, refresh_token: tok.refresh_token ?? acc.refresh_token, refreshed_at: new Date().toISOString(), last_error: null,
-    expires_at: tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000).toISOString() : null,
-  }).eq("id", acc.id);
-  return tok.access_token;
+  // falló: si mientras tanto otro proceso ya la renovó (cambió el refresh_token), se usa esa y no hay error
+  const again = await accountById(db, cur.id);
+  if (again?.refresh_token && again.refresh_token !== cur.refresh_token) {
+    await release();
+    return usable(again, opts.charge);
+  }
+  console.error("MP refresh", cur.id, r?.status);
+  // venció y no se pudo renovar: si era la activa, deja de cobrar (tiene que reconectar)
+  await db.rpc("mp_account_error", { p_account: cur.id, p_error: `No se pudo renovar la llave (${r?.status ?? "sin respuesta"})`, p_expired: msLeft(cur) <= 0 });
+  return usable(cur, opts.charge);
 }
 
-// Respuesta de Mercado Pago sin datos de tarjeta ni del documento del pagador (la base vuelve a limpiarla).
+// Respuesta de Mercado Pago: solo los campos permitidos (nada del comprador ni de la tarjeta). La base vuelve a filtrar
+// con la misma lista (mp_clean), que es la que guarda.
+const MP_FIELDS = ["id", "status", "status_detail", "transaction_amount", "currency_id", "date_created", "date_approved",
+  "date_last_updated", "collector_id", "external_reference", "metadata", "fee_details", "marketplace_fee"];
 export function mpClean(pay: Record<string, unknown>): Record<string, unknown> {
-  const { card: _card, barcode: _barcode, transaction_details: _td, ...rest } = pay ?? {};
-  const payer = rest.payer && typeof rest.payer === "object" ? { ...(rest.payer as Record<string, unknown>) } : null;
-  if (payer) { delete payer.identification; delete payer.phone; delete payer.first_name; delete payer.last_name; rest.payer = payer; }
-  return rest;
+  const out: Record<string, unknown> = {};
+  for (const k of MP_FIELDS) if (pay && k in pay) out[k] = pay[k];
+  if (Array.isArray(pay?.refunds)) {
+    out.refunds = (pay.refunds as Record<string, unknown>[]).filter((x) => x && typeof x === "object")
+      .map((x) => ({ id: x.id, amount: x.amount, status: x.status, date_created: x.date_created }));
+  }
+  return out;
 }

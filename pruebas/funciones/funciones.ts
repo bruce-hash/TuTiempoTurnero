@@ -64,13 +64,18 @@ for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds"]
 const fn = (name: string, req: Request) => handlers[name](req);
 async function body(res: Response) { return await res.json().catch(() => ({})); }
 
-async function webhook(pid: number, acc: number | null, payId: string, { firma = true } = {}) {
+// sinReqId: el aviso llega sin x-request-id. completa: se firma con la plantilla entera aunque falte el encabezado.
+async function webhook(pid: number, acc: number | null, payId: string, { firma = true, sinReqId = false, completa = false } = {}) {
   const ts = String(Date.now()), reqId = crypto.randomUUID();
-  const v1 = firma ? await hmacHex(WHSEC, `id:${payId.toLowerCase()};request-id:${reqId};ts:${ts};`) : "0".repeat(64);
+  const texto = `id:${payId.toLowerCase()};` + (sinReqId && !completa ? "" : `request-id:${sinReqId ? "" : reqId};`) + `ts:${ts};`;
+  const v1 = firma ? await hmacHex(WHSEC, texto) : "0".repeat(64);
   const u = `https://fn.test/functions/v1/mp-webhook?provider=${pid}${acc ? `&account=${acc}` : ""}&data.id=${payId}&type=payment`;
-  return fn("mp-webhook", new Request(u, { method: "POST", headers: { "x-signature": `ts=${ts},v1=${v1}`, "x-request-id": reqId, "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "payment", data: { id: payId } }) }));
+  const headers: Record<string, string> = { "x-signature": `ts=${ts},v1=${v1}`, "Content-Type": "application/json" };
+  if (!sinReqId) headers["x-request-id"] = reqId;
+  return fn("mp-webhook", new Request(u, { method: "POST", headers, body: JSON.stringify({ type: "payment", data: { id: payId } }) }));
 }
+const evento = async (payId: string, reason: string) =>
+  Number(await one("select count(*) from mp_webhook_events where mp_payment_id = $1 and reason = $2", [payId, reason]));
 const refundsRun = async (key = SERVICE) => fn("mp-refunds", new Request("https://fn.test/functions/v1/mp-refunds", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
 async function preference(uid: string, ids: number[]) {
   return fn("mp-create-preference", new Request("https://fn.test/functions/v1/mp-create-preference", {
@@ -132,8 +137,9 @@ ok("mp-webhook: pago aprobado → turno confirmado", r.status === 200 && (await 
 const p1 = (await q("select mp_account_id, fee_mp, fee_expected, outcome, collector_id, mp_responses from payments where mp_payment_id = '9001'"))[0];
 ok("mp-webhook: el pago queda con la cuenta que cobró y la comisión que informó MP", p1 && Number(p1.mp_account_id) === Number(A.id) && p1.fee_mp === 1000 && p1.outcome === "confirmed" && p1.collector_id === "1001");
 const guardado = JSON.stringify(p1?.mp_responses ?? []);
-ok("c) se guarda la respuesta de MP sin tarjeta ni documento", p1?.mp_responses.length === 1 && guardado.includes("fee_details") && !guardado.includes("450995")
-   && !guardado.includes("3704") && !guardado.includes("30111222") && !guardado.includes("ANA LOPEZ"));
+ok("3/11) se guarda solo la lista de campos permitidos: nada de la tarjeta ni del comprador", p1?.mp_responses.length === 1 && guardado.includes("fee_details")
+   && !["450995", "3704", "30111222", "ANA LOPEZ", "Ana López", "ana@test.ar", "200.45.1.2", "2284 555666"].some((x) => guardado.includes(x))
+   && !["payer", "additional_info", "card"].some((k) => k in p1.mp_responses[0].body));
 r = await webhook(pid, A.id, "9001");
 ok("mp-webhook: mismo aviso dos veces → 200 y nada nuevo", r.status === 200 && (await body(r)).result?.status === "already_processed"
    && Number(await one("select count(*) from payments where mp_payment_id = '9001'")) === 1);
@@ -203,6 +209,9 @@ ok("aviso sin cuenta: lo encuentra con la cuenta vieja y lo confirma", r.status 
    && Number(await one("select mp_account_id from payments where mp_payment_id = '9006'")) === Number(A.id));
 r = await webhook(pid, null, "9999");
 ok("aviso de un pago que no existe en ninguna cuenta: 200 sin hacer nada", r.status === 200 && (await body(r)).error === "payment_not_found");
+ok("2) …pero queda el rastro en mp_webhook_events", (await evento("9999", "payment_not_found")) === 1);
+r = await webhook(999999, null, "9998");
+ok("2) aviso de un prestador sin cuentas: 200 y queda el rastro (unknown_provider)", r.status === 200 && (await evento("9998", "unknown_provider")) === 1);
 
 // ---------- 9. Reconectar la MISMA cuenta: actualiza esa llave ----------
 mp.codigo("c-A2", "1001");
@@ -268,7 +277,66 @@ mp.pago({ id: "9011", collector: "1001", status: "approved", amount: 6000, fee: 
 await webhook(pid, A.id, "9011");
 ok("D17: devolución parcial que no hizo la app → revisión", JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9011'")) === '["partial_refund_mismatch"]');
 
+// ---------- 12b. Cobrador equivocado, moneda, firma y errores al guardar cambios ----------
+const bw = await book();
+mp.pago({ id: "9020", collector: "1001", informa: "5555", status: "approved", amount: 6000, fee: 1000, ref: bw.join(",") });
+r = await webhook(pid, A.id, "9020");
+const pw = (await q("select outcome, review_reasons, collector_id, mp_account_id from payments where mp_payment_id = '9020'"))[0];
+ok("1) cobrador equivocado: el webhook no confirma el turno", r.status === 200 && (await body(r)).error === "wrong_collector" && (await st(bw[0])) === "hold");
+ok("1) …el pago queda en 'Para revisar' (no como bueno) y con el collector que informó MP", pw?.outcome === "review"
+   && JSON.stringify(pw.review_reasons) === '["wrong_collector"]' && pw.collector_id === "5555" && pw.mp_account_id === null
+   && Number(await one("select count(*) from payment_bookings where payment_id = (select id from payments where mp_payment_id = '9020')")) === 0);
+ok("1) …y queda el rastro en mp_webhook_events", (await evento("9020", "wrong_collector")) === 1);
+r = await webhook(pid, A.id, "9020");
+ok("1) el mismo aviso otra vez no confirma nada", (await st(bw[0])) === "hold" && Number(await one("select count(*) from payments where mp_payment_id = '9020'")) === 1);
+await q("update mp_accounts set mp_user_id = null where id = $1", [A.id]);
+const bn = await book();
+mp.pago({ id: "9021", collector: "1001", status: "approved", amount: 6000, fee: 1000, ref: bn.join(",") });
+await webhook(pid, A.id, "9021");
+await q("update mp_accounts set mp_user_id = '1001' where id = $1", [A.id]);
+ok("2) cuenta sin mp_user_id: no se saltea el control, se trata como cobrador equivocado", (await st(bn[0])) === "hold"
+   && (await evento("9021", "wrong_collector")) === 1 && (await one("select outcome from payments where mp_payment_id = '9021'")) === "review");
+const bu = await book();
+mp.pago({ id: "9022", collector: "1001", status: "approved", amount: 6000, fee: 1000, ref: bu.join(","), currency: "USD" });
+r = await webhook(pid, A.id, "9022");
+ok("2) moneda distinta de ARS: no confirma y queda el rastro", r.status === 200 && (await st(bu[0])) === "hold" && (await evento("9022", "bad_currency")) === 1);
+const bs = await book();
+mp.pago({ id: "9023", collector: "1001", status: "approved", amount: 6000, fee: 1000, ref: bs.join(",") });
+r = await webhook(pid, A.id, "9023", { sinReqId: true, completa: true });
+ok("4) sin x-request-id, firmado con la plantilla entera: rechazado", r.status === 401 && (await st(bs[0])) === "hold");
+r = await webhook(pid, A.id, "9023", { sinReqId: true });
+ok("4) sin x-request-id, firmado sin esa parte (como dice Mercado Pago): aceptado", r.status === 200 && (await st(bs[0])) === "confirmed");
+await q("revoke execute on function public.payment_mp_update(text, text, int, text, jsonb, bigint) from service_role");
+Object.assign(mp.pagos.get("9023")!, { status: "refunded", refunded: 6000 });
+r = await webhook(pid, A.id, "9023");
+await q("grant execute on function public.payment_mp_update(text, text, int, text, jsonb, bigint) to service_role");
+ok("8) si falla guardar un cambio de estado, 500 aunque el pago esté registrado (Mercado Pago reintenta)", r.status === 500 && (await st(bs[0])) === "confirmed");
+r = await webhook(pid, A.id, "9023");
+ok("8) …y el reintento lo procesa", r.status === 200 && (await st(bs[0])) === "cancelled_refunded");
+
 // ---------- 13. Llaves que vencen ----------
+const utilMod = await import("../../supabase/functions/_shared/util.ts");
+const dbfn = utilMod.admin();
+await q("update mp_accounts set expires_at = now() + interval '5 days', refreshing_until = null where id = $1", [A.id]);
+let antes0 = (await acc("1001")).access_token;
+const pedidos0 = mp.refrescos_pedidos.length;
+mp.demorarRefresco(300);
+const accRow = await utilMod.accountById(dbfn, Number(A.id));
+const [t1, t2] = await Promise.all([utilMod.accountToken(dbfn, accRow), utilMod.accountToken(dbfn, accRow)]);
+mp.demorarRefresco(0);
+const Ar = await acc("1001");
+ok("1·R) dos renovaciones al mismo tiempo: se pide una sola a Mercado Pago y la cuenta queda activa, sin error",
+   mp.refrescos_pedidos.length === pedidos0 + 1 && Ar.status === "active" && !Ar.last_error && Ar.access_token !== antes0 && !!t1 && !!t2);
+await q("update mp_accounts set expires_at = now() + interval '5 days', refreshing_until = null where id = $1", [A.id]);
+mp.fallarRefrescoTras(async () => {
+  // mientras tanto, otro proceso ya la renovó (por ejemplo, con la reserva vencida)
+  await q("update mp_accounts set access_token = 'tok-de-otro', refresh_token = 'ref-de-otro', expires_at = now() + interval '170 days' where id = $1", [A.id]);
+});
+const t3 = await utilMod.accountToken(dbfn, await utilMod.accountById(dbfn, Number(A.id)));
+const Ao = await acc("1001");
+ok("1·R) si la renovación falla pero otro ya renovó, usa la llave nueva y no marca error", t3 === "tok-de-otro" && Ao.status === "active" && !Ao.last_error);
+mp.codigo("c-A3", "1001");
+await oauth(owner, "c-A3");   // vuelve a una llave que el Mercado Pago falso conoce
 await q("update mp_accounts set expires_at = now() + interval '5 days' where id = $1", [A.id]);
 const antes = (await acc("1001")).access_token;
 await refundsRun();

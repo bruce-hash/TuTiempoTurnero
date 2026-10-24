@@ -32,6 +32,11 @@ begin
          refreshed_at = now(), refreshing_until = null, last_error = null
    where id = p_account and status <> 'purged';
 end $$;
+-- Libera la reserva sin cambiar la llave (quien la tomó vio que otro proceso ya la había renovado)
+create or replace function public.mp_account_refresh_release(p_account bigint) returns void
+language sql security definer set search_path = public as $$
+  update public.mp_accounts set refreshing_until = null where id = p_account
+$$;
 -- Llave que venció y no se pudo renovar: también libera la reserva
 create or replace function public.mp_account_error(p_account bigint, p_error text, p_expired boolean default false) returns void
 language sql security definer set search_path = public as $$
@@ -486,6 +491,7 @@ end $$;
 
 -- ---------- Permisos de ejecución ----------
 revoke execute on function public.mp_account_refresh_claim(bigint, int), public.mp_account_refreshed(bigint, text, text, int),
+  public.mp_account_refresh_release(bigint),
   public.mp_account_error(bigint, text, boolean), public.mp_webhook_event(text, bigint, bigint, text),
   public.payment_review(text, bigint, text, bigint[], int, text, jsonb), public.mp_clean(jsonb),
   public.admin_refund_create(bigint, bigint, int, text),
@@ -495,6 +501,7 @@ revoke execute on function public.mp_account_refresh_claim(bigint, int), public.
   from public, anon, authenticated;
 grant execute on function public.admin_refund_create(bigint, bigint, int, text), public.admin_review(), public.admin_stats() to authenticated;
 grant execute on function public.mp_account_refresh_claim(bigint, int), public.mp_account_refreshed(bigint, text, text, int),
+  public.mp_account_refresh_release(bigint),
   public.mp_account_error(bigint, text, boolean), public.mp_webhook_event(text, bigint, bigint, text),
   public.payment_review(text, bigint, text, bigint[], int, text, jsonb),
   public.confirm_payment(bigint[], text, int, bigint, bigint, int, text, jsonb, text),
