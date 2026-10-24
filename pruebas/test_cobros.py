@@ -127,15 +127,20 @@ r = book(sv, at(2, 9), cli)[0][0]
 b0 = r["booking_ids"][0]
 ok("reserva: seña $5.000 + comisión $1.000", r["amount_due"] == 6000)
 res = pay([b0], "P-OK", 6000, 1000, pid, acc1, {"id": "P-OK", "status": "approved", "card": {"first_six_digits": "450995"},
-                                                 "payer": {"email": "ana@cobros.ar", "identification": {"number": "30111222"}}})
+                                                 "payer": {"email": "ana@cobros.ar", "identification": {"number": "30111222"}},
+                                                 "additional_info": {"ip_address": "200.1.2.3", "payer": {"first_name": "Ana"}},
+                                                 "refunds": [{"id": 7, "amount": 100, "status": "approved", "date_created": "2026-10-24", "source": {"name": "Ana López"}}],
+                                                 "collector_id": 111, "fee_details": [{"type": "application_fee", "amount": 1000}]})
 ok("pago aprobado: confirma el turno", res["status"] == "processed" and res["confirmed"] == 1 and bk(b0)[0] == "confirmed")
 pm = q("select id, outcome, amount, fee_expected, fee_mp, mp_account_id, booking_ids from payments where mp_payment_id = 'P-OK'")[0]
 ok("queda en payments: monto, comisión calculada y la de MP, cuenta que cobró, turnos", pm[1:] == ("confirmed", 6000, 1000, 1000, acc1, [b0]))
 ok("el turno queda ligado al pago", one("select payment_id from bookings where id = %s", (b0,)) == pm[0])
 ok("lo cobrado por el turno queda en payment_bookings", q("select amount, fee, result from payment_bookings where payment_id = %s", (pm[0],))[0] == (6000, 1000, "confirmed"))
 raw = one("select mp_responses from payments where id = %s", (pm[0],))
-ok("se guarda la respuesta de Mercado Pago sin datos de tarjeta ni documento",
-   len(raw) == 1 and raw[0]["body"]["id"] == "P-OK" and "card" not in raw[0]["body"] and "identification" not in raw[0]["body"]["payer"]
+ok("3/11) se guarda solo la lista de campos permitidos de la respuesta de Mercado Pago (nada del comprador)",
+   len(raw) == 1 and raw[0]["body"]["id"] == "P-OK" and set(raw[0]["body"]) == {"id", "status", "collector_id", "fee_details", "refunds"}
+   and raw[0]["body"]["refunds"] == [{"id": 7, "amount": 100, "status": "approved", "date_created": "2026-10-24"}]
+   and not any(x in json.dumps(raw) for x in ("ana@cobros.ar", "200.1.2.3", "Ana López", "Ana\"", "30111222"))
    and "450995" not in json.dumps(raw))
 again = pay([b0], "P-OK", 6000, 1000, pid, acc1, {"id": "P-OK", "status": "approved"})
 ok("mismo aviso dos veces: no hace nada más", again["status"] == "already_processed"
@@ -159,7 +164,7 @@ expire(b1)
 ok("H01: otro cliente toma el horario liberado", not err(book(sv, at(3, 9), cli2)))
 res = pay([b1], "P-H01", 6000, 1000, pid, acc1)
 ok("H01: el pago se registra y el turno queda para devolver (no falla)", res["status"] == "processed" and res["refunded"] == 1
-   and bk(b1)[:2] == ("cancelled_provider", 6000))
+   and bk(b1)[:2] == ("expired", 6000))
 ok("H01: la devolución queda ligada al pago, con el id de MP y la cuenta que cobró",
    refunds_of(b1) == [(6000, "slot_taken", "pending", True, "P-H01", acc1)])
 ok("H01: el pago queda como 'refund'", one("select outcome from payments where mp_payment_id = 'P-H01'") == "refund")
@@ -198,7 +203,7 @@ for x in s_ids:
 ok("la serie vence y otro toma el PRIMER horario", not err(book(sv, at(4, 9), cli2)))
 res = pay(s_ids, "P-SERIE", 18000, 3000, pid, acc1)
 ok("serie con el primero ocupado: se confirman los otros dos y el primero queda para devolver",
-   res["confirmed"] == 2 and res["refunded"] == 1 and [bk(x)[0] for x in s_ids] == ["cancelled_provider", "confirmed", "confirmed"])
+   res["confirmed"] == 2 and res["refunded"] == 1 and [bk(x)[0] for x in s_ids] == ["expired", "confirmed", "confirmed"])
 ok("serie: el primero tiene su devolución ligada al pago (antes quedaba sin mp_payment_id)",
    refunds_of(s_ids[0]) == [(6000, "slot_taken", "pending", True, "P-SERIE", acc1)])
 ok("serie: los 3 turnos quedan ligados al mismo pago", q("select count(distinct payment_id), count(*) from bookings where id = any(%s)", (s_ids,))[0] == (1, 3))
@@ -424,6 +429,104 @@ res = pay(r["booking_ids"], "P-OTRO", 6000, 1000, pid_x)
 ok("turno de otro prestador: no se toca, el pago queda para revisar y lo cobrado se devuelve", bk(r["booking_ids"][0])[0] == "hold"
    and "other_provider" in one("select review_reasons from payments where mp_payment_id = 'P-OTRO'")
    and q("select amount, reason from refunds where payment_id = (select id from payments where mp_payment_id = 'P-OTRO')")[0] == (6000, "unknown_booking"))
+
+# ---------- 7) Devoluciones creadas por el admin ("Devolver" en Para revisar) ----------
+r = book(sv, at(13, 9), cli)[0][0]
+pay(r["booking_ids"], "P-OVER2", 7500, 1000, pid)
+po2 = one("select id from payments where mp_payment_id = 'P-OVER2'")
+item = [x for x in one("select admin_review()", uid=adm)["payments"] if x["id"] == po2][0]
+ok("7) Para revisar ofrece devolver lo que falta (la diferencia: $1.500)", item["refundable"] == 1500 and item["refundable_from_app"] is True)
+ok("7) Devolver exige una nota", err(q("select admin_refund_create(%s, null, 1500, ' ')", (po2,), uid=adm), "note_required"))
+ok("7) solo el admin devuelve", err(q("select admin_refund_create(%s, null, 1500, 'nota')", (po2,), uid=owner), "forbidden"))
+rid = one("select admin_refund_create(%s, null, 1500, 'Pagó de más: le devuelvo la diferencia')", (po2,), uid=adm)
+ok("7) pago con monto de más → devuelve la diferencia, con quién y la nota, y la ejecuta mp-refunds con la cuenta que cobró",
+   q("select amount, reason, status, created_by = %s, note, mp_account_id, mp_payment_id from refunds where id = %s", (adm, rid))[0]
+   == (1500, "admin", "pending", True, "Pagó de más: le devuelvo la diferencia", acc1, "P-OVER2")
+   and any(x[0] == rid for x in q("select id from refunds_due(200)", role="service_role")))
+ok("7) el pago sale de Para revisar con la nota de la devolución", not any(x["id"] == po2 for x in one("select admin_review()", uid=adm)["payments"])
+   and one("select review_note from payments where id = %s", (po2,)).startswith("Devolución de $1.500"))
+ok("7) respeta el tope: no se puede devolver más de lo cobrado", err(q("select admin_refund_create(%s, null, 6001, 'otra')", (po2,), uid=adm), "refund_exceeds_payment"))
+ok("13) el cliente ve la devolución de su pago aunque no sea de un turno", one("select count(*) from refunds where id = %s", (rid,), uid=cli) == 1
+   and one("select count(*) from refunds where id = %s", (rid,), uid=cli2) == 0)
+# pago en revisión por un error inesperado → devolver todo
+q("""create or replace function public.prueba_falla() returns trigger language plpgsql as $$
+     begin if new.payment_id = (select id from public.payments where mp_payment_id = 'P-ERR') then raise exception 'falla inesperada de prueba'; end if; return new; end $$""")
+q("create trigger prueba_falla before insert on payment_bookings for each row execute function public.prueba_falla()")
+r = book(sv, at(13, 10), cli)[0][0]
+res = pay(r["booking_ids"], "P-ERR", 6000, 1000, pid)
+q("drop trigger prueba_falla on payment_bookings")
+pe = one("select id from payments where mp_payment_id = 'P-ERR'")
+ok("un error inesperado deja el pago registrado en revisión, con el error", res["status"] == "review"
+   and one("select review_reasons[1] from payments where id = %s", (pe,)).startswith("error: falla inesperada de prueba"))
+rid2 = one("select admin_refund_create(%s, null, 6000, 'Error al procesar: devuelvo todo')", (pe,), uid=adm)
+ok("7) pago en revisión por error → devolver todo", q("select amount, status from refunds where id = %s", (rid2,))[0] == (6000, "pending")
+   and err(q("select admin_refund_create(%s, null, 1, 'más')", (pe,), uid=adm), "refund_exceeds_payment"))
+
+# ---------- 8) Errores pasajeros: suben (el webhook responde 500 y Mercado Pago reintenta) ----------
+q("create table if not exists prueba_pasajero (code text)")
+q("""create or replace function public.prueba_pasajera() returns trigger language plpgsql as $$
+     declare c text := (select code from public.prueba_pasajero limit 1);
+     begin if c is not null and new.mp_payment_id like 'P-PAS%%' then raise exception 'error pasajero de prueba' using errcode = c; end if; return new; end $$""")
+q("create trigger prueba_pasajera before insert on payments for each row execute function public.prueba_pasajera()")
+r = book(sv, at(13, 11), cli)[0][0]
+for code, name in (("40P01", "deadlock_detected"), ("40001", "serialization_failure"), ("55P03", "lock_not_available"),
+                   ("57014", "query_canceled"), ("23505", "unique_violation")):
+    q("delete from prueba_pasajero"); q("insert into prueba_pasajero values (%s)", (code,))
+    e = q("select confirm_payment(%s::bigint[], 'P-PAS', 6000, p_provider => %s, p_fee_mp => 1000)", (r["booking_ids"], pid), role="service_role")
+    ok(f"8) {name} sube (no queda el pago en revisión)", err(e, "error pasajero") and one("select count(*) from payments where mp_payment_id = 'P-PAS'") == 0
+       and bk(r["booking_ids"][0])[0] == "hold")
+q("delete from prueba_pasajero")
+res = pay(r["booking_ids"], "P-PAS", 6000, 1000, pid)
+ok("8) el reintento de Mercado Pago lo confirma", res["status"] == "processed" and res["confirmed"] == 1 and bk(r["booking_ids"][0])[0] == "confirmed")
+q("drop trigger prueba_pasajera on payments")
+
+# ---------- 10) Reclamo → resuelto a favor (approved) → otro reclamo ----------
+r = book(sv, at(13, 12), cli)[0][0]
+pay(r["booking_ids"], "P-MED2", 6000, 1000, pid)
+mp_update("P-MED2", "in_mediation")
+q("select admin_resolve('payment', (select id from payments where mp_payment_id = 'P-MED2'), 'Reclamo respondido')", uid=adm)
+mp_update("P-MED2", "approved")
+st_mid = q("select mp_status, review_reasons from payments where mp_payment_id = 'P-MED2'")[0]
+ok("10) approved después de un reclamo: el pago vuelve a 'approved' y el motivo queda como historial", st_mid == ("approved", ["in_mediation"]))
+mp_update("P-MED2", "in_mediation")
+nmed = q("select count(*) from provider_notices where kind = 'mp_in_mediation' and (ref = 'P-MED2' or ref like 'P-MED2#%%')")[0][0]
+ok("10) un segundo reclamo genera un segundo aviso y vuelve a Para revisar", nmed == 2
+   and any(x["mp_payment_id"] == "P-MED2" for x in one("select admin_review()", uid=adm)["payments"])
+   and one("select review_reasons from payments where mp_payment_id = 'P-MED2'") == ["in_mediation"])
+
+# ---------- 2/9) Cancelaciones del sistema: no son del prestador ----------
+mine = {b["id"]: b for b in one("select my_bookings()", uid=cli)}
+ok("2) el turno del pago tardío (H01) queda 'expired' con su devolución, no 'canceló el prestador'",
+   mine[b1]["status"] == "expired" and mine[b1]["refund_reason"] == "slot_taken")
+dep = one("select admin_stats()", uid=adm)["deposits_month"]
+dep_kept = one("""select coalesce(sum(paid_mp), 0) from bookings where source = 'app' and paid_mp > 0
+                   and created_at >= date_trunc('month', now() at time zone 'America/Argentina/Buenos_Aires') at time zone 'America/Argentina/Buenos_Aires'
+                   and (status in ('confirmed','done','no_show','cancelled_client') or (status = 'cancelled_provider' and settle_by_provider))""")
+dep_all = one("select coalesce(sum(paid_mp), 0) from bookings where source = 'app' and paid_mp > 0")
+ok("9) 'Señas cobradas' del admin no cuenta lo devuelto (expired con pago, cancelado por el prestador, devuelto por MP)", dep == dep_kept and dep < dep_all)
+
+# ---------- 2) Cobrador equivocado y avisos descartados (en la base; el webhook se prueba en pruebas/funciones) ----------
+r = book(sv, at(13, 13), cli)[0][0]
+res = svc_role("select payment_review('P-WRONG', %s, '999999', %s::bigint[], 6000, 'wrong_collector', %s)", (pid, r["booking_ids"], json.dumps({"id": "P-WRONG", "payer": {"email": "x@y.z"}})))
+ok("cobrador equivocado: el pago queda en revisión y no confirma turnos", res["status"] == "review" and bk(r["booking_ids"][0])[0] == "hold"
+   and q("select outcome, review_reasons, collector_id, mp_account_id from payments where mp_payment_id = 'P-WRONG'")[0] == ("review", ["wrong_collector"], "999999", None)
+   and q("select count(*) from payment_bookings where payment_id = (select id from payments where mp_payment_id = 'P-WRONG')")[0][0] == 0)
+ok("…aparece en Para revisar y la app no lo puede devolver sola (no es de una cuenta de TuTiempo)",
+   any(x["mp_payment_id"] == "P-WRONG" and x["refundable_from_app"] is False for x in one("select admin_review()", uid=adm)["payments"]))
+svc_role("select mp_webhook_event('P-WRONG', %s, %s, 'wrong_collector')", (pid, acc1))
+ok("los avisos descartados quedan en mp_webhook_events y los ve el admin", any(x["mp_payment_id"] == "P-WRONG" and x["reason"] == "wrong_collector" for x in one("select admin_review()", uid=adm)["webhook_events"])
+   and one("select count(*) from mp_webhook_events", uid=adm) >= 1)
+ok("…nadie más los lee ni los escribe", one("select count(*) from mp_webhook_events", uid=owner) == 0 and err(q("select * from mp_webhook_events", role="anon"))
+   and err(q("insert into mp_webhook_events (reason) values ('wrong_collector')", uid=adm)) and err(q("select mp_webhook_event('x', null, null, 'bad_currency')", uid=adm)))
+
+# ---------- Renovación de llaves: una sola a la vez ----------
+ok("reservar la renovación: la toma uno solo", svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is True and svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is False)
+svc_role("select mp_account_refreshed(%s, 'tok-nuevo', 'ref-nuevo', 15552000)", (acc1,))
+ok("guardar la llave nueva libera la reserva", q("select access_token, refresh_token, refreshing_until from mp_accounts where id = %s", (acc1,))[0] == ("tok-nuevo", "ref-nuevo", None)
+   and svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is True)
+svc_role("select mp_account_error(%s, 'No se pudo renovar', false)", (acc1,))
+ok("un error también la libera (y no desconecta si la llave no venció)", q("select refreshing_until, status from mp_accounts where id = %s", (acc1,))[0] == (None, "active"))
+ok("la app no puede reservar ni guardar llaves", err(q("select mp_account_refresh_claim(%s)", (acc1,), uid=owner)) and err(q("select mp_account_refreshed(%s, 'a', 'b', 1)", (acc1,), uid=adm)))
 
 # ---------- Seguridad ----------
 ok("nadie de la app lee las llaves", err(q("select access_token from mp_accounts", uid=owner)) and err(q("select * from mp_accounts", role="anon")))
