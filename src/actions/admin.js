@@ -311,6 +311,39 @@ registerSubmit("fResolve", (ev) => {
   store.DEMO_REV[list] = store.DEMO_REV[list].filter((item) => item.id !== id);
   done();
 });
+// "Devolver" un pago en revisión (D20): monto entero en pesos y nota obligatoria
+registerSubmit("fAdmRefund", (ev) => {
+  const id = +ev.target.dataset.id;
+  const raw = String($("#arAmount").value || "").trim();
+  const amount = /^\d+$/.test(raw) ? +raw : 0;
+  const note = String($("#arNote").value || "")
+    .replace(/[\u0000-\u001f]/g, " ")
+    .trim()
+    .slice(0, 500);
+  if (amount <= 0) {
+    $("#arerr").textContent = "Escribí el monto en pesos, sin puntos ni decimales.";
+    return;
+  }
+  if (note.length < 3) {
+    $("#arerr").textContent = "Escribí por qué devolvés.";
+    return;
+  }
+  const done = () => {
+    S.admResolve = null;
+    toast("Devolución pedida: sale en los próximos minutos.");
+    render();
+  };
+  if (LIVE) {
+    api.m
+      .adminRefundCreate(id, amount, note)
+      .then(() => api.adminReview())
+      .then(done)
+      .catch(() => {});
+    return;
+  }
+  store.DEMO_REV.payments = store.DEMO_REV.payments.filter((item) => item.id !== id);
+  done();
+});
 registerSubmit("fNote", (ev) => {
   const pid = +ev.target.dataset.p;
   const body = String($("#admNote").value || "")

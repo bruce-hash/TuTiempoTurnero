@@ -289,7 +289,8 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   probing = true; const forb = await pg.evaluate(async () => { const r = await sb.from("app_settings").update({ commission_pct: 1 }).eq("id", true).select(); return (r.data || []).length }); probing = false;
   ok("nadie cambia la comisión por fuera de la función", forb === 0 && Number((await q("select commission_pct from app_settings"))[0].commission_pct) === 10);
   // Bloque 1: "Para revisar · cobros": una devolución que falló una vez (el turno de Ana pagado con Mercado Pago)
-  const bpaid = (await q("select id, paid_mp + app_fee as amount from bookings where pay_method='cash' and status='confirmed' and payment_id is not null limit 1"))[0];
+  // (el turno puede seguir confirmado o haber caído en el bloqueo de días: depende de la fecha; la devolución se pide igual)
+  const bpaid = (await q("select pb.booking_id as id, pb.amount from payment_bookings pb order by pb.payment_id desc limit 1"))[0];
   const rfe = (await q("select refund_request($1, null, $2, 'provider_cancelled') as id", [bpaid.id, bpaid.amount]))[0].id;
   await db.query("update refunds set attempts = 1, first_attempt_at = now(), last_error = '400 insufficient_amount', next_attempt_at = now() + interval '10 minutes' where id = $1", [rfe]);
   await pg.evaluate(() => { S.admRev = null; S.admT = "res"; render() }); await pg.waitForSelector("[data-act=admRetry]", { timeout: 8000 }).catch(() => {}); await wait(300);
@@ -305,7 +306,17 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.fill("#rsNote", "Le devolví por transferencia"); await pg.click("#fResolve button:not([type])"); await wait(1200);
   const rres = (await q("select r.status, r.resolved_note, u.email from refunds r join auth.users u on u.id = r.resolved_by where r.id=$1", [rfe]))[0];
   ok("Bloque 1: Resuelto a mano queda con la nota y quién lo hizo, sin devolver nada", rres && rres.status === "resolved" && rres.resolved_note === "Le devolví por transferencia" && rres.email === "carla@test.ar"
-     && (await q("select count(*)::int c from refunds"))[0].c === 1 && (await pg.locator(`[data-act=admResolveOpen][data-id="${rfe}"]`).count()) === 0);
+     && (await q("select count(*)::int c from refunds where reason <> 'admin'"))[0].c === 1 && (await pg.locator(`[data-act=admResolveOpen][data-id="${rfe}"]`).count()) === 0);
+  // Bloque 1 (D20): "Devolver" un pago en revisión, con el monto por defecto de lo que falta devolver
+  const pov = (await q("select p.id, p.amount from payments p where p.id <> (select payment_id from refunds where id = $1) order by p.id limit 1", [rfe]))[0];
+  await db.query("update payments set outcome = 'review', review_reasons = '{amount_over}', review_resolved_at = null where id = $1", [pov.id]);
+  await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForSelector("[data-act=admResolveOpen][data-k=refundNew]", { timeout: 8000 }).catch(() => {}); await wait(300);
+  await pg.click(`[data-act=admResolveOpen][data-k=refundNew][data-id="${pov.id}"]`); await wait(300);
+  const defAmount = Number(await pg.inputValue("#arAmount"));
+  await pg.fill("#arAmount", "500"); await pg.fill("#arNote", "Pagó de más"); await pg.click("#fAdmRefund button:not([type])"); await wait(1500);
+  const rnew = (await q("select amount, reason, note, status from refunds where reason = 'admin'"))[0];
+  ok("Bloque 1: Devolver crea la devolución (monto editable, nota) y el pago sale de Para revisar", defAmount > 0 && rnew && rnew.amount === 500 && rnew.note === "Pagó de más"
+     && ["pending", "failed"].includes(rnew.status) && (await pg.locator(`[data-act=admResolveOpen][data-k=refundNew][data-id="${pov.id}"]`).count()) === 0);
   // v30: prestadores por rubro, notas privadas, eliminar
   await pg.click("[data-act=admT][data-t=prov]"); await wait(400);
   ok("v30: prestadores divididos por rubro", (await pg.locator(".admgrp").count()) >= 1 && (await pg.locator(".admgh").first().innerText()).length > 2);
@@ -335,7 +346,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   probing = true; const reuse = await pg.evaluate(async (h) => { const r = await sb.auth.verifyOtp({ token_hash: h, type: "recovery" }); return !!r.error }, (await mailOf("carla@test.ar")).recovery); probing = false;
   ok("el link de recuperación sirve una sola vez", reuse);
   // ---------- Bloque 1 (H23): la prestadora desconecta Mercado Pago ----------
-  const pay0 = (await q("select p.mp_payment_id from payments p join bookings b on b.payment_id = p.id where b.pay_method='cash' limit 1"))[0].mp_payment_id;
+  const pay0 = (await q("select mp_payment_id from payments order by id desc limit 1"))[0].mp_payment_id;
   await db.query("select payment_mp_update($1, 'in_mediation')", [pay0]);   // un reclamo abierto: le llega el aviso
   await pg.goto(BASE); await wait(1200); await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
   await pg.click("[data-go=loginBarbero]"); await wait();
@@ -346,16 +357,19 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const accBefore = (await q("select id, mp_user_id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   await pg.click("[data-btab=perfil]"); await wait(300);
   ok("Bloque 1: Mercado Pago conectado, con el número de cuenta (no el texto de la demo)", (await txt()).includes("Mercado Pago conectado") && (await txt()).includes("Cuenta n° " + accBefore.mp_user_id) && !(await txt()).includes("hidro.style.mp"));
+  // (cuántos turnos futuros pagados tiene depende de la fecha: el bloqueo de días puede haber cancelado alguno)
+  const futurePaid = (await q("select count(*)::int c from bookings where provider_id=$1 and status='confirmed' and source='app' and starts_at > now() and paid_mp > 0", [sofi]))[0].c;
   await pg.click("[data-act=mpDesc]"); await wait(300);
   const ask = await pg.locator(".mpask").innerText().catch(() => "");
   ok("H23: antes de desconectar explica qué pasa (reservas nuevas, turnos confirmados, devoluciones y cuántos turnos pagados tiene)",
-     /No vas a poder recibir reservas nuevas con seña/.test(ask) && /Tus turnos ya confirmados siguen en pie/.test(ask) && /se devuelve desde esta cuenta/.test(ask) && /Tenés \d+ turnos? futuros? con la seña pagada/.test(ask));
+     /No vas a poder recibir reservas nuevas con seña/.test(ask) && /Tus turnos ya confirmados siguen en pie/.test(ask) && /se devuelve desde esta cuenta/.test(ask)
+     && (futurePaid ? new RegExp(`Tenés ${futurePaid} turnos? futuros? con la seña pagada`).test(ask) : !/con la seña pagada/.test(ask)));
   await pg.click("[data-act=mpDescOk]"); await wait(1500);
   const accAfter = (await q("select status, access_token is not null as key from mp_accounts where id=$1", [accBefore.id]))[0];
   ok("H23: desconecta de verdad: la cuenta queda solo para devoluciones (con su llave) y mp_connected en false",
      accAfter.status === "refunds_only" && accAfter.key && (await q("select mp_connected from provider_private where provider_id=$1", [sofi]))[0].mp_connected === false);
   ok("H23: el prestador ve que hoy no puede cobrar", /Mercado Pago sin conectar/.test(await txt()) && /Hoy no podés cobrar señas/.test(await txt()) && /Sin Mercado Pago conectado/.test(await txt())
-     && /con tu cuenta anterior|desde tu cuenta anterior/.test(await txt()));
+     && (!futurePaid || /desde tu cuenta anterior/.test(await txt())));
   await pg.click("[data-act=salirBarbero]"); await wait(600);
   await pg.goto(BASE + "/p/" + sofi); await pg.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("H23: su perfil público dice que todavía no toma turnos online (con Seguir) y no deja elegir horario",

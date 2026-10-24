@@ -49,8 +49,7 @@ function vMisTurnosBase() {
      const cancelled = store.BOOK.filter(
        (booking) =>
          booking.mine &&
-         booking.status === "cancelled" &&
-         (booking.byProv || booking.byRefund) &&
+         ((booking.status === "cancelled" && (booking.byProv || booking.byRefund)) || (booking.status === "expired" && booking.refund)) &&
          booking.date >= TODAY() &&
          !booking.rebooked &&
          !store.BOOK.some(
@@ -65,7 +64,7 @@ function vMisTurnosBase() {
          ),
      );
      if (cancelled.length) {
-       const byProvOnly = cancelled.every((booking) => booking.byProv && !notByProvider(booking));
+       const byProvOnly = cancelled.every((booking) => booking.status === "cancelled" && booking.byProv && !notByProvider(booking));
        // qué pasa con la plata: lo devuelve el profesional (bloqueo de días), Mercado Pago o la app
        const refundNote = (booking) =>
          booking.self

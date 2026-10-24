@@ -32,8 +32,9 @@ export function admReviewDemo() {
         next_attempt_at: dkey(addDays(1)), mp_payment_id: "1324567890", provider_name: "Barbería de ejemplo", client_name: "Cliente de ejemplo" },
     ],
     payments: [
-      { id: 2, mp_payment_id: "1324567999", amount: 6000, review_reasons: ["fee_mismatch"], provider_name: "Barbería de ejemplo", client_name: "Cliente de ejemplo" },
+      { id: 2, mp_payment_id: "1324567999", amount: 7500, refundable: 1500, refundable_from_app: true, review_reasons: ["amount_over"], provider_name: "Barbería de ejemplo", client_name: "Cliente de ejemplo" },
     ],
+    webhook_events: [{ id: 3, mp_payment_id: "1324568000", reason: "payment_not_found", created_at: dkey(addDays(-1)), provider_name: "Barbería de ejemplo" }],
   };
   return store.DEMO_REV;
 }

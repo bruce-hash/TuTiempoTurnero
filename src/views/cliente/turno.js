@@ -33,6 +33,13 @@ export function vTurnoOk() {
     return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px">⏳</div><h1 class="h1">Estamos confirmando tu pago</h1>
     <p class="lead">Mercado Pago nos avisa en segundos. Tu horario queda reservado mientras tanto.</p><button class="btn btn-pri btn-block" data-act="refreshMine">Actualizar</button></div></div>`;
   }
+  if (booking.status === "expired" && booking.refund) {
+    // lo canceló el sistema (el pago llegó tarde y el horario ya no estaba, o no alcanzó): se devuelve lo cobrado
+    const prov = pr(booking.pid);
+    return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px">💳</div><h1 class="h1">No pudimos confirmar tu turno</h1>
+    <p class="lead">${esc(booking.svc)} · ${esc(longLabel(booking.date))} a las ${booking.time} en ${esc(prov.name)}: ${esc(refundText(booking))} a tu Mercado Pago.</p>
+    <button class="btn btn-pri btn-block" data-act="rebook" data-id="${booking.id}">Elegir otro horario</button><button class="btn btn-ghost btn-block" style="margin-top:8px" data-go="misturnos">Ver mis turnos</button></div></div>`;
+  }
   if (booking.status === "expired") {
     return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><h1 class="h1">El pago no se completó</h1><p class="lead">El horario se liberó.</p><button class="btn btn-pri btn-block" data-go="perfil" data-id="${booking.pid}">Elegir otro horario</button></div></div>`;
   }

@@ -90,7 +90,9 @@ El LEEME dice que no se puede, pero `mp-oauth` no lo controla. Comparar `tok.use
 Mercado Pago de TuTiempo (variable `MP_OWNER_USER_ID`) y rechazar.
 
 ### H13 · Baja · Llaves y secretos
-- Las llaves de Mercado Pago (`provider_secrets`) se guardan sin cifrar. Evaluar Supabase Vault.
+- Las llaves de Mercado Pago se guardan sin cifrar: `provider_secrets` (sin uso desde el Bloque 1, se borra en el
+  Bloque 2, D21) y **`mp_accounts`** (desde el Bloque 1, una por prestador y cuenta; las desconectadas se guardan hasta
+  180 días después del último pago). Evaluar Supabase Vault o `pgsodium` para `access_token` y `refresh_token`.
 - La tarea programada de devoluciones lleva la `service_role` key escrita en el SQL del cron: guardarla en Vault.
 - `mp_oauth_states` no se limpia si el prestador abandona la conexión: borrar estados de más de 1 día.
 
@@ -180,6 +182,13 @@ Los avisos que arma la base (`notify_booking` y `send_scheduled_notices`, al ree
 Desde el Bloque B el frontend usa el dominio en el que corre (`location.origin`).
 **En el Bloque 2:** agregar `app_settings.site_url` (texto, por ejemplo `https://prueba.tutiempo.com.ar`, editable solo
 por el admin) y armar los links con `site_url || '/' || slug` (o `/p/<id>` si el slug es reservado).
+
+### H25 · Baja · Premio de sellos sin Mercado Pago (Bloque 1 → Bloque 2, D22)
+Desde el Bloque 1, si el prestador no tiene cuenta de Mercado Pago activa, su perfil público dice "Todavía no toma turnos
+online" y no deja elegir horario. La base sí permite reservar el premio de sellos sin cuenta (no lleva pago), pero desde
+el perfil no se llega.
+**En el Bloque 2 (D22):** con la cuenta desconectada, el perfil deja canjear el premio (solo los servicios con la tarjeta
+llena del cliente) y muestra "Solo podés canjear tu premio" en lugar de "Todavía no toma turnos online".
 
 ## Mejoras futuras (no son hallazgos; después del lanzamiento)
 
