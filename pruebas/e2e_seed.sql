@@ -20,4 +20,4 @@ update public.provider_settings set buffer_min=10 where provider_id=(select id f
 update public.services set repeat_days=21, prep_note='Venir sin esmalte' where name='Esmaltado semipermanente';
 insert into public.service_addons (service_id, name, price, duration_min) select id, 'Nail art', 2000, 15 from public.services where name='Esmaltado semipermanente';
 -- cuenta de Mercado Pago activa (Bloque 1: mp_accounts; mp_connected lo actualiza la base)
-select public.mp_connect(id, 'mp-test-' || id, 'TEST-token', null, 15552000) from public.providers;
+select public.mp_connect(id, 'mp-test-' || id, 'v1:aXY=:VEVTVC10b2tlbg==', null, 15552000) from public.providers;   -- llave con el formato cifrado (el e2e no la usa)

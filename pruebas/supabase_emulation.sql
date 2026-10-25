@@ -37,3 +37,17 @@ alter table storage.objects enable row level security;
 create or replace function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name,'/') $$;
 grant all on storage.objects to anon, authenticated, service_role;
 grant select on storage.buckets to anon, authenticated, service_role;
+
+-- Vault y pg_net (Bloque 2a): lo mínimo para probar el cron de devoluciones. En Supabase vienen con el proyecto.
+create schema if not exists vault;
+create table if not exists vault.secrets (id uuid primary key default gen_random_uuid(), name text unique, secret text, created_at timestamptz default now());
+create or replace view vault.decrypted_secrets as select id, name, secret as decrypted_secret, created_at from vault.secrets;
+create or replace function vault.create_secret(new_secret text, new_name text default null, new_description text default '')
+returns uuid language sql as $$ insert into vault.secrets (name, secret) values (new_name, new_secret) returning id $$;
+revoke all on schema vault from public, anon, authenticated;
+revoke all on all tables in schema vault from public, anon, authenticated;
+create schema if not exists net;
+create table if not exists net.requests (id bigserial primary key, url text, headers jsonb, body jsonb, timeout_milliseconds int, created_at timestamptz default now());
+create or replace function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000)
+returns bigint language sql as $$ insert into net.requests (url, headers, body, timeout_milliseconds) values (url, headers, body, timeout_milliseconds) returning id $$;
+revoke all on schema net from public, anon, authenticated;

@@ -34,7 +34,7 @@ def err(x, txt=None):
 
 def conectar_mp(provider_id):
     """Cuenta de Mercado Pago activa (Bloque 1): sin ella no se puede reservar con seña."""
-    return q("select mp_connect(%s, %s, 'tok-prueba', 'ref-prueba', 15552000)", (provider_id, f"mp-{provider_id}"), role="service_role")
+    return q("select mp_connect(%s, %s, 'v1:aXY=:dG9r', 'v1:aXY=:cmVm', 15552000)", (provider_id, f"mp-{provider_id}"), role="service_role")   # llaves con el formato cifrado
 
 def mkuser(email, name):
     uid = uuid.uuid4()
@@ -74,7 +74,7 @@ ok("anon no puede leer columnas privadas (select *)", err(anon_cols))
 ok("anon lee la vitrina", q("select name from providers where id=%s", (pid,), role="anon")[0][0] == "Sofía Benítez Studio")
 ok("anon no ve datos privados", err(q("select phone from provider_private", role="anon")) or q("select count(*) from provider_private", role="anon")[0][0] == 0)
 ok("otro usuario no ve el teléfono ni el DNI", q("select count(*) from provider_private", uid=cli1)[0][0] == 0)
-ok("nadie lee los tokens de Mercado Pago", err(q("select * from provider_secrets", uid=prov)) or q("select count(*) from provider_secrets", uid=prov)[0][0] == 0)
+ok("nadie lee las llaves de Mercado Pago", err(q("select * from mp_accounts", uid=prov)) and err(q("select access_token from mp_accounts", role="anon")))
 g = q("select get_provider(%s)", (pid,), role="anon")[0][0]
 ok("ficha pública con 3 rubros y servicios", g and len(g["categories"]) == 3 and len(g["services"]) == 3 and "phone" not in json.dumps(g))
 cc = dict(q("select * from category_counts('olavarria')", role="anon"))
