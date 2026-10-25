@@ -18,6 +18,8 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const wait = (ms = 400) => pg.waitForTimeout(ms);
   const txt = () => pg.locator("#app").innerText();
   const seg = () => pg.evaluate(() => document.body.dataset.seg);
+  // espera hasta que la consulta devuelva algo que cumple la condición (para lo que guarda la app sin avisar cuándo)
+  const until = async (sql, args, test, ms = 6000) => { const t0 = Date.now(); let rows; do { rows = await q(sql, args); if (test(rows)) return true; await wait(200) } while (Date.now() - t0 < ms); return false };
 
   await pg.goto(BASE); await pg.waitForSelector(".grid .card"); await wait();
   ok("modo en vivo: sin barra demo", !(await pg.isVisible(".modebar")) && !(await pg.isVisible(".demo")));
@@ -126,8 +128,9 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   // H08: montos enteros en pesos: "8000,50" se rechaza (antes se guardaba 800.050) y "8.000" es $8.000
   await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Gel caro"); await pg.fill("#pnp", "8000,50"); await pg.click("#fProd button[type=submit]"); await wait(400);
   ok("H08: un precio con centavos se rechaza con un mensaje claro", /sin centavos/.test(await pg.locator("#perr2").innerText()) && (await q("select count(*)::int c from products where name='Gel caro'"))[0].c === 0);
-  await pg.fill("#pnp", "8.000"); await pg.click("#fProd button[type=submit]"); await wait(600);
-  ok("H08: 8.000 se guarda como $8.000", (await q("select price from products where name='Gel caro'"))[0]?.price === 8000);
+  await wait(700);   // la app ignora un segundo envío del mismo formulario en menos de medio segundo
+  await pg.fill("#pnp", "8.000"); await pg.click("#fProd button[type=submit]");
+  ok("H08: 8.000 se guarda como $8.000", await until("select price from products where name='Gel caro'", [], (r) => r[0]?.price === 8000));
   // caja
   await pg.click("[data-btab=caja]"); await pg.click("[data-act=walkOpen]"); await pg.fill("#wpr", "7000"); await pg.click("#fWalk button[type=submit]"); await wait(600);
   ok("servicio sin turno guardado", (await q("select count(*)::int c from walkins"))[0].c === 1);
@@ -297,8 +300,10 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("H24: Comisión muestra la dirección del sitio", (await pg.inputValue("#admSite")) === "https://tutiempo.com.ar");
   await pg.fill("#admSite", "prueba.tutiempo.com.ar"); await pg.click("#fSite button[type=submit]"); await wait(400);
   ok("H24: sin https:// avisa y no guarda", (await pg.locator("#siteerr").innerText()).includes("https://") && (await q("select site_url from app_settings"))[0].site_url === "https://tutiempo.com.ar");
-  await pg.fill("#admSite", "https://Prueba.TuTiempo.com.ar/"); await pg.click("#fSite button[type=submit]"); await wait(1000);
-  ok("H24: el admin guarda la dirección del subdominio de prueba", (await q("select site_url from app_settings"))[0].site_url === "https://prueba.tutiempo.com.ar");
+  await wait(700);
+  await pg.fill("#admSite", "https://Prueba.TuTiempo.com.ar/"); await pg.click("#fSite button[type=submit]");
+  ok("H24: el admin guarda la dirección del subdominio de prueba", await until("select site_url from app_settings", [], (r) => r[0].site_url === "https://prueba.tutiempo.com.ar"));
+  await wait(400);
   await db.query("update app_settings set site_url = 'https://tutiempo.com.ar'");
   // Bloque 1: "Para revisar · cobros": una devolución que falló una vez (el turno de Ana pagado con Mercado Pago)
   // (el turno puede seguir confirmado o haber caído en el bloqueo de días: depende de la fecha; la devolución se pide igual)
