@@ -207,7 +207,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
     const other = await sb.from("bookings").select("id").neq("provider_id", S.me);
     const r1 = await sb.from("providers").update({ dni_verified: true }).eq("id", S.me);
     const r2 = await sb.from("bookings").insert({ provider_id: S.me, source: "app", status: "confirmed", starts_at: new Date().toISOString(), ends_at: new Date(Date.now() + 3600e3).toISOString(), price: 1 });
-    const r3 = await sb.from("provider_secrets").select("*");
+    const r3 = await sb.from("mp_accounts").select("*");   // las llaves de Mercado Pago (Bloque 2a: cifradas y sin acceso)
     return { other: (other.data || []).length, dni: !!r1.error, ins: !!r2.error, secrets: (r3.data || []).length };
   });
   await wait(300); probing = false;
