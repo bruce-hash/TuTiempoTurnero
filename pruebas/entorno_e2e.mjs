@@ -1,7 +1,7 @@
 // Entorno "en vivo" para las pruebas en navegador: base nueva con la emulación de Supabase, TODO_EN_UNO.sql y
 // e2e_seed.sql; PostgREST real y pruebas/e2e_server.js (Auth, Storage y Mercado Pago simulados) sirviendo una carpeta web.
 // Uso como comando:  node pruebas/entorno_e2e.mjs <carpeta web> -- <comando…>
-//   el comando recibe E2E_URL y E2E_PG en el entorno (y como reemplazo de {url} y {pg} en sus argumentos).
+//   el comando recibe E2E_URL, E2E_PG y E2E_SECRET (el de los JWT) en el entorno (y {url} y {pg} en sus argumentos).
 // Variables: PGHOST, PGPORT, PGUSER, PGPASSWORD (conexión de administración), POSTGREST (binario; por defecto "postgrest").
 import fs from "node:fs";
 import os from "node:os";
@@ -77,7 +77,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url
   }
   const e = await levantar({ web });
   const p = spawn(cmd, args.map((a) => a.replace("{url}", e.url).replace("{pg}", e.pg)), {
-    cwd: ROOT, stdio: "inherit", env: { ...process.env, E2E_URL: e.url, E2E_PG: e.pg },
+    cwd: ROOT, stdio: "inherit", env: { ...process.env, E2E_URL: e.url, E2E_PG: e.pg, E2E_SECRET: SECRET },
   });
   const code = await new Promise((r) => p.on("exit", r));
   await e.cerrar();

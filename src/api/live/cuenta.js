@@ -76,6 +76,7 @@ export const liveCuenta = {
       no_show: "noshow",
       cancelled_client: "cancelled",
       cancelled_provider: "cancelled",
+      cancelled_refunded: "cancelled",
       hold: "hold",
       expired: "expired",
     };
@@ -106,6 +107,16 @@ export const liveCuenta = {
             disc: row.discount_pct,
             status: statusMap[row.status] || row.status,
             byProv: row.status === "cancelled_provider",
+            // Bloque 1: el pago se devolvió (o hubo contracargo) desde Mercado Pago; y la devolución de la app, si hay
+            byRefund: row.status === "cancelled_refunded",
+            refund: row.refund_amount
+              ? {
+                  amount: row.refund_amount,
+                  status: row.refund_status,
+                  done: row.refund_done_at ? isoToLocal(row.refund_done_at).date : null,
+                  reason: row.refund_reason,
+                }
+              : null,
             self: !!row.settle_by_provider,
             mine: true,
             pay: row.pay_method || "mp",

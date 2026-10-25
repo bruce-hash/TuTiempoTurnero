@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   base:
-    name: Base (Postgres 16 · test_db.py)
+    name: Base (Postgres 16 · test_db.py · test_cobros.py)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -50,14 +50,19 @@ jobs:
       - name: Driver de Postgres para Python
         run: pip install "psycopg[binary]==3.3.*"
 
-      - name: Cargar la base (emulación de Supabase + TODO_EN_UNO.sql)
+      - name: Cargar las bases (emulación de Supabase + TODO_EN_UNO.sql; una limpia para cada prueba)
         run: |
-          createdb tt
-          psql -v ON_ERROR_STOP=1 -q -d tt -f pruebas/supabase_emulation.sql
-          psql -v ON_ERROR_STOP=1 -q -d tt -f supabase/TODO_EN_UNO.sql
+          for db in tt tt_cobros; do
+            createdb $db
+            psql -v ON_ERROR_STOP=1 -q -d $db -f pruebas/supabase_emulation.sql
+            psql -v ON_ERROR_STOP=1 -q -d $db -f supabase/TODO_EN_UNO.sql
+          done
 
       - name: test_db.py
         run: python3 pruebas/test_db.py "host=localhost port=5432 dbname=tt user=postgres password=postgres"
+
+      - name: test_cobros.py (pagos, devoluciones, cuentas de Mercado Pago)
+        run: python3 pruebas/test_cobros.py "host=localhost port=5432 dbname=tt_cobros user=postgres password=postgres"
 
   frontend:
     name: Frontend (sin demo · crawl · clicks)
@@ -143,6 +148,54 @@ jobs:
           name: comparacion
           path: .build/comparar/
           if-no-files-found: ignore
+
+  funciones:
+    name: Edge Functions (Deno · Mercado Pago falso)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.1.4
+
+      - name: PostgREST 12.2.3
+        run: |
+          curl -sSfL https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz | tar xJ -C "$RUNNER_TEMP"
+          echo "POSTGREST=$RUNNER_TEMP/postgrest" >> "$GITHUB_ENV"
+
+      - name: Tipos de las Edge Functions (deno check)
+        run: deno check --config pruebas/funciones/deno.json supabase/functions/*/index.ts
+
+      - name: Funciones reales contra la base, PostgREST y un Mercado Pago falso
+        run: npm run test:funciones
 
   apache:
     name: Apache (.htaccess real · fallback, HTTPS, CSP)

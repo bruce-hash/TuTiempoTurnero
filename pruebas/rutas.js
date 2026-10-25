@@ -212,6 +212,15 @@ const SOFIA = "sofia-benitez-studio";
   await page.reload();
   await wait(page, 1200);
   ok("recarga en /turno/<id>: el detalle del turno", (await st(page)).view === "turnoOk" && here(page) === turno);
+  // Bloque 1: en vivo no se puede mover un turno; ?reprogramar=<id> lleva al detalle del turno, sin "Cambiar" ni reserva
+  const idTurno = turno.split("/").pop();
+  const antesR = +(await q("select count(*) from bookings"))[0].count;
+  s = await go(page, "/" + SOFIA + "?reprogramar=" + idTurno);
+  ok("?reprogramar=<id> en vivo → /turno/<id>, sin modo “Cambiar”", s.view === "turnoOk" && here(page) === turno
+     && !(await page.evaluate(() => S.reprog)) && !/Cambiar|Elegí el nuevo horario/.test(await page.locator("#app").innerText()), here(page));
+  ok("…y no crea ninguna reserva", +(await q("select count(*) from bookings"))[0].count === antesR);
+  s = await go(page, "/" + SOFIA + "?reprogramar=abc");
+  ok("?reprogramar= inválido en vivo → inicio, sin error", s.view === "home" && here(page) === "/", here(page));
   await page.context().close();
 
   // ---------- 6. Panel: recarga en cada pestaña, ficha de cliente, QR y link ----------
@@ -267,8 +276,10 @@ const SOFIA = "sofia-benitez-studio";
   ok("el link copiado abre el perfil", s.view === "perfil" && s.pid === sofiaId);
 
   // ---------- 7. Palabras reservadas: cada una abre su pantalla y nunca un perfil ----------
-  await q("alter table providers drop constraint providers_slug_not_reserved");
-  await q("update providers set slug = 'blog' where id = $1", [maxId]); // como un dato viejo, de antes de la lista
+  // como un dato viejo, de antes de la lista: el trigger que rechaza slugs reservados se apaga solo para cargarlo
+  await q("alter table providers disable trigger providers_slug_not_reserved");
+  await q("update providers set slug = 'blog' where id = $1", [maxId]);
+  await q("alter table providers enable trigger providers_slug_not_reserved");
   const screens = { ingresar: "login", "crear-cuenta": "register", "nueva-contrasena": "newpass", sumate: "prestador", terminos: "terminos", buscar: "home", "mis-turnos": "login", cuenta: "login", panel: "loginBarbero", admin: "login" };
   const wrong = [];
   const folders = ["assets", "fonts", "vendor"]; // carpetas reales del sitio: Apache responde 403, nunca la app

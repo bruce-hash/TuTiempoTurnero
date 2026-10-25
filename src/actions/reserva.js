@@ -108,13 +108,14 @@ registerClick("useReward", (ev, el, act) => {
   render();
   return;
 });
-// volver a sacar un turno parecido (data-in = días después del anterior), dentro de los días habilitados
+// volver a sacar un turno parecido (data-in = días después del anterior), dentro de los días habilitados: el mismo
+// servicio precargado y una reserva nueva, con su pago (nunca mueve el turno anterior ni reusa su seña)
 registerClick("rebook", (ev, el, act) => {
   const booking = store.BOOK.find((item) => item.id === +el.dataset.id);
   if (!booking) {
     return;
   }
-  if (booking.byProv) {
+  if (booking.byProv || booking.byRefund || (booking.status === "expired" && booking.refund)) {
     booking.rebooked = true;
   }
   const prov = pr(booking.pid);

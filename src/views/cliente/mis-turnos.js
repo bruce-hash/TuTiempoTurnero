@@ -2,6 +2,7 @@ import { api } from "../../api/index.js";
 import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { TODAY, dayLabel, nowHM } from "../../lib/fechas.js";
+import { cap, notByProvider, refundText } from "../../lib/devoluciones.js";
 import { avatar, pr } from "../../lib/prestadores.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
@@ -25,10 +26,14 @@ function vMisTurnosBase() {
       : booking.status === "noshow"
         ? '<span class="chip bad">No fuiste</span>'
         : booking.status === "cancelled"
-          ? booking.byProv
-            ? '<span class="chip bad">Lo canceló el profesional</span>'
-            : '<span class="chip gray">Avisaste que no ibas</span>'
-          : '<span class="chip gray">Pasado</span>';
+          ? booking.byRefund
+            ? '<span class="chip bad">Pago devuelto por Mercado Pago</span>'
+            : booking.byProv
+              ? `<span class="chip bad">${notByProvider(booking) ? "Pago devuelto" : "Lo canceló el profesional"}</span>`
+              : '<span class="chip gray">Avisaste que no ibas</span>'
+          : booking.refund
+            ? `<span class="chip gray">${esc(cap(refundText(booking)))}</span>`
+            : '<span class="chip gray">Pasado</span>';
   const inbox = S.inbox || [];
   const unread = inbox.filter((msg) => !msg.read).length;
   if (unread && !S.inboxSeen) {
@@ -44,8 +49,7 @@ function vMisTurnosBase() {
      const cancelled = store.BOOK.filter(
        (booking) =>
          booking.mine &&
-         booking.status === "cancelled" &&
-         booking.byProv &&
+         ((booking.status === "cancelled" && (booking.byProv || booking.byRefund)) || (booking.status === "expired" && booking.refund)) &&
          booking.date >= TODAY() &&
          !booking.rebooked &&
          !store.BOOK.some(
@@ -60,7 +64,19 @@ function vMisTurnosBase() {
          ),
      );
      if (cancelled.length) {
-       return `<div class="panel delpanel"><p class="lbl" style="margin:0 0 6px">⚠ Turnos que canceló el profesional</p><ul class="ag">${cancelled.map((booking) => `<li><span class="ag-t">${booking.time}</span><div><b>${esc(pr(booking.pid).name)}</b><span>${esc(booking.svc)} · ${esc(dayLabel(booking.date))}${booking.self ? " · te va a llamar para devolverte la seña o darte otro turno" : booking.paid ? ` · te devolvemos ${money(booking.paid + (booking.fee || 0))}` : ""}</span></div>${booking.self ? "<span></span>" : `<button class="btn btn-pri btn-sm" data-act="rebook" data-id="${booking.id}">Reprogramar</button>`}</li>`).join("")}</ul></div>`;
+       const byProvOnly = cancelled.every((booking) => booking.status === "cancelled" && booking.byProv && !notByProvider(booking));
+       // qué pasa con la plata: lo devuelve el profesional (bloqueo de días), Mercado Pago o la app
+       const refundNote = (booking) =>
+         booking.self
+           ? " · te va a llamar para devolverte la seña o darte otro turno"
+           : booking.byRefund
+             ? " · Mercado Pago te devolvió el pago"
+             : booking.refund
+               ? " · " + refundText(booking)
+               : booking.paid
+                 ? ` · te devolvemos ${money(booking.paid + (booking.fee || 0))}`
+                 : "";
+       return `<div class="panel delpanel"><p class="lbl" style="margin:0 0 6px">⚠ ${byProvOnly ? "Turnos que canceló el profesional" : "Turnos cancelados"}</p><ul class="ag">${cancelled.map((booking) => `<li><span class="ag-t">${booking.time}</span><div><b>${esc(pr(booking.pid).name)}</b><span>${esc(booking.svc)} · ${esc(dayLabel(booking.date))}${esc(refundNote(booking))}</span></div>${booking.self ? "<span></span>" : `<button class="btn btn-pri btn-sm" data-act="rebook" data-id="${booking.id}">${booking.byRefund || booking.status === "expired" ? "Reservar de nuevo" : "Reprogramar"}</button>`}</li>`).join("")}</ul></div>`;
      } else {
        return "";
      }

@@ -50,11 +50,13 @@ Deno.serve(async (req) => {
     });
     const tok = await r.json();
     if (!r.ok || !tok.access_token) { console.error("MP oauth", r.status, tok); return Response.redirect(`${site}/?mp_connected=0`, 302); }
-    await db.from("provider_secrets").upsert({
-      provider_id: st.provider_id, mp_access_token: tok.access_token, mp_refresh_token: tok.refresh_token ?? null,
-      mp_expires_at: tok.expires_in ? new Date(Date.now() + tok.expires_in * 1000).toISOString() : null,
+    // Llaves por cuenta (Bloque 1): la misma cuenta actualiza su llave; otra cuenta crea una fila nueva y la anterior queda
+    // para devoluciones y consultas (mp_connect). provider_private.mp_connected lo actualiza la base.
+    const { error } = await db.rpc("mp_connect", {
+      p_provider: st.provider_id, p_mp_user_id: String(tok.user_id ?? ""), p_access: tok.access_token,
+      p_refresh: tok.refresh_token ?? null, p_expires_in: Number(tok.expires_in) || 0,
     });
-    await db.from("provider_private").update({ mp_connected: true, mp_user_id: String(tok.user_id ?? "") }).eq("provider_id", st.provider_id);
+    if (error) { console.error("mp_connect", error); return Response.redirect(`${site}/?mp_connected=0`, 302); }
     return Response.redirect(`${site}/?mp_connected=1`, 302);
   } catch (e) {
     console.error(e);
