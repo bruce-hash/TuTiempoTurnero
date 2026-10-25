@@ -46,9 +46,11 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   (el CI falla si no son idénticos).
 - `supabase/functions/`: Edge Functions de Mercado Pago (`_shared/util.ts` compartido). Desde el Bloque 1 las llaves están
   en `mp_accounts` (una por prestador y cuenta de MP; solo la `active` cobra) y cada pago en `payments`, ligado a la
-  cuenta que lo cobró: las devoluciones y consultas usan esa llave, no la actual. `MP_API_URL` (opcional, solo pruebas)
+  cuenta que lo cobró: las devoluciones y consultas usan esa llave, no la actual. Desde el Bloque 2a las llaves se guardan
+  cifradas (AES-256-GCM con `MP_TOKENS_KEY`, `encryptToken`/`decryptToken` en `_shared/util.ts`; la base rechaza texto
+  plano) y `mp-refunds` solo acepta `CRON_SECRET`, que el cron lee de Vault. `MP_API_URL` (opcional, solo pruebas)
   cambia la API de Mercado Pago; sin ese secreto, la real.
-- `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: usa negocios reales de Olavarría. Solo para pruebas locales.
+- `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: prestadores ficticios. Solo para pruebas locales (pide `set tt.ejemplos = 'si'` antes).
 - `pruebas/`: pruebas del cliente; `test_db.py` y `test_cobros.py` (base: pagos, devoluciones, cuentas de MP);
   `funciones/` (las Edge Functions reales con Deno contra un Mercado Pago falso, `npm run test:funciones`).
 

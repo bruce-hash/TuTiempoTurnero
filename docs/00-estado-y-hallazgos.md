@@ -17,6 +17,7 @@ Auditoría de Bruno (con Claude) sobre el paquete del cliente, octubre 2026.
 | Bloque A1: `src/prototipo.html` → módulos de `src/` con Vite (`1368349` → merge `9899126`) | Mudanza pura: cada declaración de la referencia, idéntica en su módulo (`tools/mudanza/`, borrado al aprobar A1). Crawl idéntico toque por toque, e2e 107/107, comparación en navegador 36/36 |
 | Bloque 1: cobros (`payments`, `refunds`, `mp_accounts`) | H01–H05 y H23 resueltos. `pruebas/test_cobros.py` (base) y `pruebas/funciones/` (Edge Functions reales con Deno contra un Mercado Pago falso) en el CI |
 | Bloque A2: nombres claros y comentarios (merge `9899126` → merge `6d7b5a0`) | Código idéntico módulo por módulo: árbol de sintaxis con las variables locales en nombres canónicos y sin comentarios (`tools/legibilidad/`, borrado al aprobar A2). Variables locales de una letra: 2834 → 0. Crawl idéntico toque por toque, e2e 107/107, comparación 36/36 |
+| Bloque 2a: seguridad y datos | H12, H13, H14, H18, H26 y H29 resueltos. Llaves de Mercado Pago cifradas (AES-256-GCM), cron de devoluciones con Vault y `CRON_SECRET`, limpieza diaria, demo y seed ficticios. Despliegue en `docs/02` |
 
 ## Hallazgos
 
@@ -85,18 +86,31 @@ El registro de prestador manda `provider_reg` (con el DNI) en `user_metadata` de
 En el perfil público la insignia no depende de `dni_verified`. Riesgo bajo (solo se ven perfiles activados por un
 admin), pero debe mostrarse según el dato.
 
-### H12 · Baja · Se puede conectar la cuenta de Mercado Pago de TuTiempo como prestador
+### H12 · Baja · Se puede conectar la cuenta de Mercado Pago de TuTiempo como prestador (resuelto en el Bloque 2a)
 El LEEME dice que no se puede, pero `mp-oauth` no lo controla. Comparar `tok.user_id` con el id de usuario de
 Mercado Pago de TuTiempo (variable `MP_OWNER_USER_ID`) y rechazar.
+**Bloque 2a:** `mp-oauth` rechaza esa cuenta (vuelve con `?mp_connected=0` y lo deja en el log) y, si falta
+`MP_OWNER_USER_ID`, no conecta ninguna. Pruebas en `pruebas/funciones/`.
 
-### H13 · Baja · Llaves y secretos
+### H13 · Baja · Llaves y secretos (resuelto en el Bloque 2a)
 - Las llaves de Mercado Pago se guardan sin cifrar: `provider_secrets` (sin uso desde el Bloque 1, se borra en el
   Bloque 2, D21) y **`mp_accounts`** (desde el Bloque 1, una por prestador y cuenta; las desconectadas se guardan hasta
   180 días después del último pago). Evaluar Supabase Vault o `pgsodium` para `access_token` y `refresh_token`.
 - La tarea programada de devoluciones lleva la `service_role` key escrita en el SQL del cron: guardarla en Vault.
 - `mp_oauth_states` no se limpia si el prestador abandona la conexión: borrar estados de más de 1 día.
 
-### H14 · Alta (antes de abrir) · Negocios reales en datos de ejemplo
+**Bloque 2a** (`20261025171952_seguridad.sql`, `supabase/functions/_shared/util.ts`):
+- Las Edge Functions cifran `access_token` y `refresh_token` con AES-256-GCM (Web Crypto, IV aleatorio de 12 bytes,
+  formato `v<n>:<iv>:<cifrado>` en base64, datos asociados: prestador + cuenta de MP + campo). Clave `MP_TOKENS_KEY`
+  (y `MP_TOKENS_KEY_V2`… para rotar: se lee con cualquiera, se escribe con la última). La base rechaza llaves sin
+  cifrar; una vieja sin el prefijo deja la cuenta en "solo devoluciones" con el motivo en el log (hay que reconectar).
+- `provider_secrets` se borró (D21).
+- El cron `tt-refunds` llama a `mp-refunds` con `pg_net`, leyendo la dirección del proyecto y `CRON_SECRET` de
+  `vault.decrypted_secrets`. `mp-refunds` acepta solo `CRON_SECRET` (comparada con `safeEqual`), ya no la `service_role`.
+- El cron `tt-cleanup` (diario) borra `mp_oauth_states` de más de 1 día (y `mp_webhook_events`, ver H29).
+- Cómo generar y rotar las claves: `docs/02`.
+
+### H14 · Alta (antes de abrir) · Negocios reales en datos de ejemplo (resuelto en el Bloque 2a)
 `ejemplos.sql` y el array `P` de la demo usan nombres, direcciones y hasta un teléfono de negocios reales de
 Olavarría. Esos perfiles se pueden reservar y fallan (no tienen Mercado Pago). Reemplazar por datos ficticios y
 no cargar ejemplos en producción.
@@ -114,6 +128,13 @@ vivo, y llegan a `dist/`:
 `test:sin-demo` para que lo detecte: buscar en `dist/` textos de esos datos (por ejemplo "Koleston 7.1") y que ninguna
 función de siembra (`seedStore`, `demoClosings`, `seedComm`) sobreviva en el build de producción.
 
+**Bloque 2a:** los 13 prestadores de la demo y del seed son ficticios (nombres, direcciones, teléfonos que empiezan
+con 0 después de la característica, Instagram `*.demo`). `seedStore` y `demoClosings` están en `src/demo/panel.js` y
+`seedComm` en `src/demo/comunidad.js`: en vivo el panel y la comunidad arrancan vacíos y los llena la base. El seed
+no carga sin `set tt.ejemplos = 'si'` antes (`test_db.py` lo prueba). `test:sin-demo` verifica que no lleguen a
+`dist/` las funciones de siembra ni sus datos ("Koleston 7.1", "Trabajar cervicales", "Insumos de …") y que ni
+`src/` ni el seed tengan los datos de los negocios reales.
+
 ### H15 · Baja · Contradicciones del LEEME
 - Clientes: "si el profesional bloquea el día se devuelve la seña y hay botón Reprogramar". Prestadores y pruebas
   (v31): TuTiempo **no** devuelve la seña en bloqueos de días; el prestador la arregla. Vale la segunda.
@@ -129,12 +150,14 @@ TuTiempo ya no maneja saldo ni cashback (v25), pero el código sigue: `src/lib/s
 en las vistas y en `liveApi`). En el Bloque A1 se mudó tal cual. **Borrarlo en el Bloque 2**, con sus pruebas (la base
 conserva las columnas por compatibilidad).
 
-### H18 · Media · Credenciales de demo precargadas en vivo (Bloque A1)
+### H18 · Media · Credenciales de demo precargadas en vivo (Bloque A1 · resuelto en el Bloque 2a)
 El estado inicial (`fresh()` en `src/state.js`) trae `S.blogin = { email: "hidro.style@tutiempo.demo", pass: "barbero123" }`
 y el formulario "Acceso prestadores" los muestra **también en vivo** (versión 31). Además, `vBPerfil` usa
 `sofia@tutiempo.demo` / `hidro.style@tutiempo.demo` como email de respaldo si no hay usuario. En A1 no se tocó (cero cambios
 visibles); `pruebas/sin_demo.mjs` los tolera con un tope exacto y avisa "PEND". **Corregir en el Bloque 2** (con H14) y
 bajar el tope a 0.
+**Bloque 2a:** el formulario arranca vacío (también en la demo: tiene los botones de cada prestador de ejemplo) y el
+email del perfil sale solo de la sesión en vivo. `test:sin-demo` no tolera ninguna cuenta de demo en `dist/`.
 
 ### H19 · Baja · Texto de prototipo visible en producción (Bloque A1)
 El pie dice "… Olavarría, Buenos Aires, Argentina · Prototipo" (`index.html`). Revisar en el Bloque 2.
@@ -190,11 +213,12 @@ el perfil no se llega.
 **En el Bloque 2 (D22):** con la cuenta desconectada, el perfil deja canjear el premio (solo los servicios con la tarjeta
 llena del cliente) y muestra "Solo podés canjear tu premio" en lugar de "Todavía no toma turnos online".
 
-### H26 · Baja · Cuentas activas sin `mp_user_id` y `provider_secrets` (Bloque 1 → Bloque 2)
+### H26 · Baja · Cuentas activas sin `mp_user_id` y `provider_secrets` (Bloque 1 → resuelto en el Bloque 2a)
 Desde el Bloque 1, una cuenta sin `mp_user_id` no puede confirmar pagos (el webhook la trata como cobrador equivocado).
 `mp_connect` ya lo exige; solo pueden quedar sin id las llaves viejas copiadas de `provider_secrets`.
 **En el Bloque 2:** `check (status <> 'active' or mp_user_id is not null)` en `mp_accounts` (antes, pasar a
 `refunds_only` las activas sin id y avisar al prestador que reconecte) y borrar `provider_secrets` (D21, junto con H13).
+**Bloque 2a:** hecho así, con el aviso `mp_reconnect` y la restricción `mp_accounts_active_user`.
 
 ### H27 · Baja · "Reprocesar" pagos en revisión por un error inesperado (Bloque 1 → Bloque 2)
 Si `confirm_payment` falla por un error inesperado, el pago queda en "Para revisar" (no se pierde) y hoy el admin solo
@@ -209,10 +233,11 @@ Mercado Pago un cobro y una devolución sin ninguna explicación en la app.
 **En el Bloque 2:** un aviso en `provider_notices` ("El pago de X llegó cuando el horario ya no estaba libre: se le
 devuelve $Y desde tu cuenta"), una vez por pago.
 
-### H29 · Baja · Retención de `mp_webhook_events` y `mp_oauth_states` (Bloque 1 → Bloque 2)
+### H29 · Baja · Retención de `mp_webhook_events` y `mp_oauth_states` (Bloque 1 → resuelto en el Bloque 2a)
 `mp_webhook_events` crece con cada aviso descartado y no se limpia.
 **En el Bloque 2:** borrar los de más de 180 días que no estén ligados a un pago en revisión sin resolver, en la misma
 tarea programada que limpia `mp_oauth_states` (H13).
+**Bloque 2a:** `daily_cleanup()`, en la tarea `tt-cleanup` de todos los días.
 
 ## Mejoras futuras (no son hallazgos; después del lanzamiento)
 
