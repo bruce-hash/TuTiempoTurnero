@@ -6,7 +6,6 @@ import { $ } from "../lib/dom.js";
 import { TODAY, nowHM } from "../lib/fechas.js";
 import { onPhoto } from "../lib/imagenes.js";
 import { ME, pr } from "../lib/prestadores.js";
-import { refundPay } from "../lib/saldo.js";
 import { freed } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
@@ -85,8 +84,6 @@ registerClick("delYes", (ev, el, act) => {
     });
     S.user = null;
     S.following = false;
-    S.wallet = 0;
-    S.wmov = [];
     S.form = {
       tel: "",
     };
@@ -108,9 +105,6 @@ registerClick("delYes", (ev, el, act) => {
       ) {
         booking.status = "cancelled";
         booking.refund = (booking.paid || 0) + (booking.fee || 0);
-        if (booking.mine) {
-          refundPay(booking, booking.svc + " en " + pr(booking.pid).name);
-        }
         cancelled++;
       }
     });
@@ -134,7 +128,6 @@ registerClick("logout", (ev, el, act) => {
   S.user = null;
   S.followingBy = {};
   store.BOOK = store.BOOK.filter((booking) => !booking.mine || !LIVE);
-  S.wallet = LIVE ? 0 : S.wallet;
   toast("Cerraste sesión");
   go("home");
 });

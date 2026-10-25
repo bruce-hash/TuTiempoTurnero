@@ -65,6 +65,7 @@ export function admData() {
       return {
         st: S.adm.stats,
         pv: S.adm.providers,
+        siteUrl: S.adm.siteUrl,
       };
     } else {
       return null;

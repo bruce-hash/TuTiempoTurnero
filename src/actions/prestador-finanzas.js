@@ -1,6 +1,6 @@
 import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
-import { money } from "../lib/dinero.js";
+import { PESOS_ERR, money, parsePesos } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { MESES, TODAY, nowHM, pad } from "../lib/fechas.js";
 import { S } from "../state.js";
@@ -111,9 +111,13 @@ registerChange("gcat", (ev) => {
 });
 registerSubmit("fGasto", (ev) => {
   const concept = $("#gc").value.trim();
-  const amount = parseInt($("#gm").value.replace(/\D/g, "")) || 0;
+  const amount = parsePesos($("#gm").value);
   if (!concept) {
     $("#gerr").textContent = "Escribí el concepto (ej: Alquiler).";
+    return;
+  }
+  if (isNaN(amount)) {
+    $("#gerr").textContent = PESOS_ERR;
     return;
   }
   if (amount <= 0) {

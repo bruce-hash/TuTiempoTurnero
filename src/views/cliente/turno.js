@@ -44,8 +44,6 @@ export function vTurnoOk() {
     return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><h1 class="h1">El pago no se completó</h1><p class="lead">El horario se liberó.</p><button class="btn btn-pri btn-block" data-go="perfil" data-id="${booking.pid}">Elegir otro horario</button></div></div>`;
   }
   const prov = pr(booking.pid);
-  // no se usa
-  const hours = hoursUntil(booking);
   const calUrl =
     "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" +
     encodeURIComponent(booking.svc + " · " + prov.name) +

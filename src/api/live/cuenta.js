@@ -137,10 +137,6 @@ export const liveCuenta = {
       }),
     );
   },
-  async wallet() {
-    S.wallet = 0;
-    S.wmov = [];
-  },
   async myStamps() {
     if (!S.user) {
       return;

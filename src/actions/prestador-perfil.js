@@ -14,7 +14,7 @@ import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { stampCfg } from "../ui/sellos.js";
 import { toast } from "../ui/toast.js";
-import { readSvcEditor } from "../views/prestador/perfil.js";
+import { readSvcEditor, svcEditorError } from "../views/prestador/perfil.js";
 
 registerClick("cashToggle", (ev, el, act) => {
   const conf = cfg(ME());
@@ -162,11 +162,6 @@ registerClick("noticesRead", (ev, el, act) => {
   api.m.readNotices();
   render();
 });
-registerChange("useW", (ev) => {
-  S.useWallet = ev.target.checked;
-  render();
-  return;
-});
 registerChange("msv", (ev) => {
   S.manSvc = +ev.target.value;
   const client = $("#mcl").value;
@@ -297,10 +292,14 @@ registerSubmit("fStamps", (ev) => {
 // datos y servicios del perfil: valida el editor y guarda; removed = servicios que se sacaron (quedan inactivos)
 registerSubmit("fDatos", (ev) => {
   const prov = pr(ME());
-  readSvcEditor();
   const showErr = (msg) => {
     $("#derr").textContent = msg;
   };
+  const numErr = svcEditorError();
+  if (numErr) {
+    return showErr(numErr);
+  }
+  readSvcEditor();
   const name = $("#dn").value.trim();
   if (name.length < 2) {
     return showErr("El nombre visible tiene que tener al menos 2 letras.");

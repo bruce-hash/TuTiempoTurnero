@@ -615,6 +615,21 @@ ok("…y sí por uno libre", not err(q("update providers set slug = 'turnos-viej
 ok("…una vez libre, tampoco puede volver al reservado", err(q("update providers set slug = 'turnos' where id = %s", (pv,)), "reserved_slug"))
 ok("a un prestador común no se le puede poner un slug reservado", err(q("update providers set slug = 'Panel' where id = %s", (pid2,)), "reserved_slug"))
 
+# Bloque 2b (H24): los links de los avisos salen de app_settings.site_url, no de un dominio escrito a mano
+ok("H24: la dirección del sitio la cambia solo el admin", err(q("select admin_set_site_url('https://otro.com')", uid=prov), "forbidden")
+   and err(q("update app_settings set site_url = 'https://otro.com'", uid=adm)) and err(q("select admin_set_site_url('https://otro.com')", role="anon")))
+ok("H24: una dirección con carpeta o sin https:// se rechaza", err(q("select admin_set_site_url('https://prueba.tutiempo.com.ar/panel')", uid=adm), "bad_site_url")
+   and err(q("select admin_set_site_url('prueba.tutiempo.com.ar')", uid=adm), "bad_site_url"))
+ok("H24: el admin la guarda (en minúsculas y sin la barra final)", q("select admin_set_site_url('https://Prueba.TuTiempo.com.ar/')", uid=adm)[0][0] == "https://prueba.tutiempo.com.ar")
+bl = q("select id from bookings where provider_id = %s and source = 'app' and client_id is not null order by id limit 1", (pid,))[0][0]
+q("delete from client_messages where kind = 'r24' and ref = %s", (str(bl),))
+q("select notify_booking(%s, 'r24')", (bl,))
+sl = q("select slug from providers where id = %s", (pid,))[0][0]
+ok("H24: el link del aviso usa la dirección del sitio", f"https://prueba.tutiempo.com.ar/{sl}" in q("select body from client_messages where kind = 'r24' and ref = %s", (str(bl),))[0][0])
+ok("H24: un slug reservado lleva a /p/<id>", q("select provider_link(%s, 'panel')", (pid,))[0][0] == f"https://prueba.tutiempo.com.ar/p/{pid}")
+ok("H24: provider_link es interna", err(q("select provider_link(1, 'x')", role="anon")))
+q("select admin_set_site_url('https://tutiempo.com.ar')", uid=adm)
+
 # Bloque 2a (H14): el seed de ejemplos es ficticio y no carga sin el aviso explícito (todo en una transacción que se deshace)
 import pathlib, re
 SEED = (pathlib.Path(__file__).resolve().parent.parent / "supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql").read_text()

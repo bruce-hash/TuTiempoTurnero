@@ -1,5 +1,5 @@
 import { LIVE } from "../../config.js";
-import { pctTxt } from "../../lib/dinero.js";
+import { PESOS_ERR, parsePesos, parseWhole, pctTxt } from "../../lib/dinero.js";
 import { $, esc } from "../../lib/dom.js";
 import { ME } from "../../lib/prestadores.js";
 import { CATS, catInfo } from "../../lib/rubros.js";
@@ -51,6 +51,21 @@ function svcOpts(svc, index) {
   const meta = (svc[5] ||= svcMeta(svc));
   return `<div class="svcopts"><div class="f"><label for="snt${index}">Indicaciones antes del turno (opcional)</label><input id="snt${index}" maxlength="300" value="${esc(meta.note || "")}" placeholder="Ej: venir sin esmalte"></div></div>`;
 }
+// un número mal escrito (con centavos, H08) no pisa lo que había: lo marca svcEditorError al guardar
+const keepIfBad = (value, before) => (isNaN(value) ? before || 0 : value);
+// error de montos o minutos en el editor de servicios (lo escrito, antes de pasarlo a S.edSvcs), o ""
+export function svcEditorError() {
+  for (const [index] of (S.edSvcs || []).entries()) {
+    const bad = (sel, parse) => [...document.querySelectorAll(sel)].some((input) => isNaN(parse(input.value)));
+    if (bad(`#sp${index}, [id^="ap${index}_"]`, parsePesos)) {
+      return `Revisá el servicio ${index + 1}: ${PESOS_ERR.charAt(0).toLowerCase()}${PESOS_ERR.slice(1)}`;
+    }
+    if (bad(`#sd${index}, [id^="am${index}_"]`, parseWhole)) {
+      return `Revisá el servicio ${index + 1}: los minutos van con números enteros.`;
+    }
+  }
+  return "";
+}
 // pasa lo escrito en el editor a S.edSvcs (formato svcMeta) antes de guardar o de volver a dibujar;
 // un servicio cuyo rubro se desmarcó pasa al primer rubro marcado
 export function readSvcEditor() {
@@ -89,8 +104,8 @@ export function readSvcEditor() {
               $("#an" + index + "_" + addonIndex)
                 .value.trim()
                 .slice(0, 60),
-              parseInt(($("#ap" + index + "_" + addonIndex).value || "").replace(/\D/g, "")) || 0,
-              Math.min(240, parseInt(($("#am" + index + "_" + addonIndex).value || "").replace(/\D/g, "")) || 0),
+              keepIfBad(parsePesos($("#ap" + index + "_" + addonIndex).value), addon[1]),
+              Math.min(240, keepIfBad(parseWhole($("#am" + index + "_" + addonIndex).value), addon[2])),
               addon[3],
             ]
           : addon,
@@ -98,8 +113,8 @@ export function readSvcEditor() {
     }
     return [
       nameInput.value.trim(),
-      parseInt(($("#sd" + index).value || "").replace(/\D/g, "")) || 0,
-      parseInt(($("#sp" + index).value || "").replace(/\D/g, "")) || 0,
+      keepIfBad(parseWhole($("#sd" + index).value), svc[1]),
+      keepIfBad(parsePesos($("#sp" + index).value), svc[2]),
       catSelect ? catSelect.value : cats[0] || svc[3],
       svc[4],
       meta,

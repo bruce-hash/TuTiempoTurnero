@@ -50,6 +50,10 @@ const RENOMBRES = [
   ['tel:"2284 111222"', 'tel:"2284 000456"'], ['ig:"sofi.studio"', 'ig:"sofi.studio.demo"'],
   ['email:"hidro.style@tutiempo.demo",pass:"barbero123"', 'email:"",pass:""'],
   ["hidro.style@tutiempo.demo", "filo@tutiempo.demo"], ["hidro.style.mp", "filo.barber.mp"],
+  // Bloque 2b (H22): la barra de la demo nombra el archivo real
+  ["completá config.cjs con", "completá config.js con"],
+  // Bloque 2b: las cuentas de demo usan el dominio tutiempo.demo, no uno real
+  ["juan.perez@gmail.com", "juan.perez@tutiempo.demo"], ["donpepe.barber@gmail.com", "donpepe@tutiempo.demo"],
 ];
 const renombrar = (js) => RENOMBRES.reduce((t, [a, b]) => t.split(a).join(b), js);
 function estatico(dir, reescribir) {
@@ -96,6 +100,8 @@ async function normalizar(page) {
     document.querySelectorAll("#app p.lbl").forEach((label) => {
       if (/^Para revisar · cobros/i.test(label.textContent.trim())) label.parentElement.remove();
     });
+    // Bloque 2b (H24, cambio a propósito): en vivo, la pestaña Comisión suma "Dirección del sitio"
+    document.querySelectorAll("#app #fSite").forEach((form) => form.remove());
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
@@ -122,7 +128,7 @@ async function recorridoDemo(page, url) {
   await clic(page, "[data-quick]");
   await foto(page, pasos, "perfil con horario elegido");
   await clic(page, "[data-act=reservarT]");
-  await page.fill("#ai_e", "juan.perez@gmail.com");
+  await page.fill("#ai_e", "juan.perez@tutiempo.demo");
   await page.fill("#ai_p", "cliente123");
   await clic(page, "#fLogin button[type=submit]");
   await page.waitForSelector("#fTurno");

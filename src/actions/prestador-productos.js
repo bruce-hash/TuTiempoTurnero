@@ -1,6 +1,6 @@
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
-import { money } from "../lib/dinero.js";
+import { PESOS_ERR, money, parsePesos, parseWhole } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY } from "../lib/fechas.js";
 import { S } from "../state.js";
@@ -43,8 +43,16 @@ registerClick("prodClose", (ev, el, act) => {
 // compra de un producto: suma al stock y se carga sola como gasto del mes
 registerSubmit("fBuy", (ev) => {
   const prod = store.PRODS[S.buyI];
-  const qty = parseInt(($("#bq").value || "").replace(/\D/g, "")) || 0;
-  const cost = parseInt(($("#bc").value || "").replace(/\D/g, "")) || 0;
+  const qty = parseWhole($("#bq").value);
+  const cost = parsePesos($("#bc").value);
+  if (isNaN(qty)) {
+    $("#berr2").textContent = "Escribí las unidades con números enteros.";
+    return;
+  }
+  if (isNaN(cost)) {
+    $("#berr2").textContent = PESOS_ERR;
+    return;
+  }
   if (qty <= 0) {
     $("#berr2").textContent = "Ingresá cuántas unidades compraste.";
     return;
@@ -73,9 +81,17 @@ registerSubmit("fBuy", (ev) => {
 });
 registerSubmit("fProd", (ev) => {
   const name = $("#pnn").value.trim();
-  const price = parseInt(($("#pnp").value || "").replace(/\D/g, "")) || 0;
-  const stock = parseInt(($("#pns").value || "0").replace(/\D/g, "")) || 0;
-  const min = parseInt(($("#pnm").value || "0").replace(/\D/g, "")) || 0;
+  const price = parsePesos($("#pnp").value);
+  const stock = parseWhole($("#pns").value);
+  const min = parseWhole($("#pnm").value);
+  if (isNaN(price)) {
+    $("#perr2").textContent = PESOS_ERR;
+    return;
+  }
+  if (isNaN(stock) || isNaN(min)) {
+    $("#perr2").textContent = "Escribí el stock con números enteros.";
+    return;
+  }
   if (!name) {
     $("#perr2").textContent = "Escribí el nombre del producto.";
     return;

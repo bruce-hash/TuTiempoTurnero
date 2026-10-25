@@ -38,7 +38,7 @@ export function saved(promise, okMsg) {
           if (S.role === "barbero" && S.me) {
             await liveApi.loadMine();
           } else {
-            await Promise.all([liveApi.myBookings(), liveApi.wallet()]);
+            await liveApi.myBookings();
           }
         } catch (reloadErr) {}
         render();

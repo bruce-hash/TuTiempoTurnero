@@ -1,6 +1,6 @@
 import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
-import { money } from "../lib/dinero.js";
+import { PESOS_ERR, money, parsePesos } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
@@ -87,11 +87,15 @@ registerSubmit("fWalk", (ev) => {
     $("#werr").textContent = "No te queda stock de ese producto.";
     return;
   }
-  const price = parseInt($("#wpr").value.replace(/\D/g, "")) || 0;
+  const price = parsePesos($("#wpr").value);
   const tip = 0;
   const time = $("#whr").value;
   if (!label) {
     $("#werr").textContent = "Escribí qué servicio hiciste.";
+    return;
+  }
+  if (isNaN(price)) {
+    $("#werr").textContent = PESOS_ERR;
     return;
   }
   if (price <= 0) {
@@ -139,9 +143,9 @@ registerSubmit("fCloseDay", (ev) => {
   const total = lines.reduce((sum, line) => sum + line.m, 0);
   const cash = lines.filter((line) => line.medio === "Efectivo").reduce((sum, line) => sum + line.m, 0);
   const counted = ($("#cdCount").value || "").trim();
-  const countedN = counted === "" ? null : parseInt(counted.replace(/\D/g, ""));
+  const countedN = counted === "" ? null : parsePesos(counted);
   if (counted !== "" && !(countedN >= 0)) {
-    $("#cderr").textContent = "Escribí solo números.";
+    $("#cderr").textContent = PESOS_ERR;
     return;
   }
   closeDay(today, total, cash, total - cash, countedN);

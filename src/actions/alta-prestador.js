@@ -94,53 +94,56 @@ export function readReg() {
   return reg;
 }
 store.REGFILES = {};
-// demo: completa el formulario como si viniera de Google
-registerClick("regGoogle", (ev, el, act) => {
-  S.reg = Object.assign({}, S.reg, readReg(), {
-    nombre: readReg().nombre || S.reg.nombre || "Barbería Don Pepe",
-    email: "donpepe.barber@gmail.com",
-    pass: "googleauth",
-    errs: {},
+// solo la demo (no viaja a producción): completar con Google y entrar al panel del prestador nuevo
+if (!LIVE) {
+  // demo: completa el formulario como si viniera de Google
+  registerClick("regGoogle", (ev, el, act) => {
+    S.reg = Object.assign({}, S.reg, readReg(), {
+      nombre: readReg().nombre || S.reg.nombre || "Barbería Don Pepe",
+      email: "donpepe@tutiempo.demo",
+      pass: "googleauth",
+      errs: {},
+    });
+    toast("Datos completados con Google");
+    render();
   });
-  toast("Datos completados con Google");
-  render();
-});
-// demo: crea el prestador nuevo con un servicio por rubro y entra a su panel
-registerClick("regPanel", (ev, el, act) => {
-  const reg = S.reg;
-  const id = 100 + P.length;
-  P.push({
-    id: id,
-    cats: reg.cats && reg.cats.length ? reg.cats : ["b"],
-    name: reg.nombre || "Mi negocio",
-    addr: reg.addr || "",
-    tel: reg.tel || "",
-    hue: (id * 47) % 360,
-    verified: false,
-    svcs: (reg.cats && reg.cats.length ? reg.cats : ["b"]).map((cat) => [
-      {
-        b: "Corte",
-        p: "Corte y peinado",
-        m: "Masaje",
-        l: "Lifting de pestañas",
-        u: "Esmaltado",
-        d: "Depilación",
-      }[cat],
-      30,
-      1e4,
-      cat,
-    ]),
+  // demo: crea el prestador nuevo con un servicio por rubro y entra a su panel
+  registerClick("regPanel", (ev, el, act) => {
+    const reg = S.reg;
+    const id = 100 + P.length;
+    P.push({
+      id: id,
+      cats: reg.cats && reg.cats.length ? reg.cats : ["b"],
+      name: reg.nombre || "Mi negocio",
+      addr: reg.addr || "",
+      tel: reg.tel || "",
+      hue: (id * 47) % 360,
+      verified: false,
+      svcs: (reg.cats && reg.cats.length ? reg.cats : ["b"]).map((cat) => [
+        {
+          b: "Corte",
+          p: "Corte y peinado",
+          m: "Masaje",
+          l: "Lifting de pestañas",
+          u: "Esmaltado",
+          d: "Depilación",
+        }[cat],
+        30,
+        1e4,
+        cat,
+      ]),
+    });
+    useProvider(id);
+    cfg(id).on = false;
+    S.reg = {};
+    S.barberAuth = true;
+    S.role = "barbero";
+    S.btab = "perfil";
+    toast("Bienvenido. Completá tu perfil y conectá Mercado Pago.");
+    render();
+    window.scrollTo(0, 0);
   });
-  useProvider(id);
-  cfg(id).on = false;
-  S.reg = {};
-  S.barberAuth = true;
-  S.role = "barbero";
-  S.btab = "perfil";
-  toast("Bienvenido. Completá tu perfil y conectá Mercado Pago.");
-  render();
-  window.scrollTo(0, 0);
-});
+}
 registerSubmit("fPrest", (ev) => {
   const reg = Object.assign(S.reg, readReg());
   const errs = {};

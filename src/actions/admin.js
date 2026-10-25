@@ -5,7 +5,6 @@ import { pctTxt } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, nowHM } from "../lib/fechas.js";
 import { pr } from "../lib/prestadores.js";
-import { refundPay } from "../lib/saldo.js";
 import { S } from "../state.js";
 import { P, store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -105,7 +104,6 @@ registerClick("admDelYes", (ev, el, act) => {
       booking.refund = (booking.paid || 0) + (booking.fee || 0);
       if (booking.mine) {
         pushCancel(booking);
-        refundPay(booking, booking.svc + " en " + prov.name);
       }
       count++;
     }
@@ -256,6 +254,22 @@ registerSubmit("fCom", (ev) => {
   toast(`Comisión guardada: ${pctTxt(pct)}%. Se aplica a las reservas nuevas.`);
   render();
   return;
+});
+// dirección del sitio (H24): solo en vivo; la base la valida (https://dominio, sin carpeta)
+registerSubmit("fSite", (ev) => {
+  const url = String($("#admSite").value || "").trim().toLowerCase().replace(/\/+$/, "");
+  if (!/^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/.test(url)) {
+    $("#siteerr").textContent = "Escribí la dirección con https:// y sin nada después del dominio (por ejemplo https://prueba.tutiempo.com.ar).";
+    return;
+  }
+  api.m
+    .adminSetSiteUrl(url)
+    .then(() => api.adminLoad())
+    .then(() => {
+      toast("Dirección guardada: los avisos nuevos usan " + url + ".");
+      render();
+    })
+    .catch(() => {});
 });
 // "Para revisar · cobros" (Bloque 1, D20): Reintentar una devolución y "Resuelto a mano" (con nota; no devuelve nada)
 registerClick("admRetry", (ev, el, act) => {

@@ -123,6 +123,11 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("producto guardado", (await q("select stock from products where name='Gel top coat'"))[0]?.stock === 3);
   await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]"); await wait(800);
   ok("compra suma stock y carga gasto", (await q("select stock from products where name='Gel top coat'"))[0].stock === 9 && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  // H08: montos enteros en pesos: "8000,50" se rechaza (antes se guardaba 800.050) y "8.000" es $8.000
+  await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Gel caro"); await pg.fill("#pnp", "8000,50"); await pg.click("#fProd button[type=submit]"); await wait(400);
+  ok("H08: un precio con centavos se rechaza con un mensaje claro", /sin centavos/.test(await pg.locator("#perr2").innerText()) && (await q("select count(*)::int c from products where name='Gel caro'"))[0].c === 0);
+  await pg.fill("#pnp", "8.000"); await pg.click("#fProd button[type=submit]"); await wait(600);
+  ok("H08: 8.000 se guarda como $8.000", (await q("select price from products where name='Gel caro'"))[0]?.price === 8000);
   // caja
   await pg.click("[data-btab=caja]"); await pg.click("[data-act=walkOpen]"); await pg.fill("#wpr", "7000"); await pg.click("#fWalk button[type=submit]"); await wait(600);
   ok("servicio sin turno guardado", (await q("select count(*)::int c from walkins"))[0].c === 1);
@@ -288,6 +293,13 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.fill("#admCom", "10"); await pg.click("#fCom button[type=submit]"); await wait(800);
   probing = true; const forb = await pg.evaluate(async () => { const r = await sb.from("app_settings").update({ commission_pct: 1 }).eq("id", true).select(); return (r.data || []).length }); probing = false;
   ok("nadie cambia la comisión por fuera de la función", forb === 0 && Number((await q("select commission_pct from app_settings"))[0].commission_pct) === 10);
+  // H24: la dirección del sitio para los links de los avisos
+  ok("H24: Comisión muestra la dirección del sitio", (await pg.inputValue("#admSite")) === "https://tutiempo.com.ar");
+  await pg.fill("#admSite", "prueba.tutiempo.com.ar"); await pg.click("#fSite button[type=submit]"); await wait(400);
+  ok("H24: sin https:// avisa y no guarda", (await pg.locator("#siteerr").innerText()).includes("https://") && (await q("select site_url from app_settings"))[0].site_url === "https://tutiempo.com.ar");
+  await pg.fill("#admSite", "https://Prueba.TuTiempo.com.ar/"); await pg.click("#fSite button[type=submit]"); await wait(1000);
+  ok("H24: el admin guarda la dirección del subdominio de prueba", (await q("select site_url from app_settings"))[0].site_url === "https://prueba.tutiempo.com.ar");
+  await db.query("update app_settings set site_url = 'https://tutiempo.com.ar'");
   // Bloque 1: "Para revisar · cobros": una devolución que falló una vez (el turno de Ana pagado con Mercado Pago)
   // (el turno puede seguir confirmado o haber caído en el bloqueo de días: depende de la fecha; la devolución se pide igual)
   const bpaid = (await q("select pb.booking_id as id, pb.amount from payment_bookings pb order by pb.payment_id desc limit 1"))[0];
@@ -401,6 +413,10 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const accRe = (await q("select id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   ok("H23: reconectar la misma cuenta vuelve a cobrar con la misma fila", accRe && accRe.id === accBefore.id);
 
+  // H21: en vivo no se descarta a nadie por cómo se llama (antes "Bruno F." quedaba afuera por parecer relleno de la demo)
+  await db.query("insert into provider_clients (provider_id, name) values ($1, 'Bruno F.')", [sofi]);
+  await pg.evaluate(async () => { await api.loadMine(); S.role = "barbero"; S.btab = "clientes"; S.cli = null; S.cf = "todos"; S.msgOpen = S.contactOpen = false; render() }); await wait(600);
+  ok("H21: un cliente real llamado “Bruno F.” aparece en la lista de clientes", (await pg.locator('.clist [data-cli="Bruno F."]').count()) === 1);
   // ---------- Bloque 2b (H10): alta de prestador sin DNI en los metadatos; DNI y fotos después; activar = verificar ----------
   const ctx2 = await b.newContext({ viewport: { width: 400, height: 900 } }); const p2 = await ctx2.newPage();
   p2.on("pageerror", (e) => errs.push(e.message));

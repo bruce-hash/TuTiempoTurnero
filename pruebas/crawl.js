@@ -22,7 +22,7 @@ const w=dom.window;w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>
 w.addEventListener('error',e=>errs.push(e.message));w.console.error=(...a)=>errs.push(a.map(x=>x&&x.stack||String(x)).join(' '));
 w.HTMLAnchorElement.prototype.click=function(){};
 const tick=(ms=2)=>new Promise(r=>setTimeout(r,ms));
-const SIGN='if(!S.user)demoSignIn("juan.perez@gmail.com","Juan Pérez");';
+const SIGN='if(!S.user)demoSignIn("juan.perez@tutiempo.demo","Juan Pérez");';
 const prov=(t,extra='')=>`S.role="barbero";S.barberAuth=true;S.preview=false;useProvider(7);selectBtab("${t}");${extra}render()`;
 const SCREENS=[
  ['cliente · inicio','S.role="cliente";'+SIGN+'go("home")'],

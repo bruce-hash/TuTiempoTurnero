@@ -2,6 +2,7 @@ import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
 import { admCloseDemo } from "../demo/admin.js";
+import { PESOS_ERR, parsePesos } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { MESES, TODAY, pad } from "../lib/fechas.js";
 import { S } from "../state.js";
@@ -112,12 +113,15 @@ registerSubmit("fAdmExp", (ev) => {
     .replace(/[<>\u0000-\u001f]/g, "")
     .trim()
     .slice(0, 80);
-  const amount = parseInt(String($("#aem").value).replace(/\D/g, ""), 10);
+  const amount = parsePesos($("#aem").value);
   const showErr = (msg) => {
     $("#aeerr").textContent = msg;
   };
   if (!concept) {
     return showErr("Escribí el concepto.");
+  }
+  if (isNaN(amount)) {
+    return showErr(PESOS_ERR);
   }
   if (!(amount >= 1) || !(amount <= 2e9)) {
     return showErr("Escribí el monto.");

@@ -11,6 +11,7 @@ Object.assign(LM, {
         p_pct: pct,
       }),
     ),
+  adminSetSiteUrl: (url) => saved(sb.rpc("admin_set_site_url", { p_url: url })),
   adminSetProvider: (providerId, status, verified) =>
     saved(
       sb.rpc("admin_set_provider", {

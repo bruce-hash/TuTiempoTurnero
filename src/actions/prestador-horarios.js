@@ -1,5 +1,6 @@
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
+import { parseWhole } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, addDays, dkey, pad, toMin } from "../lib/fechas.js";
 import { ME } from "../lib/prestadores.js";
@@ -193,7 +194,7 @@ registerSubmit("fHorarios", (ev) => {
   if (!anyOpen) {
     errs.days = "Activá al menos un día.";
   }
-  const pct = parseInt(($("#hhp").value || "").replace(/\D/g, ""));
+  const pct = parseWhole($("#hhp").value);
   if ($("#hhon").checked) {
     const from = $("#hhf").value;
     const to = $("#hht").value;

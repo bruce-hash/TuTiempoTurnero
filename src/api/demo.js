@@ -42,7 +42,6 @@ export const demoApi = {
   },
   async loadProvider() {},
   async myBookings() {},
-  async wallet() {},
   async book() {
     return null;
   },

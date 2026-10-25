@@ -8,6 +8,7 @@ import { ME } from "../../lib/prestadores.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
+import { demoMonthTotals } from "../../demo/estadisticas.js";
 
 store.FIN = [];
 store.GASTOS = [];
@@ -153,12 +154,7 @@ export function monthTotals(year, month) {
       gas: expenses.length ? expTotal : live ? live.gas : 0,
     };
   }
-  const seed = ((year * 12 + month) * 7919) % 97;
-  const season = [0.85, 0.8, 0.95, 1, 1, 0.95, 1.05, 1, 1, 1.05, 1.1, 1.35][month];
-  return {
-    ing: Math.round(((115e4 + seed * 5200) * season) / 1e3) * 1e3,
-    gas: expenses.length ? expTotal : Math.round((235e3 + (seed % 23) * 2600) / 100) * 100,
-  };
+  return demoMonthTotals(year, month, expenses.length ? expTotal : null);
 }
 // pestaña Finanzas: caja del día, mes o año
 export function vBFinanzas() {

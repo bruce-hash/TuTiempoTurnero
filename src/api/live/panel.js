@@ -97,7 +97,6 @@ export const livePanel = {
             // comisión que salió de la seña (turnos anteriores a la versión 30, cuando no se cobraba aparte)
             feeIn: Math.max(0, (row.app_fee || 0) - (row.client_fee || 0)),
             fee: row.client_fee || 0,
-            wUsed: row.paid_wallet,
             disc: row.discount_pct,
             cliente: row.client_name || "",
             tel: row.client_phone || "",
