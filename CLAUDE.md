@@ -52,6 +52,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   cambia la API de Mercado Pago; sin ese secreto, la real.
 - `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: prestadores ficticios. Solo para pruebas locales (pide `set tt.ejemplos = 'si'` antes).
 - `pruebas/`: pruebas del cliente; `test_db.py` y `test_cobros.py` (base: pagos, devoluciones, cuentas de MP);
+  `test_mudanza.py` (una base de la versión 31 con llaves en texto plano, migrada hasta la última; base limpia aparte);
   `funciones/` (las Edge Functions reales con Deno contra un Mercado Pago falso, `npm run test:funciones`).
 
 ## Arquitectura del frontend (respetarla)
@@ -82,7 +83,7 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
   Nunca commit directo a `main`. Commits chicos, en español.
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
-  `npm run sql:check`, `pruebas/test_db.py` y `pruebas/test_cobros.py` (base); `npm run test:funciones` si tocás las
+  `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` si tocás las
   Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:crawl`, `npm run test:clicks` y
   `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas` y `npm run test:comparar` (navegador
   real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` si tocás el `.htaccess` (Apache local; en

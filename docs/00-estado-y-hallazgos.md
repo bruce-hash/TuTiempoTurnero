@@ -103,7 +103,9 @@ Mercado Pago de TuTiempo (variable `MP_OWNER_USER_ID`) y rechazar.
 - Las Edge Functions cifran `access_token` y `refresh_token` con AES-256-GCM (Web Crypto, IV aleatorio de 12 bytes,
   formato `v<n>:<iv>:<cifrado>` en base64, datos asociados: prestador + cuenta de MP + campo). Clave `MP_TOKENS_KEY`
   (y `MP_TOKENS_KEY_V2`… para rotar: se lee con cualquiera, se escribe con la última). La base rechaza llaves sin
-  cifrar; una vieja sin el prefijo deja la cuenta en "solo devoluciones" con el motivo en el log (hay que reconectar).
+  cifrar. Las viejas copiadas de `provider_secrets` las borra la migración `20261025181645_llaves_sin_cifrar.sql`
+  (null, con el motivo en `last_error`; si cobraba, "solo devoluciones" y aviso para reconectar; lo prueba
+  `pruebas/test_mudanza.py` desde una base de la versión 31). Si aun así una función lee una sin el prefijo, hace lo mismo.
 - `provider_secrets` se borró (D21).
 - El cron `tt-refunds` llama a `mp-refunds` con `pg_net`, leyendo la dirección del proyecto y `CRON_SECRET` de
   `vault.decrypted_secrets`. `mp-refunds` acepta solo `CRON_SECRET` (comparada con `safeEqual`), ya no la `service_role`.

@@ -72,9 +72,12 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
      intentos de conexión con Mercado Pago de más de 1 día y avisos descartados de más de 180 días);
    - borra `provider_secrets` (sin uso desde el Bloque 1);
    - pasa a "solo devoluciones" las cuentas activas sin id de Mercado Pago (con aviso al prestador) y desde ahí lo exige;
-   - rechaza llaves de Mercado Pago sin cifrar. Una llave vieja sin cifrar (no debería haber: no hay cuentas reales
-     conectadas) deja la cuenta en "solo devoluciones" la primera vez que una función la lee, con el motivo en el log:
-     el prestador tiene que volver a conectar.
+   - rechaza llaves de Mercado Pago sin cifrar.
+   La siguiente (`20261025181645_llaves_sin_cifrar.sql`) borra las llaves viejas sin cifrar (las copiadas de
+   `provider_secrets` en el Bloque 1; no debería haber, no hay cuentas reales conectadas): quedan en null con
+   "Llave sin cifrar: hay que reconectar" en `last_error`, y si la cuenta cobraba pasa a "solo devoluciones" con aviso
+   al prestador para que vuelva a conectar. Comprobación: `select count(*) from mp_accounts where access_token !~ '^v[0-9]+:'
+   or refresh_token !~ '^v[0-9]+:';` tiene que dar 0.
    Si `pg_cron` o `pg_net` no estaban activos, activalos y volvé a correr la migración (es idempotente).
 5. Verificar en el SQL Editor:
    ```sql
