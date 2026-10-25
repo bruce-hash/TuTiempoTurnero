@@ -18,6 +18,7 @@ Auditoría de Bruno (con Claude) sobre el paquete del cliente, octubre 2026.
 | Bloque 1: cobros (`payments`, `refunds`, `mp_accounts`) | H01–H05 y H23 resueltos. `pruebas/test_cobros.py` (base) y `pruebas/funciones/` (Edge Functions reales con Deno contra un Mercado Pago falso) en el CI |
 | Bloque A2: nombres claros y comentarios (merge `9899126` → merge `6d7b5a0`) | Código idéntico módulo por módulo: árbol de sintaxis con las variables locales en nombres canónicos y sin comentarios (`tools/legibilidad/`, borrado al aprobar A2). Variables locales de una letra: 2834 → 0. Crawl idéntico toque por toque, e2e 107/107, comparación 36/36 |
 | Bloque 2a: seguridad y datos | H12, H13, H14, H18, H26 y H29 resueltos. Llaves de Mercado Pago cifradas (AES-256-GCM), cron de devoluciones con Vault y `CRON_SECRET`, limpieza diaria, demo y seed ficticios. Despliegue en `docs/02` |
+| Bloque 2b: correcciones de la app | H08, H10, H11, H15, H17, H21, H22, H24, H25 (D22), H27 y H28 resueltos. Además: cuentas de Mercado Pago con error en Para revisar y cuentas de demo en `@tutiempo.demo`. Despliegue en `docs/02` |
 
 ## Hallazgos
 
@@ -69,22 +70,33 @@ firma con la clave de la aplicación de TuTiempo los avisos de pagos cobrados co
 `send_scheduled_notices` crea avisos en `client_messages`: quien no abre la app no se entera del recordatorio de
 24 h / 2 h. Agregar envío por email (y opcionalmente Web Push). Afecta directamente las faltas.
 
-### H08 · Media · Precios ×100 con coma decimal (heredado del prototipo)
+### H08 · Media · Precios ×100 con coma decimal (heredado del prototipo · resuelto en el Bloque 2b)
 Los campos de precio usan `parseInt(valor.replace(/\D/g, ""))`: "12500,50" se guarda como 1.250.050.
 Validar enteros en pesos y rechazar decimales con mensaje claro (editor de servicios, productos, gastos, caja, admin).
+**Bloque 2b:** `parsePesos` (`src/lib/dinero.js`): acepta `12500`, `12.500` o `$ 12.500` y rechaza un monto con centavos con
+"Escribí el monto en pesos enteros, sin centavos". Servicios y adicionales, productos, gastos, caja (servicio sin turno y
+efectivo contado) y gastos del admin; las cantidades (stock, minutos, %) con `parseWhole`. Prueba en el e2e.
 
 ### H09 · Baja · Prueba que depende de la fecha (resuelto en el Bloque 0)
 `test_db.py` línea ~259 ("repetición cada 6 semanas permitida") reserva un horario que otra prueba anterior ya
 ocupó según el día en que se corre. Usar un horario libre garantizado.
 
-### H10 · Media · DNI en los metadatos de la cuenta
+### H10 · Media · DNI en los metadatos de la cuenta (resuelto en el Bloque 2b)
 El registro de prestador manda `provider_reg` (con el DNI) en `user_metadata` de Supabase Auth. Queda en
 `auth.users` y en el token de sesión hasta que se crea el perfil. El DNI tiene que ir directo a
 `provider_private` por función del servidor, nunca por metadatos.
+**Bloque 2b (opción A):** el DNI no viaja en los metadatos. Con sesión se guarda con `set_my_dni()`; si hay que confirmar el
+email, se carga en Perfil → Verificación (número, foto del frente y del dorso). Número de 7 u 8 dígitos y único entre
+prestadores no eliminados (`dni_taken`). `admin_set_provider(…, 'active')` exige número y las dos fotos y marca
+`dni_verified` con quién y cuándo (`provider_private.dni_verified_by/at`). Bucket `dni`: sube solo el dueño, en su carpeta
+(`frente-…`/`dorso-…`); lo ve solo el admin, con URL firmada de 2 minutos. El dueño ya no lee su fila entera de
+`provider_private`. La migración `20261025194744_dni.sql` borra el DNI de `raw_user_meta_data` (prueba: `test_mudanza.py`).
+Pendiente de decisión: retención de las fotos después de verificar (propuesta en el informe del 2b).
 
-### H11 · Baja · "Identidad verificada" siempre visible
+### H11 · Baja · "Identidad verificada" siempre visible (resuelto en el Bloque 2b)
 En el perfil público la insignia no depende de `dni_verified`. Riesgo bajo (solo se ven perfiles activados por un
 admin), pero debe mostrarse según el dato.
+**Bloque 2b:** la insignia sale de `dni_verified` (y activar = verificar, H10).
 
 ### H12 · Baja · Se puede conectar la cuenta de Mercado Pago de TuTiempo como prestador (resuelto en el Bloque 2a)
 El LEEME dice que no se puede, pero `mp-oauth` no lo controla. Comparar `tok.user_id` con el id de usuario de
@@ -137,20 +149,24 @@ no carga sin `set tt.ejemplos = 'si'` antes (`test_db.py` lo prueba). `test:sin-
 `dist/` las funciones de siembra ni sus datos ("Koleston 7.1", "Trabajar cervicales", "Insumos de …") y que ni
 `src/` ni el seed tengan los datos de los negocios reales.
 
-### H15 · Baja · Contradicciones del LEEME
+### H15 · Baja · Contradicciones del LEEME (resuelto en el Bloque 2b)
 - Clientes: "si el profesional bloquea el día se devuelve la seña y hay botón Reprogramar". Prestadores y pruebas
   (v31): TuTiempo **no** devuelve la seña en bloqueos de días; el prestador la arregla. Vale la segunda.
 - "No puede ser la misma cuenta de TuTiempo": no está implementado (H12).
+**Bloque 2b:** el LEEME ya dice que en un bloqueo de días TuTiempo no devuelve la seña, que la cuenta de TuTiempo no se
+puede conectar (H12, Bloque 2a) y remite a `docs/02` para el cron de devoluciones.
 
 ### H16 · Baja · Mantenimiento
 - `vendor/supabase.js` 2.45.4 es viejo: actualizar en un bloque propio, con todas las pruebas.
 - Variables internas con letras sueltas: resuelto en el Bloque A2 (ver la tabla de arriba).
 
-### H17 · Baja · Código muerto de saldo y cashback (Bloque A1)
+### H17 · Baja · Código muerto de saldo y cashback (Bloque A1 · resuelto en el Bloque 2b)
 TuTiempo ya no maneja saldo ni cashback (v25), pero el código sigue: `src/lib/saldo.js` (`CASHBACK = 0`, `cbOf`, `wMove`,
 `walletPay`, `applyPay`, `refundPay`, `walletBox`, `walletPanel`) y sus usos (`S.wallet`, `S.wmov`, `paid_wallet`, `cashback`
 en las vistas y en `liveApi`). En el Bloque A1 se mudó tal cual. **Borrarlo en el Bloque 2**, con sus pruebas (la base
 conserva las columnas por compatibilidad).
+**Bloque 2b:** borrado `src/lib/saldo.js` con `S.wallet`, `S.wmov` y `useWallet`. Lo pagado de turnos viejos con saldo
+(`paid_wallet`) se sigue sumando en lo que se muestra como pagado.
 
 ### H18 · Media · Credenciales de demo precargadas en vivo (Bloque A1 · resuelto en el Bloque 2a)
 El estado inicial (`fresh()` en `src/state.js`) trae `S.blogin = { email: "hidro.style@tutiempo.demo", pass: "barbero123" }`
@@ -169,7 +185,7 @@ El pie dice "… Olavarría, Buenos Aires, Argentina · Prototipo" (`index.html`
 tarde, la reserva caía a las 20:00 y el bloqueo chocaba ("bloqueo guardado en la base" fallaba también con la versión 31).
 Ahora bloquea un día hábil sin turnos. 107/107 con la versión 31 y con la nueva.
 
-### H21 · Media · Lógica de demo en código de producción (Bloque A2)
+### H21 · Media · Lógica de demo en código de producción (Bloque A2 · resuelto en el Bloque 2b)
 - `realClients` (`src/views/prestador/clientes.js`) descarta con una expresión regular los nombres de relleno de la demo
   (`Lucas|Matías|Bruno|Iván|Leo|Nahuel|Franco` + inicial A–G + punto) y el nombre "R". **Corre en vivo:** un cliente
   real que se llame, por ejemplo, "Bruno F." no aparece en la lista de clientes ni en los mensajes del prestador.
@@ -181,14 +197,18 @@ Ahora bloquea un día hábil sin turnos. 107/107 con la versión 31 y con la nue
 
 **En el Bloque 2:** que `realClients` no filtre por nombre en vivo; mostrar la cuenta de Mercado Pago real (o ninguna);
 pasar las ramas de demo a `src/demo/`.
+**Bloque 2b:** en vivo `realClients` muestra a todos los clientes con nombre (prueba en el e2e con "Bruno F."); el armado de
+clientes de la demo está en `src/demo/clientes.js` y la ocupación e ingresos inventados en `src/demo/estadisticas.js`.
+La cuenta de Mercado Pago real ya se mostraba desde el Bloque 1.
 
-### H22 · Baja · Código muerto y texto viejo (Bloque A2)
+### H22 · Baja · Código muerto y texto viejo (Bloque A2 · resuelto en el Bloque 2b)
 - `misTurnosHtml` (`src/ui/bookbar.js`) no se usa (el build ya la descarta).
 - `const hours = hoursUntil(booking)` en `src/views/cliente/turno.js` no se usa.
 - La barra de la demo dice "completá config.cjs": el archivo ahora es `config.js`. Solo se ve en la demo (desarrollo y
   pruebas); el build de producción no la incluye.
 
 **En el Bloque 2:** borrar lo muerto y corregir el texto.
+**Bloque 2b:** borrados `misTurnosHtml` y la variable sin uso; la barra de la demo dice `config.js`.
 
 ### H23 · Media · "Desconectar" Mercado Pago no desconecta (Bloque A2 → resuelto en el Bloque 1)
 En el perfil del prestador, el botón "Desconectar" (`mpDesc`, `src/actions/prestador-perfil.js`) solo pone
@@ -201,19 +221,22 @@ de Mercado Pago) y la desconectada queda "solo devoluciones y consultas" hasta q
 `mp_disconnect()` deja de cobrar en el acto; `book_slot` rechaza reservas con seña sin cuenta activa; el perfil público
 dice "Todavía no toma turnos online". En vivo ya no se muestra "hidro.style.mp" (parte de H21): se ve el número de cuenta.
 
-### H24 · Baja · Links armados en la base con el dominio escrito a mano (Bloque B → Bloque 2)
+### H24 · Baja · Links armados en la base con el dominio escrito a mano (Bloque B → resuelto en el Bloque 2b)
 Los avisos que arma la base (`notify_booking` y `send_scheduled_notices`, al reemplazar `{link}`) usan
 `'tutiempo.com.ar/' || slug`. En el subdominio de prueba (o si el dominio cambia, D12) esos links llevan a otro sitio.
 Desde el Bloque B el frontend usa el dominio en el que corre (`location.origin`).
 **En el Bloque 2:** agregar `app_settings.site_url` (texto, por ejemplo `https://prueba.tutiempo.com.ar`, editable solo
 por el admin) y armar los links con `site_url || '/' || slug` (o `/p/<id>` si el slug es reservado).
+**Bloque 2b:** `app_settings.site_url` (por defecto `https://tutiempo.com.ar`; el admin la cambia en Comisión → Dirección del
+sitio) y `provider_link()` arman `{link}` en `notify_booking` y `send_scheduled_notices`.
 
-### H25 · Baja · Premio de sellos sin Mercado Pago (Bloque 1 → Bloque 2, D22)
+### H25 · Baja · Premio de sellos sin Mercado Pago (Bloque 1 → resuelto en el Bloque 2b, D22)
 Desde el Bloque 1, si el prestador no tiene cuenta de Mercado Pago activa, su perfil público dice "Todavía no toma turnos
 online" y no deja elegir horario. La base sí permite reservar el premio de sellos sin cuenta (no lleva pago), pero desde
 el perfil no se llega.
 **En el Bloque 2 (D22):** con la cuenta desconectada, el perfil deja canjear el premio (solo los servicios con la tarjeta
 llena del cliente) y muestra "Solo podés canjear tu premio" en lugar de "Todavía no toma turnos online".
+**Bloque 2b:** hecho (D22). Prueba en el e2e.
 
 ### H26 · Baja · Cuentas activas sin `mp_user_id` y `provider_secrets` (Bloque 1 → resuelto en el Bloque 2a)
 Desde el Bloque 1, una cuenta sin `mp_user_id` no puede confirmar pagos (el webhook la trata como cobrador equivocado).
@@ -222,18 +245,23 @@ Desde el Bloque 1, una cuenta sin `mp_user_id` no puede confirmar pagos (el webh
 `refunds_only` las activas sin id y avisar al prestador que reconecte) y borrar `provider_secrets` (D21, junto con H13).
 **Bloque 2a:** hecho así, con el aviso `mp_reconnect` y la restricción `mp_accounts_active_user`.
 
-### H27 · Baja · "Reprocesar" pagos en revisión por un error inesperado (Bloque 1 → Bloque 2)
+### H27 · Baja · "Reprocesar" pagos en revisión por un error inesperado (Bloque 1 → resuelto en el Bloque 2b)
 Si `confirm_payment` falla por un error inesperado, el pago queda en "Para revisar" (no se pierde) y hoy el admin solo
 puede devolverlo o marcarlo resuelto a mano.
 **En el Bloque 2:** botón "Reprocesar" que vuelva a correr `confirm_payment_core` sobre ese pago, solo para motivos
 `error: …`, solo si sus turnos siguen en `hold`/`expired` sin pago, y en la misma transacción que borra el registro de
 revisión (con nota de quién y cuándo).
+**Bloque 2b:** `admin_reprocess()` y el botón "Reprocesar" en Para revisar, con esas condiciones; queda en
+`payments.reprocessed` (quién, cuándo, nota y el error anterior). El error inesperado ahora guarda la comisión que informó
+Mercado Pago, para poder reprocesar.
 
-### H28 · Baja · El prestador no se entera de un pago tardío que se devuelve (Bloque 1 → Bloque 2)
+### H28 · Baja · El prestador no se entera de un pago tardío que se devuelve (Bloque 1 → resuelto en el Bloque 2b)
 Cuando un pago llega tarde y se devuelve (horario ocupado, monto de menos, turno ya cancelado), el prestador ve en su
 Mercado Pago un cobro y una devolución sin ninguna explicación en la app.
 **En el Bloque 2:** un aviso en `provider_notices` ("El pago de X llegó cuando el horario ya no estaba libre: se le
 devuelve $Y desde tu cuenta"), una vez por pago.
+**Bloque 2b:** aviso `mp_late_refund` (trigger en `refunds`), uno por pago con el total, para horario ocupado, turno ya no
+disponible, monto de menos y pago sin turno.
 
 ### H29 · Baja · Retención de `mp_webhook_events` y `mp_oauth_states` (Bloque 1 → resuelto en el Bloque 2a)
 `mp_webhook_events` crece con cada aviso descartado y no se limpia.

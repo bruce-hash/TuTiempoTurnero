@@ -88,6 +88,20 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
    Un 403 en `net._http_response` es que la `CRON_SECRET` de Vault no es igual a la de las funciones; un 500 con
    "config", que a la función le falta `CRON_SECRET` o tiene menos de 32 caracteres.
 
+#### Bloque 2b (después del 2a)
+No cambia ninguna Edge Function ni ningún secreto. Son tres migraciones y el frontend:
+1. `supabase db push` (o `TODO_EN_UNO.sql`): `20261025194744_dni.sql`, `20261025200359_cobros_revision.sql` y
+   `20261025201554_site_url.sql`.
+   - La de DNI se frena con el error `dni_duplicado` si dos prestadores no eliminados tienen el mismo DNI (no debería
+     pasar en el entorno de prueba). Muestra los últimos 3 dígitos y los ids: resolvelo a mano y volvé a correrla.
+   - Borra el DNI que haya quedado en los metadatos de las cuentas (`auth.users.raw_user_meta_data`). Una sesión ya
+     abierta lo puede tener en su token hasta que se renueve (1 hora).
+   - Desde esta migración, **activar a un prestador exige el número de DNI y las dos fotos** (frente y dorso, que el
+     prestador sube en Perfil → Verificación). Los prestadores de prueba que crees los tenés que cargar así.
+2. Panel admin → Comisión → **Dirección del sitio**: en el entorno de prueba, `https://prueba.tutiempo.com.ar` (con
+   ella se arman los links de los avisos; por defecto es `https://tutiempo.com.ar`).
+3. Frontend: `npm run build` y subir `dist/` como siempre.
+
 #### Rotar la CRON_SECRET
 Si se filtró, o una vez por año. Generá una nueva (`openssl rand -base64 48`) y cambiala en los dos lados, uno atrás del
 otro:
@@ -137,7 +151,9 @@ dice con qué versión se cifró (`v1:…`, `v2:…`).
       verificar que en Supabase → Auth → URL Configuration → Redirect URLs esté la raíz del subdominio
       (`https://prueba.tutiempo.com.ar/`).
 - [ ] Crear cuenta, activar por email, ingresar, recuperar contraseña, entrar con Google.
-- [ ] Alta de prestador, subir DNI, aprobarlo desde el panel admin, conectar Mercado Pago (vendedor de prueba).
+- [ ] Alta de prestador, cargar el número de DNI y las fotos del frente y del dorso (Perfil → Verificación), aprobarlo
+      desde el panel admin (sin el número o sin una foto no deja: H10), conectar Mercado Pago (vendedor de prueba).
+- [ ] Un recordatorio o aviso de cancelación trae el link del subdominio de prueba (Comisión → Dirección del sitio, H24).
 - [ ] Reservar y pagar con el comprador de prueba: el turno se confirma solo (verifica H06: firma del webhook).
 - [ ] La seña llega al vendedor de prueba y el 4% a la cuenta de TuTiempo.
 - [ ] Pago rechazado: el horario se libera.
