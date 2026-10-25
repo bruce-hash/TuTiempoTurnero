@@ -57,13 +57,13 @@ const secure = (res) =>
   res.headers["x-content-type-options"] === "nosniff";
 
 // 1. HTTP → HTTPS, con la dirección y la query como estaban
-for (const route of ["/panel/agenda?x=1", "/?mp=success&b=12", "/?token_hash=abc123&type=recovery", "/hidro-style/reservar?servicio=5&dia=2026-10-24&hora=17%3A30"]) {
+for (const route of ["/panel/agenda?x=1", "/?mp=success&b=12", "/?token_hash=abc123&type=recovery", "/filo-barber-club/reservar?servicio=5&dia=2026-10-24&hora=17%3A30"]) {
   const res = await get(HTTP + route);
   const want = "https://" + new URL(HTTP).host + route;
   ok(`HTTP ${route} → 301 a HTTPS con la query intacta`, res.status === 301 && res.headers.location === want, `${res.status} ${res.headers.location}`);
 }
 // 2. Direcciones de la app → index.html, con CSP, HSTS y los demás encabezados
-for (const route of ["/", "/rubro/unas", "/buscar?q=corte", "/hidro-style", "/hidro-style/trabajos", "/p/7", "/turno/12", "/mis-turnos", "/panel/agenda", "/panel/clientes?cliente=3", "/admin/balance/2026-10", "/no-existe", "/functions/v1/mp-webhook"]) {
+for (const route of ["/", "/rubro/unas", "/buscar?q=corte", "/filo-barber-club", "/filo-barber-club/trabajos", "/p/7", "/turno/12", "/mis-turnos", "/panel/agenda", "/panel/clientes?cliente=3", "/admin/balance/2026-10", "/no-existe", "/functions/v1/mp-webhook"]) {
   const res = await get(HTTPS + route);
   ok(`HTTPS ${route} → index.html con CSP y HSTS`, isIndex(res) && secure(res), `${res.status} ${res.headers["content-type"]}`);
 }

@@ -53,8 +53,8 @@ export function seedTurnos() {
   const tomorrow = dkey(addDays(1));
   const in2 = dkey(addDays(2));
   const in3 = dkey(addDays(3));
-  // turno de ejemplo en Hidro.Style (prestador 7); los de la app pagaron la seña del 50 %
-  const addHidro = (date, time, dur, svc, price, client, src, type, extra) =>
+  // turno de ejemplo en Filo Barber Club (prestador 7); los de la app pagaron la seña del 50 %
+  const addFilo = (date, time, dur, svc, price, client, src, type, extra) =>
     store.BOOK.push(
       Object.assign(
         {
@@ -77,40 +77,40 @@ export function seedTurnos() {
         extra || {},
       ),
     );
-  addHidro(today, "10:00", 25, "Corte de cabello", 8e3, "Pablo M.", "app", "local", {
+  addFilo(today, "10:00", 25, "Corte de cabello", 8e3, "Pablo M.", "app", "local", {
     att: true,
     disc: 20,
   });
-  addHidro(today, "11:30", 30, "Corte de cabello y barba", 12500, "Ezequiel R.", "manual", "local", {
+  addFilo(today, "11:30", 30, "Corte de cabello y barba", 12500, "Ezequiel R.", "manual", "local", {
     att: true,
   });
-  addHidro(today, "17:00", 25, "Corte de cabello", 1e4, "Sergio L.", "app", "local", {
+  addFilo(today, "17:00", 25, "Corte de cabello", 1e4, "Sergio L.", "app", "local", {
     paid: 1e4,
   });
-  addHidro(today, "18:00", 30, "Corte de cabello y barba", 12500, "Tomás V.", "app", "local", {
+  addFilo(today, "18:00", 30, "Corte de cabello y barba", 12500, "Tomás V.", "app", "local", {
     att: true,
   });
-  addHidro(today, "19:30", 25, "Corte de cabello", 1e4, "Ana B. (para su hijo)", "app", "local", {
+  addFilo(today, "19:30", 25, "Corte de cabello", 1e4, "Ana B. (para su hijo)", "app", "local", {
     att: true,
   });
-  addHidro(tomorrow, "09:30", 25, "Corte de cabello", 1e4, "Raúl F.", "app", "local", {
+  addFilo(tomorrow, "09:30", 25, "Corte de cabello", 1e4, "Raúl F.", "app", "local", {
     att: true,
   });
-  addHidro(tomorrow, "16:00", 15, "Arreglo de barba", 6e3, "Nicolás D.", "app");
-  addHidro(tomorrow, "18:30", 30, "Corte de cabello y barba", 12500, "Federico A.", "manual", "local", {
+  addFilo(tomorrow, "16:00", 15, "Arreglo de barba", 6e3, "Nicolás D.", "app");
+  addFilo(tomorrow, "18:30", 30, "Corte de cabello y barba", 12500, "Federico A.", "manual", "local", {
     att: true,
   });
-  addHidro(in2, "10:00", 30, "Corte de cabello y barba", 1e4, "Hernán S.", "app", "local", {
+  addFilo(in2, "10:00", 30, "Corte de cabello y barba", 1e4, "Hernán S.", "app", "local", {
     disc: 20,
   });
-  addHidro(in3, "18:00", 25, "Corte de cabello", 1e4, "Gonzalo T.", "app");
+  addFilo(in3, "18:00", 25, "Corte de cabello", 1e4, "Gonzalo T.", "app");
   ["17:00", "17:30", "18:00", "19:00", "19:30", "20:00", "20:30"].forEach((time, index) => {
     const name = ["Lucas", "Matías", "Bruno", "Iván", "Leo", "Nahuel", "Franco"][index] + " " + "ABCDEFG"[index] + ".";
     store.CLIENTS[name] = {
       v: 2 + index,
       n: 0,
     };
-    addHidro(tomorrow, time, 30, "Corte de cabello y barba", 12500, name, "app", "local", {
+    addFilo(tomorrow, time, 30, "Corte de cabello y barba", 12500, name, "app", "local", {
       att: index % 2 === 0,
     });
   });

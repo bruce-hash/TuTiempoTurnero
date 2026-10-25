@@ -2,7 +2,8 @@
 //  1. Compila producción solo con eliminación de código muerto (sin acortar nombres) y verifica que no quede ninguna
 //     declaración de src/demo/ ni de src/api/demo.js: si una sobrevive, es código de demo que llega a producción.
 //  2. Revisa dist/ (el build real, minificado): sin window.__TT__, sin la barra de demo y sin datos de ejemplo
-//     (nombres de los prestadores de ejemplo, cuentas de demo).
+//     (nombres de los prestadores de ejemplo, cuentas de demo, datos de siembra del panel).
+//  3. Ni src/ ni el seed de ejemplos usan nombres, direcciones o teléfonos de negocios reales (H14).
 // Uso: npm run test:sin-demo   (compila dist/ y corre esta prueba)
 import fs from "node:fs";
 import path from "node:path";
@@ -52,14 +53,32 @@ for (const [que, marca] of marcas) {
   if (donde.length) falla(`${que} en ${donde.join(", ")}`);
 }
 if (!fallas) ok(`dist/ (${archivos.length} archivos) sin ganchos de prueba, sin barra de demo y sin los ${prestadores.length} prestadores de ejemplo`);
-// Cuentas de demo. La versión 31 ya trae estas en código que también corre en vivo (H18: el formulario de acceso de
-// prestadores arranca con hidro.style@tutiempo.demo / barbero123): se toleran solo esas apariciones, hasta el Bloque 2.
-const PENDIENTES_H18 = { "tutiempo.demo": 3, barbero123: 1, prestador123: 0, "juan.perez@gmail.com": 0 };
-for (const [marca, tope] of Object.entries(PENDIENTES_H18)) {
-  const n = texto.reduce((a, [, t]) => a + t.split(marca).length - 1, 0);
-  if (n > tope) falla(`cuenta de demo "${marca}" aparece ${n} veces (máximo ${tope})`);
-  else if (n) console.log(`PEND "${marca}" aparece ${n} veces: heredado de la versión 31 (H18, se borra en el Bloque 2)`);
+// Cuentas de demo (H18, Bloque 2a): ni el formulario de acceso de prestadores ni el perfil traen credenciales de la demo
+const CUENTAS = ["tutiempo.demo", "barbero123", "prestador123", "cliente123", "juan.perez@gmail.com"];
+for (const marca of CUENTAS) {
+  const donde = texto.filter(([, t]) => t.includes(marca)).map(([f]) => f);
+  if (donde.length) falla(`cuenta de demo "${marca}" en ${donde.join(", ")}`);
 }
+if (!fallas) ok(`dist/ sin cuentas de demo (${CUENTAS.join(", ")})`);
+// Datos de ejemplo del panel (H14, Bloque 2a): fichas, clientes y finanzas de siembra solo en src/demo/
+const SIEMBRA = ["seedStore", "demoClosings", "seedComm"];
+const sinCubrir = SIEMBRA.filter((n) => !nombres.has(n));
+if (sinCubrir.length) falla(`funciones de siembra fuera de src/demo/: ${sinCubrir.join(", ")}`);
+const DATOS = ["Koleston 7.1", "Trabajar cervicales", "Insumos de "];
+for (const marca of DATOS) {
+  const donde = texto.filter(([, t]) => t.includes(marca)).map(([f]) => f);
+  if (donde.length) falla(`dato de ejemplo "${marca}" en ${donde.join(", ")}`);
+}
+if (!fallas) ok(`siembra (${SIEMBRA.join(", ")}) solo en src/demo/ y sin sus datos en dist/`);
+// Negocios reales de Olavarría (H14): no aparecen en ningún lado, ni en la demo ni en el seed de ejemplos
+const REALES = ["Hidro", "Kevin Ortiz", "la fama", "Niko_barberr", "Mary Garcia", "Carina Saitti", "2284727692",
+  "9 de julio 2381", "Antártida Argentina 4762", "Rivadavia 2684", "Islas Malvinas 3974", "Colon 3794", "Belgrano 2683"];
+const fuentes = [...listar(path.join(ROOT, "src")), path.join(ROOT, "index.html"), path.join(ROOT, "supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql")]
+  .filter((f) => /\.(js|html|css|sql)$/.test(f))
+  .map((f) => [rel(f), fs.readFileSync(f, "utf8").toLowerCase()]);
+const reales = REALES.flatMap((r) => fuentes.filter(([, t]) => t.includes(r.toLowerCase())).map(([f]) => `"${r}" en ${f}`));
+if (reales.length) falla(`datos de negocios reales: ${reales.join("; ")}`);
+else ok(`src/, index.html y el seed sin datos de los ${REALES.length} negocios reales que tenía la versión 31`);
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(fallas ? `${fallas} FALLAS` : "TODO OK");
 process.exit(fallas ? 1 : 0);

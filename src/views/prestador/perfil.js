@@ -120,14 +120,14 @@ function mpPaidNote(st, past) {
   return `<p class="note" style="text-align:left;margin:8px 0 0">Tenés ${n} turno${n === 1 ? "" : "s"} futuro${n === 1 ? "" : "s"} con la seña pagada: ${n === 1 ? "sigue" : "siguen"} en pie y, si hay que devolver una seña, se devuelve desde ${past ? "tu cuenta anterior" : "esta cuenta"}.</p>`;
 }
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
-// En vivo muestra el número de la cuenta conectada; “hidro.style.mp” es solo de la demo.
+// En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
 export function vBPerfil(prov) {
   const mp = S.mp;
   const st = S.mpSt || {};
   return `<div class="panel"><p class="lbl">Cobros</p>
    ${
      mp === "ok"
-       ? `<div class="paym" style="border-color:var(--ok);background:var(--ok-soft)"><span class="mp">MP</span><span>Mercado Pago conectado<br><small class="hint">${LIVE ? (st.account ? `Cuenta n° ${esc(st.account)} · ` : "") : "hidro.style.mp · "}Las señas se acreditan en tu cuenta al reservar.</small></span></div>
+       ? `<div class="paym" style="border-color:var(--ok);background:var(--ok-soft)"><span class="mp">MP</span><span>Mercado Pago conectado<br><small class="hint">${LIVE ? (st.account ? `Cuenta n° ${esc(st.account)} · ` : "") : "filo.barber.mp · "}Las señas se acreditan en tu cuenta al reservar.</small></span></div>
      ${
        S.mpAsk
          ? `<div class="mpask" role="alertdialog" aria-label="Desconectar Mercado Pago"><b>¿Desconectar Mercado Pago?</b>
@@ -173,7 +173,7 @@ export function vBPerfil(prov) {
    <button class="btn btn-pri btn-block" type="submit">Guardar cambios</button>
   </form>
   ${vMensajes()}
-  <div class="panel"><p class="lbl">Verificación</p><dl class="kv"><dt>DNI</dt><dd style="color:${prov.verified === false ? "var(--warn)" : "var(--ok)"}">${prov.verified === false ? "En revisión" : "✓ Verificado"}</dd><dt>Email</dt><dd>${esc(LIVE && S.user ? S.user.email : prov.id === 21 ? "sofia@tutiempo.demo" : "hidro.style@tutiempo.demo")}</dd></dl>
+  <div class="panel"><p class="lbl">Verificación</p><dl class="kv"><dt>DNI</dt><dd style="color:${prov.verified === false ? "var(--warn)" : "var(--ok)"}">${prov.verified === false ? "En revisión" : "✓ Verificado"}</dd><dt>Email</dt><dd>${esc(LIVE ? (S.user ? S.user.email : "") : prov.id === 21 ? "sofia@tutiempo.demo" : "filo@tutiempo.demo")}</dd></dl>
    ${LIVE && prov.verified === false ? '<div class="f" style="margin-top:10px"><label for="dniUp">Subí tu DNI (frente y dorso)</label><input id="dniUp" type="file" accept="image/*,application/pdf" multiple><span class="hint">Solo lo ve el equipo de TuTiempo para verificarte.</span></div>' : ""}</div>
   ${delBox("pro")}
   <button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;

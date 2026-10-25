@@ -38,7 +38,7 @@ export function vLoginBarbero() {
             )
             .join(
               "",
-            )}</div><span class="hint">O con email y contraseña: hidro.style@tutiempo.demo · barbero123</span>`
+            )}</div><span class="hint">O con email y contraseña: filo@tutiempo.demo · barbero123</span>`
     }</div>
    <button type="button" class="gbtn" data-act="googleProv">${GLOGO} Entrar con Google</button><div class="or">o con tu email</div>
    <div class="f"><label for="be">Email</label><input id="be" type="email" value="${esc(login.email)}" autocomplete="email"></div>

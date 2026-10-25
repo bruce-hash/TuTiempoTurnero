@@ -37,13 +37,29 @@ function referencia() {
 
 // ---------- Servidor estático (modo demo) ----------
 const TIPOS = { ".html": "text/html; charset=utf-8", ".js": "application/javascript", ".css": "text/css", ".woff2": "font/woff2" };
-function estatico(dir) {
+// Bloque 2a (H14 y H18, cambios a propósito): la demo ya no usa negocios reales ni precarga el ingreso de prestadores.
+// A la versión de referencia se le cambian esos datos por los nuevos al servir su app.js, así las dos muestran los mismos
+// nombres, direcciones, iniciales y links; el resto se compara igual.
+const RENOMBRES = [
+  ['ig:"Hidro.Style"', 'ig:"filo.barber.demo"'], ["Hidro.Style", "Filo Barber Club"], ['addr:"9 de julio 2381"', 'addr:"Alsina 2100"'],
+  ['tel:"2284727692"', 'tel:"2284 000123"'], ["Kevin Ortiz", "Tomás Herrera barbero"], ['addr:"Antártida Argentina 4762"', 'addr:"Lavalle 3100"'],
+  ["Barbería la fama santiago", "Barbería El Molino"], ['addr:"Rivadavia 2684"', 'addr:"Moreno 2400"'],
+  ["Niko_barberr", "Nacho barber"], ['addr:"Islas Malvinas 3974"', 'addr:"Sarmiento 3200"'],
+  ["Mary Garcia peluquería", "Marta Ruiz peluquería"], ['addr:"Av. Colon 3794"', 'addr:"Av. Pringles 3800"'],
+  ["Carina Saitti", "Valeria Sosa estilista"], ['addr:"Belgrano 2683"', 'addr:"Rufino Fal 2600"'],
+  ['tel:"2284 111222"', 'tel:"2284 000456"'], ['ig:"sofi.studio"', 'ig:"sofi.studio.demo"'],
+  ['email:"hidro.style@tutiempo.demo",pass:"barbero123"', 'email:"",pass:""'],
+  ["hidro.style@tutiempo.demo", "filo@tutiempo.demo"], ["hidro.style.mp", "filo.barber.mp"],
+];
+const renombrar = (js) => RENOMBRES.reduce((t, [a, b]) => t.split(a).join(b), js);
+function estatico(dir, reescribir) {
   return new Promise((ok) => {
     const s = http.createServer((req, res) => {
       const u = decodeURIComponent(new URL(req.url, "http://x").pathname);
       const f = path.join(dir, u === "/" ? "index.html" : path.normalize(u).replace(/^(\.\.[/\\])+/, ""));
       if (!f.startsWith(dir) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
       res.writeHead(200, { "Content-Type": TIPOS[path.extname(f)] || "application/octet-stream" });
+      if (reescribir && f.endsWith(".js")) return res.end(reescribir(fs.readFileSync(f, "utf8")));
       fs.createReadStream(f).pipe(res);
     }).listen(0, () => ok({ url: `http://localhost:${s.address().port}`, cerrar: () => s.close() }));
   });
@@ -76,7 +92,7 @@ async function normalizar(page) {
       if (qr) qr.innerHTML = '<svg width="132" height="132"><rect width="132" height="132" fill="#ccc"/></svg>';
     });
     // Bloque 1 (cambios a propósito): el panel admin suma "Para revisar · cobros" y, en vivo, la tarjeta de Mercado Pago
-    // muestra el número de cuenta en lugar del "hidro.style.mp" de la demo
+    // muestra el número de cuenta en lugar del "hidro.style.mp" de la demo (en vivo la versión de referencia lo sigue mostrando)
     document.querySelectorAll("#app p.lbl").forEach((label) => {
       if (/^Para revisar · cobros/i.test(label.textContent.trim())) label.parentElement.remove();
     });
@@ -230,7 +246,7 @@ const browser = await chromium.launch({ args: ["--disable-gpu", "--force-color-p
 
 // Modo demo
 {
-  const [sv, sn] = [await estatico(VIEJO), await estatico(path.resolve(process.env.COMPARAR_DEMO || path.join(ROOT, "dist-test")))];
+  const [sv, sn] = [await estatico(VIEJO, renombrar), await estatico(path.resolve(process.env.COMPARAR_DEMO || path.join(ROOT, "dist-test")))];
   const [pv, pn] = [await pagina(browser, { relojFijo: true }), await pagina(browser, { relojFijo: true })];
   const viejo = await recorridoDemo(pv, sv.url);
   const nuevo = await recorridoDemo(pn, sn.url);
