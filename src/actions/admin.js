@@ -311,6 +311,27 @@ registerSubmit("fResolve", (ev) => {
   store.DEMO_REV[list] = store.DEMO_REV[list].filter((item) => item.id !== id);
   done();
 });
+// "Reprocesar" un pago en revisión por un error inesperado (H27): solo en vivo (la demo no lo ofrece)
+registerSubmit("fReprocess", (ev) => {
+  const id = +ev.target.dataset.id;
+  const note = String($("#rpNote").value || "")
+    .replace(/[\u0000-\u001f]/g, " ")
+    .trim()
+    .slice(0, 500);
+  if (note.length < 3) {
+    $("#rperr").textContent = "Escribí por qué lo reprocesás.";
+    return;
+  }
+  api.m
+    .adminReprocess(id, note)
+    .then(() => api.adminReview())
+    .then(() => {
+      S.admResolve = null;
+      toast("Pago reprocesado.");
+      render();
+    })
+    .catch(() => {});
+});
 // "Devolver" un pago en revisión (D20): monto entero en pesos y nota obligatoria
 registerSubmit("fAdmRefund", (ev) => {
   const id = +ev.target.dataset.id;

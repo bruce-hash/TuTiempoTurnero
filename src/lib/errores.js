@@ -36,6 +36,7 @@ const ERRS = {
   provider_mp_not_connected: "Este profesional todavía no toma turnos online.",
   mp_not_connected: "Tu cuenta de Mercado Pago ya estaba desconectada.",
   note_required: "Escribí una nota que explique cómo se resolvió.",
+  cannot_reprocess: "Ese pago ya no se puede reprocesar: sus turnos cambiaron o ya tiene una devolución.",
   cannot_retry: "Esa devolución ya no se puede reintentar.",
   too_many_cash: "Ya tenés 4 turnos para pagar en efectivo. Pagá este con Mercado Pago.",
   bad_photo_path: "No pudimos guardar la foto.",

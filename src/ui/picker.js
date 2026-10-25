@@ -6,6 +6,7 @@ import { selDur } from "../lib/servicios.js";
 import { cfg, cli, freeCount, nextFree, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
+import { myStamps, stampGoal } from "./sellos.js";
 
 // etiqueta del cliente para el prestador según sus faltas (n) y visitas (v)
 export function relBadge(name) {
@@ -22,9 +23,16 @@ export function relBadge(name) {
     return "";
   }
 }
+// ¿El cliente tiene la tarjeta de sellos de ese servicio llena? (el canje no lleva pago)
+export const canRedeemSvc = (prov, svc) => {
+  const goal = svc ? stampGoal(prov.id, svc) : 0;
+  return !!goal && !!S.user && myStamps(prov.id, svc) >= goal;
+};
 // ¿Se puede reservar online? Tiene los turnos online prendidos y puede cobrar la seña (cuenta de Mercado Pago
-// activa: la base lo informa en get_provider, Bloque 1). Si no, el perfil no deja elegir horario.
-export const bookable = (prov) => cfg(prov.id).on && prov.canCharge !== false;
+// activa: la base lo informa en get_provider, Bloque 1). D22: sin cuenta, igual se puede canjear el premio de sellos,
+// solo en los servicios con la tarjeta llena del cliente.
+export const rewardOnly = (prov) => prov.canCharge === false;
+export const bookable = (prov) => cfg(prov.id).on && (!rewardOnly(prov) || canRedeemSvc(prov, prov.svcs[S.svc]));
 // selector de día y horario: semanas de 7 días hasta conf.ahead, horarios libres por franja,
 // primer turno libre, happy hour y lista de espera si el día está lleno
 export function vPicker(prov) {
@@ -32,6 +40,10 @@ export function vPicker(prov) {
   const dur = selDur(prov);
   if (!bookable(prov)) {
     const following = isFol(prov.id);
+    const rewards = cfg(prov.id).on && rewardOnly(prov) ? prov.svcs.map((svc, index) => [svc, index]).filter(([svc]) => canRedeemSvc(prov, svc)) : [];
+    if (rewards.length) {
+      return `<div class="panel" style="text-align:center"><b>Solo podés canjear tu premio.</b><p class="note">Este profesional todavía no toma turnos con seña online, pero tu tarjeta de sellos está llena. Elegí el servicio del premio:</p><div class="chips" style="justify-content:center">${rewards.map(([svc, index]) => `<button class="btn btn-sm btn-pri" data-svc="${index}">🎁 ${esc(svc[0])}</button>`).join("")}</div></div>`;
+    }
     return `<div class="panel" style="text-align:center"><b>Todavía no toma turnos online.</b><p class="note">Seguilo para enterarte cuando los active.</p><button class="btn btn-sm ${following ? "btn-ghost" : "btn-pri"}" data-act="seguir" aria-pressed="${following}">${following ? "✓ Siguiendo" : "+ Seguir"}</button></div>`;
   }
   const days = [];
@@ -113,6 +125,6 @@ export function vPicker(prov) {
        ${firstFree ? `<button class="btn btn-ghost btn-block" style="margin-top:8px" data-quick="${firstFree.date}|${firstFree.time}">Ver el primer turno libre: ${esc(dayLabel(firstFree.date))} ${firstFree.time}</button>` : ""}</div>`
     }
    </div>
-   <p class="note pk-pol">⏱ ${dur} min · ${conf.pay === "total" ? "Pagás el total al reservar" : "Seña del " + conf.pct + "% al reservar"} + comisión TuTiempo (${pctTxt()}%) con Mercado Pago${conf.cash !== false && conf.pay !== "total" ? " · el resto en efectivo o Mercado Pago" : ""}</p>
+   <p class="note pk-pol">⏱ ${dur} min · ${rewardOnly(prov) ? "Solo podés canjear tu premio: este turno no lleva seña ni comisión" : conf.pay === "total" ? "Pagás el total al reservar" : "Seña del " + conf.pct + "% al reservar"} + comisión TuTiempo (${pctTxt()}%) con Mercado Pago${conf.cash !== false && conf.pay !== "total" ? " · el resto en efectivo o Mercado Pago" : ""}</p>
   </section>`;
 }

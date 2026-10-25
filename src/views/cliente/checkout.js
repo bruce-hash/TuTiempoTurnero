@@ -20,8 +20,16 @@ export function vCheckoutTurno() {
   const conf = cfg(prov.id);
   const goal = svc ? stampGoal(prov.id, svc) : 0;
   const canRedeem = !!goal && !S.reprog && !!(myStamps(prov.id, svc) >= goal);
+  // D22: si el prestador no puede cobrar señas, el único turno posible es el canje del premio
+  const rewardOnly = prov.canCharge === false;
+  if (rewardOnly && canRedeem) {
+    S.payM = "reward";
+  }
   if (S.payM === "reward" && !canRedeem) {
     S.payM = "mp";
+  }
+  if (rewardOnly && !canRedeem) {
+    return `<div class="narrow" style="margin-top:24px"><div class="panel" style="text-align:center"><b>Este profesional todavía no toma turnos online.</b><p class="note">Solo podés canjear tu premio de sellos, en el servicio de la tarjeta llena.</p><button class="btn btn-pri btn-block" style="margin-top:12px" data-go="perfil" data-id="${prov.id}">Volver al perfil</button></div></div>`;
   }
   if (S.payM === "reward") {
     S.rep = 0;
@@ -86,7 +94,7 @@ export function vCheckoutTurno() {
      if (method === "reward") {
        return `<div class="panel"><p class="lbl">¿Cómo pagás?</p><div class="paypick" role="radiogroup">
       <button type="button" role="radio" class="payopt" data-paym="reward" aria-checked="true"><span class="mp reward">🎁</span><span><b>Usar mi premio</b><small class="hint">Canjeás ${goal} sellos de tu tarjeta de ${esc(svc[0])}: este turno es gratis.</small></span></button>
-      <button type="button" role="radio" class="payopt" data-paym="mp" aria-checked="false"><span class="mp">MP</span><span><b>Mercado Pago</b><small class="hint">Pagar y guardar los sellos para después.</small></span></button></div></div>
+      ${rewardOnly ? "" : `<button type="button" role="radio" class="payopt" data-paym="mp" aria-checked="false"><span class="mp">MP</span><span><b>Mercado Pago</b><small class="hint">Pagar y guardar los sellos para después.</small></span></button>`}</div></div>
      <div class="panel"><div class="sum"><div><span>${esc(svc[0])}</span><span><s>${money(svc[2])}</s></span></div><div style="color:var(--ok)"><span>🎁 Premio de la tarjeta de sellos</span><span>−${money(svc[2])}</span></div>
       <div class="tot"><span>Pagás</span><span>${money(0)}</span></div></div></div>
      <p class="note" style="text-align:left;margin:0">Si cancelás, los sellos vuelven a tu tarjeta.</p>

@@ -317,6 +317,12 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const rnew = (await q("select amount, reason, note, status from refunds where reason = 'admin'"))[0];
   ok("Bloque 1: Devolver crea la devolución (monto editable, nota) y el pago sale de Para revisar", defAmount > 0 && rnew && rnew.amount === 500 && rnew.note === "Pagó de más"
      && ["pending", "failed"].includes(rnew.status) && (await pg.locator(`[data-act=admResolveOpen][data-k=refundNew][data-id="${pov.id}"]`).count()) === 0);
+  // Bloque 2b: una cuenta de Mercado Pago con error en su llave aparece en Para revisar (prestador, cuenta, error, desde cuándo)
+  await db.query("select mp_account_error(a.id, 'No se pudo renovar la llave (400)', false) from mp_accounts a join providers p on p.id = a.provider_id where p.name like 'Sofía%' and a.status = 'active'");
+  await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForFunction(() => /Cuenta de Mercado Pago con error/.test(document.body.innerText), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("2b: Para revisar muestra la cuenta con error: prestador, cuenta, error y desde cuándo", /Cuenta de Mercado Pago con error · Sofía/.test(await txt())
+     && (await txt()).includes("No se pudo renovar la llave (400) · desde ") && /Cuenta n° \S+ · cobra las reservas/.test(await txt()));
+  await db.query("update mp_accounts set last_error = null where last_error = 'No se pudo renovar la llave (400)'");
   // v30: prestadores por rubro, notas privadas, eliminar
   await pg.click("[data-act=admT][data-t=prov]"); await wait(400);
   ok("v30: prestadores divididos por rubro", (await pg.locator(".admgrp").count()) >= 1 && (await pg.locator(".admgh").first().innerText()).length > 2);
@@ -374,6 +380,20 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.goto(BASE + "/p/" + sofi); await pg.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("H23: su perfil público dice que todavía no toma turnos online (con Seguir) y no deja elegir horario",
      /Todavía no toma turnos online/.test(await txt()) && (await pg.locator(".bookbar").count()) === 0 && (await pg.locator("[data-slot]").count()) === 0);
+  // D22 (H25): con la cuenta desconectada, una clienta con la tarjeta llena igual puede canjear su premio
+  await db.query("update loyalty_cards set stamps = 16 where user_id = (select id from auth.users where email='ana@test.ar') and service_id = $1", [esm]);
+  await pg.click("nav [data-go=login]"); await wait(); await pg.click("[data-act=authMode][data-m=code]"); await wait(200);
+  await pg.fill("#le", "ana@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc"); await pg.fill("#lc", "123456"); await pg.click("#fCode button[type=submit]"); await wait(1200);
+  await pg.goto(BASE + "/p/" + sofi); await pg.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await wait(800);
+  ok("D22: sin Mercado Pago, la clienta con la tarjeta llena ve “Solo podés canjear tu premio”", /Solo podés canjear tu premio/.test(await txt()) && !/Todavía no toma turnos online/.test(await txt()));
+  await pg.click(".panel [data-svc]"); await wait(400);
+  ok("D22: elige el servicio del premio y aparece el selector de horario, sin seña", (await pg.locator("[data-slot]").count()) > 0 && /no lleva seña ni comisión/.test(await txt()));
+  const rewardsBefore = (await q("select count(*)::int c from bookings where pay_method = 'reward'"))[0].c;
+  await pg.click("[data-quick]"); await wait(200); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno", { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("D22: en el pago solo queda “Usar mi premio”", (await pg.locator("[data-paym=reward]").count()) === 1 && (await pg.locator("[data-paym=mp]").count()) === 0);
+  await pg.click("#fTurno button[type=submit]"); await wait(1500);
+  ok("D22: el premio queda reservado sin pago", (await q("select count(*)::int c from bookings where pay_method = 'reward' and status = 'confirmed'"))[0].c === rewardsBefore + 1);
+  await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
   // "Volver al panel" cierra la sesión del prestador: se vuelve a ingresar y la app vuelve a Perfil (?volver=)
   await pg.goto(BASE + "/panel/perfil"); await pg.waitForSelector("#fBarb", { timeout: 8000 }).catch(() => {}); await wait(400);
   await pg.fill("#be", "sofia@test.ar"); await pg.fill("#bp", "prestador123"); await pg.click("#fBarb button[type=submit]"); await pg.waitForSelector("[data-act=mpConnect]", { timeout: 8000 }).catch(() => {}); await wait(400);
