@@ -119,6 +119,15 @@ function mpPaidNote(st, past) {
   }
   return `<p class="note" style="text-align:left;margin:8px 0 0">Tenés ${n} turno${n === 1 ? "" : "s"} futuro${n === 1 ? "" : "s"} con la seña pagada: ${n === 1 ? "sigue" : "siguen"} en pie y, si hay que devolver una seña, se devuelve desde ${past ? "tu cuenta anterior" : "esta cuenta"}.</p>`;
 }
+// H10: lo que falta para verificar la identidad (número, frente y dorso). El número no se muestra: solo si está cargado.
+export const DNI_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
+function dniForm(st) {
+  const done = (ok) => (ok ? ' <span style="color:var(--ok)">✓ cargado</span>' : "");
+  return `<p class="note" style="text-align:left;margin:10px 0">Para activar tu perfil necesitamos tu número de DNI y las fotos del frente y del dorso. Solo los ve el equipo de TuTiempo.</p>
+   <form id="fDni" novalidate><div class="f"><label for="dniN">Número de DNI${done(st.number)}</label><div class="pw"><input id="dniN" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Sin puntos, 7 u 8 números"><button class="btn btn-ghost btn-sm" type="submit">Guardar</button></div></div></form>
+   <div class="f"><label for="dniFront">Foto del frente${done(st.front)}</label><input id="dniFront" type="file" accept="${DNI_ACCEPT}"></div>
+   <div class="f"><label for="dniBack">Foto del dorso${done(st.back)}</label><input id="dniBack" type="file" accept="${DNI_ACCEPT}"></div>`;
+}
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
 // En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
 export function vBPerfil(prov) {
@@ -174,7 +183,7 @@ export function vBPerfil(prov) {
   </form>
   ${vMensajes()}
   <div class="panel"><p class="lbl">Verificación</p><dl class="kv"><dt>DNI</dt><dd style="color:${prov.verified === false ? "var(--warn)" : "var(--ok)"}">${prov.verified === false ? "En revisión" : "✓ Verificado"}</dd><dt>Email</dt><dd>${esc(LIVE ? (S.user ? S.user.email : "") : prov.id === 21 ? "sofia@tutiempo.demo" : "filo@tutiempo.demo")}</dd></dl>
-   ${LIVE && prov.verified === false ? '<div class="f" style="margin-top:10px"><label for="dniUp">Subí tu DNI (frente y dorso)</label><input id="dniUp" type="file" accept="image/*,application/pdf" multiple><span class="hint">Solo lo ve el equipo de TuTiempo para verificarte.</span></div>' : ""}</div>
+   ${LIVE && prov.verified === false ? dniForm(S.dniSt || {}) : ""}</div>
   ${delBox("pro")}
   <button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
 }

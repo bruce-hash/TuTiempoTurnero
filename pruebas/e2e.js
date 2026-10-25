@@ -380,6 +380,55 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await Promise.all([pg.waitForURL(/mp_connected=1/, { timeout: 8000 }).catch(() => {}), pg.click("[data-act=mpConnect]")]); await wait(1500);
   const accRe = (await q("select id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   ok("H23: reconectar la misma cuenta vuelve a cobrar con la misma fila", accRe && accRe.id === accBefore.id);
+
+  // ---------- Bloque 2b (H10): alta de prestador sin DNI en los metadatos; DNI y fotos después; activar = verificar ----------
+  const ctx2 = await b.newContext({ viewport: { width: 400, height: 900 } }); const p2 = await ctx2.newPage();
+  p2.on("pageerror", (e) => errs.push(e.message));
+  const wait2 = (ms = 400) => p2.waitForTimeout(ms); const txt2 = () => p2.locator("#app").innerText();
+  await p2.goto(BASE + "/sumate"); await p2.waitForSelector("#fPrest");
+  await p2.fill("#pn", "Uñas Nuevas"); await p2.fill("#pe", "nuevas@test.ar"); await p2.fill("#pp", "Nuevas2026x");
+  await p2.fill("#ptel", "2284 555666"); await p2.fill("#pd", "33444555");
+  const DNIF = (n) => ({ name: n + ".png", mimeType: "image/png", buffer: PNG.buffer });
+  await p2.setInputFiles("#pf", DNIF("frente")); await wait2(200); await p2.setInputFiles("#pf2", DNIF("dorso")); await wait2(200);
+  await p2.evaluate(() => { document.querySelector("#rr-u").checked = true; document.querySelector("#ptc").checked = true }); await p2.click("#fPrest button[type=submit]"); await wait2(1200);
+  ok("H10: alta con confirmación de email: pide cargar el DNI después", (await txt2()).includes("Perfil → Verificación"));
+  const meta = (await q("select raw_user_meta_data m from auth.users where email='nuevas@test.ar'"))[0].m;
+  ok("H10: el DNI no viaja en los metadatos de la cuenta", meta.provider_reg && meta.provider_reg.name === "Uñas Nuevas" && !JSON.stringify(meta).includes("33444555"));
+  await p2.goto(BASE + "/?token_hash=" + (await mailOf("nuevas@test.ar")).signup + "&type=signup"); await wait2(2000);
+  const np = (await q("select p.id, p.status, pp.dni_number from providers p join provider_private pp on pp.provider_id=p.id join auth.users u on u.id=p.owner_id where u.email='nuevas@test.ar'"))[0];
+  ok("H10: al confirmar se crea el perfil pendiente, todavía sin DNI", np && np.status === "pending" && np.dni_number === null);
+  await p2.goto(BASE + "/panel/perfil"); await p2.waitForSelector("#fDni", { timeout: 8000 }).catch(() => {}); await wait2(400);
+  ok("H10: Perfil → Verificación pide número, frente y dorso", await p2.isVisible("#fDni") && await p2.isVisible("#dniFront") && await p2.isVisible("#dniBack"));
+  await p2.fill("#dniN", "30111222"); await p2.click("#fDni button[type=submit]"); await wait2(800);
+  ok("H10: un DNI de otro prestador se rechaza con un mensaje claro", (await p2.locator("#toast").innerText().catch(() => "")).includes("ya está registrado")
+     && (await q("select dni_number from provider_private where provider_id=$1", [np.id]))[0].dni_number === null);
+  await p2.fill("#dniN", "33444555"); await p2.click("#fDni button[type=submit]"); await wait2(800);
+  ok("H10: el número se guarda directo en provider_private", (await q("select dni_number from provider_private where provider_id=$1", [np.id]))[0].dni_number === "33444555");
+  await p2.setInputFiles("#dniFront", DNIF("f")); await wait2(800);
+  const uid2 = (await q("select id::text from auth.users where email='nuevas@test.ar'"))[0].id;
+  ok("H10: el frente queda en el bucket dni, en su carpeta", (await q("select count(*)::int c from storage.objects where bucket_id='dni' and name like $1", [uid2 + "/frente-%.png"]))[0].c === 1);
+  // el admin (Carla) no puede aprobar sin el dorso; con las dos fotos, aprobar = verificar
+  const p3 = await ctx.newPage(); p3.on("pageerror", (e) => errs.push(e.message));
+  await p3.goto(BASE); await p3.waitForTimeout(1000);
+  if (!(await p3.evaluate(() => S.user && S.user.email === "carla@test.ar"))) {
+    await p3.evaluate(() => sb.auth.signOut()); await p3.goto(BASE + "/ingresar"); await p3.waitForSelector("#ai_e");
+    await p3.fill("#ai_e", "carla@test.ar"); await p3.fill("#ai_p", "Nueva2026zz"); await p3.click("#fLogin button[type=submit]"); await p3.waitForTimeout(1500);
+  }
+  await p3.goto(BASE + "/admin/prestadores"); await p3.waitForSelector("[data-act=admSet][data-s=active]", { timeout: 8000 }).catch(() => {}); await p3.waitForTimeout(500);
+  ok("H10: el admin ve el número y qué fotos faltan", (await p3.locator("#app").innerText()).includes("DNI 33444555 · Frente ✓ · Dorso falta"));
+  await p3.click(`[data-act=admSet][data-id="${np.id}"]`); await p3.waitForTimeout(1000);
+  ok("H10: sin el dorso no se puede activar", (await q("select status from providers where id=$1", [np.id]))[0].status === "pending"
+     && (await p3.locator("#toast").innerText().catch(() => "")).includes("Faltan las fotos del DNI"));
+  await p2.setInputFiles("#dniBack", DNIF("d")); await wait2(800);
+  await p3.goto(BASE + "/admin/prestadores"); await p3.waitForSelector(`[data-act=admDni][data-id="${np.id}"]`, { timeout: 8000 }).catch(() => {}); await p3.waitForTimeout(500);
+  await p3.click(`[data-act=admDni][data-id="${np.id}"]`); await p3.waitForTimeout(800);
+  const logDni = await (await fetch(BASE + "/__log")).json();
+  ok("H10: el admin ve frente y dorso con URL firmada de 2 minutos", (await p3.locator("a.lnk", { hasText: "Frente" }).count()) === 1 && (await p3.locator("a.lnk", { hasText: "Dorso" }).count()) === 1
+     && logDni.filter((x) => x.signed && x.signed.startsWith(uid2)).every((x) => x.expiresIn === 120));
+  await p3.click(`[data-act=admSet][data-id="${np.id}"]`); await p3.waitForTimeout(1200);
+  const ver = (await q("select p.status, p.dni_verified, pp.dni_verified_at is not null at, (select email from auth.users where id = pp.dni_verified_by) by from providers p join provider_private pp on pp.provider_id=p.id where p.id=$1", [np.id]))[0];
+  ok("H10: aprobar = verificar, con quién y cuándo", ver.status === "active" && ver.dni_verified === true && ver.at && ver.by === "carla@test.ar");
+  await p3.close(); await ctx2.close();
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));
   await b.close(); await db.end();

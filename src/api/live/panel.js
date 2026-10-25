@@ -76,6 +76,8 @@ export const livePanel = {
       call(sb.rpc("my_mp_status")),
       call(sb.rpc("my_provider_notices")),
     ]);
+    // H10: mientras no está verificado, qué le falta cargar (número, frente, dorso); el número no viaja al navegador
+    S.dniSt = pr(pid).verified === false ? await call(sb.rpc("my_dni_status")).catch(() => null) : null;
     const statusMap = {
       confirmed: "confirmed",
       done: "done",

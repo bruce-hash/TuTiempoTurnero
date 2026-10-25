@@ -13,7 +13,8 @@ import { toast } from "../ui/toast.js";
 import { useProvider } from "../views/prestador/panel.js";
 
 // alta en vivo: los datos del negocio viajan en provider_reg (metadatos de la cuenta) y session() crea el perfil
-// en el primer ingreso. Si Supabase no pide confirmar el email, eso pasa acá mismo: entra al panel y sube el DNI.
+// en el primer ingreso. El DNI no (H10): si Supabase no pide confirmar el email, la sesión empieza acá mismo y se
+// guardan el número y las fotos; si lo pide, los carga después en Perfil → Verificación.
 async function liveRegister(reg) {
   const btn = $("#fPrest button[type=submit]");
   if (btn) {
@@ -26,7 +27,6 @@ async function liveRegister(reg) {
       address: reg.addr || "",
       categories: reg.cats,
       phone: reg.tel,
-      dni: reg.dni,
       instagram: null,
     };
     const res = await sb.auth.signUp({
@@ -45,9 +45,14 @@ async function liveRegister(reg) {
     }
     if (res.data.session) {
       await api.session();
-      if (store.REGFILES.length) {
-        await api.m.uploadDni(store.REGFILES);
+      // si algo de esto falla, la cuenta ya existe: saved() avisa y lo completa en Perfil → Verificación
+      await api.m.setDni(reg.dni).catch(() => {});
+      for (const side of ["frente", "dorso"]) {
+        if (store.REGFILES[side]) {
+          await api.m.uploadDni(side, store.REGFILES[side]).catch(() => {});
+        }
       }
+      await api.loadMine().catch(() => {});
       S.reg = {};
       S.role = "barbero";
       S.btab = "perfil";
@@ -88,7 +93,7 @@ export function readReg() {
   }
   return reg;
 }
-store.REGFILES = [];
+store.REGFILES = {};
 // demo: completa el formulario como si viniera de Google
 registerClick("regGoogle", (ev, el, act) => {
   S.reg = Object.assign({}, S.reg, readReg(), {
@@ -136,13 +141,6 @@ registerClick("regPanel", (ev, el, act) => {
   render();
   window.scrollTo(0, 0);
 });
-registerChange("dniUp", (ev) => {
-  api.m
-    .uploadDni([...ev.target.files].slice(0, 4))
-    .then(() => toast("Recibimos tu DNI. Te avisamos cuando esté verificado."))
-    .catch(() => {});
-  return;
-});
 registerSubmit("fPrest", (ev) => {
   const reg = Object.assign(S.reg, readReg());
   const errs = {};
@@ -168,8 +166,8 @@ registerSubmit("fPrest", (ev) => {
   if (!/^\d{7,8}$/.test(reg.dni || "")) {
     errs.dni = "El DNI tiene que tener 7 u 8 números, sin puntos.";
   }
-  if (!reg.files) {
-    errs.files = "Subí la foto del DNI (frente y dorso).";
+  if (!reg.frente || !reg.dorso) {
+    errs.files = "Subí las fotos del frente y del dorso de tu DNI.";
   }
   if (!reg.tc) {
     errs.tc = "Tenés que aceptar los términos para continuar.";

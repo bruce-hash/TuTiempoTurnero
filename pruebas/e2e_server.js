@@ -2,7 +2,7 @@
 //  /rest/v1/*      → PostgREST real (con la base y las políticas RLS reales)
 //  /auth/v1/*      → Auth simulado (emite JWT firmados con el mismo secreto que PostgREST)
 //  /functions/v1/* → Edge Functions simuladas (Mercado Pago "aprueba" al instante)
-//  /storage/v1/*   → Storage simulado (aplica la misma regla de carpeta)
+//  /storage/v1/*   → Storage simulado (aplica la misma regla de carpeta; el bucket dni, las políticas reales de la base)
 //  resto           → archivos del paquete para Hostinger, con la CSP y el fallback de direcciones del .htaccess
 //                    (misma regla que Apache: pruebas/fallback.cjs)
 // Uso: node e2e_server.js <carpeta web> <puerto> <jwt_secret> <pg_conn> <postgrest_url>
@@ -79,9 +79,42 @@ async function functions(req, res, url) {
   send(res, 404, {});
 }
 
+// consulta con los permisos del usuario del token (rol authenticated y sus claims), como PostgREST: aplica la RLS real
+// (una conexión aparte: la transacción no se mezcla con las consultas de otros pedidos)
+async function asUser(claims, sql, params) {
+  const c = new Client({ connectionString: PGCONN }); await c.connect();
+  try {
+    await c.query("begin");
+    await c.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify(claims)]);
+    await c.query("set local role authenticated");
+    const r = await c.query(sql, params); await c.query("commit"); return r;
+  } finally { await c.end() }
+}
 async function storage(req, res, url) {
-  const claims = verify((req.headers.authorization || "").slice(7)); await body(req);
+  const claims = verify((req.headers.authorization || "").slice(7)); const raw = await body(req);
+  // bucket dni (H10): la subida, el listado y las URL firmadas pasan por storage.objects con las políticas de la base
+  const list = url.pathname.match(/^\/storage\/v1\/object\/list\/dni$/);
+  if (req.method === "POST" && list) {
+    if (!claims || !claims.sub) return send(res, 403, { message: "unauthorized" });
+    const prefix = (JSON.parse(raw.toString() || "{}").prefix || "").replace(/\/$/, "");
+    const r = await asUser(claims, "select substr(name, length($1) + 2) as name from storage.objects where bucket_id = 'dni' and name like $1 || '/%' order by name", [prefix]);
+    return send(res, 200, r.rows.map((row) => ({ name: row.name, id: row.name, metadata: {} })));
+  }
+  const signed = url.pathname.match(/^\/storage\/v1\/object\/sign\/dni\/(.+)$/);
+  if (req.method === "POST" && signed) {
+    if (!claims || !claims.sub) return send(res, 403, { message: "unauthorized" });
+    const r = await asUser(claims, "select 1 from storage.objects where bucket_id = 'dni' and name = $1", [decodeURIComponent(signed[1])]);
+    if (!r.rows.length) return send(res, 400, { message: "Object not found" });
+    LOG.push({ signed: signed[1], expiresIn: JSON.parse(raw.toString() || "{}").expiresIn });
+    return send(res, 200, { signedURL: `/object/sign/dni/${signed[1]}?token=prueba` });
+  }
   const m = url.pathname.match(/^\/storage\/v1\/object\/(media|dni|avatars)\/(.+)$/);
+  if (req.method === "POST" && m && m[1] === "dni") {
+    if (!claims || !claims.sub) return send(res, 403, { message: "unauthorized" });
+    try { await asUser(claims, "insert into storage.objects (bucket_id, name) values ('dni', $1)", [decodeURIComponent(m[2])]) }
+    catch (e) { return send(res, 403, { message: "new row violates row-level security policy" }) }
+    LOG.push({ upload: "dni/" + m[2] }); return send(res, 200, { Key: "dni/" + m[2] });
+  }
   if (req.method === "POST" && m) {
     if (!claims || !claims.sub) return send(res, 403, { message: "unauthorized" });
     const folder = m[2].split("/")[0];

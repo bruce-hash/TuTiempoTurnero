@@ -176,16 +176,53 @@ registerChange("msv", (ev) => {
   $("#mtel").value = tel;
   return;
 });
-registerChange("pf", (ev) => {
-  store.REGFILES = [...ev.target.files].slice(0, 4);
+// alta: foto del frente (pf) y del dorso (pf2) del DNI; se suben cuando la cuenta ya tiene sesión (H10)
+const regPhoto = (side) => (ev) => {
   Object.assign(S.reg, readReg());
-  S.reg.files = ev.target.files.length;
+  store.REGFILES[side] = ev.target.files[0] || null;
+  S.reg[side] = !!store.REGFILES[side];
   if (S.reg.errs) {
     delete S.reg.errs.files;
   }
   render();
   return;
+};
+registerChange("pf", regPhoto("frente"));
+registerChange("pf2", regPhoto("dorso"));
+// Perfil → Verificación (H10): número de DNI y fotos, mientras el perfil no está verificado
+registerSubmit("fDni", (ev) => {
+  const dni = $("#dniN").value.trim();
+  if (!/^\d{7,8}$/.test(dni)) {
+    toast(errMsg("bad_dni"));
+    return;
+  }
+  api.m
+    .setDni(dni)
+    .then(() => {
+      S.dniSt = Object.assign({}, S.dniSt, { number: true });
+      toast("Guardamos tu DNI.");
+      render();
+    })
+    .catch(() => {});
+  return;
 });
+const dniPhoto = (side, key) => (ev) => {
+  const file = ev.target.files[0];
+  if (!file) {
+    return;
+  }
+  api.m
+    .uploadDni(side, file)
+    .then(() => {
+      S.dniSt = Object.assign({}, S.dniSt, { [key]: true });
+      toast("Recibimos la foto. Te avisamos cuando esté verificado.");
+      render();
+    })
+    .catch(() => {});
+  return;
+};
+registerChange("dniFront", dniPhoto("frente", "front"));
+registerChange("dniBack", dniPhoto("dorso", "back"));
 registerChange("upPhoto", (ev) => {
   onPhoto(ev.target, "pro");
   return;

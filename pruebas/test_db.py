@@ -402,7 +402,39 @@ q("select admin_set_commission(10)", uid=adm)
 ap = q("select admin_providers(null)", uid=adm)
 ok("admin lista prestadores (hasta 500, pendientes primero, después los más activos)", not err(ap) and 1 <= len(ap[0][0]) <= 500 and all(k in ap[0][0][0] for k in ("status","dni_verified","bookings_month","mp_connected","activity")))
 ok("admin suspende: desaparece del listado", not err(q("select admin_set_provider(%s,'suspended',null)", (pid3,), uid=adm)) and not any(r0[0] == pid3 for r0 in q("select id from list_providers('olavarria', null, null, null, null, 48)", role="anon")))
+# Bloque 2b (H10): activar = verificar, solo con el número y las dos fotos del DNI
+ok("reactivar sin las fotos del DNI: rechazado", err(q("select admin_set_provider(%s,'active',true)", (pid3,), uid=adm), "dni_photos_missing")
+   and q("select status from providers where id=%s", (pid3,))[0][0] == "suspended")
+ok("el dueño sube el frente en su carpeta", not err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{nails_owner}/frente-1.jpg",), uid=nails_owner)))
+ok("…no en otra carpeta", err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{cli1}/frente-1.jpg",), uid=nails_owner)))
+ok("…ni con otro nombre", err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{nails_owner}/selfie.jpg",), uid=nails_owner)))
+ok("…y nadie más ve las fotos (ni el dueño)", q("select count(*) from storage.objects where bucket_id='dni'", uid=nails_owner)[0][0] == 0
+   and q("select count(*) from storage.objects where bucket_id='dni'", uid=cli1)[0][0] == 0)
+ok("solo con el frente: rechazado", err(q("select admin_set_provider(%s,'active',true)", (pid3,), uid=adm), "dni_photos_missing"))
+q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{nails_owner}/dorso-2.pdf",), uid=nails_owner)
 ok("admin reactiva y verifica", not err(q("select admin_set_provider(%s,'active',true)", (pid3,), uid=adm)) and q("select status, dni_verified from providers where id=%s", (pid3,))[0] == ("active", True))
+# un prestador nuevo, de punta a punta: sin DNI en el alta, lo carga después, el admin lo activa
+nu = mkuser("nuevo-dni@test.ar", "Nuevo DNI")
+pn_ = q("select register_provider('Nuevo DNI', 'Calle 3', array['b'], '2284 3', null)", uid=nu)
+ok("alta sin DNI (todavía sin sesión al registrarse)", not err(pn_)); pn_ = pn_[0][0]
+ok("el estado de su verificación: sin número ni fotos", q("select my_dni_status()", uid=nu)[0][0] == {"number": False, "front": False, "back": False, "verified": False, "verified_at": None})
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{nu}/frente-1.png", f"{nu}/dorso-1.png"), uid=nu)
+ok("activar sin número: rechazado", err(q("select admin_set_provider(%s,'active',true)", (pn_,), uid=adm), "dni_missing"))
+ok("número con puntos o corto: rechazado", err(q("select set_my_dni('30.111.555')", uid=nu), "bad_dni") and err(q("select set_my_dni('123456')", uid=nu), "bad_dni"))
+ok("número de otro prestador: rechazado con error claro", err(q("select set_my_dni('30111222')", uid=nu), "dni_taken"))
+ok("…también en el alta", err(q("select register_provider('Otro', 'x', array['b'], '1', '28111222')", uid=mkuser("otro-dni@test.ar", "Otro")), "dni_taken"))
+ok("el dueño carga su número", not err(q("select set_my_dni('30111555')", uid=nu)) and q("select my_dni_status()", uid=nu)[0][0]["number"] is True)
+ok("el dueño no lee el número ni puede escribirlo directo", err(q("select dni_number from provider_private", uid=nu)) and err(q("update provider_private set dni_number='1' where provider_id=%s", (pn_,), uid=nu)))
+ok("un cliente no puede cargar DNI", err(q("select set_my_dni('30111666')", uid=cli1), "not_provider"))
+ap_n = [x for x in q("select admin_providers('pending')", uid=adm)[0][0] if x["id"] == pn_][0]
+ok("el admin ve el número y que están las dos fotos", ap_n["dni_number"] == "30111555" and ap_n["dni_photos"] == {"front": True, "back": True})
+ok("admin activa = verifica", not err(q("select admin_set_provider(%s,'active',false)", (pn_,), uid=adm))
+   and q("select status, dni_verified from providers where id=%s", (pn_,))[0] == ("active", True))
+ok("…con quién y cuándo", q("select dni_verified_by = %s and dni_verified_at > now() - interval '1 minute' from provider_private where provider_id=%s", (adm, pn_))[0][0] is True)
+ok("verificado, el dueño ya no cambia su número", err(q("select set_my_dni('30111777')", uid=nu), "dni_locked"))
+ok("el público ve la verificación (H11 sale de dni_verified)", q("select (get_provider(%s))->>'dni_verified'", (pn_,), role="anon")[0][0] == "true")
+ok("set_my_dni y my_dni_status: anon no", err(q("select set_my_dni('30111888')", role="anon")) and err(q("select my_dni_status()", role="anon")))
+ok("dni_photos es interna", err(q("select dni_photos(%s)", (nu,), uid=nu)))
 
 # ---------- versión 29 ----------
 # la seña de cada turno siempre alcanza para la comisión
@@ -468,7 +500,7 @@ ok("nadie más puede leer las notas (ni el prestador dueño)", err(q("select * f
 ok("ni el listado público ni la ficha muestran notas", "Llamar" not in json.dumps(q("select get_provider(%s)", (pn,), role="anon")[0][0], default=str))
 ok("admin borra una nota", not err(q("select admin_delete_note(%s)", (n1[0][0],), uid=adm)) and q("select count(*) from admin_notes where id=%s", (n1[0][0],))[0][0] == 0)
 # admin elimina un prestador: cancela turnos futuros y devuelve todo
-pz = q("select register_provider('Borrar Test','Sarmiento 9', array['b'], '2284 1', '30111222')", uid=mkuser("borrar@test.ar","Borrar"))[0][0]
+pz = q("select register_provider('Borrar Test','Sarmiento 9', array['b'], '2284 1', '30111444')", uid=mkuser("borrar@test.ar","Borrar"))[0][0]
 zo = q("select owner_id from providers where id=%s", (pz,))[0][0]
 q("update providers set status='active' where id=%s", (pz,)); conectar_mp(pz)
 q("update provider_settings set online=true, step_min=30, ahead_days=31, notice_min=0, pay_mode='deposit', deposit_pct=50 where provider_id=%s", (pz,))
@@ -543,9 +575,9 @@ rubros = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sr
 front_cats = dict(re.findall(r'^\s+([a-z]): "([a-z0-9-]+)",$', rubros.split("CAT_SLUGS = {")[1].split("};")[0], re.M))
 ok("rubros en la URL: src/lib/rubros.js (CAT_SLUGS) tiene los mismos slugs que categories", front_cats == dict(q("select id, slug from categories")) and len(front_cats) == 6)
 ok("is_reserved_slug no distingue mayúsculas", q("select is_reserved_slug('PANEL'), is_reserved_slug('panel-1'), is_reserved_slug(null)")[0] == (True, False, False))
-for nombre, esperado in (("Panel", "panel-1"), ("Admin", "admin-1"), ("Mis Turnos", "mis-turnos-1")):
+for nombre, esperado, dni in (("Panel", "panel-1", "30999881"), ("Admin", "admin-1", "30999882"), ("Mis Turnos", "mis-turnos-1", "30999883")):
     u = mkuser(f"res-{esperado}@test.ar", nombre)
-    r = q("select register_provider(%s, 'Calle 1', array['b'], '2284 1', '30999888')", (nombre,), uid=u)
+    r = q("select register_provider(%s, 'Calle 1', array['b'], '2284 1', %s)", (nombre, dni), uid=u)
     r = r if err(r) else q("select slug from providers where id = %s", (r[0][0],))
     ok(f"un prestador llamado \"{nombre}\" recibe el slug {esperado}", not err(r) and r[0][0] == esperado)
 u = mkuser("res-panel2@test.ar", "Panel")

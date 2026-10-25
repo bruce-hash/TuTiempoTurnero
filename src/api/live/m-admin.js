@@ -78,11 +78,15 @@ Object.assign(LM, {
     if (res.error) {
       throw res.error;
     }
+    // URL firmada de 2 minutos por archivo: se piden al tocar "Ver DNI" y no se guardan
     const urls = [];
     for (const file of res.data || []) {
-      const signed = await sb.storage.from("dni").createSignedUrl(userId + "/" + file.name, 300);
+      const signed = await sb.storage.from("dni").createSignedUrl(userId + "/" + file.name, 120);
       if (signed.data) {
-        urls.push(signed.data.signedUrl);
+        urls.push({
+          side: file.name.startsWith("frente-") ? "Frente" : file.name.startsWith("dorso-") ? "Dorso" : "Archivo",
+          url: signed.data.signedUrl,
+        });
       }
     }
     return urls;

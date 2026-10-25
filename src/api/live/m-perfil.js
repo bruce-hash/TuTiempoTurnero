@@ -7,6 +7,9 @@ import { mediaUrl } from "../../ui/fotos.js";
 
 // Escrituras del perfil del prestador: datos, rubros, servicios con sus adicionales, posteos, respuestas a reseñas,
 // fotos, DNI y conexión con Mercado Pago.
+
+// tipos de archivo que acepta el bucket "dni" (mismos que la política de la base)
+const DNI_TYPES = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
 Object.assign(LM, {
   // prof.svcs: servicios en formato svcMeta [nombre, minutos, precio, rubro, id, meta]; prof.before: cómo estaban.
   // Los servicios y adicionales que se sacan no se borran: quedan inactivos (los turnos viejos los siguen nombrando).
@@ -156,15 +159,24 @@ Object.assign(LM, {
     media.id = row.id;
     media.url = mediaUrl(storagePath);
   },
-  uploadDni: async (files) => {
-    for (const file of files) {
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
-      await saved(
-        sb.storage.from("dni").upload(`${S.user.id}/${Date.now()}.${ext}`, file, {
-          contentType: file.type,
-        }),
-      );
+  // H10: el número va directo a provider_private (nunca por los metadatos de la cuenta); las fotos, al bucket privado
+  // "dni" con el nombre de su lado (frente o dorso), que es lo que mira la base para dejar activar
+  setDni: (dni) =>
+    saved(
+      sb.rpc("set_my_dni", {
+        p_dni: dni,
+      }),
+    ),
+  uploadDni: async (side, file) => {
+    const ext = DNI_TYPES[file.type];
+    if (!ext) {
+      throw new Error("bad_dni_file");
     }
+    await saved(
+      sb.storage.from("dni").upload(`${S.user.id}/${side}-${Date.now()}.${ext}`, file, {
+        contentType: file.type,
+      }),
+    );
   },
   deleteProvider: () => saved(sb.rpc("delete_my_provider")),
   // desconecta de verdad (la cuenta queda solo para devoluciones) y devuelve el estado nuevo (my_mp_status)

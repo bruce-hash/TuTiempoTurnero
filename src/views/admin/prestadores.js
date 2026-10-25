@@ -7,6 +7,12 @@ import { S } from "../../state.js";
 import { admIc } from "./admin.js";
 import { admFile } from "./ficha.js";
 
+// H10: lo que cargó el prestador para verificarlo (para aprobar hacen falta el número y las dos fotos)
+const dniLine = (prov) => {
+  const photo = (side, label) => `${label} ${prov.dniPhotos[side] ? "✓" : "falta"}`;
+  return `DNI ${prov.dni ? esc(prov.dni) : "sin cargar"} · ${photo("front", "Frente")} · ${photo("back", "Dorso")}`;
+};
+
 // niveles de actividad: [nombre, detalle, condición sobre los servicios de los últimos 30 días]
 const ACT_LEVELS = [
   ["🔥 Muy activos", "30 o más servicios en 30 días", (count) => count >= 30],
@@ -62,7 +68,8 @@ export function admProv(data) {
             (
               prov,
             ) => `<li>${avatar(prov)}<div><b>${esc(prov.name)}</b><span>${(prov.cats || []).map(catName).join(" · ")}${prov.created ? " · " + esc(typeof prov.created == "string" && prov.created.length > 12 ? relDate(prov.created) : prov.created) : ""}</span>
-     ${S.admDni && S.admDni.id === prov.id ? `<span>${S.admDni.urls.length ? S.admDni.urls.map((url, index) => `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener">DNI ${index + 1}</a>`).join(" · ") : "Sin archivos de DNI"}</span>` : ""}</div>
+     ${LIVE ? `<span>${dniLine(prov)}</span>` : ""}
+     ${S.admDni && S.admDni.id === prov.id ? `<span>${S.admDni.urls.length ? S.admDni.urls.map((file) => `<a class="lnk" href="${esc(file.url)}" target="_blank" rel="noopener">${esc(file.side)}</a>`).join(" · ") : "Sin archivos de DNI"}</span>` : ""}</div>
      <span class="admact">${LIVE ? `<button class="btn btn-ghost btn-sm" data-act="admDni" data-id="${prov.id}">Ver DNI</button>` : ""}<button class="btn btn-ok btn-sm" data-act="admSet" data-id="${prov.id}" data-s="active">Aprobar</button></span></li>`,
           )
           .join("")}</ul></div>`
