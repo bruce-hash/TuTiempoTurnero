@@ -330,7 +330,11 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForSelector("[data-act=admResolveOpen][data-k=refundNew]", { timeout: 8000 }).catch(() => {}); await wait(300);
   await pg.click(`[data-act=admResolveOpen][data-k=refundNew][data-id="${pov.id}"]`); await wait(300);
   const defAmount = Number(await pg.inputValue("#arAmount"));
-  await pg.fill("#arAmount", "500"); await pg.fill("#arNote", "Pagó de más"); await pg.click("#fAdmRefund button:not([type])"); await wait(1500);
+  // H08: con centavos no se pide nada (antes "1.000" también se rechazaba; ahora se lee como mil)
+  await pg.fill("#arAmount", "500,50"); await pg.fill("#arNote", "Pagó de más"); await pg.click("#fAdmRefund button:not([type])"); await wait(700);
+  ok("H08: Devolver con centavos muestra el error y no crea la devolución", /pesos enteros, sin centavos/.test(await pg.textContent("#arerr"))
+     && (await q("select count(*)::int c from refunds where reason = 'admin'"))[0].c === 0);
+  await pg.fill("#arAmount", "500"); await pg.click("#fAdmRefund button:not([type])"); await wait(1500);
   const rnew = (await q("select amount, reason, note, status from refunds where reason = 'admin'"))[0];
   ok("Bloque 1: Devolver crea la devolución (monto editable, nota) y el pago sale de Para revisar", defAmount > 0 && rnew && rnew.amount === 500 && rnew.note === "Pagó de más"
      && ["pending", "failed"].includes(rnew.status) && (await pg.locator(`[data-act=admResolveOpen][data-k=refundNew][data-id="${pov.id}"]`).count()) === 0);

@@ -1,7 +1,7 @@
 import { registerClick, registerInput, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
-import { pctTxt } from "../lib/dinero.js";
+import { PESOS_ERR, parsePesos, pctTxt } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, nowHM } from "../lib/fechas.js";
 import { pr } from "../lib/prestadores.js";
@@ -349,14 +349,17 @@ registerSubmit("fReprocess", (ev) => {
 // "Devolver" un pago en revisión (D20): monto entero en pesos y nota obligatoria
 registerSubmit("fAdmRefund", (ev) => {
   const id = +ev.target.dataset.id;
-  const raw = String($("#arAmount").value || "").trim();
-  const amount = /^\d+$/.test(raw) ? +raw : 0;
+  const amount = parsePesos($("#arAmount").value);
   const note = String($("#arNote").value || "")
     .replace(/[\u0000-\u001f]/g, " ")
     .trim()
     .slice(0, 500);
+  if (isNaN(amount)) {
+    $("#arerr").textContent = PESOS_ERR;
+    return;
+  }
   if (amount <= 0) {
-    $("#arerr").textContent = "Escribí el monto en pesos, sin puntos ni decimales.";
+    $("#arerr").textContent = "Escribí cuánto devolvés.";
     return;
   }
   if (note.length < 3) {

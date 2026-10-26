@@ -1,4 +1,4 @@
-.h1,.hero h1,.sec-h h2,.cb h3,.bk-h,.segtile b,.wc-top b{font-family:var(--font-d);text-transform:var(--d-tt);letter-spacing:var(--d-ls);font-weight:var(--d-w)}
+.h1,.hero h1,.sec-h h2,.cb h3,.bk-h,.segtile b{font-family:var(--font-d);text-transform:var(--d-tt);letter-spacing:var(--d-ls);font-weight:var(--d-w)}
 .lbl,.catchip,footer h4,.pk-gl,.btabs button,.seg3 button{font-family:var(--font-d)}
 .btn{border-radius:var(--r-btn);text-transform:var(--btn-tt);letter-spacing:var(--btn-ls);font-family:var(--btn-font);font-size:var(--btn-fs)}
 .card,.panel,.picker,.tcard,.kpi,.btabs,.empty{border-radius:var(--r)}
