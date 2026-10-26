@@ -100,7 +100,8 @@ Vault que `mp-refunds`), cinco migraciones y el frontend:
    Conviene antes de las migraciones: la de retención (`…_dni_retencion.sql`) llama a `dni-cleanup` en cada baja.
 2. `supabase db push` (o `TODO_EN_UNO.sql`): `20261025194744_dni.sql`, `20261025200359_cobros_revision.sql`,
    `20261025201554_site_url.sql`, `20261026021720_gastos_fecha_argentina.sql`, `20261026025232_site_url_https.sql` y
-   `20261026025356_dni_retencion.sql`.
+   `20261026025356_dni_retencion.sql` y `20261026031955_dni_subida_prestador.sql` (las fotos del DNI las sube solo
+   el dueño de un prestador).
    - La de DNI se frena con el error `dni_duplicado` si dos prestadores no eliminados tienen el mismo DNI (no debería
      pasar en el entorno de prueba). Muestra los últimos 3 dígitos y los ids: resolvelo a mano y volvé a correrla.
    - Borra el DNI que haya quedado en los metadatos de las cuentas (`auth.users.raw_user_meta_data`). Una sesión ya

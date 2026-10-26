@@ -97,7 +97,8 @@ El registro de prestador manda `provider_reg` (con el DNI) en `user_metadata` de
 email, se carga en Perfil → Verificación (número, foto del frente y del dorso). Número de 7 u 8 dígitos y único entre
 prestadores no eliminados (`dni_taken`). `admin_set_provider(…, 'active')` exige número y las dos fotos y marca
 `dni_verified` con quién y cuándo (`provider_private.dni_verified_by/at`). Bucket `dni`: sube solo el dueño, en su carpeta
-(`frente-…`/`dorso-…`); lo ve solo el admin, con URL firmada de 2 minutos. El dueño ya no lee su fila entera de
+(`frente-…`/`dorso-…`) y solo si es dueño de un prestador no eliminado; lo ve solo el admin, con URL firmada de 2
+minutos. El dueño ya no lee su fila entera de
 `provider_private`. La migración `20261025194744_dni.sql` borra el DNI de `raw_user_meta_data` (prueba: `test_mudanza.py`).
 Retención de las fotos (D24, `20261026025356_dni_retencion.sql`): la Edge Function `dni-cleanup` las borra con la API de
 Storage a los 30 días de verificar, a los 90 de la última foto de un alta sin aprobar y en el momento de una baja (cron
