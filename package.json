@@ -10,6 +10,7 @@
     "build": "vite build",
     "build:test": "vite build --mode test",
     "preview": "vite preview",
+    "test:unidad": "node pruebas/unidad.mjs",
     "test:crawl": "vite build --mode test --logLevel warn && node pruebas/crawl.js dist-test",
     "test:clicks": "python3 pruebas/audit_clicks.py src",
     "test:sin-demo": "vite build --logLevel warn && node pruebas/sin_demo.mjs",
