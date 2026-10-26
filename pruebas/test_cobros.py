@@ -58,7 +58,8 @@ def mkuser(email, name):
 
 
 def at(days, hh, mm=0):
-    return dt.datetime.combine(dt.date.today() + dt.timedelta(days=days), dt.time(hh, mm), TZ)
+    # "hoy" en Buenos Aires, como la base (el runner del CI está en UTC: de 21 a 24 h de Argentina ya es mañana)
+    return dt.datetime.combine(dt.datetime.now(TZ).date() + dt.timedelta(days=days), dt.time(hh, mm), TZ)
 
 
 def svc_role(sql, args=None):

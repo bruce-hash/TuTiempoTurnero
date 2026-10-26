@@ -533,14 +533,15 @@ ok("el dueño ya no tiene panel", q("select my_provider()", uid=zo)[0][0] is Non
 ok("eliminar dos veces da error claro", err(q("select admin_delete_provider(%s)", (pz,), uid=adm), "not_found"))
 ok("queda registrado en las notas", any("Eliminado" in r0[0] for r0 in q("select body from admin_notes where provider_id=%s", (pz,))))
 # balance de TuTiempo: mes a mes y año a año
-yy = dt.date.today().year
+hoy_ar = dt.datetime.now(tz).date()   # "hoy" en Buenos Aires, como la base (el CI corre en UTC)
+yy = hoy_ar.year
 fz = q("select admin_finance(%s)", (yy,), uid=adm)
 ok("solo un admin ve el balance", err(q("select admin_finance(%s)", (yy,), uid=prov), "forbidden"))
 FZ = fz[0][0] if not err(fz) else {"months": []}
 cur = [m for m in FZ["months"] if m["state"] == "open"]
 ok("balance del año: 12 meses, el actual abierto", len(FZ["months"]) == 12 and len(cur) == 1 and cur[0]["commission"] >= 2000 and cur[0]["charged"] >= cur[0]["deposits"] + 2000)
 ok("no se cierra un mes que no terminó", err(q("select admin_close('month', date_trunc('month', current_date)::date)", uid=adm), "period_not_over"))
-pm0 = (dt.date.today().replace(day=1) - dt.timedelta(days=1)).replace(day=1)
+pm0 = (hoy_ar.replace(day=1) - dt.timedelta(days=1)).replace(day=1)
 e1 = q("select admin_add_expense(%s, %s, 15000)", (pm0 + dt.timedelta(days=4), "Hosting <script>"), uid=adm)
 ok("admin carga un gasto (limpio)", not err(e1) and q("select concept from admin_expenses where id=%s", (e1[0][0],))[0][0] == "Hosting script")
 ok("gastos inválidos rechazados", err(q("select admin_add_expense(current_date, 'x', 0)", uid=adm), "bad_amount") and err(q("select admin_add_expense(current_date, ' ', 10)", uid=adm), "empty_concept")
