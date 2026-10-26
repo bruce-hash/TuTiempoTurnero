@@ -4,6 +4,7 @@
 //   npm run test:funciones
 import pg from "npm:pg@8.12.0";
 import { mpFalso } from "./mp_falso.ts";
+import { resendFalso } from "./resend_falso.ts";
 
 const BASE = Deno.env.get("E2E_URL")!, PG = Deno.env.get("E2E_PG")!, SECRET = Deno.env.get("E2E_SECRET")!;
 if (!BASE || !PG || !SECRET) throw new Error("Correr dentro de pruebas/entorno_e2e.mjs (npm run test:funciones)");
@@ -48,6 +49,7 @@ const one = async (sql: string, args: unknown[] = [], uid?: string) => Object.va
 
 // ---------- Mercado Pago falso y funciones ----------
 const mp = mpFalso();
+const RESEND_KEY = "re_llave_de_prueba", rs = resendFalso(RESEND_KEY);
 const SITE = "http://sitio.test", WHSEC = "whsec-prueba";
 const SERVICE = await jwt({ role: "service_role" });
 const rnd = (n: number) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n))));
@@ -56,11 +58,13 @@ for (const [k, v] of Object.entries({
   SUPABASE_URL: BASE, SUPABASE_SERVICE_ROLE_KEY: SERVICE, SUPABASE_ANON_KEY: await jwt({ role: "anon" }), MP_API_URL: mp.url,
   MP_WEBHOOK_SECRET: WHSEC, MP_CLIENT_ID: "cliente-tutiempo", MP_CLIENT_SECRET: "secreto-tutiempo", SITE_URL: SITE,
   CRON_SECRET: CRON, MP_TOKENS_KEY: TOKENS_KEY, MP_OWNER_USER_ID: OWNER_MP,
+  RESEND_API_KEY: RESEND_KEY, EMAIL_FROM: "TuTiempo <avisos@tutiempo.com.ar>", EMAIL_REPLY_TO: "soporte@tutiempo.com.ar",
+  EMAIL_API_URL: rs.url, EMAIL_GAP_MS: "0",
 })) Deno.env.set(k, v);
 const handlers: Record<string, (req: Request) => Promise<Response>> = {};
 let loading = "";
 (Deno as any).serve = (h: any) => { handlers[loading] = typeof h === "function" ? h : h.handler; return { finished: Promise.resolve(), shutdown: async () => {} }; };
-for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "dni-cleanup"]) {
+for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "dni-cleanup", "email-send"]) {
   loading = n;
   await import(`../../supabase/functions/${n}/index.ts`);
 }
@@ -444,6 +448,65 @@ ok("D24) las del alta reciente siguen (en disco y en la base)", (await Promise.a
 dj = await body(await dniRun());
 ok("D24) una segunda corrida no tiene nada que borrar", dj.files === 0 && dj.failed === 0, JSON.stringify(dj));
 
+// ---------- Bloque 3: email-send manda los avisos por email con Resend (un Resend falso) ----------
+const emailRun = (key = CRON) => fn("email-send", new Request("https://fn.test/functions/v1/email-send", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
+await q("delete from email_outbox");   // lo que dejaron las secciones de arriba (clientes sin email confirmado)
+const mailUser = crypto.randomUUID();
+await q("insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values ($1, 'cliente@fn.test', '{\"full_name\":\"Cliente Mail\"}', now())", [mailUser]);
+const aviso = async (kind: string, ref: string, texto: string) => {
+  const m = Number(await one("insert into client_messages (provider_id, user_id, body, kind, ref) values ($1, $2, $3, $4, $5) returning id", [pid, mailUser, texto, kind, ref]));
+  return Number(await one("select id from email_outbox where message_id = $1", [m]));
+};
+const estado = async (id: number) => (await q("select status, attempts, provider_message_id, last_error from email_outbox where id = $1", [id]))[0];
+const LINK = "https://tutiempo.com.ar/" + (await one("select slug from providers where id = $1", [pid]));
+const eRev = await aviso("rev", "999001", `¡Gracias por venir! <script>alert(1)</script> ¿Nos dejás tu opinión? ${LINK}.`);
+const eBday = await aviso("bday", "2026", "¡Feliz cumpleaños, Cliente! Este mes tenés 15% off.");
+r = await emailRun("otra-clave-cualquiera-de-mas-de-32-caracteres");
+ok("email-send sin la clave del cron: 403 y no manda nada", r.status === 403 && rs.enviados.length === 0);
+Deno.env.delete("RESEND_API_KEY");
+r = await emailRun();
+ok("email-send sin RESEND_API_KEY: 500 (config) y no toma los pendientes", r.status === 500 && (await body(r)).error === "config" && (await estado(eRev)).status === "pending"
+   && Number(await one("select count(*) from email_outbox where next_attempt_at > now()")) === 0);
+Deno.env.set("RESEND_API_KEY", RESEND_KEY);
+r = await emailRun();
+let ej = await body(r);
+ok("email-send manda los pendientes", r.status === 200 && ej.sent === 2 && ej.failed === 0, JSON.stringify(ej));
+const mRev = rs.enviados.find((e) => e.clave === `tt-email-${eRev}`)?.body;
+ok("…con remitente, respuestas a soporte, destinatario y asunto", mRev?.from === "TuTiempo <avisos@tutiempo.com.ar>" && mRev?.reply_to === "soporte@tutiempo.com.ar"
+   && JSON.stringify(mRev?.to) === JSON.stringify(["cliente@fn.test"]) && mRev?.subject === "¿Qué tal tu turno en Prov Funciones?", JSON.stringify(mRev));
+ok("…con el texto de la app escapado (nada de HTML del texto) y el link tocable", mRev?.html.includes("&lt;script&gt;alert(1)&lt;/script&gt;") && !mRev?.html.includes("<script>")
+   && mRev?.html.includes(`<a href="${LINK}" style="color:#4338ca">${LINK}</a>.`));
+ok("…y el pie con el link a Mi perfil para dejar de recibirlos (también en el texto plano)",
+   /<a href="https:\/\/tutiempo\.com\.ar\/cuenta"[^>]*>Dejar de recibir estos emails<\/a>/.test(mRev?.html ?? "")
+   && mRev?.text.includes("Dejar de recibir estos emails: https://tutiempo.com.ar/cuenta") && mRev?.text.startsWith("¡Gracias por venir! <script>"));
+ok("…y en la base quedan enviados, con el id de Resend", (await estado(eRev)).status === "sent" && /^re_/.test((await estado(eRev)).provider_message_id)
+   && (await estado(eBday)).status === "sent");
+ej = await body(await emailRun());
+ok("una segunda corrida no manda nada otra vez", ej.sent === 0 && ej.failed === 0 && rs.enviados.length === 2);
+// Resend caído: se reintenta (con la misma clave de idempotencia)
+const eRe = await aviso("rev", "999002", "Aviso que se reintenta");
+rs.fallas.push({ status: 500, message: "internal_server_error" });
+ej = await body(await emailRun());
+const st1 = await estado(eRe);
+ok("si Resend falla, queda pendiente con el error para reintentar", ej.failed === 1 && st1.status === "pending" && st1.attempts === 1 && /^500/.test(st1.last_error));
+await q("update email_outbox set next_attempt_at = now() where id = $1", [eRe]);
+ej = await body(await emailRun());
+ok("…y el reintento sale, con la misma clave", ej.sent === 1 && (await estado(eRe)).status === "sent"
+   && rs.pedidos.filter((k) => k === `tt-email-${eRe}`).length === 2 && rs.enviados.filter((e) => e.clave === `tt-email-${eRe}`).length === 1);
+// salió pero la respuesta se perdió: el reintento no manda un segundo email
+const eDup = await aviso("rev", "999003", "Aviso que ya había salido");
+await fetch(`${rs.url}/emails`, { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Idempotency-Key": `tt-email-${eDup}` }, body: "{}" });
+ej = await body(await emailRun());
+ok("si ya había salido (respuesta perdida), el reintento no manda otro: idempotencia", ej.sent === 1
+   && rs.enviados.filter((e) => e.clave === `tt-email-${eDup}`).length === 1 && (await estado(eDup)).status === "sent");
+const eMal = await aviso("rev", "999004", "Aviso con dirección rechazada");
+rs.fallas.push({ status: 422, message: "Invalid `to` field" });
+await body(await emailRun());
+ok("una dirección que Resend rechaza (422) queda fallida, sin reintentos", (await estado(eMal)).status === "failed" && (await estado(eMal)).attempts === 1);
+await q("update profiles set email_notices = false where id = $1", [mailUser]);
+const eOff = await aviso("rev", "999005", "No va");
+ok("con la opción apagada en Mi perfil, el aviso no entra a la cola", Number.isNaN(eOff) && rs.enviados.length === 4);
+
 const cfg = new URL("./deno.json", import.meta.url).pathname;
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;
 const leer = async (extra: Record<string, string>) => {
@@ -457,5 +520,6 @@ ok("con MP_API_URL (solo pruebas), usan esa", (await leer({ MP_API_URL: "http://
 
 await db.end();
 await mp.cerrar();
+await rs.cerrar();
 console.log(F ? `${F} FALLAS` : "TODO OK");
 Deno.exit(F ? 1 : 0);
