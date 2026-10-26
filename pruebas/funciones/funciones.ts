@@ -508,8 +508,11 @@ const eOff = await aviso("rev", "999005", "No va");
 ok("con «Recordatorios y novedades» apagada, la reseña no entra a la cola", Number.isNaN(eOff) && rs.enviados.length === 4);
 const eCan = await aviso("cancel", "999006", "Prov Funciones tuvo que cancelar tu turno del lunes 2/11 a las 10:00.");
 ej = await body(await emailRun());
-ok("…pero una cancelación igual sale por email", !Number.isNaN(eCan) && ej.sent === 1 && (await estado(eCan)).status === "sent"
-   && rs.enviados.some((e) => e.clave === `tt-email-${eCan}`));
+const mCan = rs.enviados.find((e) => e.clave === `tt-email-${eCan}`)?.body;
+ok("…pero una cancelación igual sale por email", !Number.isNaN(eCan) && ej.sent === 1 && (await estado(eCan)).status === "sent" && !!mCan);
+ok("…con el pie de los avisos que llegan siempre: «Recordatorios y novedades: Mi perfil» (no «Dejar de recibir»)",
+   /Recordatorios y novedades: <a href="https:\/\/tutiempo\.com\.ar\/cuenta"[^>]*>Mi perfil<\/a>/.test(mCan?.html ?? "") && !mCan?.html.includes("Dejar de recibir")
+   && mCan?.text.includes("Recordatorios y novedades: Mi perfil (https://tutiempo.com.ar/cuenta)") && !mCan?.text.includes("Dejar de recibir"));
 await q("update profiles set email_notices = true where id = $1", [mailUser]);
 // texto que viene del prestador con HTML (plantilla, nombre del negocio y dirección): todo escapado y ningún link ajeno
 const [nombre0, dir0] = Object.values((await q("select name, address from providers where id = $1", [pid]))[0]);

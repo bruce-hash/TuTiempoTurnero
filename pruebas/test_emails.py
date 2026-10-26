@@ -82,7 +82,7 @@ def cola(bid=None, kind=None):
 
 
 def due():
-    r = q("select id, to_email, subject, body, provider_name, site_url from emails_due(100)", role="service_role")
+    r = q("select id, to_email, subject, body, provider_name, site_url, optional from emails_due(100)", role="service_role")
     return r if err(r) else {x[0]: x[1:] for x in r}
 
 
@@ -135,7 +135,8 @@ D = due()
 ok("emails_due: dirección, asunto, texto (el mismo de la app), negocio y dirección del sitio",
    D.get(outbox_id(b1, "conf")) == ("ana@mail.test", "Tu turno en Barbería Mail quedó confirmado",
                                     one("select body from client_messages where kind = 'conf' and ref = %s", (str(b1),)),
-                                    "Barbería Mail", "https://tutiempo.com.ar"))
+                                    "Barbería Mail", "https://tutiempo.com.ar", False))   # la confirmación no se puede apagar
+ok("…los recordatorios sí se pueden apagar (optional)", D.get(outbox_id(b24, "r24"), [None] * 6)[5] is True and D.get(outbox_id(b2, "r2"), [None] * 6)[5] is True)
 ok("…asuntos de los recordatorios", D.get(outbox_id(b24, "r24"), [None, None])[1] == "Mañana tenés turno en Barbería Mail"
    and D.get(outbox_id(b2, "r2"), [None, None])[1] == "Hoy a las " + one("select to_char(starts_at at time zone 'America/Argentina/Buenos_Aires', 'HH24:MI') from bookings where id = %s", (b2,)) + " tenés turno en Barbería Mail")
 ok("…y los reserva: una segunda corrida al mismo tiempo no los manda otra vez", due() == {})

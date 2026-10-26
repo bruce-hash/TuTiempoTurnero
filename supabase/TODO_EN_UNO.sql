@@ -4773,8 +4773,10 @@ create trigger client_messages_email after insert on public.client_messages
 -- Toma hasta p_limit pendientes (los reserva 15 minutos para que dos corridas no manden lo mismo) y descarta los que
 -- ya no van: opcional que el cliente apagó, sin email confirmado, recordatorio de un turno que ya empezó o no está
 -- confirmado, o vencidos.
+-- optional: si el cliente lo puede apagar en Mi perfil (cambia el pie del email)
+drop function if exists public.emails_due(int);
 create or replace function public.emails_due(p_limit int default 50)
-returns table (id bigint, to_email text, subject text, body text, provider_name text, site_url text)
+returns table (id bigint, to_email text, subject text, body text, provider_name text, site_url text, optional boolean)
 language plpgsql security definer set search_path = public as $$
 declare r record; skip text; subj text; site text := (select s.site_url from public.app_settings s where s.id);
 begin
@@ -4813,6 +4815,7 @@ begin
     end;
     update public.email_outbox set next_attempt_at = now() + interval '15 minutes' where email_outbox.id = r.id;
     id := r.id; to_email := r.email; subject := left(subj, 200); body := r.body; provider_name := r.pname; site_url := site;
+    optional := public.email_optional(r.kind);
     return next;
   end loop;
 end $$;

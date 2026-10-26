@@ -13,7 +13,7 @@ const API = (Deno.env.get("EMAIL_API_URL") ?? "").replace(/\/+$/, "") || "https:
 // Resend acepta 2 pedidos por segundo
 const GAP_MS = Number(Deno.env.get("EMAIL_GAP_MS") ?? "550");
 
-type Due = { id: number; to_email: string; subject: string; body: string; provider_name: string; site_url: string };
+type Due = { id: number; to_email: string; subject: string; body: string; provider_name: string; site_url: string; optional: boolean };
 
 Deno.serve(async (req) => {
   const denied = cronOnly(req);

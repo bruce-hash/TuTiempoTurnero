@@ -345,8 +345,8 @@ la cuenta, recuperar la contraseña). Un solo dominio para los dos entornos; cla
 - [ ] Devolver un pago desde el panel de Mercado Pago del vendedor de prueba: el turno queda cancelado
       ("Pago devuelto por Mercado Pago") y al prestador le llega el aviso.
 - [ ] Emails (Bloque 3): llegan la confirmación, el recordatorio de 24 h y una cancelación, con el mismo texto que en Mis
-      turnos y desde `avisos@tutiempo.com.ar`; responder llega a `soporte@`; "Dejar de recibir estos emails" lleva a Mi
-      perfil. Con "Recordatorios y novedades por email" apagada no llegan los recordatorios, la reseña ni el
+      turnos y desde `avisos@tutiempo.com.ar`; responder llega a `soporte@`; el pie lleva a Mi perfil ("Dejar de recibir
+      estos emails" en el recordatorio; "Recordatorios y novedades: Mi perfil" en la confirmación y la cancelación). Con "Recordatorios y novedades por email" apagada no llegan los recordatorios, la reseña ni el
       cumpleaños, pero la confirmación y las cancelaciones sí (y todos los avisos siguen en Mis turnos).
 - [ ] Sellos: marcar "Asistió" suma sello; canjear el premio.
 
