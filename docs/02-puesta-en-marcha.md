@@ -156,6 +156,71 @@ dice con qué versión se cifró (`v1:…`, `v2:…`).
    cuentas cifradas con ella que vuelva a conectar Mercado Pago (Perfil → Cobros). Las devoluciones de esas cuentas
    quedan pendientes hasta que reconecten la misma cuenta.
 
+### 2b. Emails con Resend (Bloque 3, D14)
+Resend manda los avisos de los turnos por email (la Edge Function `email-send`) y hace de SMTP de Supabase Auth (activar
+la cuenta, recuperar la contraseña). Un solo dominio para los dos entornos; claves distintas por entorno y por uso.
+1. **Cuenta.** resend.com → crear la cuenta con un email de TuTiempo (no uno personal). El plan gratis alcanza para la
+   prueba (3.000 emails por mes, 100 por día); para producción, el plan Pro (sin tope diario). Verificá los precios
+   en resend.com/pricing.
+2. **Dominio.** Domains → Add Domain → `tutiempo.com.ar`, región **São Paulo (sa-east-1)**. Resend muestra los
+   registros DNS que hay que cargar.
+3. **Registros DNS en Hostinger.** hPanel → Dominios → `tutiempo.com.ar` → DNS / Nameservers → Administrar registros
+   DNS. Antes, fijate que los nameservers sean los de Hostinger (si apuntan a otro lado, como Cloudflare, los registros
+   van ahí). Copiá los valores **exactos** que muestra Resend; quedan así:
+
+   | Tipo | Nombre (en Hostinger) | Valor | Prioridad |
+   |---|---|---|---|
+   | TXT | `resend._domainkey` | `p=MIGf…` (la clave DKIM que da Resend) | |
+   | MX | `send` | `feedback-smtp.sa-east-1.amazonses.com` (el de la región elegida) | 10 |
+   | TXT | `send` | `v=spf1 include:amazonses.com ~all` | |
+   | TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:soporte@tutiempo.com.ar` (solo si no hay uno) | |
+
+   - Hostinger completa el dominio: en Nombre va `send`, no `send.tutiempo.com.ar`.
+   - **No toques** los MX ni el SPF de la raíz (`@`): son del correo actual y del sitio Laravel. Los de Resend van en
+     el subdominio `send` y no los pisan.
+   - Si ya existe un `_dmarc`, no agregues otro.
+   - Después: Resend → Domains → Verify. Suele tardar minutos (hasta 48 h). Si dice "region-mismatch", el MX no es el
+     de la región del dominio.
+   - `soporte@tutiempo.com.ar` tiene que existir (casilla o reenvío en Hostinger → Emails): ahí llegan las respuestas.
+4. **Dos claves por entorno.** API Keys → Create API Key, con permiso **Sending access** y solo el dominio
+   `tutiempo.com.ar`. Cada una se ve una sola vez: pegala directo donde va (nunca en el repo ni en un chat).
+   - `prueba-funcion` → secreto `RESEND_API_KEY` de la función (paso 5).
+   - `prueba-auth` → contraseña del SMTP de Auth (paso 6).
+   Separadas, se revoca una sin cortar la otra. Para producción, otras dos (`prod-funcion`, `prod-auth`).
+5. **La función.** Desde la carpeta del repo:
+   ```bash
+   supabase secrets set RESEND_API_KEY=<prueba-funcion> EMAIL_FROM="TuTiempo <avisos@tutiempo.com.ar>" \
+     EMAIL_REPLY_TO=soporte@tutiempo.com.ar
+   supabase functions deploy email-send --no-verify-jwt
+   ```
+   Usa la misma `CRON_SECRET` y la misma `tt_project_url` de Vault que `mp-refunds` (paso 6 de Mercado Pago): no hay
+   que cargar nada más en Vault. **Nunca** cargues `EMAIL_API_URL` ni `EMAIL_GAP_MS`: son solo para las pruebas.
+6. **SMTP de Auth.** Supabase → Authentication → Emails → SMTP Settings → Enable Custom SMTP:
+   - Sender email `avisos@tutiempo.com.ar`, Sender name `TuTiempo`.
+   - Host `smtp.resend.com`, Port `465`, Username `resend`, Password: la clave `prueba-auth`.
+   - Authentication → Rate Limits: con SMTP propio, Supabase arranca en 30 emails de Auth por hora; subilo si hace falta.
+   Las plantillas de los emails de Auth (PASO 2 del LEEME) siguen igual.
+7. **Verificar.**
+   - Crear una cuenta: el email de activación llega desde `avisos@tutiempo.com.ar`.
+   - Reservar un turno con esa cuenta: en 5 minutos como mucho llega la confirmación por email.
+   - En el SQL Editor:
+     ```sql
+     select kind, status, skip_reason, attempts, last_error from email_outbox order by id desc limit 10;
+     select status_code, content from net._http_response order by created desc limit 3;  -- 200 y {"sent":…,"failed":0}
+     ```
+   - `skip_reason`: `opt_out` (el cliente los apagó en Mi perfil), `no_email` (email sin confirmar), `stale` (el turno
+     ya empezó o ya no está confirmado).
+   - `last_error` con 403 de Resend: la clave no sirve o el dominio no está verificado. Un 403 en `net._http_response`:
+     la `CRON_SECRET` de Vault no es igual a la de las funciones. Un 500 con "config": falta `RESEND_API_KEY` o `EMAIL_FROM`.
+   - En Resend → Emails se ve cada envío, entrega o rebote.
+
+#### Bloque 3 (después del 2b)
+1. Resend: pasos 1 a 6 de arriba (la función, con sus secretos, antes de la migración).
+2. `supabase db push` (o `TODO_EN_UNO.sql`): `20261026033854_emails.sql`. Arma la tarea `tt-emails` (cada 5 minutos).
+   Los avisos que ya existían no se mandan: solo los nuevos.
+3. Frontend: `npm run build` y subir `dist/` (Mi perfil → Avisos por email).
+4. Verificar (paso 7) y `select jobname, schedule from cron.job where jobname = 'tt-emails';` → `*/5 * * * *`.
+
 ### 3. Hostinger (subdominio de prueba)
 1. hPanel → Dominios → Subdominios → crear `prueba.tutiempo.com.ar`. Activar SSL.
 2. En tu compu (Node 22, ver `.nvmrc`): `npm ci` y `npm run build` → carpeta `dist/`.
@@ -190,12 +255,15 @@ dice con qué versión se cifró (`v1:…`, `v2:…`).
       de un turno ya pagado se devuelve igual, y reconectar la misma cuenta vuelve a cobrar.
 - [ ] Devolver un pago desde el panel de Mercado Pago del vendedor de prueba: el turno queda cancelado
       ("Pago devuelto por Mercado Pago") y al prestador le llega el aviso.
-- [ ] Recordatorio por email 24 h antes (bloque 3).
+- [ ] Emails (Bloque 3): llegan la confirmación, el recordatorio de 24 h y una cancelación, con el mismo texto que en Mis
+      turnos y desde `avisos@tutiempo.com.ar`; responder llega a `soporte@`; "Dejar de recibir estos emails" lleva a Mi
+      perfil, y con la opción apagada no llega ninguno más (los avisos siguen en Mis turnos).
 - [ ] Sellos: marcar "Asistió" suma sello; canjear el premio.
 
 ## Etapa B · Producción
 1. Supabase: proyecto nuevo `tutiempo` en plan **Pro** (backups diarios). Mismos pasos 1 a 7.
-2. Auth: SMTP propio (Resend o Brevo, D14) y Google con el dominio definitivo. CAPTCHA (Turnstile) activado.
+2. Auth: SMTP propio (Resend, D14: paso 2b con las claves `prod-funcion` y `prod-auth`) y Google con el dominio
+   definitivo. CAPTCHA (Turnstile) activado.
 3. Mercado Pago: credenciales de producción de la misma aplicación; nueva clave de webhook; `MP_OWNER_USER_ID` de la
    cuenta real de TuTiempo; `CRON_SECRET` y `MP_TOKENS_KEY` **nuevas** (no las del entorno de prueba);
    `supabase secrets set` en el proyecto de producción, deploy de las 4 funciones y Vault (pasos 4 a 6 de Mercado Pago).

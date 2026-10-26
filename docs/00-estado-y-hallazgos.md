@@ -19,6 +19,7 @@ Auditoría de Bruno (con Claude) sobre el paquete del cliente, octubre 2026.
 | Bloque A2: nombres claros y comentarios (merge `9899126` → merge `6d7b5a0`) | Código idéntico módulo por módulo: árbol de sintaxis con las variables locales en nombres canónicos y sin comentarios (`tools/legibilidad/`, borrado al aprobar A2). Variables locales de una letra: 2834 → 0. Crawl idéntico toque por toque, e2e 107/107, comparación 36/36 |
 | Bloque 2a: seguridad y datos | H12, H13, H14, H18, H26 y H29 resueltos. Llaves de Mercado Pago cifradas (AES-256-GCM), cron de devoluciones con Vault y `CRON_SECRET`, limpieza diaria, demo y seed ficticios. Despliegue en `docs/02` |
 | Bloque 2b: correcciones de la app | H08, H10, H11, H15, H17, H21, H22, H24, H25 (D22), H27 y H28 resueltos. Además: cuentas de Mercado Pago con error en Para revisar y cuentas de demo en `@tutiempo.demo`. Despliegue en `docs/02` |
+| Bloque 3: avisos por email | H07 resuelto (D10, D14, D25): Resend, cola `email_outbox`, Edge Function `email-send` cada 5 minutos, opción en Mi perfil. `pruebas/test_emails.py` y la función real contra un Resend falso en el CI. Despliegue en `docs/02` |
 
 ## Hallazgos
 
@@ -66,9 +67,14 @@ el id ni la fecha de la devolución hecha. Registrar cada intento y resultado, y
 firma con la clave de la aplicación de TuTiempo los avisos de pagos cobrados con la llave del prestador
 (`notification_url` de la preferencia). Si no, ningún turno se confirmaría.
 
-### H07 · Media · Recordatorios solo dentro de la app
+### H07 · Media · Recordatorios solo dentro de la app (resuelto en el Bloque 3)
 `send_scheduled_notices` crea avisos en `client_messages`: quien no abre la app no se entera del recordatorio de
 24 h / 2 h. Agregar envío por email (y opcionalmente Web Push). Afecta directamente las faltas.
+**Bloque 3:** cada aviso de confirmación, recordatorio (24 h y 2 h), reseña, cumpleaños y cancelación entra a
+`email_outbox` (trigger en `client_messages`, una sola vez por turno y tipo) y la Edge Function `email-send` lo manda
+con Resend cada 5 minutos, con el mismo texto, reintentos y clave de idempotencia. Solo a emails confirmados; un
+recordatorio no sale si el turno ya empezó o se canceló; el cliente los apaga en Mi perfil. El turno que el sistema no
+pudo confirmar (expired con devolución) ahora también deja su aviso en la app. Web Push sigue afuera (prompt original).
 
 ### H08 · Media · Precios ×100 con coma decimal (heredado del prototipo · resuelto en el Bloque 2b)
 Los campos de precio usan `parseInt(valor.replace(/\D/g, ""))`: "12500,50" se guarda como 1.250.050.
@@ -297,3 +303,10 @@ en vivo lleva al detalle del turno, `/turno/<id>`, sin ese modo; lo prueba `prue
   recalculado por la base) y conserve `payment_id`, seña y comisión;
 - reglas de negocio a decidir: hasta cuánto antes del turno se puede cambiar, cuántas veces, y qué pasa con la seña si
   el horario nuevo tiene otro precio (happy hour, adicionales).
+
+### F03 · Aviso "Ya te toca tu próximo turno"
+La plantilla `back` ("{nombre}, ya te toca tu próximo turno. ¿Te reservo?…") existe en `message_templates` (se crea con
+cada prestador y se puede editar y apagar), pero nada la manda: ni dentro de la app ni por email. Queda afuera del
+Bloque 3 (D25). Para hacerlo: decidir cuándo "ya le toca" a un cliente (por ejemplo, la frecuencia de sus últimos turnos
+con ese prestador o un intervalo por servicio), armarlo en `send_scheduled_notices` con su `ref` (una vez por ciclo) y
+sumarlo a los tipos de `email_outbox`.
