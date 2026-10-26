@@ -408,6 +408,8 @@ ok("reactivar sin las fotos del DNI: rechazado", err(q("select admin_set_provide
 ok("el dueño sube el frente en su carpeta", not err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{nails_owner}/frente-1.jpg",), uid=nails_owner)))
 ok("…no en otra carpeta", err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{cli1}/frente-1.jpg",), uid=nails_owner)))
 ok("…ni con otro nombre", err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{nails_owner}/selfie.jpg",), uid=nails_owner)))
+ok("…ni un usuario que no es dueño de un prestador, aunque sea en su carpeta (D24 borraría esa foto)",
+   err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{cli1}/frente-1.jpg",), uid=cli1)))
 ok("…y nadie más ve las fotos (ni el dueño)", q("select count(*) from storage.objects where bucket_id='dni'", uid=nails_owner)[0][0] == 0
    and q("select count(*) from storage.objects where bucket_id='dni'", uid=cli1)[0][0] == 0)
 ok("solo con el frente: rechazado", err(q("select admin_set_provider(%s,'active',true)", (pid3,), uid=adm), "dni_photos_missing"))
@@ -490,6 +492,8 @@ ok("D24: alta reciente: sus fotos no se borran", due(baja) == [])
 q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
 q("select vault.create_secret('https://proyecto.supabase.co/', 'tt_project_url')"); q("select vault.create_secret('secreto-del-cron', 'tt_cron_secret')")
 ok("D24: la baja del prestador se hace igual", not err(q("select delete_my_provider()", uid=baja)))
+ok("D24: dado de baja, ya no puede subir fotos (su carpeta queda sin prestador)",
+   err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{baja}/frente-9.jpg",), uid=baja)))
 ok("D24: …sus fotos se borran en el momento", due(baja) == [("baja", sorted([f"{baja}/frente-1.jpg", f"{baja}/dorso-1.jpg"]))])
 rq = q("select url, headers->>'Authorization' from net.requests")
 ok("D24: …y la baja llama ya a dni-cleanup con la clave del cron", rq == [("https://proyecto.supabase.co/functions/v1/dni-cleanup", "Bearer secreto-del-cron")])
