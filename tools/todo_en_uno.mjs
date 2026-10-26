@@ -5,8 +5,9 @@
 //   node tools/todo_en_uno.mjs --check  → no escribe nada; sale con 1 si TODO_EN_UNO.sql no es idéntico a las migraciones
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIG = path.join(ROOT, "supabase", "migrations");
 const OUT = path.join(ROOT, "supabase", "TODO_EN_UNO.sql");
 const check = process.argv.includes("--check");

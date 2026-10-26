@@ -7,9 +7,10 @@
 // Uso: npm run test:sin-demo   (compila dist/ y corre esta prueba)
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { build } from "vite";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const rel = (p) => path.relative(ROOT, p);
 const listar = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? listar(path.join(dir, d.name)) : [path.join(dir, d.name)]));
 let fallas = 0;

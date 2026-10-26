@@ -9,12 +9,13 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import { chromium } from "playwright";
 import pg from "pg";
 import { levantar } from "./entorno_e2e.mjs";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REF = "1368349";
 const AHORA = new Date(process.env.TT_AHORA || "2026-10-21T15:00:00-03:00");
 const SALIDA = path.join(ROOT, ".build", "comparar");

@@ -3,6 +3,7 @@
 // Corre dentro de pruebas/entorno_e2e.mjs (que da E2E_URL, E2E_PG y E2E_SECRET):
 //   npm run test:funciones
 import pg from "npm:pg@8.12.0";
+import { fileURLToPath } from "node:url";
 import { mpFalso } from "./mp_falso.ts";
 import { resendFalso } from "./resend_falso.ts";
 
@@ -538,7 +539,7 @@ ok("…y todos los links son del sitio: el del aviso, el único botón (Ver mis 
 await q("update providers set name = $1, address = $2 where id = $3", [nombre0, dir0, pid]);
 await q("update message_templates set body = $1 where provider_id = $2 and key = 'rev'", [plantilla0, pid]);
 
-const cfg = new URL("./deno.json", import.meta.url).pathname;
+const cfg = fileURLToPath(new URL("./deno.json", import.meta.url));
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;
 const leer = async (extra: Record<string, string>) => {
   const env = { ...Deno.env.toObject(), ...extra };
