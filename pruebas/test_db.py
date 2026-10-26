@@ -616,6 +616,19 @@ ok("…y sí por uno libre", not err(q("update providers set slug = 'turnos-viej
 ok("…una vez libre, tampoco puede volver al reservado", err(q("update providers set slug = 'turnos' where id = %s", (pv,)), "reserved_slug"))
 ok("a un prestador común no se le puede poner un slug reservado", err(q("update providers set slug = 'Panel' where id = %s", (pid2,)), "reserved_slug"))
 
+# Bloque 2b (H10): el DNI de un prestador eliminado no cuenta como duplicado y no se borra
+q("update provider_private set dni_number = '30111560' where provider_id = %s", (pz,))   # dato viejo de un eliminado
+ok("el prestador de prueba está eliminado", q("select status from providers where id = %s", (pz,))[0][0] == "deleted")
+nd = mkuser("dni-elim@test.ar", "Dni Elim")
+ok("un alta con el DNI de un prestador eliminado se acepta", not err(q("select register_provider('Dni Elim', 'x', array['b'], '1', '30111560')", uid=nd)))
+ok("…y al eliminado no se le borra el dato", q("select dni_number from provider_private where provider_id = %s", (pz,))[0][0] == "30111560")
+ok("pero otro alta con ese DNI (ahora de un prestador activo o pendiente) se rechaza",
+   err(q("select register_provider('Dni Elim 2', 'x', array['b'], '1', '30111560')", uid=mkuser("dni-elim2@test.ar", "Dni Elim 2")), "dni_taken"))
+
+# Bloque 2b: un gasto sin fecha queda en el día de Buenos Aires (antes current_date: el día en UTC)
+ex = q("insert into expenses (provider_id, concept, amount, category) values (%s, 'Sin fecha', 100, 'Otros') returning spent_on", (pid3,), uid=nails_owner)
+ok("un gasto cargado sin fecha queda en el día de Buenos Aires", not err(ex) and ex[0][0] == q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date")[0][0])
+
 # Bloque 2b (H24): los links de los avisos salen de app_settings.site_url, no de un dominio escrito a mano
 ok("H24: la dirección del sitio la cambia solo el admin", err(q("select admin_set_site_url('https://otro.com')", uid=prov), "forbidden")
    and err(q("update app_settings set site_url = 'https://otro.com'", uid=adm)) and err(q("select admin_set_site_url('https://otro.com')", role="anon")))

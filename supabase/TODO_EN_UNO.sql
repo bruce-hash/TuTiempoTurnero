@@ -3872,15 +3872,9 @@ do $$ begin
 end $$;
 
 -- ---------- Cuentas activas siempre con mp_user_id (H26) ----------
--- (solo si todavía no la tiene: una migración posterior puede haber sumado más tipos y esto se puede volver a correr)
-do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'provider_notices_kind_check'
-                   and pg_get_constraintdef(oid) like '%mp_reconnect%') then
-    alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
-    alter table public.provider_notices add constraint provider_notices_kind_check
-      check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect'));
-  end if;
-end $$;
+alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
+alter table public.provider_notices add constraint provider_notices_kind_check
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect'));
 -- las activas sin id (llaves viejas copiadas de provider_secrets) dejan de cobrar y el prestador recibe el aviso
 do $$ declare r record; begin
   for r in update public.mp_accounts set status = 'refunds_only', disconnected_at = now(),
@@ -3964,7 +3958,7 @@ end $$;
 -- TuTiempo · Bloque 2b · DNI del prestador (H10)
 -- - El DNI ya no viaja en los metadatos de la cuenta (auth.users): lo guarda el dueño con set_my_dni() (o el alta,
 --   register_provider, cuando ya hay sesión). Se borra el que haya quedado en raw_user_meta_data.
--- - Número: 7 u 8 dígitos, único entre prestadores no eliminados (los eliminados ya no lo guardan: provider_teardown).
+-- - Número: 7 u 8 dígitos, único entre prestadores no eliminados (trigger provider_private_dni_unique).
 -- - Fotos: frente y dorso en el bucket privado "dni", en la carpeta del dueño (<usuario>/frente-<n>.<ext> y
 --   <usuario>/dorso-<n>.<ext>). Sube solo el dueño, las ve solo el admin (URL firmada, ver m-admin.js).
 -- - Activar = verificar: admin_set_provider(…, 'active') exige número y las dos fotos, marca dni_verified y guarda
@@ -3977,20 +3971,35 @@ alter table public.provider_private add column if not exists dni_verified_at tim
 alter table public.provider_private add column if not exists dni_verified_by uuid references auth.users(id) on delete set null;
 
 -- ---------- DNI único entre prestadores no eliminados ----------
--- los eliminados no conservan el DNI (provider_teardown lo borra); por las dudas, los que hayan quedado
-update public.provider_private pp set dni_number = null
-  from public.providers p where p.id = pp.provider_id and p.status = 'deleted' and pp.dni_number is not null;
+-- El estado está en providers, así que no alcanza un índice único: lo controla un trigger, con un candado por número
+-- para que dos altas a la vez con el mismo DNI no pasen las dos. Los eliminados no cuentan y no se les borra nada.
 do $$
 declare dup text;
 begin
   select string_agg(format('DNI terminado en %s (prestadores %s)', right(dni_number, 3), ids), '; ') into dup
-    from (select dni_number, string_agg(provider_id::text, ', ' order by provider_id) as ids
-            from public.provider_private where dni_number is not null group by dni_number having count(*) > 1) d;
+    from (select pp.dni_number, string_agg(pp.provider_id::text, ', ' order by pp.provider_id) as ids
+            from public.provider_private pp join public.providers p on p.id = pp.provider_id
+           where pp.dni_number is not null and p.status <> 'deleted'
+           group by pp.dni_number having count(*) > 1) d;
   if dup is not null then
     raise exception 'dni_duplicado: hay prestadores con el mismo DNI (%). Resolverlo a mano antes de esta migración (docs/02).', dup;
   end if;
 end $$;
-create unique index if not exists provider_private_dni_unique on public.provider_private (dni_number) where dni_number is not null;
+create or replace function public.provider_private_dni_unique() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.dni_number is not null and (tg_op = 'INSERT' or new.dni_number is distinct from old.dni_number) then
+    perform pg_advisory_xact_lock(hashtext('tt-dni:' || new.dni_number));
+    if exists (select 1 from public.provider_private pp join public.providers p on p.id = pp.provider_id
+                where pp.dni_number = new.dni_number and pp.provider_id <> new.provider_id and p.status <> 'deleted') then
+      raise exception 'dni_taken' using errcode = 'unique_violation';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists provider_private_dni_unique on public.provider_private;
+create trigger provider_private_dni_unique before insert or update of dni_number on public.provider_private
+  for each row execute function public.provider_private_dni_unique();
 
 -- ---------- Fotos cargadas (frente y dorso) ----------
 create or replace function public.dni_photos(p_owner uuid) returns jsonb
@@ -4046,7 +4055,8 @@ begin
   if p_categories is null or array_length(p_categories,1) is null then raise exception 'category_required'; end if;
   if array_length(p_categories,1) > 6 then raise exception 'too_many_categories'; end if;
   if p_dni is not null and p_dni !~ '^[0-9]{7,8}$' then raise exception 'bad_dni'; end if;
-  if p_dni is not null and exists (select 1 from public.provider_private where dni_number = p_dni) then raise exception 'dni_taken'; end if;
+  if p_dni is not null and exists (select 1 from public.provider_private pp join public.providers pr on pr.id = pp.provider_id
+                                    where pp.dni_number = p_dni and pr.status <> 'deleted') then raise exception 'dni_taken'; end if;
   select id into cid from public.cities where slug = p_city;
   if cid is null then raise exception 'bad_city'; end if;
   base := trim(both '-' from regexp_replace(lower(extensions.unaccent(p_name)), '[^a-z0-9]+', '-', 'g'));
@@ -4140,7 +4150,8 @@ end $$;
 -- (en 0003, "grant select, update (phone, monthly_goal)" daba select sobre toda la fila)
 revoke select on public.provider_private from anon, authenticated;
 grant select (provider_id, phone, monthly_goal, mp_connected, mp_user_id) on public.provider_private to authenticated;
-revoke execute on function public.dni_photos(uuid), public.set_my_dni(text), public.my_dni_status() from public, anon, authenticated;
+revoke execute on function public.dni_photos(uuid), public.set_my_dni(text), public.my_dni_status(), public.provider_private_dni_unique()
+  from public, anon, authenticated;
 grant execute on function public.set_my_dni(text), public.my_dni_status() to authenticated;
 
 -- ===================== 20261025200359_cobros_revision.sql =====================
@@ -4152,7 +4163,7 @@ grant execute on function public.set_my_dni(text), public.my_dni_status() to aut
 --   con confirm_payment_core, solo si sus turnos siguen en hold/expired sin pago; en la misma transacción se borra el
 --   registro de revisión y queda quién, cuándo y por qué (payments.reprocessed).
 -- - H28: cuando un pago llega tarde y se devuelve (horario ocupado, turno ya cancelado, monto de menos, sin turno), el
---   prestador recibe un aviso, uno por pago, con el total que se devuelve desde su cuenta.
+--   prestador recibe un aviso, uno por pago, con el total que se devuelve desde su cuenta (kind 'mp_refunded', ref 'tarde-…').
 -- No borra datos (salvo el registro de revisión que reemplaza el reproceso).
 -- =====================================================================
 set search_path = public, extensions;
@@ -4263,9 +4274,8 @@ begin
 end $$;
 
 -- ---------- H28: aviso al prestador de un pago tardío que se devuelve ----------
-alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
-alter table public.provider_notices add constraint provider_notices_kind_check
-  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_late_refund'));
+-- Es un aviso de pago devuelto (kind 'mp_refunded', como los de Mercado Pago) con ref 'tarde-<pago>': así no hace falta
+-- ampliar la lista de tipos de provider_notices (la fija la migración del 2a, que se puede volver a correr).
 
 create or replace function public.refunds_late_notice() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -4285,7 +4295,7 @@ begin
            when 'amount_short' then 'llegó con un monto menor al de la reserva'
            else 'no corresponde a ningún turno tuyo' end;
   insert into public.provider_notices (provider_id, kind, ref, body)
-  values (new.provider_id, 'mp_late_refund', left('tarde-' || coalesce(mp_id, new.payment_id::text), 40),
+  values (new.provider_id, 'mp_refunded', left('tarde-' || coalesce(mp_id, new.payment_id::text), 40),
           'El pago ' || coalesce('de ' || nullif(who, ''), 'n° ' || mp_id) || ' ' || why || ': se le devuelve ' ||
           public.money_txt(total) || ' desde tu cuenta de Mercado Pago. No tenés que hacer nada.')
   on conflict (provider_id, kind, ref) do update set body = excluded.body;
@@ -4444,4 +4454,13 @@ end $$;
 
 revoke execute on function public.provider_link(bigint, text), public.admin_set_site_url(text) from public, anon, authenticated;
 grant execute on function public.admin_set_site_url(text) to authenticated;
+
+-- ===================== 20261026021720_gastos_fecha_argentina.sql =====================
+-- =====================================================================
+-- TuTiempo · Bloque 2b · Fecha por defecto de un gasto en el día de Buenos Aires
+-- expenses.spent_on tomaba current_date, que en la sesión de Supabase es el día en UTC: un gasto cargado sin fecha
+-- después de las 21 de Argentina quedaba en el día siguiente (y el último día del mes, en el mes siguiente). La app
+-- siempre manda la fecha; esto cubre lo que se cargue sin ella. No cambia datos.
+-- =====================================================================
+alter table public.expenses alter column spent_on set default ((now() at time zone 'America/Argentina/Buenos_Aires')::date);
 
