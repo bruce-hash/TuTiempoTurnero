@@ -102,6 +102,9 @@ async function normalizar(page) {
     });
     // Bloque 2b (H24, cambio a propósito): en vivo, la pestaña Comisión suma "Dirección del sitio"
     document.querySelectorAll("#app #fSite").forEach((form) => form.remove());
+    // los avisos flotantes (toast, notif) duran unos segundos: según lo rápido que vaya la máquina, el del paso anterior
+    // todavía se ve o ya no. No son parte de la pantalla: se esconden en las dos versiones
+    document.querySelectorAll("#toast, #notif").forEach((el) => (el.hidden = true));
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {

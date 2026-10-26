@@ -205,10 +205,10 @@ ok("marcar asistió", q("select mark_booking(%s,'done')", (mid,), uid=prov2)[0][
 ok("la ficha suma la visita", q("select visits, total_spent from provider_clients where provider_id=%s", (pid2,), uid=prov2)[0] == (1, 10000))
 ok("prestador no puede agendar con dinero", err(q("insert into bookings (provider_id, source, status, starts_at, ends_at, price, paid_mp) values (%s,'manual','confirmed',now(),now()+interval '1 hour',1,5)", (pid2,), uid=prov2)))
 ok("bloquear y desbloquear horario", not err(q("insert into bookings (provider_id, source, status, starts_at, ends_at, service_name) values (%s,'block','confirmed', now()+interval '3 day', now()+interval '3 day 1 hour','Bloqueado') returning id", (pid2,), uid=prov2)))
-fin = q("select sum(man) from provider_finance(current_date - 1, current_date + 1)", uid=prov2)
+fin = q("select sum(man) from provider_finance((now() at time zone 'America/Argentina/Buenos_Aires')::date - 1, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 1)", uid=prov2)
 ok("finanzas del día", fin[0][0] == 10000)
-ok("otro no ve finanzas ajenas", q("select coalesce(sum(man),0) from provider_finance(current_date - 1, current_date + 1)", uid=cli1)[0][0] == 0)
-occ = q("select sum(busy_min) from provider_occupancy(current_date - 1, current_date + 1)", uid=prov2)
+ok("otro no ve finanzas ajenas", q("select coalesce(sum(man),0) from provider_finance((now() at time zone 'America/Argentina/Buenos_Aires')::date - 1, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 1)", uid=cli1)[0][0] == 0)
+occ = q("select sum(busy_min) from provider_occupancy((now() at time zone 'America/Argentina/Buenos_Aires')::date - 1, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 1)", uid=prov2)
 ok("ocupación por hora", occ[0][0] == 60)
 
 # panel privado
@@ -271,7 +271,7 @@ ok("prestador no puede marcarse Mercado Pago conectado", err(q("update provider_
 ok("prestador sí cambia su teléfono y su meta", not err(q("update provider_private set phone='2284 999', monthly_goal=900000 where provider_id=%s", (pid3,), uid=nails_owner)))
 ok("no puede registrar fotos fuera de su carpeta", err(q("insert into media (provider_id, storage_path, kind) values (%s,'1/otro.jpg','image')", (pid3,), uid=nails_owner)))
 ok("sí en su carpeta", not err(q("insert into media (provider_id, storage_path, kind) values (%s,%s,'image')", (pid3, f"{pid3}/a.jpg"), uid=nails_owner)))
-ok("lista de espera en el pasado rechazada", err(q("insert into waitlist (user_id, provider_id, day) values (%s,%s,current_date - 10)", (c3, pid3), uid=c3)))
+ok("lista de espera en el pasado rechazada", err(q("insert into waitlist (user_id, provider_id, day) values (%s,%s,(now() at time zone 'America/Argentina/Buenos_Aires')::date - 10)", (c3, pid3), uid=c3)))
 q("update bookings set status='done' where id=%s", (bid3,))
 ok("el cliente no puede escribir la respuesta del prestador", err(q("insert into reviews (provider_id, booking_id, author, stars, body, reply) values (%s,%s,'x',5,'ok','falsa')", (pid3, bid3), uid=c3)))
 rv = q("insert into reviews (provider_id, booking_id, author, stars, body) values (%s,%s,'Soy el dueño',5,'ok') returning author, reply", (pid3, bid3), uid=c3)
@@ -460,8 +460,8 @@ q("select cancel_by_client(%s)", (rn[0][0]["booking_ids"][0],), uid=c3)
 # bloquear días: cancela, avisa y deja la lista
 b29 = r3[0][0]["booking_ids"][0]
 ok("bloquear días: solo el prestador", err(q("select block_days(%s,%s,'x')", (d29, d29), uid=c3), "not_provider"))
-ok("no se bloquean días pasados", err(q("select block_days(current_date - 3, current_date - 1, 'x')", uid=nails_owner), "past_days"))
-ok("máximo 3 meses de una vez", err(q("select block_days(current_date + 1, current_date + 120, 'x')", uid=nails_owner), "range_too_long"))
+ok("no se bloquean días pasados", err(q("select block_days((now() at time zone 'America/Argentina/Buenos_Aires')::date - 3, (now() at time zone 'America/Argentina/Buenos_Aires')::date - 1, 'x')", uid=nails_owner), "past_days"))
+ok("máximo 3 meses de una vez", err(q("select block_days((now() at time zone 'America/Argentina/Buenos_Aires')::date + 1, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 120, 'x')", uid=nails_owner), "range_too_long"))
 bd = q("select block_days(%s, %s, 'Vacaciones <b>')", (d29, d29 + dt.timedelta(days=6)), uid=nails_owner)
 ok("bloquear una semana", not err(bd) and bd[0][0]["blocked"] >= 5)
 cl29 = bd[0][0]["cancelled"] if not err(bd) else []
@@ -471,7 +471,7 @@ ok("v31: la lista trae la seña pagada para que el prestador sepa cuánto devolv
 cm29 = [m for m in q("select my_messages()", uid=c3)[0][0] if m["kind"] == "cancel"]
 ok("v31: al cliente le llega el aviso: el profesional lo va a contactar por la seña ($6.000) o para otro turno", len(cm29) >= 1 and "tuvo que cancelar" in cm29[0]["body"] and "se va a comunicar con vos" in cm29[0]["body"] and "$6.000" in cm29[0]["body"] and "Te devolvemos" not in cm29[0]["body"])
 ok("v31: mis turnos marca que lo arregla el profesional", any(x["id"] == b29 and x["settle_by_provider"] for x in q("select my_bookings()", uid=c3)[0][0]))
-ok("v31: la comisión de ese turno queda en TuTiempo (cuenta en el balance)", q("select (admin_month_live(current_date)->>'commission')::int")[0][0] >= 1200)
+ok("v31: la comisión de ese turno queda en TuTiempo (cuenta en el balance)", q("select (admin_month_live((now() at time zone 'America/Argentina/Buenos_Aires')::date)->>'commission')::int")[0][0] >= 1200)
 ok("mis turnos lo muestra cancelado por el profesional", any(x["id"] == b29 and x["status"] == "cancelled_provider" for x in q("select my_bookings()", uid=c3)[0][0]))
 bz29 = q("select * from provider_busy(%s,%s,%s)", (pid3, d29, d29), role="anon")
 ok("ese día figura bloqueado para los clientes (Cerrado)", len(bz29) == 1 and bz29[0][2] is True)
@@ -479,11 +479,11 @@ ok("el motivo se guarda limpio", q("select service_name from bookings where prov
 ok("nadie puede reservar ese día", err(q("select book_slot(%s, %s)", (sv, dt.datetime.combine(d29, dt.time(15, 0), tz)), uid=cli2), "slot_taken"))
 ok("bloquear otra vez no duplica", q("select block_days(%s, %s, 'x')", (d29, d29), uid=nails_owner)[0][0]["blocked"] == 0)
 # cierres de caja
-ok("el prestador cierra la caja del día", not err(q("insert into cash_closings (provider_id, kind, period, income, cash, mp, counted) values (%s,'day',current_date,50000,30000,20000,30500)", (pid3,), uid=nails_owner)))
-ok("y el mes (el 1° del mes)", not err(q("insert into cash_closings (provider_id, kind, period, income, expenses) values (%s,'month',date_trunc('month', current_date)::date,900000,250000)", (pid3,), uid=nails_owner)))
-ok("un mes con día que no es 1 rechazado", err(q("insert into cash_closings (provider_id, kind, period) values (%s,'month',date_trunc('month', current_date)::date + 3)", (pid3,), uid=nails_owner)))
-ok("nadie ve ni toca la caja de otro", q("select count(*) from cash_closings", uid=cli2)[0][0] == 0 and err(q("insert into cash_closings (provider_id, kind, period) values (%s,'day',current_date)", (pid3,), uid=prov2)))
-ok("volver a cerrar actualiza el cierre", not err(q("insert into cash_closings (provider_id, kind, period, income) values (%s,'day',current_date,60000) on conflict (provider_id, kind, period) do update set income = excluded.income", (pid3,), uid=nails_owner))
+ok("el prestador cierra la caja del día", not err(q("insert into cash_closings (provider_id, kind, period, income, cash, mp, counted) values (%s,'day',(now() at time zone 'America/Argentina/Buenos_Aires')::date,50000,30000,20000,30500)", (pid3,), uid=nails_owner)))
+ok("y el mes (el 1° del mes)", not err(q("insert into cash_closings (provider_id, kind, period, income, expenses) values (%s,'month',date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date,900000,250000)", (pid3,), uid=nails_owner)))
+ok("un mes con día que no es 1 rechazado", err(q("insert into cash_closings (provider_id, kind, period) values (%s,'month',date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date + 3)", (pid3,), uid=nails_owner)))
+ok("nadie ve ni toca la caja de otro", q("select count(*) from cash_closings", uid=cli2)[0][0] == 0 and err(q("insert into cash_closings (provider_id, kind, period) values (%s,'day',(now() at time zone 'America/Argentina/Buenos_Aires')::date)", (pid3,), uid=prov2)))
+ok("volver a cerrar actualiza el cierre", not err(q("insert into cash_closings (provider_id, kind, period, income) values (%s,'day',(now() at time zone 'America/Argentina/Buenos_Aires')::date,60000) on conflict (provider_id, kind, period) do update set income = excluded.income", (pid3,), uid=nails_owner))
    and q("select income from cash_closings where provider_id=%s and kind='day'", (pid3,))[0][0] == 60000)
 
 # ---------- versión 30 ----------
@@ -540,12 +540,12 @@ ok("solo un admin ve el balance", err(q("select admin_finance(%s)", (yy,), uid=p
 FZ = fz[0][0] if not err(fz) else {"months": []}
 cur = [m for m in FZ["months"] if m["state"] == "open"]
 ok("balance del año: 12 meses, el actual abierto", len(FZ["months"]) == 12 and len(cur) == 1 and cur[0]["commission"] >= 2000 and cur[0]["charged"] >= cur[0]["deposits"] + 2000)
-ok("no se cierra un mes que no terminó", err(q("select admin_close('month', date_trunc('month', current_date)::date)", uid=adm), "period_not_over"))
+ok("no se cierra un mes que no terminó", err(q("select admin_close('month', date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date)", uid=adm), "period_not_over"))
 pm0 = (hoy_ar.replace(day=1) - dt.timedelta(days=1)).replace(day=1)
 e1 = q("select admin_add_expense(%s, %s, 15000)", (pm0 + dt.timedelta(days=4), "Hosting <script>"), uid=adm)
 ok("admin carga un gasto (limpio)", not err(e1) and q("select concept from admin_expenses where id=%s", (e1[0][0],))[0][0] == "Hosting script")
-ok("gastos inválidos rechazados", err(q("select admin_add_expense(current_date, 'x', 0)", uid=adm), "bad_amount") and err(q("select admin_add_expense(current_date, ' ', 10)", uid=adm), "empty_concept")
-   and err(q("select admin_add_expense(current_date + 90, 'x', 10)", uid=adm), "bad_day") and err(q("select admin_add_expense(current_date, 'x', 10)", uid=prov), "forbidden"))
+ok("gastos inválidos rechazados", err(q("select admin_add_expense((now() at time zone 'America/Argentina/Buenos_Aires')::date, 'x', 0)", uid=adm), "bad_amount") and err(q("select admin_add_expense((now() at time zone 'America/Argentina/Buenos_Aires')::date, ' ', 10)", uid=adm), "empty_concept")
+   and err(q("select admin_add_expense((now() at time zone 'America/Argentina/Buenos_Aires')::date + 90, 'x', 10)", uid=adm), "bad_day") and err(q("select admin_add_expense((now() at time zone 'America/Argentina/Buenos_Aires')::date, 'x', 10)", uid=prov), "forbidden"))
 ok("cerrar el mes pasado", not err(q("select admin_close('month', %s)", (pm0,), uid=adm)))
 ok("cerrar dos veces no se puede", err(q("select admin_close('month', %s)", (pm0,), uid=adm), "already_closed"))
 ok("en un mes cerrado no se cargan ni borran gastos", err(q("select admin_add_expense(%s, 'x', 10)", (pm0,), uid=adm), "month_closed") and err(q("select admin_delete_expense(%s)", (e1[0][0],), uid=adm), "month_closed"))

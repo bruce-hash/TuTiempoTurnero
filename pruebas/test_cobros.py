@@ -235,7 +235,7 @@ ok("a) la app no puede crear devoluciones", err(q("select refund_request(%s, %s,
 
 # ---------- D15: series hasta 90 días ----------
 r = book(sv, at(5, 9), cli, weeks=6, extra=3)[0][0]
-dias = [one("select (starts_at at time zone 'America/Argentina/Buenos_Aires')::date - current_date from bookings where id = %s", (x,)) for x in r["booking_ids"]]
+dias = [one("select (starts_at at time zone 'America/Argentina/Buenos_Aires')::date - (now() at time zone 'America/Argentina/Buenos_Aires')::date from bookings where id = %s", (x,)) for x in r["booking_ids"]]
 ok("D15: cada 6 semanas × 4: el 4° (día 131) pasa los 90 días y se saltea como un ocupado",
    r["skipped"] == 1 and len(r["booking_ids"]) == 3 and max(dias) <= 90 and max(dias) > 31)
 r = book(sv, at(6, 9), cli, weeks=4, extra=3)[0][0]

@@ -90,6 +90,12 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
   el CI corre en un contenedor `httpd:2.4`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
   fecha (la agenda de la demo sale de "hoy"). Lo que importa es 0 errores y 0 destinos equivocados.
+- Las pruebas usan el mismo "hoy" que la base: el de Buenos Aires (`(now() at time zone 'America/Argentina/Buenos_Aires')::date`
+  en SQL, `dt.datetime.now(TZ)` en Python), nunca `current_date` ni `date.today()`: el CI corre en UTC y de 21 a 24 h de
+  Argentina ya es mañana (y a fin de mes, otro mes). El workflow corre todas las noches a las 23:30 de Argentina sobre
+  `developer` para cazarlas. Para simular una hora localmente: un Postgres aparte levantado con
+  `FAKETIME="+<segundos>s" LD_PRELOAD=…/libfaketimeMT.so.1` y las pruebas con `faketime -f "+<segundos>s"` (el mismo
+  desplazamiento para todos los procesos; con `@fecha` cada proceso arranca su propio reloj y se desfasan).
 - No inventes reglas de negocio: si algo no está en el SQL ni en `docs/01-decisiones.md`, preguntá.
 - Textos de interfaz en español rioplatense (voseo), con el tono actual de la app.
 
