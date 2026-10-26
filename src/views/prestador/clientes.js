@@ -1,50 +1,23 @@
 import { LIVE } from "../../config.js";
 import { money } from "../../lib/dinero.js";
 import { esc, ini } from "../../lib/dom.js";
-import { NOW, TODAY, dayLabel, daysAgo, nowHM } from "../../lib/fechas.js";
+import { NOW, TODAY, dayLabel, nowHM } from "../../lib/fechas.js";
 import { ME, pr } from "../../lib/prestadores.js";
 import { RUBRO } from "../../lib/rubros.js";
-import { cli, skey } from "../../lib/turnero.js";
+import { skey } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { relBadge } from "../../ui/picker.js";
 import { cliBest, cliStamps, stampCfg, stampGoal, stampGrid, stampSvcs } from "../../ui/sellos.js";
 import { inApp, vMsgCompose } from "./mensajes.js";
+import { demoClients } from "../../demo/clientes.js";
 
-// demo: suma a la lista los clientes que reservaron por la app y todavía no estaban, con sus visitas
-function demoLinkClients() {
-  if (LIVE) {
-    return;
-  }
-  const pid = ME();
-  store.BOOK.forEach((booking) => {
-    if (booking.pid != pid || booking.src !== "app" || !booking.cliente || store.CLIENTS[booking.cliente] || booking.status === "cancelled") {
-      return;
-    }
-    const done = store.BOOK.filter((item) => item.pid == pid && item.cliente === booking.cliente && item.status === "done");
-    const stats = cli(booking.cliente);
-    stats.v = done.length;
-    stats.spend = done.length ? Math.round(done.reduce((sum, item) => sum + item.price, 0) / done.length) : booking.price;
-    stats.last = done.length
-      ? daysAgo(
-          done
-            .map((item) => item.date)
-            .sort()
-            .pop(),
-        )
-      : null;
-    stats.app = true;
-  });
-}
-// nombres de clientes para mostrar (saca los vacíos y los de relleno de la demo)
+// nombres de clientes para mostrar: en vivo, todos los de la base con nombre (H21: ya no se descarta nadie por cómo
+// se llama); en la demo, además, sin los turnos de relleno de la agenda de ejemplo
 export const realClients = () =>
-  (demoLinkClients(), Object.keys(store.CLIENTS)).filter(
-    (name) =>
-      name.trim() &&
-      /[A-Za-zÁÉÍÓÚáéíóúÑñ]/.test(name) &&
-      name !== "R" &&
-      !/^(Lucas|Matías|Bruno|Iván|Leo|Nahuel|Franco) [A-G]\.$/.test(name),
-  );
+  LIVE
+    ? Object.keys(store.CLIENTS).filter((name) => name.trim())
+    : demoClients(ME()).filter((name) => name.trim());
 export const thisMonthBday = (client) => client.bday && +client.bday.slice(0, 2) === NOW().getMonth() + 1;
 // “Hace X días/semanas/meses” desde la última visita
 export const lastTxt = (days) =>
@@ -61,7 +34,9 @@ export const lastTxt = (days) =>
             : `Hace ${Math.round(days / 30)} meses`;
 // pestaña Clientes: resumen, mensajes, contactos, filtros y lista (o la ficha si hay uno elegido)
 export function vBClientes() {
-  demoLinkClients();
+  if (!LIVE) {
+    demoClients(ME()); // la demo suma a la lista a los que reservaron por la app (también para la ficha)
+  }
   if (S.cli && store.CLIENTS[S.cli]) {
     return vFicha(S.cli);
   }

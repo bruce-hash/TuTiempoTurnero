@@ -2,7 +2,6 @@ import { esc } from "../../lib/dom.js";
 import { TODAY, nowHM } from "../../lib/fechas.js";
 import { ME, isFol } from "../../lib/prestadores.js";
 import { CAT } from "../../lib/rubros.js";
-import { walletPanel } from "../../lib/saldo.js";
 import { S } from "../../state.js";
 import { P, store } from "../../store.js";
 import { photoPicker } from "../../ui/fotos.js";
@@ -33,7 +32,6 @@ export function vCuenta() {
   const upcoming = myUpcoming().length;
   return `<div class="narrow stack" style="margin-top:20px"><h1 class="h1">Mi perfil</h1>
    <div class="panel contact">${photoPicker(user, "upAv")}<div><b>${esc(user.name)}</b><div class="hint">${esc(user.email)}</div><label class="lnk" for="upAv" style="cursor:pointer">📷 ${user.photo ? "Cambiar foto" : "Agregar foto"}</label></div></div>
-   ${walletPanel()}
    <button class="tcard" data-go="misturnos"><div class="tdate"><span>Turnos</span><b>${upcoming}</b></div><div class="tc-m"><b>📅 Mis turnos</b><span>${upcoming ? `Tenés ${upcoming} turno${upcoming > 1 ? "s" : ""} reservado${upcoming > 1 ? "s" : ""}` : "No tenés turnos reservados"}</span></div><span class="tc-go">›</span></button>
    <form class="panel" id="fCuenta" novalidate><p class="lbl">Mis datos</p>
     <div class="f"><label for="un">Nombre</label><input id="un" value="${esc(user.name)}" autocomplete="off"></div>

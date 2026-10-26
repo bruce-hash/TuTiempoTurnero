@@ -33,6 +33,12 @@ def prestador(slug, mp_user, connected):
 con_id = prestador("cobra-con-id", "111", True)      # cobraba y tiene id de Mercado Pago
 sin_id = prestador("cobra-sin-id", None, True)       # cobraba, sin id (H26)
 desc = prestador("desconectado", "333", False)       # ya no cobraba
+# versión 31 (H10): el alta guardaba el DNI en los metadatos de la cuenta hasta el primer ingreso
+import json
+reg = {"name": "Pendiente", "categories": ["b"], "phone": "2284 0", "dni": "30111999", "instagram": None}
+q("insert into auth.users (email, raw_user_meta_data) values ('pendiente@test.ar', %s), ('viejo@test.ar', %s), ('cliente@test.ar', %s)",
+  (json.dumps({"full_name": "Pendiente", "provider_reg": reg}), json.dumps({"full_name": "Viejo", "dni": "30111998"}),
+   json.dumps({"full_name": "Cliente", "provider_reg": None})))
 
 for m in resto:
     q(m.read_text())
@@ -52,6 +58,14 @@ ok("ningún prestador queda cobrando", q("select count(*) from mp_accounts where
    and q("select count(*) from provider_private where mp_connected")[0][0] == 0)
 avisos = q("select provider_id, count(*) from provider_notices where kind = 'mp_reconnect' group by provider_id order by 1")
 ok("los que cobraban reciben un solo aviso para reconectar; el desconectado ninguno", avisos == sorted([(con_id, 1), (sin_id, 1)]))
+ok("H10: después de migrar, ningún usuario tiene DNI en los metadatos",
+   q("select count(*) from auth.users where raw_user_meta_data::text ~ '3011199[89]' or raw_user_meta_data ? 'dni' "
+     "or raw_user_meta_data #> '{provider_reg,dni}' is not null")[0][0] == 0)
+ok("…y el resto de los metadatos queda igual (nombre y datos del alta)",
+   q("select raw_user_meta_data from auth.users where email = 'pendiente@test.ar'")[0][0]
+   == {"full_name": "Pendiente", "provider_reg": {k: v for k, v in reg.items() if k != "dni"}}
+   and q("select raw_user_meta_data from auth.users where email = 'viejo@test.ar'")[0][0] == {"full_name": "Viejo"}
+   and q("select raw_user_meta_data from auth.users where email = 'cliente@test.ar'")[0][0] == {"full_name": "Cliente", "provider_reg": None})
 ok("provider_secrets ya no existe", q("select to_regclass('public.provider_secrets')")[0][0] is None)
 
 # reconectar la misma cuenta: la fila vuelve a cobrar con llaves cifradas

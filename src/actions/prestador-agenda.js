@@ -5,7 +5,6 @@ import { money } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, dayLabel, toMin } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
-import { refundPay } from "../lib/saldo.js";
 import { busy, cfg, cli, freed, overlaps, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
@@ -113,9 +112,6 @@ registerClick("bCancelYes", (ev, el, act) => {
     }
   }
   booking.refund = (booking.paid || 0) + (booking.fee || 0);
-  if (booking.mine) {
-    refundPay(booking, booking.svc + " en " + pr(booking.pid).name);
-  }
   S.bAsk = null;
   const notified = freed(booking);
   toast(

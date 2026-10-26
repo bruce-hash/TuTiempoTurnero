@@ -54,7 +54,7 @@ for (const [que, marca] of marcas) {
 }
 if (!fallas) ok(`dist/ (${archivos.length} archivos) sin ganchos de prueba, sin barra de demo y sin los ${prestadores.length} prestadores de ejemplo`);
 // Cuentas de demo (H18, Bloque 2a): ni el formulario de acceso de prestadores ni el perfil traen credenciales de la demo
-const CUENTAS = ["tutiempo.demo", "barbero123", "prestador123", "cliente123", "juan.perez@gmail.com"];
+const CUENTAS = ["tutiempo.demo", "barbero123", "prestador123", "cliente123", "juan.perez@tutiempo.demo"];
 for (const marca of CUENTAS) {
   const donde = texto.filter(([, t]) => t.includes(marca)).map(([f]) => f);
   if (donde.length) falla(`cuenta de demo "${marca}" en ${donde.join(", ")}`);
@@ -70,6 +70,18 @@ for (const marca of DATOS) {
   if (donde.length) falla(`dato de ejemplo "${marca}" en ${donde.join(", ")}`);
 }
 if (!fallas) ok(`siembra (${SIEMBRA.join(", ")}) solo en src/demo/ y sin sus datos en dist/`);
+// Emails (Bloque 2b): las cuentas de demo usan solo el dominio tutiempo.demo; fuera de eso, solo los ejemplos de los
+// textos de ayuda y el contacto de TuTiempo
+const EMAILS_OK = ["contacto@tutiempo.com.ar", "nombre@gmail.com", "tu@email.com"];
+const conEmail = [...listar(path.join(ROOT, "src")), path.join(ROOT, "index.html")].filter((f) => /\.(js|html)$/.test(f));
+const ajenos = conEmail.flatMap((f) =>
+  [...fs.readFileSync(f, "utf8").matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g)]
+    .map((m) => m[0])
+    .filter((email) => !email.endsWith("@tutiempo.demo") && !EMAILS_OK.includes(email))
+    .map((email) => `${email} en ${rel(f)}`),
+);
+if (ajenos.length) falla(`emails de demo con un dominio que no es tutiempo.demo: ${ajenos.join("; ")}`);
+else ok("los emails de las cuentas de demo son todos @tutiempo.demo");
 // Negocios reales de Olavarría (H14): no aparecen en ningún lado, ni en la demo ni en el seed de ejemplos
 const REALES = ["Hidro", "Kevin Ortiz", "la fama", "Niko_barberr", "Mary Garcia", "Carina Saitti", "2284727692",
   "9 de julio 2381", "Antártida Argentina 4762", "Rivadavia 2684", "Islas Malvinas 3974", "Colon 3794", "Belgrano 2683"];

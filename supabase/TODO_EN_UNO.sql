@@ -3953,3 +3953,704 @@ do $$ declare r record; begin
   end loop;
 end $$;
 
+-- ===================== 20261025194744_dni.sql =====================
+-- =====================================================================
+-- TuTiempo · Bloque 2b · DNI del prestador (H10)
+-- - El DNI ya no viaja en los metadatos de la cuenta (auth.users): lo guarda el dueño con set_my_dni() (o el alta,
+--   register_provider, cuando ya hay sesión). Se borra el que haya quedado en raw_user_meta_data.
+-- - Número: 7 u 8 dígitos, único entre prestadores no eliminados (trigger provider_private_dni_unique).
+-- - Fotos: frente y dorso en el bucket privado "dni", en la carpeta del dueño (<usuario>/frente-<n>.<ext> y
+--   <usuario>/dorso-<n>.<ext>). Sube solo el dueño, las ve solo el admin (URL firmada, ver m-admin.js).
+-- - Activar = verificar: admin_set_provider(…, 'active') exige número y las dos fotos, marca dni_verified y guarda
+--   quién y cuándo (provider_private.dni_verified_by / dni_verified_at).
+-- =====================================================================
+set search_path = public, extensions;
+
+-- ---------- Quién y cuándo verificó ----------
+alter table public.provider_private add column if not exists dni_verified_at timestamptz;
+alter table public.provider_private add column if not exists dni_verified_by uuid references auth.users(id) on delete set null;
+
+-- ---------- DNI único entre prestadores no eliminados ----------
+-- El estado está en providers, así que no alcanza un índice único: lo controla un trigger, con un candado por número
+-- para que dos altas a la vez con el mismo DNI no pasen las dos. Los eliminados no cuentan y no se les borra nada.
+do $$
+declare dup text;
+begin
+  select string_agg(format('DNI terminado en %s (prestadores %s)', right(dni_number, 3), ids), '; ') into dup
+    from (select pp.dni_number, string_agg(pp.provider_id::text, ', ' order by pp.provider_id) as ids
+            from public.provider_private pp join public.providers p on p.id = pp.provider_id
+           where pp.dni_number is not null and p.status <> 'deleted'
+           group by pp.dni_number having count(*) > 1) d;
+  if dup is not null then
+    raise exception 'dni_duplicado: hay prestadores con el mismo DNI (%). Resolverlo a mano antes de esta migración (docs/02).', dup;
+  end if;
+end $$;
+create or replace function public.provider_private_dni_unique() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.dni_number is not null and (tg_op = 'INSERT' or new.dni_number is distinct from old.dni_number) then
+    perform pg_advisory_xact_lock(hashtext('tt-dni:' || new.dni_number));
+    if exists (select 1 from public.provider_private pp join public.providers p on p.id = pp.provider_id
+                where pp.dni_number = new.dni_number and pp.provider_id <> new.provider_id and p.status <> 'deleted') then
+      raise exception 'dni_taken' using errcode = 'unique_violation';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists provider_private_dni_unique on public.provider_private;
+create trigger provider_private_dni_unique before insert or update of dni_number on public.provider_private
+  for each row execute function public.provider_private_dni_unique();
+
+-- ---------- Fotos cargadas (frente y dorso) ----------
+create or replace function public.dni_photos(p_owner uuid) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'front', exists (select 1 from storage.objects o where o.bucket_id = 'dni' and o.name like p_owner::text || '/frente-%'),
+    'back',  exists (select 1 from storage.objects o where o.bucket_id = 'dni' and o.name like p_owner::text || '/dorso-%'))
+$$;
+
+-- solo el dueño sube, en su carpeta y con el nombre de frente o dorso; solo el admin lee (ya estaba: dni_admin)
+drop policy if exists dni_upload on storage.objects;
+create policy dni_upload on storage.objects for insert to authenticated
+  with check (bucket_id = 'dni' and name ~ ('^' || auth.uid()::text || '/(frente|dorso)-[0-9]{1,15}\.(jpg|jpeg|png|webp|pdf)$'));
+
+-- ---------- El dueño carga su número ----------
+create or replace function public.set_my_dni(p_dni text) returns void
+language plpgsql security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); verified boolean;
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  select dni_verified into verified from public.providers where id = pid;
+  if verified then raise exception 'dni_locked'; end if;   -- ya verificado: lo cambia solo TuTiempo
+  if coalesce(p_dni, '') !~ '^[0-9]{7,8}$' then raise exception 'bad_dni'; end if;
+  begin
+    update public.provider_private set dni_number = p_dni where provider_id = pid;
+  exception when unique_violation then
+    raise exception 'dni_taken';
+  end;
+end $$;
+
+-- estado de la verificación para el panel del prestador (sin mostrar el número)
+create or replace function public.my_dni_status() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); r jsonb;
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  select jsonb_build_object('number', pp.dni_number is not null, 'verified', p.dni_verified, 'verified_at', pp.dni_verified_at)
+         || public.dni_photos(p.owner_id)
+    into r
+    from public.providers p join public.provider_private pp on pp.provider_id = p.id where p.id = pid;
+  return r;
+end $$;
+
+-- ---------- Alta: el DNI es opcional (sin sesión todavía no se puede guardar; lo carga después con set_my_dni) ----------
+create or replace function public.register_provider(p_name text, p_address text, p_categories text[], p_phone text,
+                                                    p_dni text, p_instagram text default null, p_city text default 'olavarria')
+returns bigint
+language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid(); pid bigint; cid smallint; base text; sl text; n int := 0; c text; d int;
+begin
+  if uid is null then raise exception 'login_required'; end if;
+  if exists (select 1 from public.providers where owner_id = uid) then raise exception 'already_registered'; end if;
+  if p_categories is null or array_length(p_categories,1) is null then raise exception 'category_required'; end if;
+  if array_length(p_categories,1) > 6 then raise exception 'too_many_categories'; end if;
+  if p_dni is not null and p_dni !~ '^[0-9]{7,8}$' then raise exception 'bad_dni'; end if;
+  if p_dni is not null and exists (select 1 from public.provider_private pp join public.providers pr on pr.id = pp.provider_id
+                                    where pp.dni_number = p_dni and pr.status <> 'deleted') then raise exception 'dni_taken'; end if;
+  select id into cid from public.cities where slug = p_city;
+  if cid is null then raise exception 'bad_city'; end if;
+  base := trim(both '-' from regexp_replace(lower(extensions.unaccent(p_name)), '[^a-z0-9]+', '-', 'g'));
+  if char_length(base) < 3 then base := 'prestador'; end if;
+  base := left(base, 50); sl := base;
+  -- Bloque B: las palabras reservadas se tratan como un slug ocupado (llevan sufijo: panel → panel-1)
+  while exists (select 1 from public.providers where slug = sl) or public.is_reserved_slug(sl) loop
+    n := n + 1; sl := base || '-' || n;
+  end loop;
+  insert into public.providers (owner_id, slug, name, address, city_id, instagram, hue, status)
+  values (uid, sl, left(p_name, 80), left(p_address, 160), cid, left(p_instagram, 60), (abs(hashtext(sl)) % 360), 'pending')
+  returning id into pid;
+  begin
+    insert into public.provider_private (provider_id, phone, dni_number) values (pid, left(p_phone, 40), p_dni);
+  exception when unique_violation then
+    raise exception 'dni_taken';
+  end;
+  insert into public.provider_settings (provider_id) values (pid);
+  foreach c in array p_categories loop
+    insert into public.provider_categories (provider_id, category_id) values (pid, c) on conflict do nothing;
+  end loop;
+  for d in 1 .. 5 loop
+    insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00');
+  end loop;
+  insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
+  insert into public.message_templates (provider_id, key, enabled, body) values
+   (pid,'conf',true,'¡Hola {nombre}! Tu turno en {barberia} quedó para el {dia} a las {hora}. Te esperamos en {direccion}.'),
+   (pid,'r24',true,'{nombre}, te recordamos tu turno mañana a las {hora} en {barberia}. ¿Venís? Confirmá acá: {link}'),
+   (pid,'r2',true,'¡Nos vemos a las {hora}! Si te demorás, avisá con un toque: {link}'),
+   (pid,'rev',true,'¡Gracias por venir, {nombre}! ¿Nos dejás tu opinión? {link}'),
+   (pid,'back',true,'{nombre}, ya te toca tu próximo turno. ¿Te reservo? Elegí tu horario: {link}'),
+   (pid,'bday',false,'¡Feliz cumpleaños, {nombre}! Este mes tenés 15% off. Reservá: {link}');
+  return pid;
+end $$;
+
+-- ---------- Activar = verificar ----------
+create or replace function public.admin_set_provider(pid bigint, p_status text, p_verified boolean) returns void
+language plpgsql security definer set search_path = public as $$
+declare p record; ph jsonb;
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if p_status not in ('pending','active','suspended') then raise exception 'bad_status'; end if;
+  select pr.id, pr.owner_id, pr.dni_verified, pp.dni_number into p
+    from public.providers pr left join public.provider_private pp on pp.provider_id = pr.id
+   where pr.id = pid and pr.status <> 'deleted' for update of pr;
+  if p.id is null then return; end if;
+  if p_status = 'active' then
+    if p.dni_number is null then raise exception 'dni_missing'; end if;
+    ph := public.dni_photos(p.owner_id);
+    if not ((ph->>'front')::boolean and (ph->>'back')::boolean) then raise exception 'dni_photos_missing'; end if;
+    update public.providers set status = 'active', dni_verified = true, updated_at = now() where id = pid;
+    if not p.dni_verified then
+      update public.provider_private set dni_verified_at = now(), dni_verified_by = auth.uid() where provider_id = pid;
+    end if;
+  else
+    update public.providers set status = p_status, dni_verified = coalesce(p_verified, dni_verified), updated_at = now() where id = pid;
+  end if;
+end $$;
+
+-- el listado del admin muestra el número, las fotos cargadas y quién verificó
+create or replace function public.admin_providers(p_status text default null) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  return (select coalesce(jsonb_agg(x order by x.pending desc, x.activity desc, x.created_at desc), '[]') from (
+    select p.id, p.name, p.slug, p.status, p.dni_verified, p.owner_id, p.created_at, p.rating_avg, p.rating_count, p.activity, (p.status = 'pending') as pending,
+           (select array_agg(pc.category_id order by pc.is_primary desc, pc.category_id) from public.provider_categories pc where pc.provider_id = p.id) as categories,
+           (select count(*) from public.bookings b where b.provider_id = p.id and b.source = 'app' and b.status in ('confirmed','done') and b.starts_at >= date_trunc('month', now())) as bookings_month,
+           pp.mp_connected, pp.dni_number, pp.dni_verified_at,
+           (select pr.full_name from public.profiles pr where pr.id = pp.dni_verified_by) as dni_verified_by,
+           public.dni_photos(p.owner_id) as dni_photos,
+           (select coalesce(jsonb_agg(jsonb_build_object('id', n.id, 'body', n.body, 'at', n.created_at) order by n.created_at desc), '[]')
+              from (select * from public.admin_notes an where an.provider_id = p.id order by an.created_at desc limit 30) n) as notes
+    from public.providers p left join public.provider_private pp on pp.provider_id = p.id
+    where p.status <> 'deleted' and (p_status is null or p.status = p_status)
+    order by (p.status = 'pending') desc, p.activity desc, p.created_at desc limit 500) x);
+end $$;
+
+-- ---------- Ningún DNI en los metadatos de la cuenta ----------
+update auth.users set raw_user_meta_data = (raw_user_meta_data - 'dni') #- '{provider_reg,dni}'
+ where raw_user_meta_data ? 'dni' or raw_user_meta_data #> '{provider_reg,dni}' is not null;
+do $$ begin
+  if to_regclass('auth.identities') is not null then
+    execute $q$update auth.identities set identity_data = (identity_data - 'dni') #- '{provider_reg,dni}'
+                where identity_data ? 'dni' or identity_data #> '{provider_reg,dni}' is not null$q$;
+  end if;
+end $$;
+
+-- ---------- Permisos ----------
+-- el dueño lee de provider_private solo lo que usa el panel: ni el DNI ni quién lo verificó viajan al navegador
+-- (en 0003, "grant select, update (phone, monthly_goal)" daba select sobre toda la fila)
+revoke select on public.provider_private from anon, authenticated;
+grant select (provider_id, phone, monthly_goal, mp_connected, mp_user_id) on public.provider_private to authenticated;
+revoke execute on function public.dni_photos(uuid), public.set_my_dni(text), public.my_dni_status(), public.provider_private_dni_unique()
+  from public, anon, authenticated;
+grant execute on function public.set_my_dni(text), public.my_dni_status() to authenticated;
+
+-- ===================== 20261025200359_cobros_revision.sql =====================
+-- =====================================================================
+-- TuTiempo · Bloque 2b · Cobros: lo que el admin tiene que ver y poder resolver
+-- - Cuentas de Mercado Pago con error (llave que no se puede descifrar, renovación fallida, llave sin cifrar): aparecen
+--   en "Para revisar" con el prestador, la cuenta, el error y desde cuándo (mp_accounts.last_error_at).
+-- - H27 "Reprocesar": un pago que quedó para revisar por un error inesperado (motivo "error: …") se vuelve a procesar
+--   con confirm_payment_core, solo si sus turnos siguen en hold/expired sin pago; en la misma transacción se borra el
+--   registro de revisión y queda quién, cuándo y por qué (payments.reprocessed).
+-- - H28: cuando un pago llega tarde y se devuelve (horario ocupado, turno ya cancelado, monto de menos, sin turno), el
+--   prestador recibe un aviso, uno por pago, con el total que se devuelve desde su cuenta (kind 'mp_refunded', ref 'tarde-…').
+-- No borra datos (salvo el registro de revisión que reemplaza el reproceso).
+-- =====================================================================
+set search_path = public, extensions;
+
+-- ---------- Desde cuándo tiene error una cuenta ----------
+alter table public.mp_accounts add column if not exists last_error_at timestamptz;
+update public.mp_accounts set last_error_at = coalesce(refreshed_at, connected_at) where last_error is not null and last_error_at is null;
+create or replace function public.mp_accounts_error_since() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if new.last_error is null then
+    new.last_error_at := null;
+  elsif tg_op = 'INSERT' or old.last_error is null then
+    new.last_error_at := now();               -- el primer error; si cambia el texto, sigue la misma fecha
+  end if;
+  return new;
+end $$;
+drop trigger if exists mp_accounts_error_since on public.mp_accounts;
+create trigger mp_accounts_error_since before insert or update of last_error on public.mp_accounts
+  for each row execute function public.mp_accounts_error_since();
+
+-- ---------- El error inesperado guarda también la comisión que informó Mercado Pago (para poder reprocesar) ----------
+create or replace function public.confirm_payment(p_booking_ids bigint[], p_payment_id text, p_amount int,
+                                                  p_provider bigint default null, p_account bigint default null,
+                                                  p_fee_mp int default null, p_collector text default null,
+                                                  p_raw jsonb default null, p_status_detail text default null)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare prev record; pay_id bigint; pid bigint;
+begin
+  if coalesce(p_payment_id, '') = '' then raise exception 'bad_payment'; end if;
+  -- el mismo aviso dos veces: no se hace nada (solo se guarda la consulta)
+  select id, outcome into prev from public.payments where mp_payment_id = p_payment_id;
+  if prev.id is not null then
+    perform public.payment_log(prev.id, p_raw);
+    return jsonb_build_object('status', 'already_processed', 'payment', prev.id, 'outcome', prev.outcome);
+  end if;
+  -- pagos confirmados antes del Bloque 1 (quedaron en bookings.mp_payment_id)
+  if exists (select 1 from public.bookings where mp_payment_id = p_payment_id) then
+    return jsonb_build_object('status', 'already_processed');
+  end if;
+  begin
+    return public.confirm_payment_core(p_booking_ids, p_payment_id, p_amount, p_provider, p_account, p_fee_mp, p_collector, p_raw, p_status_detail);
+  exception
+    -- pasajeros: que suban. Dos avisos a la vez chocan en unique_violation y el reintento termina en already_processed.
+    when deadlock_detected or serialization_failure or lock_not_available or query_canceled or unique_violation then
+      raise;
+    when others then
+      -- nunca falla ante un pago aprobado: queda registrado para revisar, con el error
+      pid := coalesce(p_provider, (select min(provider_id) from public.bookings where id = any(coalesce(p_booking_ids, '{}'))));
+      insert into public.payments (mp_payment_id, provider_id, mp_account_id, collector_id, booking_ids, amount, fee_mp, outcome, review_reasons, mp_status_detail)
+      values (p_payment_id, pid, coalesce(p_account, (select id from public.mp_accounts where provider_id = pid and status = 'active')),
+              left(p_collector, 40), coalesce(p_booking_ids, '{}'), greatest(coalesce(p_amount, 0), 0), p_fee_mp, 'review',
+              array['error: ' || left(sqlerrm, 200)], left(p_status_detail, 60))
+      on conflict (mp_payment_id) do nothing
+      returning id into pay_id;
+      perform public.payment_log(pay_id, p_raw);
+      return jsonb_build_object('status', 'review', 'payment', pay_id, 'error', sqlerrm);
+  end;
+end $$;
+
+-- ---------- H27: Reprocesar ----------
+alter table public.payments add column if not exists reprocessed jsonb;   -- {at, by, note, error}: quién lo reprocesó y por qué
+
+-- se puede reprocesar: en revisión, solo por errores inesperados, sin devoluciones ni turnos ligados todavía, y con sus
+-- turnos de la app todavía en hold/expired sin pago
+create or replace function public.payment_reprocessable(p_payment bigint) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.payments pm
+     where pm.id = p_payment and pm.outcome = 'review' and pm.review_resolved_at is null
+       and cardinality(pm.review_reasons) > 0
+       and not exists (select 1 from unnest(pm.review_reasons) r where r not like 'error: %')
+       and not exists (select 1 from public.payment_bookings pb where pb.payment_id = pm.id)
+       and not exists (select 1 from public.refunds rf where rf.payment_id = pm.id)
+       and not exists (select 1 from public.bookings b where b.payment_id = pm.id)
+       and exists (select 1 from public.bookings b where b.id = any(pm.booking_ids))
+       and not exists (select 1 from public.bookings b where b.id = any(pm.booking_ids)
+                         and (b.status not in ('hold','expired') or b.payment_id is not null)))
+$$;
+
+create or replace function public.admin_reprocess(p_payment bigint, p_note text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare txt text := left(btrim(regexp_replace(coalesce(p_note, ''), '[[:cntrl:]]', ' ', 'g')), 500);
+        pm record; fee int; res jsonb; new_id bigint;
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if char_length(txt) < 3 then raise exception 'note_required'; end if;
+  select * into pm from public.payments where id = p_payment for update;
+  if pm.id is null then raise exception 'not_found'; end if;
+  perform 1 from public.bookings where id = any(pm.booking_ids) order by id for update;
+  if not public.payment_reprocessable(pm.id) then raise exception 'cannot_reprocess'; end if;
+  -- la comisión que informó Mercado Pago: la guardada, o la de la última consulta registrada
+  fee := coalesce(pm.fee_mp, (
+    select coalesce((select (f->>'amount')::numeric from jsonb_array_elements(e->'body'->'fee_details') f where f->>'type' = 'application_fee' limit 1),
+                    (e->'body'->>'marketplace_fee')::numeric)::int
+      from jsonb_array_elements(pm.mp_responses) with ordinality t(e, n) order by n desc limit 1));
+  -- el registro de revisión se reemplaza por el procesamiento real; si falla, la transacción entera vuelve atrás
+  delete from public.payments where id = pm.id;
+  res := public.confirm_payment_core(pm.booking_ids, pm.mp_payment_id, pm.amount, pm.provider_id, pm.mp_account_id, fee,
+                                     pm.collector_id, null, pm.mp_status_detail);
+  new_id := (res->>'payment')::bigint;
+  update public.payments set mp_responses = pm.mp_responses, mp_status = pm.mp_status, refunded_mp = pm.refunded_mp,
+         created_at = pm.created_at, updated_at = now(),
+         reprocessed = jsonb_build_object('at', now(), 'by', auth.uid(), 'note', txt, 'error', to_jsonb(pm.review_reasons))
+   where id = new_id;
+  return res;
+end $$;
+
+-- ---------- H28: aviso al prestador de un pago tardío que se devuelve ----------
+-- Es un aviso de pago devuelto (kind 'mp_refunded', como los de Mercado Pago) con ref 'tarde-<pago>': así no hace falta
+-- ampliar la lista de tipos de provider_notices (la fija la migración del 2a, que se puede volver a correr).
+
+create or replace function public.refunds_late_notice() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare total int; who text; why text; mp_id text;
+begin
+  if new.payment_id is null or new.reason not in ('slot_taken','booking_unavailable','amount_short','unknown_booking') then
+    return new;
+  end if;
+  select coalesce(sum(amount), 0) into total from public.refunds
+   where payment_id = new.payment_id and reason in ('slot_taken','booking_unavailable','amount_short','unknown_booking') and status <> 'cancelled';
+  select coalesce((select b.client_name from public.bookings b where b.id = new.booking_id),
+                  (select min(b.client_name) from public.bookings b where b.id = any(pm.booking_ids))), pm.mp_payment_id
+    into who, mp_id from public.payments pm where pm.id = new.payment_id;
+  why := case new.reason
+           when 'slot_taken' then 'llegó cuando el horario ya no estaba libre'
+           when 'booking_unavailable' then 'llegó cuando el turno ya no estaba disponible (cancelado o pagado por otro pago)'
+           when 'amount_short' then 'llegó con un monto menor al de la reserva'
+           else 'no corresponde a ningún turno tuyo' end;
+  insert into public.provider_notices (provider_id, kind, ref, body)
+  values (new.provider_id, 'mp_refunded', left('tarde-' || coalesce(mp_id, new.payment_id::text), 40),
+          'El pago ' || coalesce('de ' || nullif(who, ''), 'n° ' || mp_id) || ' ' || why || ': se le devuelve ' ||
+          public.money_txt(total) || ' desde tu cuenta de Mercado Pago. No tenés que hacer nada.')
+  on conflict (provider_id, kind, ref) do update set body = excluded.body;
+  return new;
+end $$;
+drop trigger if exists refunds_late_notice on public.refunds;
+create trigger refunds_late_notice after insert on public.refunds
+  for each row execute function public.refunds_late_notice();
+
+-- ---------- "Para revisar": también las cuentas con error y si un pago se puede reprocesar ----------
+create or replace function public.admin_review() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  return jsonb_build_object(
+    'refunds', (select coalesce(jsonb_agg(x order by x.failed desc, x.created_at), '[]') from (
+      select r.id, r.amount, r.reason, r.status, r.attempts, r.last_error, r.last_attempt_at, r.next_attempt_at, r.created_at,
+             r.mp_payment_id, (r.status = 'failed') as failed, p.name as provider_name, b.client_name, b.starts_at
+      from public.refunds r left join public.providers p on p.id = r.provider_id left join public.bookings b on b.id = r.booking_id
+      where r.status = 'failed' or (r.status = 'pending' and r.attempts > 0)
+      order by r.created_at limit 200) x),
+    'payments', (select coalesce(jsonb_agg(x order by x.created_at), '[]') from (
+      select pm.id, pm.mp_payment_id, pm.amount, pm.fee_expected, pm.fee_mp, pm.mp_status, pm.review_reasons, pm.created_at,
+             pm.collector_id, (pm.mp_account_id is not null) as refundable_from_app, public.payment_reprocessable(pm.id) as reprocessable,
+             -- lo que falta devolver: lo cobrado que no respalda un turno que sigue en pie, menos lo ya devuelto o pedido
+             greatest(pm.amount
+                      - coalesce((select sum(pb.amount) from public.payment_bookings pb join public.bookings b on b.id = pb.booking_id
+                                  where pb.payment_id = pm.id and pb.result = 'confirmed'
+                                    and b.status in ('confirmed','done','no_show','cancelled_client')), 0)
+                      - coalesce((select sum(r.amount) from public.refunds r where r.payment_id = pm.id and r.status <> 'cancelled'), 0), 0) as refundable,
+             p.name as provider_name, (select min(b.client_name) from public.bookings b where b.payment_id = pm.id) as client_name
+      from public.payments pm left join public.providers p on p.id = pm.provider_id
+      where pm.outcome = 'review' and pm.review_resolved_at is null
+      order by pm.created_at limit 200) x),
+    -- cuentas que hoy no pueden cobrar o devolver por un error de su llave: las que cobran, y las de solo devoluciones
+    -- que todavía tienen devoluciones pendientes
+    'accounts', (select coalesce(jsonb_agg(x order by x.error_at), '[]') from (
+      select a.id, a.mp_user_id, a.status, a.last_error, coalesce(a.last_error_at, a.connected_at) as error_at, p.name as provider_name,
+             (select count(*) from public.refunds r where r.mp_account_id = a.id and r.status in ('pending','failed')) as refunds_pending
+      from public.mp_accounts a join public.providers p on p.id = a.provider_id
+      where a.last_error is not null and a.status <> 'purged'
+        and (a.status = 'active' or exists (select 1 from public.refunds r where r.mp_account_id = a.id and r.status in ('pending','failed')))
+      order by coalesce(a.last_error_at, a.connected_at) limit 200) x),
+    'webhook_events', (select coalesce(jsonb_agg(x order by x.created_at desc), '[]') from (
+      select e.id, e.mp_payment_id, e.reason, e.created_at, p.name as provider_name
+      from public.mp_webhook_events e left join public.providers p on p.id = e.provider_id
+      where e.created_at > now() - interval '30 days'
+      order by e.created_at desc limit 50) x));
+end $$;
+
+-- ---------- Permisos ----------
+revoke execute on function public.mp_accounts_error_since(), public.payment_reprocessable(bigint), public.admin_reprocess(bigint, text),
+  public.refunds_late_notice() from public, anon, authenticated;
+grant execute on function public.admin_reprocess(bigint, text) to authenticated;
+
+-- ===================== 20261025201554_site_url.sql =====================
+-- =====================================================================
+-- TuTiempo · Bloque 2b · Links de los avisos con la dirección del sitio (H24)
+-- Los avisos que arma la base (notify_booking y send_scheduled_notices, {link}) usaban 'tutiempo.com.ar/' || slug escrito
+-- a mano: en el subdominio de prueba llevaban al sitio equivocado. Ahora salen de app_settings.site_url (la cambia solo
+-- el admin, desde Comisión → Dirección del sitio) + '/' || slug, o /p/<id> si el slug es una palabra reservada.
+-- Las funciones son las de 0004 con ese único cambio.
+-- =====================================================================
+set search_path = public, extensions;
+
+alter table public.app_settings add column if not exists site_url text not null default 'https://tutiempo.com.ar';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'app_settings_site_url_check') then
+    alter table public.app_settings add constraint app_settings_site_url_check
+      check (site_url ~ '^https?://[a-z0-9.-]+(:[0-9]{1,5})?$' and char_length(site_url) <= 100);
+  end if;
+end $$;
+
+-- dirección pública del perfil de un prestador (la misma que arma el frontend: router/direcciones.js)
+create or replace function public.provider_link(p_id bigint, p_slug text) returns text
+language sql stable security definer set search_path = public as $$
+  select (select site_url from public.app_settings where id)
+         || case when p_slug is null or public.is_reserved_slug(p_slug) then '/p/' || p_id else '/' || p_slug end
+$$;
+
+-- el admin cambia la dirección del sitio (sin barra al final, con https://)
+create or replace function public.admin_set_site_url(p_url text) returns text
+language plpgsql security definer set search_path = public as $$
+declare url text := lower(rtrim(btrim(coalesce(p_url, '')), '/'));
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if url !~ '^https?://[a-z0-9.-]+(:[0-9]{1,5})?$' or char_length(url) > 100 then raise exception 'bad_site_url'; end if;
+  update public.app_settings set site_url = url, updated_at = now() where id;
+  return url;
+end $$;
+
+create or replace function public.notify_booking(bid bigint, k text) returns void
+language plpgsql security definer set search_path = public as $$
+declare b record; t record; p record; lt timestamp; body text;
+        dias text[] := array['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+begin
+  if bid is null then return; end if;
+  select * into b from public.bookings where id = bid;
+  if b is null or b.client_id is null or b.source <> 'app' then return; end if;
+  if k = 'cancel' then
+    if b.settle_by_provider then
+      select true as enabled, '{barberia} tuvo que cancelar tu turno del {dia} a las {hora}. {barberia} se va a comunicar con vos para devolverte la seña ($' ||
+             replace(to_char(b.paid_mp + b.paid_wallet, 'FM999,999,999'), ',', '.') || ') o pasarte el turno a otro día.' as body into t;
+    else
+      select true as enabled, '{barberia} tuvo que cancelar tu turno del {dia} a las {hora}.' ||
+             case when b.paid_mp > 0 then ' Te devolvemos todo lo que pagaste ($' || replace(to_char(b.paid_mp + least(b.client_fee, b.app_fee), 'FM999,999,999'), ',', '.') || ').' else '' end ||
+             ' Reprogramalo cuando quieras desde Mis turnos: {link}' as body into t;
+    end if;
+  else
+    select enabled, mt.body into t from public.message_templates mt where provider_id = b.provider_id and key = k;
+    if t is null or not t.enabled then return; end if;
+  end if;
+  select id, name, address, slug into p from public.providers where id = b.provider_id;
+  lt := b.starts_at at time zone public.provider_tz(b.provider_id);
+  body := replace(replace(replace(replace(replace(replace(t.body,
+            '{nombre}', split_part(coalesce(b.client_name, ''), ' ', 1)), '{barberia}', p.name),
+            '{dia}', dias[extract(dow from lt)::int + 1] || ' ' || extract(day from lt)::int || '/' || extract(month from lt)::int),
+            '{hora}', to_char(lt, 'HH24:MI')), '{direccion}', coalesce(p.address, '')), '{link}', public.provider_link(p.id, p.slug));
+  if k = 'rev' and exists (select 1 from public.loyalty_events where booking_id = bid and kind = 'earn') then
+    body := body || ' 🎟️ Sumaste 1 sello en tu tarjeta de ' || coalesce(b.service_name, 'este servicio') || '.';
+  end if;
+  insert into public.client_messages (provider_id, user_id, body, kind, ref)
+  values (b.provider_id, b.client_id, left(body, 600), k, bid::text) on conflict do nothing;
+end $$;
+
+-- Recordatorios (24 h y 2 h antes) y cumpleaños. Lo corre pg_cron cada 10 minutos.
+create or replace function public.send_scheduled_notices() returns int
+language plpgsql security definer set search_path = public as $$
+declare r record; n int := 0; tz text := 'America/Argentina/Buenos_Aires';
+begin
+  for r in select b.id from public.bookings b
+           where b.source = 'app' and b.status = 'confirmed' and b.client_id is not null
+             and b.starts_at > now() + interval '2 hours' and b.starts_at <= now() + interval '24 hours' and b.created_at < b.starts_at - interval '24 hours'
+             and not exists (select 1 from public.client_messages m where m.provider_id = b.provider_id and m.user_id = b.client_id and m.kind = 'r24' and m.ref = b.id::text)
+           limit 5000 loop
+    perform public.notify_booking(r.id, 'r24'); n := n + 1;
+  end loop;
+  for r in select b.id from public.bookings b
+           where b.source = 'app' and b.status = 'confirmed' and b.client_id is not null
+             and b.starts_at > now() and b.starts_at <= now() + interval '2 hours' and b.created_at < b.starts_at - interval '2 hours'
+             and not exists (select 1 from public.client_messages m where m.provider_id = b.provider_id and m.user_id = b.client_id and m.kind = 'r2' and m.ref = b.id::text)
+           limit 5000 loop
+    perform public.notify_booking(r.id, 'r2'); n := n + 1;
+  end loop;
+  insert into public.client_messages (provider_id, user_id, body, kind, ref)
+  select c.provider_id, c.user_id,
+         left(replace(replace(replace(t.body, '{nombre}', split_part(c.name, ' ', 1)), '{barberia}', p.name), '{link}', public.provider_link(p.id, p.slug)), 600),
+         'bday', to_char(now() at time zone tz, 'YYYY')
+  from public.provider_clients c
+  join public.message_templates t on t.provider_id = c.provider_id and t.key = 'bday' and t.enabled
+  join public.providers p on p.id = c.provider_id and p.status = 'active'
+  where c.user_id is not null and c.birthday = to_char(now() at time zone tz, 'MM-DD')
+  on conflict do nothing;
+  return n;
+end $$;
+
+revoke execute on function public.provider_link(bigint, text), public.admin_set_site_url(text) from public, anon, authenticated;
+grant execute on function public.admin_set_site_url(text) to authenticated;
+
+-- ===================== 20261026021720_gastos_fecha_argentina.sql =====================
+-- =====================================================================
+-- TuTiempo · Bloque 2b · Fecha por defecto de un gasto en el día de Buenos Aires
+-- expenses.spent_on tomaba current_date, que en la sesión de Supabase es el día en UTC: un gasto cargado sin fecha
+-- después de las 21 de Argentina quedaba en el día siguiente (y el último día del mes, en el mes siguiente). La app
+-- siempre manda la fecha; esto cubre lo que se cargue sin ella. No cambia datos.
+-- =====================================================================
+alter table public.expenses alter column spent_on set default ((now() at time zone 'America/Argentina/Buenos_Aires')::date);
+
+-- ===================== 20261026025232_site_url_https.sql =====================
+-- =====================================================================
+-- TuTiempo · Bloque 2b · Dirección del sitio: solo https:// y el dominio (H24)
+-- admin_set_site_url aceptaba http://, un puerto y quitaba la barra final en silencio. Ahora la dirección es https:// y
+-- un dominio (etiquetas de letras, números y guiones, con un punto como mínimo), sin puerto, carpeta, parámetros ni barra
+-- al final; si no, 'bad_site_url'. Es la misma regla que src/lib/sitio.js (lo verifica pruebas/unidad.mjs).
+-- No cambia datos: si la dirección guardada no cumple la regla nueva, la migración sigue y avisa (docs/02).
+-- =====================================================================
+set search_path = public, extensions;
+
+create or replace function public.site_url_ok(p_url text) returns boolean
+language sql immutable set search_path = public as $$
+  select p_url is not null and char_length(p_url) <= 100
+     and p_url ~ '^https://([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$'
+$$;
+
+-- la misma regla en la tabla: también la frena una escritura que no pase por la función
+alter table public.app_settings drop constraint if exists app_settings_site_url_check;
+alter table public.app_settings add constraint app_settings_site_url_check check (public.site_url_ok(site_url)) not valid;
+do $$ begin
+  alter table public.app_settings validate constraint app_settings_site_url_check;
+exception when check_violation then
+  raise warning 'site_url: la dirección guardada no es https:// y un dominio; cambiala en Comisión → Dirección del sitio (docs/02)';
+end $$;
+
+-- el admin cambia la dirección del sitio (en minúsculas; sin barra al final ni nada después del dominio)
+create or replace function public.admin_set_site_url(p_url text) returns text
+language plpgsql security definer set search_path = public as $$
+declare url text := lower(btrim(coalesce(p_url, '')));
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if not public.site_url_ok(url) then raise exception 'bad_site_url'; end if;
+  update public.app_settings set site_url = url, updated_at = now() where id;
+  return url;
+end $$;
+
+revoke execute on function public.admin_set_site_url(text) from public, anon, authenticated;
+grant execute on function public.admin_set_site_url(text) to authenticated;
+
+-- ===================== 20261026025356_dni_retencion.sql =====================
+-- =====================================================================
+-- TuTiempo · Bloque 2b · Retención de las fotos del DNI (D24)
+-- Las fotos (bucket privado "dni", carpeta <usuario>/) se borran:
+--   - prestador verificado (con fecha de verificación): a los 30 días de verificarlo (quedan el número, la fecha y
+--     quién verificó). Uno verificado antes del 2b, sin fecha, conserva las fotos: sin ellas no se podría reactivar;
+--   - alta no aprobada o abandonada: a los 90 días de la última foto subida;
+--   - baja del prestador: en el momento (y las de una carpeta que ya no es de ningún prestador).
+-- Las borra la Edge Function dni-cleanup con la API de Storage (un DELETE en storage.objects deja el archivo huérfano):
+-- pide la lista a dni_photos_due(), borra y avisa con dni_photos_deleted(). La llama pg_cron una vez por día y la baja
+-- del prestador en el momento (run_dni_cleanup, con la misma URL y CRON_SECRET de Vault que run_refunds).
+-- Activar pide las fotos O una verificación anterior con fecha: un verificado se reactiva (después de suspenderlo) sin
+-- las fotos.
+-- Si la llamada de la baja falla (red, función caída), la corrida diaria borra las fotos de las bajas que queden.
+-- No cambia datos al correr: el borrado lo hace la función.
+-- =====================================================================
+set search_path = public, extensions;
+
+alter table public.provider_private add column if not exists dni_photos_deleted_at timestamptz;
+
+-- ---------- Qué fotos ya hay que borrar ----------
+-- Una fila por carpeta y motivo, con las rutas (dentro del bucket) a borrar.
+create or replace function public.dni_photos_due(p_limit int default 100)
+returns table (folder text, reason text, paths text[])
+language sql stable security definer set search_path = public as $$
+  with files as (
+    select split_part(o.name, '/', 1) as folder, o.name, o.created_at
+      from storage.objects o where o.bucket_id = 'dni'
+  ), owner_of as (
+    select f.folder, max(f.created_at) as last_upload, lp.id as provider_id, lp.dni_verified, lp.dni_verified_at
+      from files f
+      left join lateral (
+        select p.id, p.dni_verified, pp.dni_verified_at
+          from public.providers p left join public.provider_private pp on pp.provider_id = p.id
+         where p.owner_id::text = f.folder and p.status <> 'deleted'
+         order by p.created_at desc limit 1) lp on true
+     group by f.folder, lp.id, lp.dni_verified, lp.dni_verified_at
+  ), due as (
+    select f.folder, f.name,
+           case
+             -- baja: la carpeta ya no es de ningún prestador (provider_teardown deja owner_id en null)
+             when w.provider_id is null then 'baja'
+             -- verificado: 30 días después de verificar (sin fecha, de antes del 2b, no: necesita las fotos para reactivarse)
+             when w.dni_verified and w.dni_verified_at <= now() - interval '30 days' then 'verificado'
+             -- sin aprobar: 90 días desde la última foto subida
+             when not w.dni_verified and w.last_upload <= now() - interval '90 days' then 'sin_aprobar'
+           end as reason
+      from files f join owner_of w on w.folder = f.folder
+  )
+  select d.folder, d.reason, array_agg(d.name order by d.name)
+    from due d where d.reason is not null
+   group by d.folder, d.reason
+   order by d.folder, d.reason
+   limit greatest(coalesce(p_limit, 100), 1)
+$$;
+
+-- ---------- La función avisa qué borró ----------
+-- Devuelve cuántas de esas rutas siguen en el bucket (0 = borradas). Cuando la carpeta queda vacía, el prestador queda
+-- con dni_paths vacío y la fecha del borrado.
+create or replace function public.dni_photos_deleted(p_folder text, p_paths text[]) returns int
+language plpgsql security definer set search_path = public as $$
+declare left_n int;
+begin
+  select count(*) into left_n from storage.objects o where o.bucket_id = 'dni' and o.name = any(coalesce(p_paths, '{}'));
+  if not exists (select 1 from storage.objects o where o.bucket_id = 'dni' and split_part(o.name, '/', 1) = p_folder) then
+    update public.provider_private pp set dni_paths = '{}', dni_photos_deleted_at = now()
+      from public.providers p
+     where p.id = pp.provider_id and p.owner_id::text = p_folder and p.status <> 'deleted';
+  end if;
+  return left_n;
+end $$;
+
+-- ---------- Llamar a dni-cleanup (cron y baja) ----------
+create or replace function public.run_dni_cleanup() returns bigint
+language plpgsql security definer set search_path = public as $$
+declare url text; key text;
+begin
+  select decrypted_secret into url from vault.decrypted_secrets where name = 'tt_project_url';
+  select decrypted_secret into key from vault.decrypted_secrets where name = 'tt_cron_secret';
+  if coalesce(url, '') = '' or coalesce(key, '') = '' then
+    raise warning 'run_dni_cleanup: faltan tt_project_url o tt_cron_secret en Vault (ver docs/02)';
+    return null;
+  end if;
+  return net.http_post(
+    url := rtrim(url, '/') || '/functions/v1/dni-cleanup',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || key, 'Content-Type', 'application/json'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000);
+end $$;
+
+-- baja del prestador: las fotos se borran en el momento. pg_net manda el pedido después del commit, así que la función
+-- ya ve al prestador dado de baja. Si algo falla acá, la baja sigue igual (la tarea diaria las borra después).
+create or replace function public.provider_deleted_dni() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from pg_proc f join pg_namespace n on n.oid = f.pronamespace where n.nspname = 'net' and f.proname = 'http_post') then
+    begin
+      perform public.run_dni_cleanup();
+    exception when others then
+      raise warning 'provider_deleted_dni: no se pudo pedir el borrado de las fotos (%): queda para la tarea diaria', sqlerrm;
+    end;
+  end if;
+  return null;
+end $$;
+drop trigger if exists provider_deleted_dni on public.providers;
+create trigger provider_deleted_dni after update of status on public.providers
+  for each row when (new.status = 'deleted' and old.status is distinct from 'deleted')
+  execute function public.provider_deleted_dni();
+
+-- tarea diaria (como tt-refunds: requiere pg_cron y pg_net; si no están, no hace nada y se puede volver a correr)
+do $$ begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') and exists (select 1 from pg_extension where extname = 'pg_net') then
+    perform cron.schedule('tt-dni-cleanup', '37 3 * * *', 'select public.run_dni_cleanup()');
+  end if;
+end $$;
+
+-- ---------- Activar = verificar, una sola vez ----------
+-- Igual que en 20261025194744_dni.sql, salvo que para activar alcanzan las fotos O una verificación anterior con fecha
+-- (dni_verified y dni_verified_at): a los 30 días de verificarlo las fotos ya no están (D24), y un prestador suspendido
+-- se tiene que poder reactivar.
+create or replace function public.admin_set_provider(pid bigint, p_status text, p_verified boolean) returns void
+language plpgsql security definer set search_path = public as $$
+declare p record; ph jsonb;
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if p_status not in ('pending','active','suspended') then raise exception 'bad_status'; end if;
+  select pr.id, pr.owner_id, pr.dni_verified, pp.dni_number, pp.dni_verified_at into p
+    from public.providers pr left join public.provider_private pp on pp.provider_id = pr.id
+   where pr.id = pid and pr.status <> 'deleted' for update of pr;
+  if p.id is null then return; end if;
+  if p_status = 'active' then
+    if not (p.dni_verified and p.dni_verified_at is not null) then
+      if p.dni_number is null then raise exception 'dni_missing'; end if;
+      ph := public.dni_photos(p.owner_id);
+      if not ((ph->>'front')::boolean and (ph->>'back')::boolean) then raise exception 'dni_photos_missing'; end if;
+    end if;
+    update public.providers set status = 'active', dni_verified = true, updated_at = now() where id = pid;
+    -- verificar con las fotos deja quién y cuándo (también a uno verificado antes del 2b, sin fecha)
+    if not (p.dni_verified and p.dni_verified_at is not null) then
+      update public.provider_private set dni_verified_at = now(), dni_verified_by = auth.uid() where provider_id = pid;
+    end if;
+  else
+    update public.providers set status = p_status, dni_verified = coalesce(p_verified, dni_verified), updated_at = now() where id = pid;
+  end if;
+end $$;
+
+-- ---------- Permisos ----------
+revoke execute on function public.dni_photos_due(int), public.dni_photos_deleted(text, text[]), public.run_dni_cleanup(),
+  public.provider_deleted_dni() from public, anon, authenticated;
+grant execute on function public.dni_photos_due(int), public.dni_photos_deleted(text, text[]), public.run_dni_cleanup() to service_role;
+

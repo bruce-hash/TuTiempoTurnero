@@ -80,17 +80,6 @@
 .delbtn{display:block;margin:8px auto 0;font-size:13px;color:var(--bad)}
 .delpanel{border:1.5px solid var(--bad-line);background:var(--bad-soft);text-align:left}
 .dl{margin:8px 0 0;padding-left:18px;font-size:14px;display:grid;gap:4px}
-.walletbox{border:1.5px solid var(--ok-line);background:var(--ok-soft);text-align:left}
-.wb-h{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.tgl{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;white-space:nowrap}
-.tgl input{width:20px;height:20px;accent-color:var(--ok)}
-.cbline{color:var(--ok);font-weight:700}
-.bk-cb{margin:6px 0 0;background:rgba(255,255,255,.95);color:#166534!important;border-radius:10px;padding:8px 10px;font-weight:700}
-.walletcard{background:linear-gradient(150deg,#065f46,#16a34a);color:#fff;border:0}
-.walletcard .hint{color:#bbf7d0}.walletcard .lbl{color:#bbf7d0}
-.walletcard .ag li{border-color:rgba(255,255,255,.18)}.walletcard .ag span,.walletcard .ag b{color:#fff}
-.wc-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-.wc-top>div{display:grid;text-align:left}.wc-top b{font-size:30px;font-variant-numeric:tabular-nums}
 .wc-badge{background:rgba(255,255,255,.18);border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap}
 .wplus{color:#bbf7d0!important}.wminus{color:#fecaca!important}
 .wallmini{display:flex;align-items:center;gap:6px;width:100%;border:1.5px solid var(--ok-line);background:var(--ok-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:14px;text-align:left}

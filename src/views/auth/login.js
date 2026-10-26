@@ -73,7 +73,7 @@ export function vLogin() {
   } else {
     return `<div class="narrow"><div class="panel" style="margin-top:24px">
    ${authHead(forBooking ? "Ingresá para reservar" : "Ingresá a TuTiempo", forBooking ? "Tu horario queda guardado mientras ingresás." : "")}${tabs}${google}
-   ${LIVE ? "" : '<div class="demohint">Demo: <b>juan.perez@gmail.com</b> · <b>cliente123</b> (o creá una cuenta nueva)</div>'}
+   ${LIVE ? "" : '<div class="demohint">Demo: <b>juan.perez@tutiempo.demo</b> · <b>cliente123</b> (o creá una cuenta nueva)</div>'}
    <form id="fLogin" novalidate>
     <div class="f"><label for="ai_e">Email</label><input id="ai_e" type="email" autocomplete="email" maxlength="120" value="${esc(login.email || "")}"></div>
     ${pwField("ai_p", "Contraseña", "current-password", false)}

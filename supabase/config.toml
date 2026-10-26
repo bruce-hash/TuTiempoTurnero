@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.mp-refunds]
 verify_jwt = false
+
+[functions.dni-cleanup]
+verify_jwt = false

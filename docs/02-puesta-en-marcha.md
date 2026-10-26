@@ -33,7 +33,7 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
 4. Generar las claves propias de TuTiempo (en tu compu, una vez por entorno; prueba y producción con claves distintas).
    No las guardes en el repo ni en un chat: van directo a `supabase secrets set` y a Vault.
    ```bash
-   openssl rand -base64 48   # CRON_SECRET: la clave con la que el cron llama a mp-refunds (mínimo 32 caracteres)
+   openssl rand -base64 48   # CRON_SECRET: la clave con la que el cron llama a mp-refunds y dni-cleanup (mínimo 32 caracteres)
    openssl rand -base64 32   # MP_TOKENS_KEY: cifra las llaves de Mercado Pago de cada prestador (exactamente 32 bytes)
    ```
    `MP_OWNER_USER_ID` es el id de usuario de Mercado Pago de la cuenta de TuTiempo (developers.mercadopago.com → Tus
@@ -49,6 +49,7 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
    supabase functions deploy mp-webhook --no-verify-jwt
    supabase functions deploy mp-oauth --no-verify-jwt
    supabase functions deploy mp-refunds --no-verify-jwt
+   supabase functions deploy dni-cleanup --no-verify-jwt
    ```
    **Nunca** cargues `MP_API_URL` en Supabase: existe solo para las pruebas (un Mercado Pago falso). Sin ese secreto las
    funciones usan la API real. Si alguna vez aparece en `supabase secrets list`, borralo (`supabase secrets unset MP_API_URL`).
@@ -87,6 +88,43 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
    ```
    Un 403 en `net._http_response` es que la `CRON_SECRET` de Vault no es igual a la de las funciones; un 500 con
    "config", que a la función le falta `CRON_SECRET` o tiene menos de 32 caracteres.
+
+#### Bloque 2b (después del 2a)
+Una Edge Function nueva (`dni-cleanup`), ningún secreto nuevo (usa la misma `CRON_SECRET` y la `tt_project_url` de
+Vault que `mp-refunds`), cinco migraciones y el frontend:
+1. Deploy de las funciones (la nueva y `mp-refunds`, que pasa a compartir el control de la clave del cron):
+   ```bash
+   supabase functions deploy dni-cleanup --no-verify-jwt
+   supabase functions deploy mp-refunds --no-verify-jwt
+   ```
+   Conviene antes de las migraciones: la de retención (`…_dni_retencion.sql`) llama a `dni-cleanup` en cada baja.
+2. `supabase db push` (o `TODO_EN_UNO.sql`): `20261025194744_dni.sql`, `20261025200359_cobros_revision.sql`,
+   `20261025201554_site_url.sql`, `20261026021720_gastos_fecha_argentina.sql`, `20261026025232_site_url_https.sql` y
+   `20261026025356_dni_retencion.sql`.
+   - La de DNI se frena con el error `dni_duplicado` si dos prestadores no eliminados tienen el mismo DNI (no debería
+     pasar en el entorno de prueba). Muestra los últimos 3 dígitos y los ids: resolvelo a mano y volvé a correrla.
+   - Borra el DNI que haya quedado en los metadatos de las cuentas (`auth.users.raw_user_meta_data`). Una sesión ya
+     abierta lo puede tener en su token hasta que se renueve (1 hora).
+   - Desde esta migración, **activar a un prestador exige el número de DNI y las dos fotos** (frente y dorso, que el
+     prestador sube en Perfil → Verificación). Los prestadores de prueba que crees los tenés que cargar así. Uno ya
+     verificado con fecha (suspendido y vuelto a activar) no las necesita.
+   - La de la dirección del sitio (`…_site_url_https.sql`) solo acepta `https://` y el dominio. Si la guardada no
+     cumple (por ejemplo, con `http://`), la migración sigue y deja el aviso `site_url: …`: cambiala en el paso 3.
+   - La de retención (`…_dni_retencion.sql`, D24) arma la tarea `tt-dni-cleanup` (todos los días a las 3:37 UTC) y
+     pide el borrado en el momento en cada baja de prestador. La función borra con la API de Storage las fotos de los
+     verificados hace 30 días o más, de las altas sin aprobar con la última foto de hace 90 días o más y de las bajas
+     (los verificados antes del 2b no tienen fecha de verificación: conservan las fotos hasta que los vuelvas a
+     verificar). Si la llamada de una baja falla, la corrida diaria borra esas fotos.
+3. Panel admin → Comisión → **Dirección del sitio**: en el entorno de prueba, `https://prueba.tutiempo.com.ar` (con
+   ella se arman los links de los avisos; por defecto es `https://tutiempo.com.ar`).
+4. Frontend: `npm run build` y subir `dist/` como siempre.
+5. Verificar en el SQL Editor:
+   ```sql
+   select jobname, schedule from cron.job where jobname = 'tt-dni-cleanup';             -- 37 3 * * *
+   select public.run_dni_cleanup();                                                     -- la corre ahora
+   select status_code, content from net._http_response order by created desc limit 3;  -- 200 y {"files":…,"failed":0}
+   ```
+   `failed` mayor a 0: el detalle está en los logs de la función (Edge Functions → dni-cleanup → Logs).
 
 #### Rotar la CRON_SECRET
 Si se filtró, o una vez por año. Generá una nueva (`openssl rand -base64 48`) y cambiala en los dos lados, uno atrás del
@@ -137,7 +175,9 @@ dice con qué versión se cifró (`v1:…`, `v2:…`).
       verificar que en Supabase → Auth → URL Configuration → Redirect URLs esté la raíz del subdominio
       (`https://prueba.tutiempo.com.ar/`).
 - [ ] Crear cuenta, activar por email, ingresar, recuperar contraseña, entrar con Google.
-- [ ] Alta de prestador, subir DNI, aprobarlo desde el panel admin, conectar Mercado Pago (vendedor de prueba).
+- [ ] Alta de prestador, cargar el número de DNI y las fotos del frente y del dorso (Perfil → Verificación), aprobarlo
+      desde el panel admin (sin el número o sin una foto no deja: H10), conectar Mercado Pago (vendedor de prueba).
+- [ ] Un recordatorio o aviso de cancelación trae el link del subdominio de prueba (Comisión → Dirección del sitio, H24).
 - [ ] Reservar y pagar con el comprador de prueba: el turno se confirma solo (verifica H06: firma del webhook).
 - [ ] La seña llega al vendedor de prueba y el 4% a la cuenta de TuTiempo.
 - [ ] Pago rechazado: el horario se libera.

@@ -13,7 +13,8 @@ import { toast } from "../ui/toast.js";
 import { useProvider } from "../views/prestador/panel.js";
 
 // alta en vivo: los datos del negocio viajan en provider_reg (metadatos de la cuenta) y session() crea el perfil
-// en el primer ingreso. Si Supabase no pide confirmar el email, eso pasa acá mismo: entra al panel y sube el DNI.
+// en el primer ingreso. El DNI no (H10): si Supabase no pide confirmar el email, la sesión empieza acá mismo y se
+// guardan el número y las fotos; si lo pide, los carga después en Perfil → Verificación.
 async function liveRegister(reg) {
   const btn = $("#fPrest button[type=submit]");
   if (btn) {
@@ -26,7 +27,6 @@ async function liveRegister(reg) {
       address: reg.addr || "",
       categories: reg.cats,
       phone: reg.tel,
-      dni: reg.dni,
       instagram: null,
     };
     const res = await sb.auth.signUp({
@@ -45,9 +45,14 @@ async function liveRegister(reg) {
     }
     if (res.data.session) {
       await api.session();
-      if (store.REGFILES.length) {
-        await api.m.uploadDni(store.REGFILES);
+      // si algo de esto falla, la cuenta ya existe: saved() avisa y lo completa en Perfil → Verificación
+      await api.m.setDni(reg.dni).catch(() => {});
+      for (const side of ["frente", "dorso"]) {
+        if (store.REGFILES[side]) {
+          await api.m.uploadDni(side, store.REGFILES[side]).catch(() => {});
+        }
       }
+      await api.loadMine().catch(() => {});
       S.reg = {};
       S.role = "barbero";
       S.btab = "perfil";
@@ -88,61 +93,57 @@ export function readReg() {
   }
   return reg;
 }
-store.REGFILES = [];
-// demo: completa el formulario como si viniera de Google
-registerClick("regGoogle", (ev, el, act) => {
-  S.reg = Object.assign({}, S.reg, readReg(), {
-    nombre: readReg().nombre || S.reg.nombre || "Barbería Don Pepe",
-    email: "donpepe.barber@gmail.com",
-    pass: "googleauth",
-    errs: {},
+store.REGFILES = {};
+// solo la demo (no viaja a producción): completar con Google y entrar al panel del prestador nuevo
+if (!LIVE) {
+  // demo: completa el formulario como si viniera de Google
+  registerClick("regGoogle", (ev, el, act) => {
+    S.reg = Object.assign({}, S.reg, readReg(), {
+      nombre: readReg().nombre || S.reg.nombre || "Barbería Don Pepe",
+      email: "donpepe@tutiempo.demo",
+      pass: "googleauth",
+      errs: {},
+    });
+    toast("Datos completados con Google");
+    render();
   });
-  toast("Datos completados con Google");
-  render();
-});
-// demo: crea el prestador nuevo con un servicio por rubro y entra a su panel
-registerClick("regPanel", (ev, el, act) => {
-  const reg = S.reg;
-  const id = 100 + P.length;
-  P.push({
-    id: id,
-    cats: reg.cats && reg.cats.length ? reg.cats : ["b"],
-    name: reg.nombre || "Mi negocio",
-    addr: reg.addr || "",
-    tel: reg.tel || "",
-    hue: (id * 47) % 360,
-    verified: false,
-    svcs: (reg.cats && reg.cats.length ? reg.cats : ["b"]).map((cat) => [
-      {
-        b: "Corte",
-        p: "Corte y peinado",
-        m: "Masaje",
-        l: "Lifting de pestañas",
-        u: "Esmaltado",
-        d: "Depilación",
-      }[cat],
-      30,
-      1e4,
-      cat,
-    ]),
+  // demo: crea el prestador nuevo con un servicio por rubro y entra a su panel
+  registerClick("regPanel", (ev, el, act) => {
+    const reg = S.reg;
+    const id = 100 + P.length;
+    P.push({
+      id: id,
+      cats: reg.cats && reg.cats.length ? reg.cats : ["b"],
+      name: reg.nombre || "Mi negocio",
+      addr: reg.addr || "",
+      tel: reg.tel || "",
+      hue: (id * 47) % 360,
+      verified: false,
+      svcs: (reg.cats && reg.cats.length ? reg.cats : ["b"]).map((cat) => [
+        {
+          b: "Corte",
+          p: "Corte y peinado",
+          m: "Masaje",
+          l: "Lifting de pestañas",
+          u: "Esmaltado",
+          d: "Depilación",
+        }[cat],
+        30,
+        1e4,
+        cat,
+      ]),
+    });
+    useProvider(id);
+    cfg(id).on = false;
+    S.reg = {};
+    S.barberAuth = true;
+    S.role = "barbero";
+    S.btab = "perfil";
+    toast("Bienvenido. Completá tu perfil y conectá Mercado Pago.");
+    render();
+    window.scrollTo(0, 0);
   });
-  useProvider(id);
-  cfg(id).on = false;
-  S.reg = {};
-  S.barberAuth = true;
-  S.role = "barbero";
-  S.btab = "perfil";
-  toast("Bienvenido. Completá tu perfil y conectá Mercado Pago.");
-  render();
-  window.scrollTo(0, 0);
-});
-registerChange("dniUp", (ev) => {
-  api.m
-    .uploadDni([...ev.target.files].slice(0, 4))
-    .then(() => toast("Recibimos tu DNI. Te avisamos cuando esté verificado."))
-    .catch(() => {});
-  return;
-});
+}
 registerSubmit("fPrest", (ev) => {
   const reg = Object.assign(S.reg, readReg());
   const errs = {};
@@ -168,8 +169,8 @@ registerSubmit("fPrest", (ev) => {
   if (!/^\d{7,8}$/.test(reg.dni || "")) {
     errs.dni = "El DNI tiene que tener 7 u 8 números, sin puntos.";
   }
-  if (!reg.files) {
-    errs.files = "Subí la foto del DNI (frente y dorso).";
+  if (!reg.frente || !reg.dorso) {
+    errs.files = "Subí las fotos del frente y del dorso de tu DNI.";
   }
   if (!reg.tc) {
     errs.tc = "Tenés que aceptar los términos para continuar.";

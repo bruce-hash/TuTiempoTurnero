@@ -41,7 +41,7 @@ _, t3 = timed("página 'Todos'", "select id from list_providers('olavarria',null
 _, t4 = timed("búsqueda 'estudio 1999'", "select id from list_providers('olavarria',null,'estudio 1999',null,null,12)")
 _, t5 = timed("conteo por rubro", "select * from category_counts('olavarria')")
 pid = ex("select id from providers where slug like 'load-%' and id % 20 = 0 limit 1")[0][0]
-_, t6 = timed("ocupados de un prestador (60 días)", "select * from provider_busy(%s, current_date - 30, current_date + 30)", (pid,))
+_, t6 = timed("ocupados de un prestador (60 días)", "select * from provider_busy(%s, (now() at time zone 'America/Argentina/Buenos_Aires')::date - 30, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 30)", (pid,))
 _, t7 = timed("ficha completa", "select get_provider(%s)", (pid,))
 
 # 60 clientes intentan el mismo horario al mismo tiempo

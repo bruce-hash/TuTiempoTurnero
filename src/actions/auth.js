@@ -28,7 +28,7 @@ registerClick("google", (ev, el, act) => {
       });
     return;
   }
-  demoSignIn("juan.perez@gmail.com", "Juan Pérez");
+  demoSignIn("juan.perez@tutiempo.demo", "Juan Pérez");
   afterLogin();
 });
 registerClick("authMode", (ev, el, act) => {

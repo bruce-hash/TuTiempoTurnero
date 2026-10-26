@@ -7,7 +7,8 @@ import { dmyIso } from "../../lib/fechas.js";
 import { S } from "../../state.js";
 import { render } from "../../ui/render.js";
 
-// "Para revisar · cobros" (Bloque 1, D19 y D20): devoluciones que fallaron o se están reintentando y pagos en revisión.
+// "Para revisar · cobros" (Bloque 1, D19 y D20): devoluciones que fallaron o se están reintentando, pagos en revisión
+// y (Bloque 2b) cuentas de Mercado Pago con error en su llave.
 // En vivo vienen de admin_review (se piden una vez y se guardan en S.admRev); en la demo, de datos de ejemplo.
 export function admReviewData() {
   if (!LIVE) {
@@ -69,6 +70,14 @@ function refundForm(payment) {
     <p class="hint" id="arerr" role="alert"></p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn btn-ghost btn-sm" data-act="admResolveNo">Cancelar</button><button class="btn btn-pri btn-sm">Devolver</button></div></form>`;
 }
+// formulario de "Reprocesar" (H27): vuelve a procesar el pago como si recién llegara; la nota es obligatoria
+function reprocessForm(id) {
+  return `<form id="fReprocess" class="stack" style="gap:6px;margin-top:6px" data-id="${id}" novalidate>
+    <label class="lbl" for="rpNote" style="margin:0">Por qué lo reprocesás (queda registrado con tu usuario y la fecha)</label>
+    <textarea id="rpNote" rows="2" maxlength="500" placeholder="Ej.: ya se corrigió el error, vuelvo a procesarlo"></textarea>
+    <p class="hint" id="rperr" role="alert"></p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn btn-ghost btn-sm" data-act="admResolveNo">Cancelar</button><button class="btn btn-pri btn-sm">Reprocesar</button></div></form>`;
+}
 // formulario de "Resuelto a mano": la nota es obligatoria
 function resolveForm(kind, id) {
   return `<form id="fResolve" class="stack" style="gap:6px;margin-top:6px" data-k="${kind}" data-id="${id}" novalidate>
@@ -85,7 +94,8 @@ export function admReview() {
   const refunds = data.refunds || [];
   const payments = data.payments || [];
   const events = data.webhook_events || [];
-  if (!refunds.length && !payments.length && !events.length) {
+  const accounts = data.accounts || [];
+  if (!refunds.length && !payments.length && !events.length && !accounts.length) {
     return "";
   }
   const open = S.admResolve || {};
@@ -96,9 +106,13 @@ export function admReview() {
   const paymentLi = (payment) => `<li><div><b>Pago ${esc(payment.mp_payment_id)} de ${money(payment.amount)} · ${esc(payment.provider_name || "Prestador")}</b>
      <span>${esc(payment.client_name || "")}${payment.client_name ? " · " : ""}${(payment.review_reasons || []).map((reason) => esc(paymentWhy(reason))).join(" · ")}</span>
      ${payment.refundable_from_app === false ? '<span class="hint">No es de una cuenta de TuTiempo: la devolución se hace a mano.</span>' : ""}
-     ${open.k === "payment" && open.id === payment.id ? resolveForm("payment", payment.id) : open.k === "refundNew" && open.id === payment.id ? refundForm(payment) : `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">${payment.refundable_from_app !== false && +payment.refundable > 0 ? `<button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="refundNew" data-id="${payment.id}">Devolver</button>` : ""}<button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="payment" data-id="${payment.id}">Resuelto a mano</button></div>`}</div></li>`;
+     ${open.k === "payment" && open.id === payment.id ? resolveForm("payment", payment.id) : open.k === "refundNew" && open.id === payment.id ? refundForm(payment) : open.k === "reprocess" && open.id === payment.id ? reprocessForm(payment.id) : `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">${payment.reprocessable ? `<button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="reprocess" data-id="${payment.id}">Reprocesar</button>` : ""}${payment.refundable_from_app !== false && +payment.refundable > 0 ? `<button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="refundNew" data-id="${payment.id}">Devolver</button>` : ""}<button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="payment" data-id="${payment.id}">Resuelto a mano</button></div>`}</div></li>`;
+  // cuenta de Mercado Pago que no puede cobrar o devolver por su llave: sale sola cuando se renueva o el prestador reconecta
+  const accountLi = (account) => `<li><div><b>Cuenta de Mercado Pago con error · ${esc(account.provider_name || "Prestador")}</b>
+     <span>Cuenta n° ${esc(account.mp_user_id || "?")} · ${account.status === "active" ? "cobra las reservas" : `solo devoluciones (${account.refunds_pending} pendiente${account.refunds_pending === 1 ? "" : "s"})`}</span>
+     <span class="hint">❌ ${esc(account.last_error)} · desde ${esc(dmyIso(account.error_at))}. Si sigue, el prestador tiene que volver a conectarla (Perfil → Cobros).</span></div></li>`;
   const eventLi = (event) => `<li><div><span>Aviso descartado · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)} · ${esc(dmyIso(event.created_at))}</span></div></li>`;
-  return `<div class="panel admalert"><p class="lbl">Para revisar · cobros <span class="cnt">${refunds.length + payments.length}</span></p>
-   <ul class="adml">${refunds.map(refundLi).join("")}${payments.map(paymentLi).join("")}</ul>
+  return `<div class="panel admalert"><p class="lbl">Para revisar · cobros <span class="cnt">${refunds.length + payments.length + accounts.length}</span></p>
+   <ul class="adml">${accounts.map(accountLi).join("")}${refunds.map(refundLi).join("")}${payments.map(paymentLi).join("")}</ul>
    ${events.length ? `<details><summary class="hint">Avisos de Mercado Pago descartados (últimos 30 días): ${events.length}</summary><ul class="adml">${events.map(eventLi).join("")}</ul></details>` : ""}</div>`;
 }

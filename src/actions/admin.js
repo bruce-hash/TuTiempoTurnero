@@ -1,11 +1,11 @@
 import { registerClick, registerInput, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
-import { pctTxt } from "../lib/dinero.js";
+import { PESOS_ERR, parsePesos, pctTxt } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, nowHM } from "../lib/fechas.js";
 import { pr } from "../lib/prestadores.js";
-import { refundPay } from "../lib/saldo.js";
+import { SITE_URL_ERR, siteUrl } from "../lib/sitio.js";
 import { S } from "../state.js";
 import { P, store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -105,7 +105,6 @@ registerClick("admDelYes", (ev, el, act) => {
       booking.refund = (booking.paid || 0) + (booking.fee || 0);
       if (booking.mine) {
         pushCancel(booking);
-        refundPay(booking, booking.svc + " en " + prov.name);
       }
       count++;
     }
@@ -257,6 +256,22 @@ registerSubmit("fCom", (ev) => {
   render();
   return;
 });
+// dirección del sitio (H24): solo en vivo; https:// y el dominio, nada más (la base vuelve a validarla)
+registerSubmit("fSite", (ev) => {
+  const url = siteUrl($("#admSite").value);
+  if (!url) {
+    $("#siteerr").textContent = SITE_URL_ERR;
+    return;
+  }
+  api.m
+    .adminSetSiteUrl(url)
+    .then(() => api.adminLoad())
+    .then(() => {
+      toast("Dirección guardada: los avisos nuevos usan " + url + ".");
+      render();
+    })
+    .catch(() => {});
+});
 // "Para revisar · cobros" (Bloque 1, D20): Reintentar una devolución y "Resuelto a mano" (con nota; no devuelve nada)
 registerClick("admRetry", (ev, el, act) => {
   const id = +el.dataset.id;
@@ -311,17 +326,41 @@ registerSubmit("fResolve", (ev) => {
   store.DEMO_REV[list] = store.DEMO_REV[list].filter((item) => item.id !== id);
   done();
 });
+// "Reprocesar" un pago en revisión por un error inesperado (H27): solo en vivo (la demo no lo ofrece)
+registerSubmit("fReprocess", (ev) => {
+  const id = +ev.target.dataset.id;
+  const note = String($("#rpNote").value || "")
+    .replace(/[\u0000-\u001f]/g, " ")
+    .trim()
+    .slice(0, 500);
+  if (note.length < 3) {
+    $("#rperr").textContent = "Escribí por qué lo reprocesás.";
+    return;
+  }
+  api.m
+    .adminReprocess(id, note)
+    .then(() => api.adminReview())
+    .then(() => {
+      S.admResolve = null;
+      toast("Pago reprocesado.");
+      render();
+    })
+    .catch(() => {});
+});
 // "Devolver" un pago en revisión (D20): monto entero en pesos y nota obligatoria
 registerSubmit("fAdmRefund", (ev) => {
   const id = +ev.target.dataset.id;
-  const raw = String($("#arAmount").value || "").trim();
-  const amount = /^\d+$/.test(raw) ? +raw : 0;
+  const amount = parsePesos($("#arAmount").value);
   const note = String($("#arNote").value || "")
     .replace(/[\u0000-\u001f]/g, " ")
     .trim()
     .slice(0, 500);
+  if (isNaN(amount)) {
+    $("#arerr").textContent = PESOS_ERR;
+    return;
+  }
   if (amount <= 0) {
-    $("#arerr").textContent = "Escribí el monto en pesos, sin puntos ni decimales.";
+    $("#arerr").textContent = "Escribí cuánto devolvés.";
     return;
   }
   if (note.length < 3) {

@@ -7,6 +7,11 @@ on:
   push:
     branches: [developer, main]
   workflow_dispatch:
+  # Todas las noches a las 23:30 de Argentina (02:30 UTC), sobre developer: a esa hora en UTC ya es mañana (y a fin de
+  # mes, otro mes), así que una prueba que use el "hoy" del runner en lugar del de Buenos Aires falla acá y no sola un
+  # día cualquiera. GitHub corre los cron con el workflow y el código de la rama por defecto, que es developer.
+  schedule:
+    - cron: "30 2 * * *"
 
 permissions:
   contents: read
@@ -71,7 +76,7 @@ jobs:
           python3 pruebas/test_mudanza.py "host=localhost port=5432 dbname=tt_mudanza user=postgres password=postgres"
 
   frontend:
-    name: Frontend (sin demo · crawl · clicks)
+    name: Frontend (unidad · sin demo · crawl · clicks)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -86,6 +91,9 @@ jobs:
 
       - name: npm ci
         run: npm ci
+
+      - name: Unidad (montos en pesos y dirección del sitio)
+        run: npm run test:unidad
 
       - name: Build de producción sin nada de la demo
         run: npm run test:sin-demo

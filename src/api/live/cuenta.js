@@ -31,8 +31,8 @@ export const liveCuenta = {
     };
     S.form.tel = (profile && profile.phone) || "";
     let pid = await call(sb.rpc("my_provider"));
-    // Alta de prestador pendiente (los datos viajaron en los metadatos de la cuenta al registrarse, DNI incluido: H10):
-    // se crea el perfil en el primer ingreso y se borran los metadatos.
+    // Alta de prestador pendiente (los datos del negocio viajaron en los metadatos de la cuenta al registrarse): se crea
+    // el perfil en el primer ingreso y se borran los metadatos. El DNI no viaja ahí (H10): lo carga en Perfil.
     const reg = user.user_metadata && user.user_metadata.provider_reg;
     if (!pid && reg) {
       try {
@@ -42,7 +42,7 @@ export const liveCuenta = {
             p_address: reg.address || "",
             p_categories: reg.categories,
             p_phone: reg.phone || "",
-            p_dni: reg.dni,
+            p_dni: null,
             p_instagram: reg.instagram || null,
             p_city: CITY,
           }),
@@ -136,10 +136,6 @@ export const liveCuenta = {
         );
       }),
     );
-  },
-  async wallet() {
-    S.wallet = 0;
-    S.wmov = [];
   },
   async myStamps() {
     if (!S.user) {

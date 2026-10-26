@@ -16,21 +16,28 @@ export const liveAdmin = {
     return S.isAdmin;
   },
   async adminLoad() {
-    const [stats, providers] = await Promise.all([
+    const [stats, providers, settings] = await Promise.all([
       call(sb.rpc("admin_stats")),
       call(
         sb.rpc("admin_providers", {
           p_status: null,
         }),
       ),
+      call(sb.from("app_settings").select("site_url").maybeSingle()).catch(() => null),
     ]);
     S.adm = {
       stats: stats,
+      // H24: la dirección del sitio con la que la base arma los links de los avisos
+      siteUrl: (settings && settings.site_url) || "",
       providers: (providers || []).map((prov) => ({
         id: prov.id,
         name: prov.name,
         status: prov.status,
         verified: prov.dni_verified,
+        dni: prov.dni_number || "",
+        dniPhotos: prov.dni_photos || {},
+        verifiedAt: prov.dni_verified_at,
+        verifiedBy: prov.dni_verified_by || "",
         owner: prov.owner_id,
         cats: prov.categories || [],
         month: prov.bookings_month,

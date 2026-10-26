@@ -11,6 +11,7 @@ Object.assign(LM, {
         p_pct: pct,
       }),
     ),
+  adminSetSiteUrl: (url) => saved(sb.rpc("admin_set_site_url", { p_url: url })),
   adminSetProvider: (providerId, status, verified) =>
     saved(
       sb.rpc("admin_set_provider", {
@@ -35,6 +36,7 @@ Object.assign(LM, {
   adminRefundRetry: (refundId) => saved(sb.rpc("admin_refund_retry", { p_refund: refundId })),
   adminRefundCreate: (paymentId, amount, note) =>
     saved(sb.rpc("admin_refund_create", { p_payment: paymentId, p_booking: null, p_amount: amount, p_note: note })),
+  adminReprocess: (paymentId, note) => saved(sb.rpc("admin_reprocess", { p_payment: paymentId, p_note: note })),
   adminResolve: (kind, id, note) => saved(sb.rpc("admin_resolve", { p_kind: kind, p_id: id, p_note: note })),
   adminDeleteProvider: (providerId) =>
     saved(
@@ -78,11 +80,15 @@ Object.assign(LM, {
     if (res.error) {
       throw res.error;
     }
+    // URL firmada de 2 minutos por archivo: se piden al tocar "Ver DNI" y no se guardan
     const urls = [];
     for (const file of res.data || []) {
-      const signed = await sb.storage.from("dni").createSignedUrl(userId + "/" + file.name, 300);
+      const signed = await sb.storage.from("dni").createSignedUrl(userId + "/" + file.name, 120);
       if (signed.data) {
-        urls.push(signed.data.signedUrl);
+        urls.push({
+          side: file.name.startsWith("frente-") ? "Frente" : file.name.startsWith("dorso-") ? "Dorso" : "Archivo",
+          url: signed.data.signedUrl,
+        });
       }
     }
     return urls;

@@ -205,10 +205,10 @@ ok("marcar asistió", q("select mark_booking(%s,'done')", (mid,), uid=prov2)[0][
 ok("la ficha suma la visita", q("select visits, total_spent from provider_clients where provider_id=%s", (pid2,), uid=prov2)[0] == (1, 10000))
 ok("prestador no puede agendar con dinero", err(q("insert into bookings (provider_id, source, status, starts_at, ends_at, price, paid_mp) values (%s,'manual','confirmed',now(),now()+interval '1 hour',1,5)", (pid2,), uid=prov2)))
 ok("bloquear y desbloquear horario", not err(q("insert into bookings (provider_id, source, status, starts_at, ends_at, service_name) values (%s,'block','confirmed', now()+interval '3 day', now()+interval '3 day 1 hour','Bloqueado') returning id", (pid2,), uid=prov2)))
-fin = q("select sum(man) from provider_finance(current_date - 1, current_date + 1)", uid=prov2)
+fin = q("select sum(man) from provider_finance((now() at time zone 'America/Argentina/Buenos_Aires')::date - 1, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 1)", uid=prov2)
 ok("finanzas del día", fin[0][0] == 10000)
-ok("otro no ve finanzas ajenas", q("select coalesce(sum(man),0) from provider_finance(current_date - 1, current_date + 1)", uid=cli1)[0][0] == 0)
-occ = q("select sum(busy_min) from provider_occupancy(current_date - 1, current_date + 1)", uid=prov2)
+ok("otro no ve finanzas ajenas", q("select coalesce(sum(man),0) from provider_finance((now() at time zone 'America/Argentina/Buenos_Aires')::date - 1, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 1)", uid=cli1)[0][0] == 0)
+occ = q("select sum(busy_min) from provider_occupancy((now() at time zone 'America/Argentina/Buenos_Aires')::date - 1, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 1)", uid=prov2)
 ok("ocupación por hora", occ[0][0] == 60)
 
 # panel privado
@@ -271,7 +271,7 @@ ok("prestador no puede marcarse Mercado Pago conectado", err(q("update provider_
 ok("prestador sí cambia su teléfono y su meta", not err(q("update provider_private set phone='2284 999', monthly_goal=900000 where provider_id=%s", (pid3,), uid=nails_owner)))
 ok("no puede registrar fotos fuera de su carpeta", err(q("insert into media (provider_id, storage_path, kind) values (%s,'1/otro.jpg','image')", (pid3,), uid=nails_owner)))
 ok("sí en su carpeta", not err(q("insert into media (provider_id, storage_path, kind) values (%s,%s,'image')", (pid3, f"{pid3}/a.jpg"), uid=nails_owner)))
-ok("lista de espera en el pasado rechazada", err(q("insert into waitlist (user_id, provider_id, day) values (%s,%s,current_date - 10)", (c3, pid3), uid=c3)))
+ok("lista de espera en el pasado rechazada", err(q("insert into waitlist (user_id, provider_id, day) values (%s,%s,(now() at time zone 'America/Argentina/Buenos_Aires')::date - 10)", (c3, pid3), uid=c3)))
 q("update bookings set status='done' where id=%s", (bid3,))
 ok("el cliente no puede escribir la respuesta del prestador", err(q("insert into reviews (provider_id, booking_id, author, stars, body, reply) values (%s,%s,'x',5,'ok','falsa')", (pid3, bid3), uid=c3)))
 rv = q("insert into reviews (provider_id, booking_id, author, stars, body) values (%s,%s,'Soy el dueño',5,'ok') returning author, reply", (pid3, bid3), uid=c3)
@@ -402,7 +402,123 @@ q("select admin_set_commission(10)", uid=adm)
 ap = q("select admin_providers(null)", uid=adm)
 ok("admin lista prestadores (hasta 500, pendientes primero, después los más activos)", not err(ap) and 1 <= len(ap[0][0]) <= 500 and all(k in ap[0][0][0] for k in ("status","dni_verified","bookings_month","mp_connected","activity")))
 ok("admin suspende: desaparece del listado", not err(q("select admin_set_provider(%s,'suspended',null)", (pid3,), uid=adm)) and not any(r0[0] == pid3 for r0 in q("select id from list_providers('olavarria', null, null, null, null, 48)", role="anon")))
+# Bloque 2b (H10): activar = verificar, solo con el número y las dos fotos del DNI
+ok("reactivar sin las fotos del DNI: rechazado", err(q("select admin_set_provider(%s,'active',true)", (pid3,), uid=adm), "dni_photos_missing")
+   and q("select status from providers where id=%s", (pid3,))[0][0] == "suspended")
+ok("el dueño sube el frente en su carpeta", not err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{nails_owner}/frente-1.jpg",), uid=nails_owner)))
+ok("…no en otra carpeta", err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{cli1}/frente-1.jpg",), uid=nails_owner)))
+ok("…ni con otro nombre", err(q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{nails_owner}/selfie.jpg",), uid=nails_owner)))
+ok("…y nadie más ve las fotos (ni el dueño)", q("select count(*) from storage.objects where bucket_id='dni'", uid=nails_owner)[0][0] == 0
+   and q("select count(*) from storage.objects where bucket_id='dni'", uid=cli1)[0][0] == 0)
+ok("solo con el frente: rechazado", err(q("select admin_set_provider(%s,'active',true)", (pid3,), uid=adm), "dni_photos_missing"))
+q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{nails_owner}/dorso-2.pdf",), uid=nails_owner)
 ok("admin reactiva y verifica", not err(q("select admin_set_provider(%s,'active',true)", (pid3,), uid=adm)) and q("select status, dni_verified from providers where id=%s", (pid3,))[0] == ("active", True))
+# un prestador nuevo, de punta a punta: sin DNI en el alta, lo carga después, el admin lo activa
+nu = mkuser("nuevo-dni@test.ar", "Nuevo DNI")
+pn_ = q("select register_provider('Nuevo DNI', 'Calle 3', array['b'], '2284 3', null)", uid=nu)
+ok("alta sin DNI (todavía sin sesión al registrarse)", not err(pn_)); pn_ = pn_[0][0]
+ok("el estado de su verificación: sin número ni fotos", q("select my_dni_status()", uid=nu)[0][0] == {"number": False, "front": False, "back": False, "verified": False, "verified_at": None})
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{nu}/frente-1.png", f"{nu}/dorso-1.png"), uid=nu)
+ok("activar sin número: rechazado", err(q("select admin_set_provider(%s,'active',true)", (pn_,), uid=adm), "dni_missing"))
+ok("número con puntos o corto: rechazado", err(q("select set_my_dni('30.111.555')", uid=nu), "bad_dni") and err(q("select set_my_dni('123456')", uid=nu), "bad_dni"))
+ok("número de otro prestador: rechazado con error claro", err(q("select set_my_dni('30111222')", uid=nu), "dni_taken"))
+ok("…también en el alta", err(q("select register_provider('Otro', 'x', array['b'], '1', '28111222')", uid=mkuser("otro-dni@test.ar", "Otro")), "dni_taken"))
+ok("el dueño carga su número", not err(q("select set_my_dni('30111555')", uid=nu)) and q("select my_dni_status()", uid=nu)[0][0]["number"] is True)
+ok("el dueño no lee el número ni puede escribirlo directo", err(q("select dni_number from provider_private", uid=nu)) and err(q("update provider_private set dni_number='1' where provider_id=%s", (pn_,), uid=nu)))
+ok("un cliente no puede cargar DNI", err(q("select set_my_dni('30111666')", uid=cli1), "not_provider"))
+ap_n = [x for x in q("select admin_providers('pending')", uid=adm)[0][0] if x["id"] == pn_][0]
+ok("el admin ve el número y que están las dos fotos", ap_n["dni_number"] == "30111555" and ap_n["dni_photos"] == {"front": True, "back": True})
+ok("admin activa = verifica", not err(q("select admin_set_provider(%s,'active',false)", (pn_,), uid=adm))
+   and q("select status, dni_verified from providers where id=%s", (pn_,))[0] == ("active", True))
+ok("…con quién y cuándo", q("select dni_verified_by = %s and dni_verified_at > now() - interval '1 minute' from provider_private where provider_id=%s", (adm, pn_))[0][0] is True)
+ok("verificado, el dueño ya no cambia su número", err(q("select set_my_dni('30111777')", uid=nu), "dni_locked"))
+ok("el público ve la verificación (H11 sale de dni_verified)", q("select (get_provider(%s))->>'dni_verified'", (pn_,), role="anon")[0][0] == "true")
+ok("set_my_dni y my_dni_status: anon no", err(q("select set_my_dni('30111888')", role="anon")) and err(q("select my_dni_status()", role="anon")))
+ok("dni_photos es interna", err(q("select dni_photos(%s)", (nu,), uid=nu)))
+
+# Bloque 2b (D24): retención de las fotos del DNI. dni_photos_due dice qué borrar (la Edge Function dni-cleanup lo borra
+# con la API de Storage; acá se simula borrando la fila) y dni_photos_deleted lo registra
+def due(folder):
+    r = q("select reason, paths from dni_photos_due(1000) where folder = %s", (str(folder),), role="service_role")
+    return r if err(r) else [(x[0], sorted(x[1])) for x in r]
+fotos_nu = sorted([f"{nu}/frente-1.png", f"{nu}/dorso-1.png"])
+ok("D24: verificado hoy, sus fotos todavía no se borran", due(nu) == [])
+q("update provider_private set dni_verified_at = now() - interval '29 days' where provider_id = %s", (pn_,))
+ok("D24: …ni a los 29 días de verificarlo", due(nu) == [])
+q("update provider_private set dni_verified_at = now() - interval '30 days 1 minute' where provider_id = %s", (pn_,))
+ok("D24: a los 30 días de verificarlo, sus dos fotos se borran", due(nu) == [("verificado", fotos_nu)])
+ok("D24: si todavía quedan fotos, no se marca el borrado", q("select dni_photos_deleted(%s, %s)", (str(nu), fotos_nu), role="service_role")[0][0] == 2
+   and q("select dni_photos_deleted_at from provider_private where provider_id = %s", (pn_,))[0][0] is None)
+q("delete from storage.objects where bucket_id = 'dni' and name = any(%s)", (fotos_nu,))   # lo que hace la API de Storage
+q("update provider_private set dni_paths = %s where provider_id = %s", (fotos_nu, pn_))   # dni_paths (de la versión 31): tiene que quedar vacío
+ok("D24: borradas, la base lo registra: dni_paths vacío y la fecha del borrado", q("select dni_photos_deleted(%s, %s)", (str(nu), fotos_nu), role="service_role")[0][0] == 0
+   and q("select dni_paths = '{}' and dni_photos_deleted_at > now() - interval '1 minute' from provider_private where provider_id = %s", (pn_,))[0][0] is True)
+ok("D24: quedan el número, la fecha y quién verificó", q("select dni_number is not null and dni_verified_at is not null and dni_verified_by = %s from provider_private where provider_id = %s", (adm, pn_))[0][0] is True
+   and q("select dni_verified from providers where id = %s", (pn_,))[0][0] is True and due(nu) == [])
+q("select admin_set_provider(%s,'suspended',null)", (pn_,), uid=adm)
+ok("D24 caso 1: un verificado (con fecha) suspendido se reactiva sin las fotos ya borradas", not err(q("select admin_set_provider(%s,'active',null)", (pn_,), uid=adm))
+   and q("select status, dni_verified from providers where id = %s", (pn_,))[0] == ("active", True)
+   and q("select dni_verified_by = %s from provider_private where provider_id = %s", (adm, pn_))[0][0] is True)   # no cambia quién verificó
+# verificado antes del 2b, sin fecha: sus fotos no se borran (sin ellas no podría reactivarse) y reactivarlo las pide
+vie = mkuser("viejo-d24@test.ar", "Viejo D24")
+pvie = q("select register_provider('Viejo D24', 'Calle 8', array['b'], '2284 8', '30111900')", uid=vie)[0][0]
+q("update providers set status = 'suspended', dni_verified = true where id = %s", (pvie,))
+q("insert into storage.objects (bucket_id, name, created_at) values ('dni', %s, now() - interval '400 days'), ('dni', %s, now() - interval '400 days')",
+  (f"{vie}/frente-1.jpg", f"{vie}/dorso-1.jpg"))
+ok("D24 caso 1: un verificado sin fecha (de antes del 2b) conserva las fotos", due(vie) == [])
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(vie),))
+ok("D24 caso 1: …y sin fotos ni fecha de verificación no se puede activar", err(q("select admin_set_provider(%s,'active',null)", (pvie,), uid=adm), "dni_photos_missing"))
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{vie}/frente-2.jpg", f"{vie}/dorso-2.jpg"))
+ok("D24 caso 1: …con las fotos sí, y queda la fecha de la verificación", not err(q("select admin_set_provider(%s,'active',null)", (pvie,), uid=adm))
+   and q("select status from providers where id = %s", (pvie,))[0][0] == "active"
+   and q("select dni_verified_at > now() - interval '1 minute' and dni_verified_by = %s from provider_private where provider_id = %s", (adm, pvie))[0][0] is True)
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(vie),))
+# alta sin aprobar: 90 días desde la última foto
+pend = mkuser("pendiente-d24@test.ar", "Pendiente D24")
+q("select register_provider('Pendiente D24', 'Calle 9', array['b'], '2284 9', '30111901')", uid=pend)
+q("update providers set created_at = now() - interval '200 days' where owner_id = %s", (pend,))
+q("insert into storage.objects (bucket_id, name, created_at) values ('dni', %s, now() - interval '100 days'), ('dni', %s, now() - interval '89 days')",
+  (f"{pend}/frente-1.jpg", f"{pend}/dorso-1.jpg"))
+ok("D24: alta sin aprobar con la última foto de hace 89 días: no se borra", due(pend) == [])
+q("update storage.objects set created_at = now() - interval '90 days 1 minute' where name = %s", (f"{pend}/dorso-1.jpg",))
+ok("D24: a los 90 días de la última foto, se borran las dos", due(pend) == [("sin_aprobar", sorted([f"{pend}/frente-1.jpg", f"{pend}/dorso-1.jpg"]))])
+# baja: en el momento, y la baja pide el borrado ya (pg_net, con la URL y la clave del cron de Vault)
+baja = mkuser("baja-d24@test.ar", "Baja D24")
+q("select register_provider('Baja D24', 'Calle 10', array['b'], '2284 10', '30111902')", uid=baja)
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{baja}/frente-1.jpg", f"{baja}/dorso-1.jpg"), uid=baja)
+ok("D24: alta reciente: sus fotos no se borran", due(baja) == [])
+q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
+q("select vault.create_secret('https://proyecto.supabase.co/', 'tt_project_url')"); q("select vault.create_secret('secreto-del-cron', 'tt_cron_secret')")
+ok("D24: la baja del prestador se hace igual", not err(q("select delete_my_provider()", uid=baja)))
+ok("D24: …sus fotos se borran en el momento", due(baja) == [("baja", sorted([f"{baja}/frente-1.jpg", f"{baja}/dorso-1.jpg"]))])
+rq = q("select url, headers->>'Authorization' from net.requests")
+ok("D24: …y la baja llama ya a dni-cleanup con la clave del cron", rq == [("https://proyecto.supabase.co/functions/v1/dni-cleanup", "Bearer secreto-del-cron")])
+ok("D24: el cron diario llama a la misma función", q("select run_dni_cleanup()", role="service_role")[0][0] is not None
+   and q("select count(*) from net.requests where url like '%%/dni-cleanup'")[0][0] == 2)
+q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
+ok("D24: sin los secretos en Vault, una baja no falla ni llama a nada", not err(q("update providers set status = 'deleted' where owner_id = %s", (pend,)))
+   and q("select count(*) from net.requests")[0][0] == 0 and due(pend)[0][0] == "baja")
+# caso 2: la llamada de la baja falla (pg_net con error): la baja sigue y la corrida diaria encuentra las fotos
+caida = mkuser("caida-d24@test.ar", "Caída D24")
+q("select register_provider('Caída D24', 'Calle 11', array['b'], '2284 11', '30111903')", uid=caida)
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{caida}/frente-1.jpg", f"{caida}/dorso-1.jpg"), uid=caida)
+q("select vault.create_secret('https://proyecto.supabase.co/', 'tt_project_url')"); q("select vault.create_secret('secreto-del-cron', 'tt_cron_secret')")
+q("alter function net.http_post(text, jsonb, jsonb, jsonb, int) rename to http_post_ok")
+q("create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000) "
+  "returns bigint language plpgsql as $$ begin raise exception 'sin red'; end $$")
+ok("D24 caso 2: si falla la llamada a dni-cleanup, la baja se hace igual", not err(q("select delete_my_provider()", uid=caida))
+   and q("select count(*) from providers where name = 'Caída D24' and status = 'deleted'")[0][0] == 1)
+q("drop function net.http_post(text, jsonb, jsonb, jsonb, int)"); q("alter function net.http_post_ok(text, jsonb, jsonb, jsonb, int) rename to http_post")
+q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')")
+ok("D24 caso 2: …y la corrida diaria las borra (siguen en la lista hasta que se borran)", due(caida) == [("baja", sorted([f"{caida}/frente-1.jpg", f"{caida}/dorso-1.jpg"]))])
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(caida),))
+ok("D24 caso 2: …borradas, ya no aparecen", due(caida) == [] and q("select dni_photos_deleted(%s, '{}')", (str(caida),), role="service_role")[0][0] == 0)
+huerfana = uuid.uuid4()
+q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{huerfana}/frente-1.jpg",))
+ok("D24: una carpeta que no es de ningún prestador se borra", due(huerfana) == [("baja", [f"{huerfana}/frente-1.jpg"])])
+ok("D24: las funciones del borrado son internas (ni el admin)", all(err(q(sql, uid=adm)) and err(q(sql, role="anon")) for sql in
+   ("select * from dni_photos_due()", "select dni_photos_deleted('x', '{}')", "select run_dni_cleanup()")))
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) in (%s, %s, %s)", (str(pend), str(baja), str(huerfana)))
 
 # ---------- versión 29 ----------
 # la seña de cada turno siempre alcanza para la comisión
@@ -428,8 +544,8 @@ q("select cancel_by_client(%s)", (rn[0][0]["booking_ids"][0],), uid=c3)
 # bloquear días: cancela, avisa y deja la lista
 b29 = r3[0][0]["booking_ids"][0]
 ok("bloquear días: solo el prestador", err(q("select block_days(%s,%s,'x')", (d29, d29), uid=c3), "not_provider"))
-ok("no se bloquean días pasados", err(q("select block_days(current_date - 3, current_date - 1, 'x')", uid=nails_owner), "past_days"))
-ok("máximo 3 meses de una vez", err(q("select block_days(current_date + 1, current_date + 120, 'x')", uid=nails_owner), "range_too_long"))
+ok("no se bloquean días pasados", err(q("select block_days((now() at time zone 'America/Argentina/Buenos_Aires')::date - 3, (now() at time zone 'America/Argentina/Buenos_Aires')::date - 1, 'x')", uid=nails_owner), "past_days"))
+ok("máximo 3 meses de una vez", err(q("select block_days((now() at time zone 'America/Argentina/Buenos_Aires')::date + 1, (now() at time zone 'America/Argentina/Buenos_Aires')::date + 120, 'x')", uid=nails_owner), "range_too_long"))
 bd = q("select block_days(%s, %s, 'Vacaciones <b>')", (d29, d29 + dt.timedelta(days=6)), uid=nails_owner)
 ok("bloquear una semana", not err(bd) and bd[0][0]["blocked"] >= 5)
 cl29 = bd[0][0]["cancelled"] if not err(bd) else []
@@ -439,7 +555,7 @@ ok("v31: la lista trae la seña pagada para que el prestador sepa cuánto devolv
 cm29 = [m for m in q("select my_messages()", uid=c3)[0][0] if m["kind"] == "cancel"]
 ok("v31: al cliente le llega el aviso: el profesional lo va a contactar por la seña ($6.000) o para otro turno", len(cm29) >= 1 and "tuvo que cancelar" in cm29[0]["body"] and "se va a comunicar con vos" in cm29[0]["body"] and "$6.000" in cm29[0]["body"] and "Te devolvemos" not in cm29[0]["body"])
 ok("v31: mis turnos marca que lo arregla el profesional", any(x["id"] == b29 and x["settle_by_provider"] for x in q("select my_bookings()", uid=c3)[0][0]))
-ok("v31: la comisión de ese turno queda en TuTiempo (cuenta en el balance)", q("select (admin_month_live(current_date)->>'commission')::int")[0][0] >= 1200)
+ok("v31: la comisión de ese turno queda en TuTiempo (cuenta en el balance)", q("select (admin_month_live((now() at time zone 'America/Argentina/Buenos_Aires')::date)->>'commission')::int")[0][0] >= 1200)
 ok("mis turnos lo muestra cancelado por el profesional", any(x["id"] == b29 and x["status"] == "cancelled_provider" for x in q("select my_bookings()", uid=c3)[0][0]))
 bz29 = q("select * from provider_busy(%s,%s,%s)", (pid3, d29, d29), role="anon")
 ok("ese día figura bloqueado para los clientes (Cerrado)", len(bz29) == 1 and bz29[0][2] is True)
@@ -447,11 +563,11 @@ ok("el motivo se guarda limpio", q("select service_name from bookings where prov
 ok("nadie puede reservar ese día", err(q("select book_slot(%s, %s)", (sv, dt.datetime.combine(d29, dt.time(15, 0), tz)), uid=cli2), "slot_taken"))
 ok("bloquear otra vez no duplica", q("select block_days(%s, %s, 'x')", (d29, d29), uid=nails_owner)[0][0]["blocked"] == 0)
 # cierres de caja
-ok("el prestador cierra la caja del día", not err(q("insert into cash_closings (provider_id, kind, period, income, cash, mp, counted) values (%s,'day',current_date,50000,30000,20000,30500)", (pid3,), uid=nails_owner)))
-ok("y el mes (el 1° del mes)", not err(q("insert into cash_closings (provider_id, kind, period, income, expenses) values (%s,'month',date_trunc('month', current_date)::date,900000,250000)", (pid3,), uid=nails_owner)))
-ok("un mes con día que no es 1 rechazado", err(q("insert into cash_closings (provider_id, kind, period) values (%s,'month',date_trunc('month', current_date)::date + 3)", (pid3,), uid=nails_owner)))
-ok("nadie ve ni toca la caja de otro", q("select count(*) from cash_closings", uid=cli2)[0][0] == 0 and err(q("insert into cash_closings (provider_id, kind, period) values (%s,'day',current_date)", (pid3,), uid=prov2)))
-ok("volver a cerrar actualiza el cierre", not err(q("insert into cash_closings (provider_id, kind, period, income) values (%s,'day',current_date,60000) on conflict (provider_id, kind, period) do update set income = excluded.income", (pid3,), uid=nails_owner))
+ok("el prestador cierra la caja del día", not err(q("insert into cash_closings (provider_id, kind, period, income, cash, mp, counted) values (%s,'day',(now() at time zone 'America/Argentina/Buenos_Aires')::date,50000,30000,20000,30500)", (pid3,), uid=nails_owner)))
+ok("y el mes (el 1° del mes)", not err(q("insert into cash_closings (provider_id, kind, period, income, expenses) values (%s,'month',date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date,900000,250000)", (pid3,), uid=nails_owner)))
+ok("un mes con día que no es 1 rechazado", err(q("insert into cash_closings (provider_id, kind, period) values (%s,'month',date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date + 3)", (pid3,), uid=nails_owner)))
+ok("nadie ve ni toca la caja de otro", q("select count(*) from cash_closings", uid=cli2)[0][0] == 0 and err(q("insert into cash_closings (provider_id, kind, period) values (%s,'day',(now() at time zone 'America/Argentina/Buenos_Aires')::date)", (pid3,), uid=prov2)))
+ok("volver a cerrar actualiza el cierre", not err(q("insert into cash_closings (provider_id, kind, period, income) values (%s,'day',(now() at time zone 'America/Argentina/Buenos_Aires')::date,60000) on conflict (provider_id, kind, period) do update set income = excluded.income", (pid3,), uid=nails_owner))
    and q("select income from cash_closings where provider_id=%s and kind='day'", (pid3,))[0][0] == 60000)
 
 # ---------- versión 30 ----------
@@ -468,7 +584,7 @@ ok("nadie más puede leer las notas (ni el prestador dueño)", err(q("select * f
 ok("ni el listado público ni la ficha muestran notas", "Llamar" not in json.dumps(q("select get_provider(%s)", (pn,), role="anon")[0][0], default=str))
 ok("admin borra una nota", not err(q("select admin_delete_note(%s)", (n1[0][0],), uid=adm)) and q("select count(*) from admin_notes where id=%s", (n1[0][0],))[0][0] == 0)
 # admin elimina un prestador: cancela turnos futuros y devuelve todo
-pz = q("select register_provider('Borrar Test','Sarmiento 9', array['b'], '2284 1', '30111222')", uid=mkuser("borrar@test.ar","Borrar"))[0][0]
+pz = q("select register_provider('Borrar Test','Sarmiento 9', array['b'], '2284 1', '30111444')", uid=mkuser("borrar@test.ar","Borrar"))[0][0]
 zo = q("select owner_id from providers where id=%s", (pz,))[0][0]
 q("update providers set status='active' where id=%s", (pz,)); conectar_mp(pz)
 q("update provider_settings set online=true, step_min=30, ahead_days=31, notice_min=0, pay_mode='deposit', deposit_pct=50 where provider_id=%s", (pz,))
@@ -501,18 +617,19 @@ ok("el dueño ya no tiene panel", q("select my_provider()", uid=zo)[0][0] is Non
 ok("eliminar dos veces da error claro", err(q("select admin_delete_provider(%s)", (pz,), uid=adm), "not_found"))
 ok("queda registrado en las notas", any("Eliminado" in r0[0] for r0 in q("select body from admin_notes where provider_id=%s", (pz,))))
 # balance de TuTiempo: mes a mes y año a año
-yy = dt.date.today().year
+hoy_ar = dt.datetime.now(tz).date()   # "hoy" en Buenos Aires, como la base (el CI corre en UTC)
+yy = hoy_ar.year
 fz = q("select admin_finance(%s)", (yy,), uid=adm)
 ok("solo un admin ve el balance", err(q("select admin_finance(%s)", (yy,), uid=prov), "forbidden"))
 FZ = fz[0][0] if not err(fz) else {"months": []}
 cur = [m for m in FZ["months"] if m["state"] == "open"]
 ok("balance del año: 12 meses, el actual abierto", len(FZ["months"]) == 12 and len(cur) == 1 and cur[0]["commission"] >= 2000 and cur[0]["charged"] >= cur[0]["deposits"] + 2000)
-ok("no se cierra un mes que no terminó", err(q("select admin_close('month', date_trunc('month', current_date)::date)", uid=adm), "period_not_over"))
-pm0 = (dt.date.today().replace(day=1) - dt.timedelta(days=1)).replace(day=1)
+ok("no se cierra un mes que no terminó", err(q("select admin_close('month', date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date)", uid=adm), "period_not_over"))
+pm0 = (hoy_ar.replace(day=1) - dt.timedelta(days=1)).replace(day=1)
 e1 = q("select admin_add_expense(%s, %s, 15000)", (pm0 + dt.timedelta(days=4), "Hosting <script>"), uid=adm)
 ok("admin carga un gasto (limpio)", not err(e1) and q("select concept from admin_expenses where id=%s", (e1[0][0],))[0][0] == "Hosting script")
-ok("gastos inválidos rechazados", err(q("select admin_add_expense(current_date, 'x', 0)", uid=adm), "bad_amount") and err(q("select admin_add_expense(current_date, ' ', 10)", uid=adm), "empty_concept")
-   and err(q("select admin_add_expense(current_date + 90, 'x', 10)", uid=adm), "bad_day") and err(q("select admin_add_expense(current_date, 'x', 10)", uid=prov), "forbidden"))
+ok("gastos inválidos rechazados", err(q("select admin_add_expense((now() at time zone 'America/Argentina/Buenos_Aires')::date, 'x', 0)", uid=adm), "bad_amount") and err(q("select admin_add_expense((now() at time zone 'America/Argentina/Buenos_Aires')::date, ' ', 10)", uid=adm), "empty_concept")
+   and err(q("select admin_add_expense((now() at time zone 'America/Argentina/Buenos_Aires')::date + 90, 'x', 10)", uid=adm), "bad_day") and err(q("select admin_add_expense((now() at time zone 'America/Argentina/Buenos_Aires')::date, 'x', 10)", uid=prov), "forbidden"))
 ok("cerrar el mes pasado", not err(q("select admin_close('month', %s)", (pm0,), uid=adm)))
 ok("cerrar dos veces no se puede", err(q("select admin_close('month', %s)", (pm0,), uid=adm), "already_closed"))
 ok("en un mes cerrado no se cargan ni borran gastos", err(q("select admin_add_expense(%s, 'x', 10)", (pm0,), uid=adm), "month_closed") and err(q("select admin_delete_expense(%s)", (e1[0][0],), uid=adm), "month_closed"))
@@ -543,9 +660,9 @@ rubros = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sr
 front_cats = dict(re.findall(r'^\s+([a-z]): "([a-z0-9-]+)",$', rubros.split("CAT_SLUGS = {")[1].split("};")[0], re.M))
 ok("rubros en la URL: src/lib/rubros.js (CAT_SLUGS) tiene los mismos slugs que categories", front_cats == dict(q("select id, slug from categories")) and len(front_cats) == 6)
 ok("is_reserved_slug no distingue mayúsculas", q("select is_reserved_slug('PANEL'), is_reserved_slug('panel-1'), is_reserved_slug(null)")[0] == (True, False, False))
-for nombre, esperado in (("Panel", "panel-1"), ("Admin", "admin-1"), ("Mis Turnos", "mis-turnos-1")):
+for nombre, esperado, dni in (("Panel", "panel-1", "30999881"), ("Admin", "admin-1", "30999882"), ("Mis Turnos", "mis-turnos-1", "30999883")):
     u = mkuser(f"res-{esperado}@test.ar", nombre)
-    r = q("select register_provider(%s, 'Calle 1', array['b'], '2284 1', '30999888')", (nombre,), uid=u)
+    r = q("select register_provider(%s, 'Calle 1', array['b'], '2284 1', %s)", (nombre, dni), uid=u)
     r = r if err(r) else q("select slug from providers where id = %s", (r[0][0],))
     ok(f"un prestador llamado \"{nombre}\" recibe el slug {esperado}", not err(r) and r[0][0] == esperado)
 u = mkuser("res-panel2@test.ar", "Panel")
@@ -582,6 +699,41 @@ ok("…pero no cambiarlo por otro reservado", err(q("update providers set slug =
 ok("…y sí por uno libre", not err(q("update providers set slug = 'turnos-viejo' where id = %s", (pv,))))
 ok("…una vez libre, tampoco puede volver al reservado", err(q("update providers set slug = 'turnos' where id = %s", (pv,)), "reserved_slug"))
 ok("a un prestador común no se le puede poner un slug reservado", err(q("update providers set slug = 'Panel' where id = %s", (pid2,)), "reserved_slug"))
+
+# Bloque 2b (H10): el DNI de un prestador eliminado no cuenta como duplicado y no se borra
+q("update provider_private set dni_number = '30111560' where provider_id = %s", (pz,))   # dato viejo de un eliminado
+ok("el prestador de prueba está eliminado", q("select status from providers where id = %s", (pz,))[0][0] == "deleted")
+nd = mkuser("dni-elim@test.ar", "Dni Elim")
+ok("un alta con el DNI de un prestador eliminado se acepta", not err(q("select register_provider('Dni Elim', 'x', array['b'], '1', '30111560')", uid=nd)))
+ok("…y al eliminado no se le borra el dato", q("select dni_number from provider_private where provider_id = %s", (pz,))[0][0] == "30111560")
+ok("pero otro alta con ese DNI (ahora de un prestador activo o pendiente) se rechaza",
+   err(q("select register_provider('Dni Elim 2', 'x', array['b'], '1', '30111560')", uid=mkuser("dni-elim2@test.ar", "Dni Elim 2")), "dni_taken"))
+
+# Bloque 2b: un gasto sin fecha queda en el día de Buenos Aires (antes current_date: el día en UTC)
+ex = q("insert into expenses (provider_id, concept, amount, category) values (%s, 'Sin fecha', 100, 'Otros') returning spent_on", (pid3,), uid=nails_owner)
+ok("un gasto cargado sin fecha queda en el día de Buenos Aires", not err(ex) and ex[0][0] == q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date")[0][0])
+
+# Bloque 2b (H24): los links de los avisos salen de app_settings.site_url, no de un dominio escrito a mano
+ok("H24: la dirección del sitio la cambia solo el admin", err(q("select admin_set_site_url('https://otro.com')", uid=prov), "forbidden")
+   and err(q("update app_settings set site_url = 'https://otro.com'", uid=adm)) and err(q("select admin_set_site_url('https://otro.com')", role="anon")))
+# solo https:// y el dominio: sin puerto, carpeta, parámetros ni barra al final (la misma regla que src/lib/sitio.js)
+malas = ["http://prueba.tutiempo.com.ar", "prueba.tutiempo.com.ar", "https://prueba.tutiempo.com.ar/", "https://prueba.tutiempo.com.ar/panel",
+         "https://prueba.tutiempo.com.ar?x=1", "https://prueba.tutiempo.com.ar#a", "https://prueba.tutiempo.com.ar:8443", "https://localhost",
+         "https://-prueba.com.ar", "https://prueba..com.ar", "https://usuario@prueba.com.ar", "https://prueba.com.ar.", "javascript:alert(1)", "", None,
+         "https://" + "a" * 90 + ".com.ar"]
+rech = [u for u in malas if not err(q("select admin_set_site_url(%s)", (u,), uid=adm), "bad_site_url")]
+ok("H24: se rechaza toda dirección que no sea https:// y el dominio (barra final, carpeta, parámetros, puerto, http://)" + (f" → aceptó {rech}" if rech else ""), not rech)
+ok("H24: …y no cambia la guardada", q("select site_url from app_settings")[0][0] == "https://tutiempo.com.ar")
+ok("H24: la tabla tampoco acepta una dirección inválida (escrita sin la función)", err(q("update app_settings set site_url = 'https://tutiempo.com.ar/'")))
+ok("H24: el admin la guarda (en minúsculas y sin espacios)", q("select admin_set_site_url(' https://Prueba.TuTiempo.com.ar ')", uid=adm)[0][0] == "https://prueba.tutiempo.com.ar")
+bl = q("select id from bookings where provider_id = %s and source = 'app' and client_id is not null order by id limit 1", (pid,))[0][0]
+q("delete from client_messages where kind = 'r24' and ref = %s", (str(bl),))
+q("select notify_booking(%s, 'r24')", (bl,))
+sl = q("select slug from providers where id = %s", (pid,))[0][0]
+ok("H24: el link del aviso usa la dirección del sitio", f"https://prueba.tutiempo.com.ar/{sl}" in q("select body from client_messages where kind = 'r24' and ref = %s", (str(bl),))[0][0])
+ok("H24: un slug reservado lleva a /p/<id>", q("select provider_link(%s, 'panel')", (pid,))[0][0] == f"https://prueba.tutiempo.com.ar/p/{pid}")
+ok("H24: provider_link es interna", err(q("select provider_link(1, 'x')", role="anon")))
+q("select admin_set_site_url('https://tutiempo.com.ar')", uid=adm)
 
 # Bloque 2a (H14): el seed de ejemplos es ficticio y no carga sin el aviso explícito (todo en una transacción que se deshace)
 import pathlib, re

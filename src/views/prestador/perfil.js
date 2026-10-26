@@ -1,5 +1,5 @@
 import { LIVE } from "../../config.js";
-import { pctTxt } from "../../lib/dinero.js";
+import { PESOS_ERR, parsePesos, parseWhole, pctTxt } from "../../lib/dinero.js";
 import { $, esc } from "../../lib/dom.js";
 import { ME } from "../../lib/prestadores.js";
 import { CATS, catInfo } from "../../lib/rubros.js";
@@ -51,6 +51,21 @@ function svcOpts(svc, index) {
   const meta = (svc[5] ||= svcMeta(svc));
   return `<div class="svcopts"><div class="f"><label for="snt${index}">Indicaciones antes del turno (opcional)</label><input id="snt${index}" maxlength="300" value="${esc(meta.note || "")}" placeholder="Ej: venir sin esmalte"></div></div>`;
 }
+// un número mal escrito (con centavos, H08) no pisa lo que había: lo marca svcEditorError al guardar
+const keepIfBad = (value, before) => (isNaN(value) ? before || 0 : value);
+// error de montos o minutos en el editor de servicios (lo escrito, antes de pasarlo a S.edSvcs), o ""
+export function svcEditorError() {
+  for (const [index] of (S.edSvcs || []).entries()) {
+    const bad = (sel, parse) => [...document.querySelectorAll(sel)].some((input) => isNaN(parse(input.value)));
+    if (bad(`#sp${index}, [id^="ap${index}_"]`, parsePesos)) {
+      return `Revisá el servicio ${index + 1}: ${PESOS_ERR.charAt(0).toLowerCase()}${PESOS_ERR.slice(1)}`;
+    }
+    if (bad(`#sd${index}, [id^="am${index}_"]`, parseWhole)) {
+      return `Revisá el servicio ${index + 1}: los minutos van con números enteros.`;
+    }
+  }
+  return "";
+}
 // pasa lo escrito en el editor a S.edSvcs (formato svcMeta) antes de guardar o de volver a dibujar;
 // un servicio cuyo rubro se desmarcó pasa al primer rubro marcado
 export function readSvcEditor() {
@@ -89,8 +104,8 @@ export function readSvcEditor() {
               $("#an" + index + "_" + addonIndex)
                 .value.trim()
                 .slice(0, 60),
-              parseInt(($("#ap" + index + "_" + addonIndex).value || "").replace(/\D/g, "")) || 0,
-              Math.min(240, parseInt(($("#am" + index + "_" + addonIndex).value || "").replace(/\D/g, "")) || 0),
+              keepIfBad(parsePesos($("#ap" + index + "_" + addonIndex).value), addon[1]),
+              Math.min(240, keepIfBad(parseWhole($("#am" + index + "_" + addonIndex).value), addon[2])),
               addon[3],
             ]
           : addon,
@@ -98,8 +113,8 @@ export function readSvcEditor() {
     }
     return [
       nameInput.value.trim(),
-      parseInt(($("#sd" + index).value || "").replace(/\D/g, "")) || 0,
-      parseInt(($("#sp" + index).value || "").replace(/\D/g, "")) || 0,
+      keepIfBad(parseWhole($("#sd" + index).value), svc[1]),
+      keepIfBad(parsePesos($("#sp" + index).value), svc[2]),
       catSelect ? catSelect.value : cats[0] || svc[3],
       svc[4],
       meta,
@@ -118,6 +133,15 @@ function mpPaidNote(st, past) {
     return "";
   }
   return `<p class="note" style="text-align:left;margin:8px 0 0">Tenés ${n} turno${n === 1 ? "" : "s"} futuro${n === 1 ? "" : "s"} con la seña pagada: ${n === 1 ? "sigue" : "siguen"} en pie y, si hay que devolver una seña, se devuelve desde ${past ? "tu cuenta anterior" : "esta cuenta"}.</p>`;
+}
+// H10: lo que falta para verificar la identidad (número, frente y dorso). El número no se muestra: solo si está cargado.
+export const DNI_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
+function dniForm(st) {
+  const done = (ok) => (ok ? ' <span style="color:var(--ok)">✓ cargado</span>' : "");
+  return `<p class="note" style="text-align:left;margin:10px 0">Para activar tu perfil necesitamos tu número de DNI y las fotos del frente y del dorso. Solo los ve el equipo de TuTiempo. Guardamos las fotos hasta 30 días después de verificarte.</p>
+   <form id="fDni" novalidate><div class="f"><label for="dniN">Número de DNI${done(st.number)}</label><div class="pw"><input id="dniN" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Sin puntos, 7 u 8 números"><button class="btn btn-ghost btn-sm" type="submit">Guardar</button></div></div></form>
+   <div class="f"><label for="dniFront">Foto del frente${done(st.front)}</label><input id="dniFront" type="file" accept="${DNI_ACCEPT}"></div>
+   <div class="f"><label for="dniBack">Foto del dorso${done(st.back)}</label><input id="dniBack" type="file" accept="${DNI_ACCEPT}"></div>`;
 }
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
 // En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
@@ -174,7 +198,7 @@ export function vBPerfil(prov) {
   </form>
   ${vMensajes()}
   <div class="panel"><p class="lbl">Verificación</p><dl class="kv"><dt>DNI</dt><dd style="color:${prov.verified === false ? "var(--warn)" : "var(--ok)"}">${prov.verified === false ? "En revisión" : "✓ Verificado"}</dd><dt>Email</dt><dd>${esc(LIVE ? (S.user ? S.user.email : "") : prov.id === 21 ? "sofia@tutiempo.demo" : "filo@tutiempo.demo")}</dd></dl>
-   ${LIVE && prov.verified === false ? '<div class="f" style="margin-top:10px"><label for="dniUp">Subí tu DNI (frente y dorso)</label><input id="dniUp" type="file" accept="image/*,application/pdf" multiple><span class="hint">Solo lo ve el equipo de TuTiempo para verificarte.</span></div>' : ""}</div>
+   ${LIVE && prov.verified === false ? dniForm(S.dniSt || {}) : ""}</div>
   ${delBox("pro")}
   <button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
 }

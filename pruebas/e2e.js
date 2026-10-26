@@ -18,6 +18,8 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const wait = (ms = 400) => pg.waitForTimeout(ms);
   const txt = () => pg.locator("#app").innerText();
   const seg = () => pg.evaluate(() => document.body.dataset.seg);
+  // espera hasta que la consulta devuelva algo que cumple la condición (para lo que guarda la app sin avisar cuándo)
+  const until = async (sql, args, test, ms = 6000) => { const t0 = Date.now(); let rows; do { rows = await q(sql, args); if (test(rows)) return true; await wait(200) } while (Date.now() - t0 < ms); return false };
 
   await pg.goto(BASE); await pg.waitForSelector(".grid .card"); await wait();
   ok("modo en vivo: sin barra demo", !(await pg.isVisible(".modebar")) && !(await pg.isVisible(".demo")));
@@ -123,6 +125,12 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("producto guardado", (await q("select stock from products where name='Gel top coat'"))[0]?.stock === 3);
   await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]"); await wait(800);
   ok("compra suma stock y carga gasto", (await q("select stock from products where name='Gel top coat'"))[0].stock === 9 && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  // H08: montos enteros en pesos: "8000,50" se rechaza (antes se guardaba 800.050) y "8.000" es $8.000
+  await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Gel caro"); await pg.fill("#pnp", "8000,50"); await pg.click("#fProd button[type=submit]"); await wait(400);
+  ok("H08: un precio con centavos se rechaza con un mensaje claro", /sin centavos/.test(await pg.locator("#perr2").innerText()) && (await q("select count(*)::int c from products where name='Gel caro'"))[0].c === 0);
+  await wait(700);   // la app ignora un segundo envío del mismo formulario en menos de medio segundo
+  await pg.fill("#pnp", "8.000"); await pg.click("#fProd button[type=submit]");
+  ok("H08: 8.000 se guarda como $8.000", await until("select price from products where name='Gel caro'", [], (r) => r[0]?.price === 8000));
   // caja
   await pg.click("[data-btab=caja]"); await pg.click("[data-act=walkOpen]"); await pg.fill("#wpr", "7000"); await pg.click("#fWalk button[type=submit]"); await wait(600);
   ok("servicio sin turno guardado", (await q("select count(*)::int c from walkins"))[0].c === 1);
@@ -288,6 +296,20 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.fill("#admCom", "10"); await pg.click("#fCom button[type=submit]"); await wait(800);
   probing = true; const forb = await pg.evaluate(async () => { const r = await sb.from("app_settings").update({ commission_pct: 1 }).eq("id", true).select(); return (r.data || []).length }); probing = false;
   ok("nadie cambia la comisión por fuera de la función", forb === 0 && Number((await q("select commission_pct from app_settings"))[0].commission_pct) === 10);
+  // H24: la dirección del sitio para los links de los avisos
+  ok("H24: Comisión muestra la dirección del sitio", (await pg.inputValue("#admSite")) === "https://tutiempo.com.ar");
+  // solo https:// y el dominio: cada dirección inválida avisa y no guarda (entre envíos, más que el antidoble toque)
+  const badSites = [];
+  for (const bad of ["prueba.tutiempo.com.ar", "http://prueba.tutiempo.com.ar", "https://prueba.tutiempo.com.ar/", "https://prueba.tutiempo.com.ar/panel", "https://prueba.tutiempo.com.ar?x=1"]) {
+    await pg.evaluate(() => { document.querySelector("#siteerr").textContent = "" });
+    await pg.fill("#admSite", bad); await pg.click("#fSite button[type=submit]"); await wait(700);
+    if (!(await pg.locator("#siteerr").innerText()).includes("sin barra al final") || (await q("select site_url from app_settings"))[0].site_url !== "https://tutiempo.com.ar") badSites.push(bad);
+  }
+  ok("H24: sin https://, con http://, barra final, carpeta o parámetros avisa y no guarda" + (badSites.length ? " → " + badSites.join(", ") : ""), !badSites.length);
+  await pg.fill("#admSite", " https://Prueba.TuTiempo.com.ar "); await pg.click("#fSite button[type=submit]");
+  ok("H24: el admin guarda la dirección del subdominio de prueba", await until("select site_url from app_settings", [], (r) => r[0].site_url === "https://prueba.tutiempo.com.ar"));
+  await wait(400);
+  await db.query("update app_settings set site_url = 'https://tutiempo.com.ar'");
   // Bloque 1: "Para revisar · cobros": una devolución que falló una vez (el turno de Ana pagado con Mercado Pago)
   // (el turno puede seguir confirmado o haber caído en el bloqueo de días: depende de la fecha; la devolución se pide igual)
   const bpaid = (await q("select pb.booking_id as id, pb.amount from payment_bookings pb order by pb.payment_id desc limit 1"))[0];
@@ -313,10 +335,20 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForSelector("[data-act=admResolveOpen][data-k=refundNew]", { timeout: 8000 }).catch(() => {}); await wait(300);
   await pg.click(`[data-act=admResolveOpen][data-k=refundNew][data-id="${pov.id}"]`); await wait(300);
   const defAmount = Number(await pg.inputValue("#arAmount"));
-  await pg.fill("#arAmount", "500"); await pg.fill("#arNote", "Pagó de más"); await pg.click("#fAdmRefund button:not([type])"); await wait(1500);
+  // H08: con centavos no se pide nada (antes "1.000" también se rechazaba; ahora se lee como mil)
+  await pg.fill("#arAmount", "500,50"); await pg.fill("#arNote", "Pagó de más"); await pg.click("#fAdmRefund button:not([type])"); await wait(700);
+  ok("H08: Devolver con centavos muestra el error y no crea la devolución", /pesos enteros, sin centavos/.test(await pg.textContent("#arerr"))
+     && (await q("select count(*)::int c from refunds where reason = 'admin'"))[0].c === 0);
+  await pg.fill("#arAmount", "500"); await pg.click("#fAdmRefund button:not([type])"); await wait(1500);
   const rnew = (await q("select amount, reason, note, status from refunds where reason = 'admin'"))[0];
   ok("Bloque 1: Devolver crea la devolución (monto editable, nota) y el pago sale de Para revisar", defAmount > 0 && rnew && rnew.amount === 500 && rnew.note === "Pagó de más"
      && ["pending", "failed"].includes(rnew.status) && (await pg.locator(`[data-act=admResolveOpen][data-k=refundNew][data-id="${pov.id}"]`).count()) === 0);
+  // Bloque 2b: una cuenta de Mercado Pago con error en su llave aparece en Para revisar (prestador, cuenta, error, desde cuándo)
+  await db.query("select mp_account_error(a.id, 'No se pudo renovar la llave (400)', false) from mp_accounts a join providers p on p.id = a.provider_id where p.name like 'Sofía%' and a.status = 'active'");
+  await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForFunction(() => /Cuenta de Mercado Pago con error/.test(document.body.innerText), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("2b: Para revisar muestra la cuenta con error: prestador, cuenta, error y desde cuándo", /Cuenta de Mercado Pago con error · Sofía/.test(await txt())
+     && (await txt()).includes("No se pudo renovar la llave (400) · desde ") && /Cuenta n° \S+ · cobra las reservas/.test(await txt()));
+  await db.query("update mp_accounts set last_error = null where last_error = 'No se pudo renovar la llave (400)'");
   // v30: prestadores por rubro, notas privadas, eliminar
   await pg.click("[data-act=admT][data-t=prov]"); await wait(400);
   ok("v30: prestadores divididos por rubro", (await pg.locator(".admgrp").count()) >= 1 && (await pg.locator(".admgh").first().innerText()).length > 2);
@@ -374,12 +406,80 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.goto(BASE + "/p/" + sofi); await pg.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("H23: su perfil público dice que todavía no toma turnos online (con Seguir) y no deja elegir horario",
      /Todavía no toma turnos online/.test(await txt()) && (await pg.locator(".bookbar").count()) === 0 && (await pg.locator("[data-slot]").count()) === 0);
+  // D22 (H25): con la cuenta desconectada, una clienta con la tarjeta llena igual puede canjear su premio
+  await db.query("update loyalty_cards set stamps = 16 where user_id = (select id from auth.users where email='ana@test.ar') and service_id = $1", [esm]);
+  await pg.click("nav [data-go=login]"); await wait(); await pg.click("[data-act=authMode][data-m=code]"); await wait(200);
+  await pg.fill("#le", "ana@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc"); await pg.fill("#lc", "123456"); await pg.click("#fCode button[type=submit]"); await wait(1200);
+  await pg.goto(BASE + "/p/" + sofi); await pg.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await wait(800);
+  ok("D22: sin Mercado Pago, la clienta con la tarjeta llena ve “Solo podés canjear tu premio”", /Solo podés canjear tu premio/.test(await txt()) && !/Todavía no toma turnos online/.test(await txt()));
+  await pg.click(".panel [data-svc]"); await wait(400);
+  ok("D22: elige el servicio del premio y aparece el selector de horario, sin seña", (await pg.locator("[data-slot]").count()) > 0 && /no lleva seña ni comisión/.test(await txt()));
+  const rewardsBefore = (await q("select count(*)::int c from bookings where pay_method = 'reward'"))[0].c;
+  await pg.click("[data-quick]"); await wait(200); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno", { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("D22: en el pago solo queda “Usar mi premio”", (await pg.locator("[data-paym=reward]").count()) === 1 && (await pg.locator("[data-paym=mp]").count()) === 0);
+  await pg.click("#fTurno button[type=submit]"); await wait(1500);
+  ok("D22: el premio queda reservado sin pago", (await q("select count(*)::int c from bookings where pay_method = 'reward' and status = 'confirmed'"))[0].c === rewardsBefore + 1);
+  await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
   // "Volver al panel" cierra la sesión del prestador: se vuelve a ingresar y la app vuelve a Perfil (?volver=)
   await pg.goto(BASE + "/panel/perfil"); await pg.waitForSelector("#fBarb", { timeout: 8000 }).catch(() => {}); await wait(400);
   await pg.fill("#be", "sofia@test.ar"); await pg.fill("#bp", "prestador123"); await pg.click("#fBarb button[type=submit]"); await pg.waitForSelector("[data-act=mpConnect]", { timeout: 8000 }).catch(() => {}); await wait(400);
   await Promise.all([pg.waitForURL(/mp_connected=1/, { timeout: 8000 }).catch(() => {}), pg.click("[data-act=mpConnect]")]); await wait(1500);
   const accRe = (await q("select id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   ok("H23: reconectar la misma cuenta vuelve a cobrar con la misma fila", accRe && accRe.id === accBefore.id);
+
+  // H21: en vivo no se descarta a nadie por cómo se llama (antes "Bruno F." quedaba afuera por parecer relleno de la demo)
+  await db.query("insert into provider_clients (provider_id, name) values ($1, 'Bruno F.')", [sofi]);
+  await pg.evaluate(async () => { await api.loadMine(); S.role = "barbero"; S.btab = "clientes"; S.cli = null; S.cf = "todos"; S.msgOpen = S.contactOpen = false; render() }); await wait(600);
+  ok("H21: un cliente real llamado “Bruno F.” aparece en la lista de clientes", (await pg.locator('.clist [data-cli="Bruno F."]').count()) === 1);
+  // ---------- Bloque 2b (H10): alta de prestador sin DNI en los metadatos; DNI y fotos después; activar = verificar ----------
+  const ctx2 = await b.newContext({ viewport: { width: 400, height: 900 } }); const p2 = await ctx2.newPage();
+  p2.on("pageerror", (e) => errs.push(e.message));
+  const wait2 = (ms = 400) => p2.waitForTimeout(ms); const txt2 = () => p2.locator("#app").innerText();
+  await p2.goto(BASE + "/sumate"); await p2.waitForSelector("#fPrest");
+  await p2.fill("#pn", "Uñas Nuevas"); await p2.fill("#pe", "nuevas@test.ar"); await p2.fill("#pp", "Nuevas2026x");
+  await p2.fill("#ptel", "2284 555666"); await p2.fill("#pd", "33444555");
+  const DNIF = (n) => ({ name: n + ".png", mimeType: "image/png", buffer: PNG.buffer });
+  await p2.setInputFiles("#pf", DNIF("frente")); await wait2(200); await p2.setInputFiles("#pf2", DNIF("dorso")); await wait2(200);
+  await p2.evaluate(() => { document.querySelector("#rr-u").checked = true; document.querySelector("#ptc").checked = true }); await p2.click("#fPrest button[type=submit]"); await wait2(1200);
+  ok("H10: alta con confirmación de email: pide cargar el DNI después", (await txt2()).includes("Perfil → Verificación"));
+  const meta = (await q("select raw_user_meta_data m from auth.users where email='nuevas@test.ar'"))[0].m;
+  ok("H10: el DNI no viaja en los metadatos de la cuenta", meta.provider_reg && meta.provider_reg.name === "Uñas Nuevas" && !JSON.stringify(meta).includes("33444555"));
+  await p2.goto(BASE + "/?token_hash=" + (await mailOf("nuevas@test.ar")).signup + "&type=signup"); await wait2(2000);
+  const np = (await q("select p.id, p.status, pp.dni_number from providers p join provider_private pp on pp.provider_id=p.id join auth.users u on u.id=p.owner_id where u.email='nuevas@test.ar'"))[0];
+  ok("H10: al confirmar se crea el perfil pendiente, todavía sin DNI", np && np.status === "pending" && np.dni_number === null);
+  await p2.goto(BASE + "/panel/perfil"); await p2.waitForSelector("#fDni", { timeout: 8000 }).catch(() => {}); await wait2(400);
+  ok("H10: Perfil → Verificación pide número, frente y dorso", await p2.isVisible("#fDni") && await p2.isVisible("#dniFront") && await p2.isVisible("#dniBack"));
+  ok("D24: Perfil → Verificación avisa cuánto se guardan las fotos", (await p2.innerText("body")).includes("Guardamos las fotos hasta 30 días después de verificarte"));
+  await p2.fill("#dniN", "30111222"); await p2.click("#fDni button[type=submit]"); await wait2(800);
+  ok("H10: un DNI de otro prestador se rechaza con un mensaje claro", (await p2.locator("#toast").innerText().catch(() => "")).includes("ya está registrado")
+     && (await q("select dni_number from provider_private where provider_id=$1", [np.id]))[0].dni_number === null);
+  await p2.fill("#dniN", "33444555"); await p2.click("#fDni button[type=submit]"); await wait2(800);
+  ok("H10: el número se guarda directo en provider_private", (await q("select dni_number from provider_private where provider_id=$1", [np.id]))[0].dni_number === "33444555");
+  await p2.setInputFiles("#dniFront", DNIF("f")); await wait2(800);
+  const uid2 = (await q("select id::text from auth.users where email='nuevas@test.ar'"))[0].id;
+  ok("H10: el frente queda en el bucket dni, en su carpeta", (await q("select count(*)::int c from storage.objects where bucket_id='dni' and name like $1", [uid2 + "/frente-%.png"]))[0].c === 1);
+  // el admin (Carla) no puede aprobar sin el dorso; con las dos fotos, aprobar = verificar
+  const p3 = await ctx.newPage(); p3.on("pageerror", (e) => errs.push(e.message));
+  await p3.goto(BASE); await p3.waitForTimeout(1000);
+  if (!(await p3.evaluate(() => S.user && S.user.email === "carla@test.ar"))) {
+    await p3.evaluate(() => sb.auth.signOut()); await p3.goto(BASE + "/ingresar"); await p3.waitForSelector("#ai_e");
+    await p3.fill("#ai_e", "carla@test.ar"); await p3.fill("#ai_p", "Nueva2026zz"); await p3.click("#fLogin button[type=submit]"); await p3.waitForTimeout(1500);
+  }
+  await p3.goto(BASE + "/admin/prestadores"); await p3.waitForSelector("[data-act=admSet][data-s=active]", { timeout: 8000 }).catch(() => {}); await p3.waitForTimeout(500);
+  ok("H10: el admin ve el número y qué fotos faltan", (await p3.locator("#app").innerText()).includes("DNI 33444555 · Frente ✓ · Dorso falta"));
+  await p3.click(`[data-act=admSet][data-id="${np.id}"]`); await p3.waitForTimeout(1000);
+  ok("H10: sin el dorso no se puede activar", (await q("select status from providers where id=$1", [np.id]))[0].status === "pending"
+     && (await p3.locator("#toast").innerText().catch(() => "")).includes("Faltan las fotos del DNI"));
+  await p2.setInputFiles("#dniBack", DNIF("d")); await wait2(800);
+  await p3.goto(BASE + "/admin/prestadores"); await p3.waitForSelector(`[data-act=admDni][data-id="${np.id}"]`, { timeout: 8000 }).catch(() => {}); await p3.waitForTimeout(500);
+  await p3.click(`[data-act=admDni][data-id="${np.id}"]`); await p3.waitForTimeout(800);
+  const logDni = await (await fetch(BASE + "/__log")).json();
+  ok("H10: el admin ve frente y dorso con URL firmada de 2 minutos", (await p3.locator("a.lnk", { hasText: "Frente" }).count()) === 1 && (await p3.locator("a.lnk", { hasText: "Dorso" }).count()) === 1
+     && logDni.filter((x) => x.signed && x.signed.startsWith(uid2)).every((x) => x.expiresIn === 120));
+  await p3.click(`[data-act=admSet][data-id="${np.id}"]`); await p3.waitForTimeout(1200);
+  const ver = (await q("select p.status, p.dni_verified, pp.dni_verified_at is not null at, (select email from auth.users where id = pp.dni_verified_by) by from providers p join provider_private pp on pp.provider_id=p.id where p.id=$1", [np.id]))[0];
+  ok("H10: aprobar = verificar, con quién y cuándo", ver.status === "active" && ver.dni_verified === true && ver.at && ver.by === "carla@test.ar");
+  await p3.close(); await ctx2.close();
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));
   await b.close(); await db.end();

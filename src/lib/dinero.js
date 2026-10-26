@@ -5,6 +5,7 @@ import { store } from "../store.js";
 store.COMISION = 0.1;
 // Porcentaje para mostrar con coma decimal ("8,5"); sin argumento, el de la comisión vigente.
 export const pctTxt = (pct) => String(Math.round((pct == null ? store.COMISION * 100 : +pct) * 100) / 100).replace(".", ",");
+export { PESOS_ERR, parsePesos, parseWhole } from "./montos.js";
 export const money = (amount) => "$" + Math.round(amount).toLocaleString("es-AR");
 export const mustPayTotal = () => false;
 // Lo que se paga al reservar: la seña (porcentaje del prestador) o el total si el prestador lo pide.

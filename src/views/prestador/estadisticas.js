@@ -6,6 +6,7 @@ import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { YEARS } from "./finanzas.js";
 import { DNAME } from "./horarios.js";
+import { demoMonthTotals, demoOcc } from "../../demo/estadisticas.js";
 
 store.OCCD = {};
 store.MTOT = {};
@@ -48,18 +49,7 @@ function occAt(date, hour) {
       return Math.min(100, Math.round(((store.OCCD[date + "|" + hour] || 0) / 60) * 100));
     }
   }
-  const dowFactor = {
-    0: 0.5,
-    1: 0.85,
-    2: 0.8,
-    3: 0.9,
-    4: 1,
-    5: 1.2,
-    6: 1.1,
-  }[dow];
-  const base = hour < 12 ? 22 + (hour - 9) * 10 : hour < 15 ? 30 : hour < 17 ? 32 + (hour - 15) * 14 : 68 + (hour - 17) * 7;
-  const noise = ((+date.replace(/-/g, "") + hour * 7) % 17) - 8;
-  return Math.max(0, Math.min(100, Math.max(real, Math.round(base * dowFactor + noise))));
+  return demoOcc(date, dow, hour, real);
 }
 const dayOcc = (date) => {
   const occs = workHours()

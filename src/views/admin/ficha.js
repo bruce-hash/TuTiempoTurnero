@@ -1,6 +1,6 @@
 import { LIVE } from "../../config.js";
 import { esc } from "../../lib/dom.js";
-import { TODAY, dmy, nowHM } from "../../lib/fechas.js";
+import { TODAY, dmy, isoToLocal, nowHM } from "../../lib/fechas.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 
@@ -18,6 +18,7 @@ export function admFile(prov) {
           booking.date + booking.time >= TODAY() + nowHM(),
       ).length;
   return `<div class="admfile">
+   ${LIVE ? `<p class="note" style="text-align:left;margin:0 0 8px">${prov.verified ? `🪪 DNI verificado${prov.verifiedAt ? ` el ${esc(dmy(isoToLocal(prov.verifiedAt).date))}` : ""}${prov.verifiedBy ? ` por ${esc(prov.verifiedBy)}` : ""}` : "🪪 DNI sin verificar"}</p>` : ""}
    <p class="lbl" style="margin:0">🔒 Notas privadas · solo las ves vos</p>
    ${(prov.notes || []).length ? `<ul class="notes">${prov.notes.map((note) => `<li><div><span>${esc(dmy(note.d))}${note.t ? " · " + esc(note.t) : ""}</span><p>${esc(note.body)}</p></div><button class="xbtn" data-act="admNoteDel" data-id="${note.id}" data-p="${prov.id}" aria-label="Borrar nota">✕</button></li>`).join("")}</ul>` : '<p class="note" style="text-align:left;margin:0">Todavía no hay notas.</p>'}
    <form id="fNote" data-p="${prov.id}" novalidate><textarea id="admNote" maxlength="1000" rows="2" placeholder="Ej: pagó tarde, pidió cambiar de rubro, llamarlo el lunes…" aria-label="Nueva nota"></textarea><div class="err" id="noteerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar nota</button></form>

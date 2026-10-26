@@ -2,7 +2,7 @@ import { S } from "../state.js";
 import { store } from "../store.js";
 
 export const demoUsers0 = () => ({
-  "juan.perez@gmail.com": {
+  "juan.perez@tutiempo.demo": {
     name: "Juan Pérez",
     pass: "cliente123",
     tel: "2284 555123",
@@ -39,8 +39,6 @@ export const demoStamps0 = () => ({
 });
 export function demoStash() {
   store.DEMO_ST[store.DEMO_OWNER] = {
-    wallet: S.wallet,
-    wmov: S.wmov,
     followingBy: S.followingBy,
     tel: S.form.tel,
   };
@@ -66,16 +64,12 @@ export function demoSignIn(email, name) {
     });
     store.DEMO_OWNER = email;
     store.DEMO_ST[email] ||= {
-      wallet: 0,
-      wmov: [],
       followingBy: {},
       tel: (store.DEMO_USERS[email] || {}).tel || "",
     };
   }
   const st = store.DEMO_ST[email];
   if (st) {
-    S.wallet = st.wallet;
-    S.wmov = st.wmov;
     S.followingBy = st.followingBy;
     S.form.tel = st.tel;
   }
@@ -85,6 +79,6 @@ export function demoSignIn(email, name) {
     email: email,
     photo: (store.DEMO_USERS[email] || {}).photo || null,
   };
-  S.inbox = email === "juan.perez@gmail.com" ? store.DEMO_INBOX : [];
+  S.inbox = email === "juan.perez@tutiempo.demo" ? store.DEMO_INBOX : [];
   S.inboxSeen = false;
 }

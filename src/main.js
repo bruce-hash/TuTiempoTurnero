@@ -63,8 +63,6 @@ async function boot() {
     store.GASTOS = [];
     store.FIN = [];
     S.user = null;
-    S.wallet = 0;
-    S.wmov = [];
     S.walk = [];
     S.me = null;
     render();
@@ -84,8 +82,6 @@ async function boot() {
           S.view = "home";
         }
         store.BOOK = store.BOOK.filter((booking) => !booking.mine);
-        S.wallet = 0;
-        S.wmov = [];
         render();
       }
     });
@@ -172,7 +168,7 @@ async function boot() {
     const bar = document.createElement("div");
     bar.className = "modebar";
     bar.innerHTML =
-      "<b>Modo demo:</b> datos de ejemplo, nada se guarda. Para conectar tu base, completá config.cjs con tu proyecto de Supabase.";
+      "<b>Modo demo:</b> datos de ejemplo, nada se guarda. Para conectar tu base, completá config.js con tu proyecto de Supabase.";
     const demoBar = document.querySelector(".demo");
     if (demoBar && demoBar.parentNode) {
       demoBar.parentNode.insertBefore(bar, demoBar.nextSibling);

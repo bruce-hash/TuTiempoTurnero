@@ -76,6 +76,8 @@ export const livePanel = {
       call(sb.rpc("my_mp_status")),
       call(sb.rpc("my_provider_notices")),
     ]);
+    // H10: mientras no está verificado, qué le falta cargar (número, frente, dorso); el número no viaja al navegador
+    S.dniSt = pr(pid).verified === false ? await call(sb.rpc("my_dni_status")).catch(() => null) : null;
     const statusMap = {
       confirmed: "confirmed",
       done: "done",
@@ -95,7 +97,6 @@ export const livePanel = {
             // comisión que salió de la seña (turnos anteriores a la versión 30, cuando no se cobraba aparte)
             feeIn: Math.max(0, (row.app_fee || 0) - (row.client_fee || 0)),
             fee: row.client_fee || 0,
-            wUsed: row.paid_wallet,
             disc: row.discount_pct,
             cliente: row.client_name || "",
             tel: row.client_phone || "",

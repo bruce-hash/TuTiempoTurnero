@@ -79,7 +79,7 @@ export function vPerfil() {
      <button class="btn btn-sm ${following ? "btn-ghost" : "btn-pri"} folbtn" data-act="seguir" aria-pressed="${!!following}">${following ? "✓ Siguiendo" : "+ Seguir"}</button></div>
     ${prov.bio ? `<p class="pbio">${esc(prov.bio)}</p>` : ""}
     <div class="pstats"><span><b>★ ${rating(provComm).toFixed(1)}</b> ${nReviews} reseña${nReviews === 1 ? "" : "s"}</span><span><b>${provComm.followers}</b> seguidores</span><span><b>${nMedia}</b> trabajos</span></div>
-    <div class="chips" style="margin-top:8px"><span class="chip ok">Identidad verificada</span>${prov.ig ? `<span class="chip">Instagram: ${esc(prov.ig)}</span>` : ""}</div>
+    ${prov.verified !== false || prov.ig ? `<div class="chips" style="margin-top:8px">${prov.verified !== false ? '<span class="chip ok">Identidad verificada</span>' : ""}${prov.ig ? `<span class="chip">Instagram: ${esc(prov.ig)}</span>` : ""}</div>` : ""}
     <dl class="kv" style="margin-top:12px"><dt>Dirección</dt><dd>${esc(prov.addr)}</dd><dt>Pago</dt><dd>Seña con Mercado Pago${conf.cash !== false ? " · resto en efectivo o Mercado Pago" : ""}</dd></dl>
    </div>
    <div class="ptabs" role="tablist">${[
