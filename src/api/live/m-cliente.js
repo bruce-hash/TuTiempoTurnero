@@ -51,6 +51,16 @@ Object.assign(LM, {
         })
         .eq("id", S.user.id),
     ),
+  // Bloque 3: avisos de los turnos por email (Mi perfil); la base no encola los emails de quien los apaga
+  setEmailNotices: (on) =>
+    saved(
+      sb
+        .from("profiles")
+        .update({
+          email_notices: !!on,
+        })
+        .eq("id", S.user.id),
+    ),
   deleteAccount: () => saved(sb.rpc("delete_my_account")),
   setAvatar: async (blob) => {
     const path = `${S.user.id}/a-${Date.now()}.jpg`;

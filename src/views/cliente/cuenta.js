@@ -38,6 +38,9 @@ export function vCuenta() {
     <div class="f"><label for="ut">Celular</label><input id="ut" value="${esc(S.form.tel)}" autocomplete="off"></div>
     <div class="err" id="uerr"></div>
     <button class="btn btn-pri btn-block" type="submit">Guardar</button></form>
+   <div class="panel"><p class="lbl">Avisos por email</p>
+    <label class="chk" style="justify-content:flex-start;text-align:left"><input type="checkbox" id="uMail"${user.emailNotices === false ? "" : " checked"}> Recibir por email la confirmación, los recordatorios y las cancelaciones de mis turnos</label>
+    <p class="note" style="text-align:left;margin:8px 0 0">Los avisos siguen llegando a Mis turnos aunque apagues los emails.</p></div>
    <div class="panel"><p class="lbl">Profesionales que seguís</p>${(() => {
      const followed = P.filter((prov) => isFol(prov.id) && !prov.deleted);
      if (followed.length) {

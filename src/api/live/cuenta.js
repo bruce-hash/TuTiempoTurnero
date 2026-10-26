@@ -21,13 +21,15 @@ export const liveCuenta = {
     }
     const user = session.user;
     const profile = await call(
-      sb.from("profiles").select("full_name,phone,avatar_path").eq("id", user.id).maybeSingle(),
+      sb.from("profiles").select("full_name,phone,avatar_path,email_notices").eq("id", user.id).maybeSingle(),
     ).catch(() => null);
     S.user = {
       id: user.id,
       email: user.email,
       name: (profile && profile.full_name) || (user.user_metadata && user.user_metadata.full_name) || user.email.split("@")[0],
       photo: avatarUrl(profile && profile.avatar_path) || (user.user_metadata && user.user_metadata.avatar_url) || null,
+      // Bloque 3: avisos de sus turnos por email (por defecto, sí)
+      emailNotices: !profile || profile.email_notices !== false,
     };
     S.form.tel = (profile && profile.phone) || "";
     let pid = await call(sb.rpc("my_provider"));

@@ -142,6 +142,14 @@ registerChange("upAv", (ev) => {
   onPhoto(ev.target, "me");
   return;
 });
+// Bloque 3: avisos de los turnos por email
+registerChange("uMail", (ev) => {
+  const on = ev.target.checked;
+  S.user.emailNotices = on;
+  api.m.setEmailNotices(on);
+  toast(on ? "Listo: te mandamos los avisos de tus turnos por email." : "Listo: ya no te mandamos emails. Los avisos siguen en Mis turnos.");
+  return;
+});
 registerSubmit("fCuenta", (ev) => {
   const name = $("#un").value.trim();
   if (!name) {
