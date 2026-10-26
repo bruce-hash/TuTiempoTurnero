@@ -75,7 +75,7 @@ Los campos de precio usan `parseInt(valor.replace(/\D/g, ""))`: "12500,50" se gu
 Validar enteros en pesos y rechazar decimales con mensaje claro (editor de servicios, productos, gastos, caja, admin).
 **Bloque 2b:** `parsePesos` (`src/lib/dinero.js`): acepta `12500`, `12.500` o `$ 12.500` y rechaza un monto con centavos con
 "Escribí el monto en pesos enteros, sin centavos". Servicios y adicionales, productos, gastos, caja (servicio sin turno y
-efectivo contado) y gastos del admin; las cantidades (stock, minutos, %) con `parseWhole`. Prueba en el e2e.
+efectivo contado), gastos del admin y la devolución de Para revisar (que aceptaba solo `12500`); las cantidades (stock, minutos, %) con `parseWhole`. Prueba en el e2e.
 
 ### H09 · Baja · Prueba que depende de la fecha (resuelto en el Bloque 0)
 `test_db.py` línea ~259 ("repetición cada 6 semanas permitida") reserva un horario que otra prueba anterior ya
@@ -166,7 +166,8 @@ TuTiempo ya no maneja saldo ni cashback (v25), pero el código sigue: `src/lib/s
 en las vistas y en `liveApi`). En el Bloque A1 se mudó tal cual. **Borrarlo en el Bloque 2**, con sus pruebas (la base
 conserva las columnas por compatibilidad).
 **Bloque 2b:** borrado `src/lib/saldo.js` con `S.wallet`, `S.wmov` y `useWallet`. Lo pagado de turnos viejos con saldo
-(`paid_wallet`) se sigue sumando en lo que se muestra como pagado.
+(`paid_wallet`) se sigue sumando en lo que se muestra como pagado. También salieron las reglas de CSS que solo usaba
+el saldo (`.walletbox`, `.walletcard`, `.wc-top`, `.tgl`, `.cbline`, `.bk-cb`).
 
 ### H18 · Media · Credenciales de demo precargadas en vivo (Bloque A1 · resuelto en el Bloque 2a)
 El estado inicial (`fresh()` en `src/state.js`) trae `S.blogin = { email: "hidro.style@tutiempo.demo", pass: "barbero123" }`
@@ -260,7 +261,7 @@ Cuando un pago llega tarde y se devuelve (horario ocupado, monto de menos, turno
 Mercado Pago un cobro y una devolución sin ninguna explicación en la app.
 **En el Bloque 2:** un aviso en `provider_notices` ("El pago de X llegó cuando el horario ya no estaba libre: se le
 devuelve $Y desde tu cuenta"), una vez por pago.
-**Bloque 2b:** aviso `mp_late_refund` (trigger en `refunds`), uno por pago con el total, para horario ocupado, turno ya no
+**Bloque 2b:** aviso de pago devuelto (`mp_refunded`, ref `tarde-<pago>`, trigger en `refunds`), uno por pago con el total, para horario ocupado, turno ya no
 disponible, monto de menos y pago sin turno.
 
 ### H29 · Baja · Retención de `mp_webhook_events` y `mp_oauth_states` (Bloque 1 → resuelto en el Bloque 2a)

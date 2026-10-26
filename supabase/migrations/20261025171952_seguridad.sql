@@ -57,15 +57,9 @@ do $$ begin
 end $$;
 
 -- ---------- Cuentas activas siempre con mp_user_id (H26) ----------
--- (solo si todavía no la tiene: una migración posterior puede haber sumado más tipos y esto se puede volver a correr)
-do $$ begin
-  if not exists (select 1 from pg_constraint where conname = 'provider_notices_kind_check'
-                   and pg_get_constraintdef(oid) like '%mp_reconnect%') then
-    alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
-    alter table public.provider_notices add constraint provider_notices_kind_check
-      check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect'));
-  end if;
-end $$;
+alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
+alter table public.provider_notices add constraint provider_notices_kind_check
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect'));
 -- las activas sin id (llaves viejas copiadas de provider_secrets) dejan de cobrar y el prestador recibe el aviso
 do $$ declare r record; begin
   for r in update public.mp_accounts set status = 'refunds_only', disconnected_at = now(),

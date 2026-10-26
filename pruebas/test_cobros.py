@@ -177,7 +177,7 @@ ok("H01: la devolución queda ligada al pago, con el id de MP y la cuenta que co
 ok("H01: el pago queda como 'refund'", one("select outcome from payments where mp_payment_id = 'P-H01'") == "refund")
 ok("H01: el reintento del webhook no duplica la devolución",
    pay([b1], "P-H01", 6000, 1000, pid, acc1)["status"] == "already_processed" and len(refunds_of(b1)) == 1)
-late = q("select body from provider_notices where provider_id = %s and kind = 'mp_late_refund' and ref = 'tarde-P-H01'", (pid,))
+late = q("select body from provider_notices where provider_id = %s and kind = 'mp_refunded' and ref = 'tarde-P-H01'", (pid,))
 ok("H28: el prestador recibe un aviso del pago tardío que se devuelve (uno por pago)", len(late) == 1
    and "ya no estaba libre" in late[0][0] and "$6.000" in late[0][0] and "Ana Cobros" in late[0][0])
 
@@ -259,7 +259,7 @@ nt = one("select my_provider_notices()", uid=owner)
 ok("D17: aviso al prestador", any(n["kind"] == "mp_refunded" and "P-EXT" in n["body"] and "1 turno futuro" in n["body"] for n in nt))
 ok("D17: el pago queda refunded (sin revisión: no hay nada que decidir)", q("select mp_status, outcome from payments where mp_payment_id = 'P-EXT'")[0] == ("refunded", "confirmed"))
 ok("D17: el aviso repetido no hace nada", mp_update("P-EXT", "refunded", 12000)["status"] == "already_processed"
-   and len([n for n in one("select my_provider_notices()", uid=owner) if n["kind"] == "mp_refunded"]) == 1)
+   and len([n for n in one("select my_provider_notices()", uid=owner) if n["kind"] == "mp_refunded" and "P-EXT" in n["body"]]) == 1)
 ok("el cliente ve el turno como 'devuelto desde Mercado Pago', distinto de 'canceló el prestador'",
    [b["status"] for b in one("select my_bookings()", uid=cli) if b["id"] == e_ids[1]] == ["cancelled_refunded"])
 # nuestra propia devolución total: MP avisa "refunded" y no es un caso externo

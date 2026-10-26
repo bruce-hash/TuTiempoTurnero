@@ -6,7 +6,7 @@
 --   con confirm_payment_core, solo si sus turnos siguen en hold/expired sin pago; en la misma transacción se borra el
 --   registro de revisión y queda quién, cuándo y por qué (payments.reprocessed).
 -- - H28: cuando un pago llega tarde y se devuelve (horario ocupado, turno ya cancelado, monto de menos, sin turno), el
---   prestador recibe un aviso, uno por pago, con el total que se devuelve desde su cuenta.
+--   prestador recibe un aviso, uno por pago, con el total que se devuelve desde su cuenta (kind 'mp_refunded', ref 'tarde-…').
 -- No borra datos (salvo el registro de revisión que reemplaza el reproceso).
 -- =====================================================================
 set search_path = public, extensions;
@@ -117,9 +117,8 @@ begin
 end $$;
 
 -- ---------- H28: aviso al prestador de un pago tardío que se devuelve ----------
-alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
-alter table public.provider_notices add constraint provider_notices_kind_check
-  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_late_refund'));
+-- Es un aviso de pago devuelto (kind 'mp_refunded', como los de Mercado Pago) con ref 'tarde-<pago>': así no hace falta
+-- ampliar la lista de tipos de provider_notices (la fija la migración del 2a, que se puede volver a correr).
 
 create or replace function public.refunds_late_notice() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -139,7 +138,7 @@ begin
            when 'amount_short' then 'llegó con un monto menor al de la reserva'
            else 'no corresponde a ningún turno tuyo' end;
   insert into public.provider_notices (provider_id, kind, ref, body)
-  values (new.provider_id, 'mp_late_refund', left('tarde-' || coalesce(mp_id, new.payment_id::text), 40),
+  values (new.provider_id, 'mp_refunded', left('tarde-' || coalesce(mp_id, new.payment_id::text), 40),
           'El pago ' || coalesce('de ' || nullif(who, ''), 'n° ' || mp_id) || ' ' || why || ': se le devuelve ' ||
           public.money_txt(total) || ' desde tu cuenta de Mercado Pago. No tenés que hacer nada.')
   on conflict (provider_id, kind, ref) do update set body = excluded.body;
