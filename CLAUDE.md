@@ -44,14 +44,14 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   (`AAAAMMDDHHMMSS_nombre.sql`, por ejemplo `20261001000001_schema.sql`). `supabase/TODO_EN_UNO.sql` es su concatenación
   exacta: si cambiás o agregás una migración, regeneralo con `npm run sql:build` y verificá con `npm run sql:check`
   (el CI falla si no son idénticos).
-- `supabase/functions/`: Edge Functions de Mercado Pago (`_shared/util.ts` compartido). Desde el Bloque 1 las llaves están
+- `supabase/functions/`: Edge Functions de Mercado Pago y `dni-cleanup` (borra las fotos del DNI, D24; `_shared/util.ts` compartido). Desde el Bloque 1 las llaves están
   en `mp_accounts` (una por prestador y cuenta de MP; solo la `active` cobra) y cada pago en `payments`, ligado a la
   cuenta que lo cobró: las devoluciones y consultas usan esa llave, no la actual. Desde el Bloque 2a las llaves se guardan
   cifradas (AES-256-GCM con `MP_TOKENS_KEY`, `encryptToken`/`decryptToken` en `_shared/util.ts`; la base rechaza texto
-  plano) y `mp-refunds` solo acepta `CRON_SECRET`, que el cron lee de Vault. `MP_API_URL` (opcional, solo pruebas)
+  plano) y `mp-refunds` y `dni-cleanup` solo aceptan `CRON_SECRET`, que el cron lee de Vault. `MP_API_URL` (opcional, solo pruebas)
   cambia la API de Mercado Pago; sin ese secreto, la real.
 - `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: prestadores ficticios. Solo para pruebas locales (pide `set tt.ejemplos = 'si'` antes).
-- `pruebas/`: pruebas del cliente; `test_db.py` y `test_cobros.py` (base: pagos, devoluciones, cuentas de MP);
+- `pruebas/`: pruebas del cliente; `unidad.mjs` (reglas de los formularios sin navegador); `test_db.py` y `test_cobros.py` (base: pagos, devoluciones, cuentas de MP);
   `test_mudanza.py` (una base de la versión 31 con llaves en texto plano, migrada hasta la última; base limpia aparte);
   `funciones/` (las Edge Functions reales con Deno contra un Mercado Pago falso, `npm run test:funciones`).
 
@@ -85,8 +85,8 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
   `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` si tocás las
-  Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:crawl`, `npm run test:clicks` y
-  `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas` y `npm run test:comparar` (navegador
+  Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:unidad`, `npm run test:crawl`,
+  `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas` y `npm run test:comparar` (navegador
   real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` si tocás el `.htaccess` (Apache local; en
   el CI corre en un contenedor `httpd:2.4`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
@@ -117,7 +117,7 @@ python3 pruebas/test_cobros.py "host=... dbname=OTRA_BASE_LIMPIA user=postgres" 
 
 ```bash
 # Deno 2.1.4 (https://github.com/denoland/deno/releases) en el PATH, más Postgres y PostgREST como en el navegador
-npm run test:funciones  # mp-oauth, mp-create-preference, mp-webhook y mp-refunds reales contra un Mercado Pago falso
+npm run test:funciones  # mp-oauth, mp-create-preference, mp-webhook, mp-refunds y dni-cleanup reales (Mercado Pago falso)
 deno check --config pruebas/funciones/deno.json supabase/functions/*/index.ts   # tipos
 ```
 

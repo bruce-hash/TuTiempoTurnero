@@ -52,6 +52,15 @@ export function safeEqual(a: string, b: string): boolean {
   return r === 0;
 }
 
+// Funciones que llama solo pg_cron (o la base) con CRON_SECRET, que lee de Vault: mp-refunds y dni-cleanup. Devuelve la
+// respuesta de rechazo, o null si la llamada trae la clave (ni la service_role sirve: la clave del cron solo dispara esto).
+export function cronOnly(req: Request): Response | null {
+  const secret = env("CRON_SECRET");
+  if (secret.length < 32) { console.error("CRON_SECRET demasiado corta (mínimo 32 caracteres)"); return json({ error: "config" }, 500); }
+  if (!safeEqual(req.headers.get("Authorization") ?? "", `Bearer ${secret}`)) return json({ error: "forbidden" }, 403);
+  return null;
+}
+
 // API de Mercado Pago. Solo para pruebas se cambia con el secreto MP_API_URL de la función (un Mercado Pago falso);
 // sin ese secreto, siempre la real.
 export const MP_API = (Deno.env.get("MP_API_URL") ?? "").replace(/\/+$/, "") || "https://api.mercadopago.com";

@@ -60,7 +60,7 @@ for (const [k, v] of Object.entries({
 const handlers: Record<string, (req: Request) => Promise<Response>> = {};
 let loading = "";
 (Deno as any).serve = (h: any) => { handlers[loading] = typeof h === "function" ? h : h.handler; return { finished: Promise.resolve(), shutdown: async () => {} }; };
-for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds"]) {
+for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "dni-cleanup"]) {
   loading = n;
   await import(`../../supabase/functions/${n}/index.ts`);
 }
@@ -406,6 +406,39 @@ const tPlano = await utilMod.accountToken(dbfn, await utilMod.accountById(dbfn, 
 const Ap = await acc("1001");
 ok("H13) llave sin 'v1:': no se usa, la cuenta queda para reconectar y queda el error", tPlano === null && Ap.status === "refunds_only" && /sin cifrar/.test(Ap.last_error)
    && (await one("select mp_connected from provider_private where provider_id = $1", [pid])) === false);
+// ---------- D24: dni-cleanup borra las fotos del DNI con la API de Storage (el Storage del server del e2e) ----------
+const dniRun = (key = CRON) => fn("dni-cleanup", new Request("https://fn.test/functions/v1/dni-cleanup", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
+const subir = async (uid: string, name: string) => (await fetch(`${BASE}/storage/v1/object/dni/${uid}/${name}`, {
+  method: "POST", headers: { Authorization: `Bearer ${await jwt({ sub: uid, role: "authenticated" })}`, "Content-Type": "image/jpeg" },
+  body: new Uint8Array([0xff, 0xd8, 0xff, 0xe0]) })).status;
+const archivo = async (name: string) => (await (await fetch(`${BASE}/__dni?name=${encodeURIComponent(name)}`)).json()).exists === true;
+const fila = async (name: string) => Number(await one("select count(*) from storage.objects where bucket_id = 'dni' and name = $1", [name]));
+const dniUser = async (email: string, dni: string) => {
+  const uid = crypto.randomUUID();
+  await q("insert into auth.users (id, email, raw_user_meta_data) values ($1, $2, '{}')", [uid, email]);
+  const p = Number(await one("select register_provider($1, 'Calle 1', array['b'], '2284 1', $2)", [email, dni], uid));
+  const fotos = [`${uid}/frente-1.jpg`, `${uid}/dorso-1.jpg`];
+  for (const f of fotos) await subir(uid, f.split("/")[1]);
+  return { uid, pid: p, fotos };
+};
+const ver = await dniUser("verificado@fn.test", "30111701"), nueva = await dniUser("nueva@fn.test", "30111702"), baja = await dniUser("baja@fn.test", "30111703");
+ok("D24) las fotos subidas están en disco y en storage.objects", (await Promise.all([...ver.fotos, ...nueva.fotos, ...baja.fotos].map(async (f) => (await archivo(f)) && (await fila(f)) === 1))).every(Boolean));
+await q("update providers set status = 'active', dni_verified = true where id = $1", [ver.pid]);
+await q("update provider_private set dni_verified_at = now() - interval '31 days' where provider_id = $1", [ver.pid]);
+await q("select delete_my_provider()", [], baja.uid);
+r = await dniRun("otra-clave-cualquiera-de-mas-de-32-caracteres");
+ok("D24) dni-cleanup sin la clave del cron: 403 y no borra nada", r.status === 403 && (await archivo(ver.fotos[0])));
+r = await dniRun();
+let dj = await body(r);
+ok("D24) dni-cleanup borra las fotos del verificado hace 31 días y las de la baja", r.status === 200 && dj.files === 4 && dj.failed === 0, JSON.stringify(dj));
+ok("D24) …el archivo ya no existe y su fila tampoco", (await Promise.all([...ver.fotos, ...baja.fotos].map(async (f) => !(await archivo(f)) && (await fila(f)) === 0))).every(Boolean));
+ok("D24) …el verificado queda con dni_paths vacío, la fecha del borrado y su verificación",
+   (await q("select pp.dni_paths, pp.dni_photos_deleted_at is not null as borrado, pp.dni_number, p.dni_verified from provider_private pp join providers p on p.id = pp.provider_id where p.id = $1", [ver.pid]))
+     .every((x: any) => x.dni_paths.length === 0 && x.borrado && x.dni_number === "30111701" && x.dni_verified));
+ok("D24) las del alta reciente siguen (en disco y en la base)", (await Promise.all(nueva.fotos.map(async (f) => (await archivo(f)) && (await fila(f)) === 1))).every(Boolean));
+dj = await body(await dniRun());
+ok("D24) una segunda corrida no tiene nada que borrar", dj.files === 0 && dj.failed === 0, JSON.stringify(dj));
+
 const cfg = new URL("./deno.json", import.meta.url).pathname;
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;
 const leer = async (extra: Record<string, string>) => {

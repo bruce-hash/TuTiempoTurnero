@@ -73,9 +73,11 @@ firma con la clave de la aplicación de TuTiempo los avisos de pagos cobrados co
 ### H08 · Media · Precios ×100 con coma decimal (heredado del prototipo · resuelto en el Bloque 2b)
 Los campos de precio usan `parseInt(valor.replace(/\D/g, ""))`: "12500,50" se guarda como 1.250.050.
 Validar enteros en pesos y rechazar decimales con mensaje claro (editor de servicios, productos, gastos, caja, admin).
-**Bloque 2b:** `parsePesos` (`src/lib/dinero.js`): acepta `12500`, `12.500` o `$ 12.500` y rechaza un monto con centavos con
-"Escribí el monto en pesos enteros, sin centavos". Servicios y adicionales, productos, gastos, caja (servicio sin turno y
-efectivo contado), gastos del admin y la devolución de Para revisar (que aceptaba solo `12500`); las cantidades (stock, minutos, %) con `parseWhole`. Prueba en el e2e.
+**Bloque 2b:** `parsePesos` (`src/lib/montos.js`, lo reexporta `dinero.js`): acepta `12500`, `12.500` o `$ 12.500` y
+rechaza un monto con centavos con "Escribí el monto en pesos enteros, sin centavos". Servicios y adicionales, productos,
+gastos, caja (servicio sin turno y efectivo contado), gastos del admin y la devolución de Para revisar (que aceptaba
+solo `12500`); las cantidades (stock, minutos, %) con `parseWhole`. Pruebas: `test:unidad` ("1.500", "12.000" y "$
+2.000" se aceptan; "1500,50", "1,5", "1.50" y "1.5000" no; y cada campo de montos pasa por `parsePesos`) y el e2e.
 
 ### H09 · Baja · Prueba que depende de la fecha (resuelto en el Bloque 0)
 `test_db.py` línea ~259 ("repetición cada 6 semanas permitida") reserva un horario que otra prueba anterior ya
@@ -91,7 +93,10 @@ prestadores no eliminados (`dni_taken`). `admin_set_provider(…, 'active')` exi
 `dni_verified` con quién y cuándo (`provider_private.dni_verified_by/at`). Bucket `dni`: sube solo el dueño, en su carpeta
 (`frente-…`/`dorso-…`); lo ve solo el admin, con URL firmada de 2 minutos. El dueño ya no lee su fila entera de
 `provider_private`. La migración `20261025194744_dni.sql` borra el DNI de `raw_user_meta_data` (prueba: `test_mudanza.py`).
-Pendiente de decisión: retención de las fotos después de verificar (propuesta en el informe del 2b).
+Retención de las fotos (D24, `20261026025356_dni_retencion.sql`): la Edge Function `dni-cleanup` las borra con la API de
+Storage a los 30 días de verificar, a los 90 de la última foto de un alta sin aprobar y en el momento de una baja (cron
+diario y la baja, con `CRON_SECRET`). Pruebas: `test_db.py` (qué se borra y cuándo) y `test:funciones` (la función real
+contra el Storage del server del e2e: el archivo ya no existe y `dni_paths` queda vacío).
 
 ### H11 · Baja · "Identidad verificada" siempre visible (resuelto en el Bloque 2b)
 En el perfil público la insignia no depende de `dni_verified`. Riesgo bajo (solo se ven perfiles activados por un
@@ -229,7 +234,10 @@ Desde el Bloque B el frontend usa el dominio en el que corre (`location.origin`)
 **En el Bloque 2:** agregar `app_settings.site_url` (texto, por ejemplo `https://prueba.tutiempo.com.ar`, editable solo
 por el admin) y armar los links con `site_url || '/' || slug` (o `/p/<id>` si el slug es reservado).
 **Bloque 2b:** `app_settings.site_url` (por defecto `https://tutiempo.com.ar`; el admin la cambia en Comisión → Dirección del
-sitio) y `provider_link()` arman `{link}` en `notify_booking` y `send_scheduled_notices`.
+sitio) y `provider_link()` arman `{link}` en `notify_booking` y `send_scheduled_notices`. La dirección es solo `https://` y el
+dominio, sin puerto, carpeta, parámetros ni barra al final: lo valida el frontend (`src/lib/sitio.js`) y la base
+(`site_url_ok()`, en `admin_set_site_url` y en la tabla; `20261026025232_site_url_https.sql`). Pruebas: `test:unidad`,
+`test_db.py` y el e2e.
 
 ### H25 · Baja · Premio de sellos sin Mercado Pago (Bloque 1 → resuelto en el Bloque 2b, D22)
 Desde el Bloque 1, si el prestador no tiene cuenta de Mercado Pago activa, su perfil público dice "Todavía no toma turnos

@@ -2,15 +2,20 @@
 //  /rest/v1/*      → PostgREST real (con la base y las políticas RLS reales)
 //  /auth/v1/*      → Auth simulado (emite JWT firmados con el mismo secreto que PostgREST)
 //  /functions/v1/* → Edge Functions simuladas (Mercado Pago "aprueba" al instante)
-//  /storage/v1/*   → Storage simulado (aplica la misma regla de carpeta; el bucket dni, las políticas reales de la base)
+//  /storage/v1/*   → Storage simulado (aplica la misma regla de carpeta; el bucket dni, las políticas reales de la base,
+//                    con los archivos en disco y su fila en storage.objects, como Storage: borrar por la API saca los dos)
 //  resto           → archivos del paquete para Hostinger, con la CSP y el fallback de direcciones del .htaccess
 //                    (misma regla que Apache: pruebas/fallback.cjs)
 // Uso: node e2e_server.js <carpeta web> <puerto> <jwt_secret> <pg_conn> <postgrest_url>
-const http = require("http"), fs = require("fs"), path = require("path"), crypto = require("crypto");
+const http = require("http"), fs = require("fs"), os = require("os"), path = require("path"), crypto = require("crypto");
 const { Client } = require("pg");
 const { resolver } = require("./fallback.cjs");
 const [WEB, PORT, SECRET, PGCONN, PGRST] = process.argv.slice(2);
 const db = new Client({ connectionString: PGCONN }); db.connect();
+// archivos del bucket dni (los demás buckets no se guardan); se borran al cerrar
+const STORE = fs.mkdtempSync(path.join(os.tmpdir(), "tt-storage-"));
+const fileOf = (name) => path.join(STORE, "dni", ...name.split("/").filter((part) => part && part !== ".."));
+process.on("SIGTERM", () => { fs.rmSync(STORE, { recursive: true, force: true }); process.exit(0) });
 
 const b64u = (b) => Buffer.from(b).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 function sign(payload) {
@@ -111,9 +116,22 @@ async function storage(req, res, url) {
   const m = url.pathname.match(/^\/storage\/v1\/object\/(media|dni|avatars)\/(.+)$/);
   if (req.method === "POST" && m && m[1] === "dni") {
     if (!claims || !claims.sub) return send(res, 403, { message: "unauthorized" });
-    try { await asUser(claims, "insert into storage.objects (bucket_id, name) values ('dni', $1)", [decodeURIComponent(m[2])]) }
+    const name = decodeURIComponent(m[2]);
+    try { await asUser(claims, "insert into storage.objects (bucket_id, name) values ('dni', $1)", [name]) }
     catch (e) { return send(res, 403, { message: "new row violates row-level security policy" }) }
+    fs.mkdirSync(path.dirname(fileOf(name)), { recursive: true }); fs.writeFileSync(fileOf(name), raw);
     LOG.push({ upload: "dni/" + m[2] }); return send(res, 200, { Key: "dni/" + m[2] });
+  }
+  // borrar por la API (storage.from("dni").remove(rutas)): la fila y el archivo. La service_role borra cualquiera; un
+  // usuario, lo que le dejen las políticas de la base (en dni, nada)
+  if (req.method === "DELETE" && url.pathname === "/storage/v1/object/dni") {
+    if (!claims) return send(res, 403, { message: "unauthorized" });
+    const names = (JSON.parse(raw.toString() || "{}").prefixes || []).map(String);
+    const sql = "delete from storage.objects where bucket_id = 'dni' and name = any($1) returning name";
+    const r = claims.role === "service_role" ? await db.query(sql, [names]) : await asUser(claims, sql, [names]);
+    for (const row of r.rows) fs.rmSync(fileOf(row.name), { force: true });
+    LOG.push({ remove: r.rows.map((row) => row.name) });
+    return send(res, 200, r.rows.map((row) => ({ name: row.name, bucket_id: "dni" })));
   }
   if (req.method === "POST" && m) {
     if (!claims || !claims.sub) return send(res, 403, { message: "unauthorized" });
@@ -141,6 +159,8 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   try {
     if (url.pathname === "/__log") return send(res, 200, LOG);
+    // ¿existe el archivo del bucket dni? (las pruebas miran el disco, no solo storage.objects)
+    if (url.pathname === "/__dni") { const name = url.searchParams.get("name") || ""; return send(res, 200, { exists: !!name && fs.statSync(fileOf(name), { throwIfNoEntry: false })?.isFile() === true }) }
     if (url.pathname === "/__mail") return send(res, 200, MAIL[url.searchParams.get("email")] || {});
     if (url.pathname.startsWith("/rest/v1")) return proxy(req, res, url);
     if (url.pathname.startsWith("/auth/v1")) return await auth(req, res, url);
