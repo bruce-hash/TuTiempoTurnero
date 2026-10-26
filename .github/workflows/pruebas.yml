@@ -107,6 +107,30 @@ jobs:
       - name: Clicks (cada data-act con su acción, cada formulario con su envío)
         run: npm run test:clicks
 
+  windows:
+    # Bruno compila dist/ en Windows para subirlo a Hostinger: rutas con "\" y letra de unidad (fileURLToPath)
+    name: Build en Windows (npm ci · npm run build · dist sin demo)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm run build
+        run: npm run build
+
+      - name: dist/ completo (config.js, .htaccess) y sin la demo
+        run: node pruebas/revisar_build.mjs
+
   navegador:
     name: Navegador (e2e · rutas · comparación con la versión anterior)
     runs-on: ubuntu-24.04

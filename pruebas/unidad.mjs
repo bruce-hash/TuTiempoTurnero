@@ -4,10 +4,11 @@
 //  - H24: siteUrl (src/lib/sitio.js), la dirección del sitio: solo https:// y el dominio.
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parsePesos } from "../src/lib/montos.js";
 import { SITE_URL_RE, siteUrl } from "../src/lib/sitio.js";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let F = 0;
 const ok = (name, cond, extra = "") => {
   if (!cond) F++;

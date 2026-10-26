@@ -5,9 +5,13 @@
 // config.js no se genera: en dist/ se copia config.example.js solo si config.js no existe, para no pisar las claves reales.
 import fs from "node:fs";
 import path from "node:path";
-import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
+import { defineConfig, normalizePath } from "vite";
 
-const ROOT = path.dirname(new URL(import.meta.url).pathname);
+// Rutas del sistema con fileURLToPath (en Windows, new URL(...).pathname da "/C:/…" y termina en "C:\C:\…"). Los ids
+// de los módulos de Vite usan siempre "/", también en Windows: se comparan con normalizePath.
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const ROOT_ID = normalizePath(ROOT);
 
 export default defineConfig(({ command, mode }) => {
   const conDemo = command === "serve" || mode === "test";
@@ -35,7 +39,7 @@ export default defineConfig(({ command, mode }) => {
         async resolveId(source, importer, options) {
           if (conDemo || !source.endsWith("/demo/index.js")) return null;
           const r = await this.resolve(source, importer, { ...options, skipSelf: true });
-          return r && r.id === path.join(ROOT, "src/demo/index.js") ? "\0tutiempo-demo-vacia" : null;
+          return r && normalizePath(r.id) === ROOT_ID + "/src/demo/index.js" ? "\0tutiempo-demo-vacia" : null;
         },
         load(id) {
           return id === "\0tutiempo-demo-vacia" ? "export {};" : null;
@@ -59,7 +63,8 @@ export default defineConfig(({ command, mode }) => {
           for (const chunk of Object.values(bundle)) {
             if (chunk.type !== "chunk") continue;
             for (const [id, info] of Object.entries(chunk.modules)) {
-              if (id.startsWith(ROOT)) modulos[path.relative(ROOT, id)] = { bytes: info.renderedLength, codigo: info.code };
+              const mid = normalizePath(id);
+              if (mid.startsWith(ROOT_ID + "/")) modulos[mid.slice(ROOT_ID.length + 1)] = { bytes: info.renderedLength, codigo: info.code };
             }
           }
           fs.mkdirSync(path.join(ROOT, ".build"), { recursive: true });

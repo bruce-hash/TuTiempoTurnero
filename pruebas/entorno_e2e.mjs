@@ -6,10 +6,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import pg from "pg";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SECRET = "tutiempo-e2e-secreto-de-prueba-0123456789";
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -69,7 +70,7 @@ export async function levantar({ web, puerto = 8787, puertoRest = 3011, base = "
 }
 
 // Como comando: node pruebas/entorno_e2e.mjs <web> -- <comando…>
-if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [web, sep, cmd, ...args] = process.argv.slice(2);
   if (!web || sep !== "--" || !cmd) {
     console.error("Uso: node pruebas/entorno_e2e.mjs <carpeta web> -- <comando…>");
