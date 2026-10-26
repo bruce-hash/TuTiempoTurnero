@@ -5,6 +5,7 @@ import { PESOS_ERR, parsePesos, pctTxt } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, nowHM } from "../lib/fechas.js";
 import { pr } from "../lib/prestadores.js";
+import { SITE_URL_ERR, siteUrl } from "../lib/sitio.js";
 import { S } from "../state.js";
 import { P, store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -255,11 +256,11 @@ registerSubmit("fCom", (ev) => {
   render();
   return;
 });
-// dirección del sitio (H24): solo en vivo; la base la valida (https://dominio, sin carpeta)
+// dirección del sitio (H24): solo en vivo; https:// y el dominio, nada más (la base vuelve a validarla)
 registerSubmit("fSite", (ev) => {
-  const url = String($("#admSite").value || "").trim().toLowerCase().replace(/\/+$/, "");
-  if (!/^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/.test(url)) {
-    $("#siteerr").textContent = "Escribí la dirección con https:// y sin nada después del dominio (por ejemplo https://prueba.tutiempo.com.ar).";
+  const url = siteUrl($("#admSite").value);
+  if (!url) {
+    $("#siteerr").textContent = SITE_URL_ERR;
     return;
   }
   api.m

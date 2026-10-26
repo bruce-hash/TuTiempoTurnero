@@ -298,10 +298,15 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("nadie cambia la comisión por fuera de la función", forb === 0 && Number((await q("select commission_pct from app_settings"))[0].commission_pct) === 10);
   // H24: la dirección del sitio para los links de los avisos
   ok("H24: Comisión muestra la dirección del sitio", (await pg.inputValue("#admSite")) === "https://tutiempo.com.ar");
-  await pg.fill("#admSite", "prueba.tutiempo.com.ar"); await pg.click("#fSite button[type=submit]"); await wait(400);
-  ok("H24: sin https:// avisa y no guarda", (await pg.locator("#siteerr").innerText()).includes("https://") && (await q("select site_url from app_settings"))[0].site_url === "https://tutiempo.com.ar");
-  await wait(700);
-  await pg.fill("#admSite", "https://Prueba.TuTiempo.com.ar/"); await pg.click("#fSite button[type=submit]");
+  // solo https:// y el dominio: cada dirección inválida avisa y no guarda (entre envíos, más que el antidoble toque)
+  const badSites = [];
+  for (const bad of ["prueba.tutiempo.com.ar", "http://prueba.tutiempo.com.ar", "https://prueba.tutiempo.com.ar/", "https://prueba.tutiempo.com.ar/panel", "https://prueba.tutiempo.com.ar?x=1"]) {
+    await pg.evaluate(() => { document.querySelector("#siteerr").textContent = "" });
+    await pg.fill("#admSite", bad); await pg.click("#fSite button[type=submit]"); await wait(700);
+    if (!(await pg.locator("#siteerr").innerText()).includes("sin barra al final") || (await q("select site_url from app_settings"))[0].site_url !== "https://tutiempo.com.ar") badSites.push(bad);
+  }
+  ok("H24: sin https://, con http://, barra final, carpeta o parámetros avisa y no guarda" + (badSites.length ? " → " + badSites.join(", ") : ""), !badSites.length);
+  await pg.fill("#admSite", " https://Prueba.TuTiempo.com.ar "); await pg.click("#fSite button[type=submit]");
   ok("H24: el admin guarda la dirección del subdominio de prueba", await until("select site_url from app_settings", [], (r) => r[0].site_url === "https://prueba.tutiempo.com.ar"));
   await wait(400);
   await db.query("update app_settings set site_url = 'https://tutiempo.com.ar'");
@@ -444,6 +449,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("H10: al confirmar se crea el perfil pendiente, todavía sin DNI", np && np.status === "pending" && np.dni_number === null);
   await p2.goto(BASE + "/panel/perfil"); await p2.waitForSelector("#fDni", { timeout: 8000 }).catch(() => {}); await wait2(400);
   ok("H10: Perfil → Verificación pide número, frente y dorso", await p2.isVisible("#fDni") && await p2.isVisible("#dniFront") && await p2.isVisible("#dniBack"));
+  ok("D24: Perfil → Verificación avisa cuánto se guardan las fotos", (await p2.innerText("body")).includes("Guardamos las fotos hasta 30 días después de verificarte"));
   await p2.fill("#dniN", "30111222"); await p2.click("#fDni button[type=submit]"); await wait2(800);
   ok("H10: un DNI de otro prestador se rechaza con un mensaje claro", (await p2.locator("#toast").innerText().catch(() => "")).includes("ya está registrado")
      && (await q("select dni_number from provider_private where provider_id=$1", [np.id]))[0].dni_number === null);

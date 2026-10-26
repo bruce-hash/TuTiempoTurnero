@@ -19,6 +19,6 @@ export function admCom(data) {
 function siteForm(url) {
   return `<form class="panel" id="fSite" novalidate><p class="lbl">Dirección del sitio</p>
     <input id="admSite" type="url" inputmode="url" maxlength="100" value="${esc(url || "")}" placeholder="https://prueba.tutiempo.com.ar" aria-label="Dirección del sitio" autocomplete="off">
-    <p class="note" style="text-align:left;margin:8px 0 10px">La que abren los clientes, con <b>https://</b> y sin nada después del dominio. Con ella se arman los links de los avisos (por ejemplo <i>${esc(url || "https://tutiempo.com.ar")}/nombre-del-negocio</i>). En el entorno de prueba, la del subdominio de prueba.</p>
+    <p class="note" style="text-align:left;margin:8px 0 10px">La que abren los clientes: <b>https://</b> y el dominio, sin barra al final ni nada después. Con ella se arman los links de los avisos (por ejemplo <i>${esc(url || "https://tutiempo.com.ar")}/nombre-del-negocio</i>). En el entorno de prueba, la del subdominio de prueba.</p>
     <div class="err" id="siteerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar dirección</button></form>`;
 }

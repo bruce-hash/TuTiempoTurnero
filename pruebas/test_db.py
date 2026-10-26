@@ -436,6 +436,60 @@ ok("el público ve la verificación (H11 sale de dni_verified)", q("select (get_
 ok("set_my_dni y my_dni_status: anon no", err(q("select set_my_dni('30111888')", role="anon")) and err(q("select my_dni_status()", role="anon")))
 ok("dni_photos es interna", err(q("select dni_photos(%s)", (nu,), uid=nu)))
 
+# Bloque 2b (D24): retención de las fotos del DNI. dni_photos_due dice qué borrar (la Edge Function dni-cleanup lo borra
+# con la API de Storage; acá se simula borrando la fila) y dni_photos_deleted lo registra
+def due(folder):
+    r = q("select reason, paths from dni_photos_due(1000) where folder = %s", (str(folder),), role="service_role")
+    return r if err(r) else [(x[0], sorted(x[1])) for x in r]
+fotos_nu = sorted([f"{nu}/frente-1.png", f"{nu}/dorso-1.png"])
+ok("D24: verificado hoy, sus fotos todavía no se borran", due(nu) == [])
+q("update provider_private set dni_verified_at = now() - interval '29 days' where provider_id = %s", (pn_,))
+ok("D24: …ni a los 29 días de verificarlo", due(nu) == [])
+q("update provider_private set dni_verified_at = now() - interval '30 days 1 minute' where provider_id = %s", (pn_,))
+ok("D24: a los 30 días de verificarlo, sus dos fotos se borran", due(nu) == [("verificado", fotos_nu)])
+ok("D24: si todavía quedan fotos, no se marca el borrado", q("select dni_photos_deleted(%s, %s)", (str(nu), fotos_nu), role="service_role")[0][0] == 2
+   and q("select dni_photos_deleted_at from provider_private where provider_id = %s", (pn_,))[0][0] is None)
+q("delete from storage.objects where bucket_id = 'dni' and name = any(%s)", (fotos_nu,))   # lo que hace la API de Storage
+q("update provider_private set dni_paths = %s where provider_id = %s", (fotos_nu, pn_))   # dni_paths (de la versión 31): tiene que quedar vacío
+ok("D24: borradas, la base lo registra: dni_paths vacío y la fecha del borrado", q("select dni_photos_deleted(%s, %s)", (str(nu), fotos_nu), role="service_role")[0][0] == 0
+   and q("select dni_paths = '{}' and dni_photos_deleted_at > now() - interval '1 minute' from provider_private where provider_id = %s", (pn_,))[0][0] is True)
+ok("D24: quedan el número, la fecha y quién verificó", q("select dni_number is not null and dni_verified_at is not null and dni_verified_by = %s from provider_private where provider_id = %s", (adm, pn_))[0][0] is True
+   and q("select dni_verified from providers where id = %s", (pn_,))[0][0] is True and due(nu) == [])
+q("select admin_set_provider(%s,'suspended',null)", (pn_,), uid=adm)
+ok("D24: un verificado sin fotos se puede volver a activar (después de suspenderlo)", not err(q("select admin_set_provider(%s,'active',null)", (pn_,), uid=adm))
+   and q("select status from providers where id = %s", (pn_,))[0][0] == "active")
+# alta sin aprobar: 90 días desde la última foto
+pend = mkuser("pendiente-d24@test.ar", "Pendiente D24")
+q("select register_provider('Pendiente D24', 'Calle 9', array['b'], '2284 9', '30111901')", uid=pend)
+q("update providers set created_at = now() - interval '200 days' where owner_id = %s", (pend,))
+q("insert into storage.objects (bucket_id, name, created_at) values ('dni', %s, now() - interval '100 days'), ('dni', %s, now() - interval '89 days')",
+  (f"{pend}/frente-1.jpg", f"{pend}/dorso-1.jpg"))
+ok("D24: alta sin aprobar con la última foto de hace 89 días: no se borra", due(pend) == [])
+q("update storage.objects set created_at = now() - interval '90 days 1 minute' where name = %s", (f"{pend}/dorso-1.jpg",))
+ok("D24: a los 90 días de la última foto, se borran las dos", due(pend) == [("sin_aprobar", sorted([f"{pend}/frente-1.jpg", f"{pend}/dorso-1.jpg"]))])
+# baja: en el momento, y la baja pide el borrado ya (pg_net, con la URL y la clave del cron de Vault)
+baja = mkuser("baja-d24@test.ar", "Baja D24")
+q("select register_provider('Baja D24', 'Calle 10', array['b'], '2284 10', '30111902')", uid=baja)
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{baja}/frente-1.jpg", f"{baja}/dorso-1.jpg"), uid=baja)
+ok("D24: alta reciente: sus fotos no se borran", due(baja) == [])
+q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
+q("select vault.create_secret('https://proyecto.supabase.co/', 'tt_project_url')"); q("select vault.create_secret('secreto-del-cron', 'tt_cron_secret')")
+ok("D24: la baja del prestador se hace igual", not err(q("select delete_my_provider()", uid=baja)))
+ok("D24: …sus fotos se borran en el momento", due(baja) == [("baja", sorted([f"{baja}/frente-1.jpg", f"{baja}/dorso-1.jpg"]))])
+rq = q("select url, headers->>'Authorization' from net.requests")
+ok("D24: …y la baja llama ya a dni-cleanup con la clave del cron", rq == [("https://proyecto.supabase.co/functions/v1/dni-cleanup", "Bearer secreto-del-cron")])
+ok("D24: el cron diario llama a la misma función", q("select run_dni_cleanup()", role="service_role")[0][0] is not None
+   and q("select count(*) from net.requests where url like '%%/dni-cleanup'")[0][0] == 2)
+q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
+ok("D24: sin los secretos en Vault, una baja no falla ni llama a nada", not err(q("update providers set status = 'deleted' where owner_id = %s", (pend,)))
+   and q("select count(*) from net.requests")[0][0] == 0 and due(pend)[0][0] == "baja")
+huerfana = uuid.uuid4()
+q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{huerfana}/frente-1.jpg",))
+ok("D24: una carpeta que no es de ningún prestador se borra", due(huerfana) == [("baja", [f"{huerfana}/frente-1.jpg"])])
+ok("D24: las funciones del borrado son internas (ni el admin)", all(err(q(sql, uid=adm)) and err(q(sql, role="anon")) for sql in
+   ("select * from dni_photos_due()", "select dni_photos_deleted('x', '{}')", "select run_dni_cleanup()")))
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) in (%s, %s, %s)", (str(pend), str(baja), str(huerfana)))
+
 # ---------- versión 29 ----------
 # la seña de cada turno siempre alcanza para la comisión
 q("update provider_settings set deposit_pct=10, strict_no_show=true where provider_id=%s", (pid3,))
@@ -632,9 +686,16 @@ ok("un gasto cargado sin fecha queda en el día de Buenos Aires", not err(ex) an
 # Bloque 2b (H24): los links de los avisos salen de app_settings.site_url, no de un dominio escrito a mano
 ok("H24: la dirección del sitio la cambia solo el admin", err(q("select admin_set_site_url('https://otro.com')", uid=prov), "forbidden")
    and err(q("update app_settings set site_url = 'https://otro.com'", uid=adm)) and err(q("select admin_set_site_url('https://otro.com')", role="anon")))
-ok("H24: una dirección con carpeta o sin https:// se rechaza", err(q("select admin_set_site_url('https://prueba.tutiempo.com.ar/panel')", uid=adm), "bad_site_url")
-   and err(q("select admin_set_site_url('prueba.tutiempo.com.ar')", uid=adm), "bad_site_url"))
-ok("H24: el admin la guarda (en minúsculas y sin la barra final)", q("select admin_set_site_url('https://Prueba.TuTiempo.com.ar/')", uid=adm)[0][0] == "https://prueba.tutiempo.com.ar")
+# solo https:// y el dominio: sin puerto, carpeta, parámetros ni barra al final (la misma regla que src/lib/sitio.js)
+malas = ["http://prueba.tutiempo.com.ar", "prueba.tutiempo.com.ar", "https://prueba.tutiempo.com.ar/", "https://prueba.tutiempo.com.ar/panel",
+         "https://prueba.tutiempo.com.ar?x=1", "https://prueba.tutiempo.com.ar#a", "https://prueba.tutiempo.com.ar:8443", "https://localhost",
+         "https://-prueba.com.ar", "https://prueba..com.ar", "https://usuario@prueba.com.ar", "https://prueba.com.ar.", "javascript:alert(1)", "", None,
+         "https://" + "a" * 90 + ".com.ar"]
+rech = [u for u in malas if not err(q("select admin_set_site_url(%s)", (u,), uid=adm), "bad_site_url")]
+ok("H24: se rechaza toda dirección que no sea https:// y el dominio (barra final, carpeta, parámetros, puerto, http://)" + (f" → aceptó {rech}" if rech else ""), not rech)
+ok("H24: …y no cambia la guardada", q("select site_url from app_settings")[0][0] == "https://tutiempo.com.ar")
+ok("H24: la tabla tampoco acepta una dirección inválida (escrita sin la función)", err(q("update app_settings set site_url = 'https://tutiempo.com.ar/'")))
+ok("H24: el admin la guarda (en minúsculas y sin espacios)", q("select admin_set_site_url(' https://Prueba.TuTiempo.com.ar ')", uid=adm)[0][0] == "https://prueba.tutiempo.com.ar")
 bl = q("select id from bookings where provider_id = %s and source = 'app' and client_id is not null order by id limit 1", (pid,))[0][0]
 q("delete from client_messages where kind = 'r24' and ref = %s", (str(bl),))
 q("select notify_booking(%s, 'r24')", (bl,))

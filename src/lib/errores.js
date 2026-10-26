@@ -52,7 +52,7 @@ const ERRS = {
   bad_stamp_goal: "Cada tarjeta lleva de 15 a 20 sellos.",
   forbidden: "No tenés permiso para hacer eso.",
   bad_commission: "La comisión tiene que estar entre 0% y 30%.",
-  bad_site_url: "Escribí la dirección con https:// y sin nada después del dominio.",
+  bad_site_url: "Escribí solo https:// y el dominio, sin barra al final ni nada después.",
   empty_note: "Escribí la nota.",
   too_many_notes: "Ese prestador ya tiene demasiadas notas.",
   month_closed: "El mes está cerrado: reabrilo para cambiarlo.",
