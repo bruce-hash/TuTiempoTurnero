@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   base:
-    name: Base (Postgres 16 · test_db.py · test_cobros.py)
+    name: Base (Postgres 16 · test_db.py · test_cobros.py · test_emails.py)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -57,7 +57,7 @@ jobs:
 
       - name: Cargar las bases (emulación de Supabase + TODO_EN_UNO.sql; una limpia para cada prueba)
         run: |
-          for db in tt tt_cobros; do
+          for db in tt tt_cobros tt_emails; do
             createdb $db
             psql -v ON_ERROR_STOP=1 -q -d $db -f pruebas/supabase_emulation.sql
             psql -v ON_ERROR_STOP=1 -q -d $db -f supabase/TODO_EN_UNO.sql
@@ -68,6 +68,9 @@ jobs:
 
       - name: test_cobros.py (pagos, devoluciones, cuentas de Mercado Pago)
         run: python3 pruebas/test_cobros.py "host=localhost port=5432 dbname=tt_cobros user=postgres password=postgres"
+
+      - name: test_emails.py (avisos por email · cola, reintentos, opción del cliente)
+        run: python3 pruebas/test_emails.py "host=localhost port=5432 dbname=tt_emails user=postgres password=postgres"
 
       - name: test_mudanza.py (base de la versión 31 con llaves en texto plano → última migración)
         run: |
