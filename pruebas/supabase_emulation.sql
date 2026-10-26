@@ -23,6 +23,8 @@ create table if not exists auth.users(
   raw_user_meta_data jsonb default '{}'::jsonb,
   created_at timestamptz default now()
 );
+-- como Supabase: fecha en que se confirmó el email (Bloque 3: solo se manda email a direcciones confirmadas)
+alter table auth.users add column if not exists email_confirmed_at timestamptz;
 create or replace function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true),''),'{}')::jsonb $$;
 create or replace function auth.uid() returns uuid language sql stable as $$

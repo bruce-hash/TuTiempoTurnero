@@ -175,6 +175,11 @@ ok("H01: el pago se registra y el turno queda para devolver (no falla)", res["st
 ok("H01: la devolución queda ligada al pago, con el id de MP y la cuenta que cobró",
    refunds_of(b1) == [(6000, "slot_taken", "pending", True, "P-H01", acc1)])
 ok("H01: el pago queda como 'refund'", one("select outcome from payments where mp_payment_id = 'P-H01'") == "refund")
+avc = q("select body from client_messages where kind = 'cancel' and ref = %s and user_id = %s", (str(b1), cli))
+ok("Bloque 3: el cliente recibe el aviso de que no se pudo confirmar, con el motivo y lo que se devuelve (y va por email)",
+   len(avc) == 1 and avc[0][0].startswith("No pudimos confirmar tu turno del") and "el horario ya no estaba libre" in avc[0][0]
+   and "Te devolvemos $6.000" in avc[0][0]
+   and one("select count(*) from email_outbox o join client_messages m on m.id = o.message_id where m.kind = 'cancel' and m.ref = %s", (str(b1),)) == 1)
 ok("H01: el reintento del webhook no duplica la devolución",
    pay([b1], "P-H01", 6000, 1000, pid, acc1)["status"] == "already_processed" and len(refunds_of(b1)) == 1)
 late = q("select body from provider_notices where provider_id = %s and kind = 'mp_refunded' and ref = 'tarde-P-H01'", (pid,))
