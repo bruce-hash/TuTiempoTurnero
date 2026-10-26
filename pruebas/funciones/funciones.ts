@@ -425,12 +425,17 @@ const ver = await dniUser("verificado@fn.test", "30111701"), nueva = await dniUs
 ok("D24) las fotos subidas están en disco y en storage.objects", (await Promise.all([...ver.fotos, ...nueva.fotos, ...baja.fotos].map(async (f) => (await archivo(f)) && (await fila(f)) === 1))).every(Boolean));
 await q("update providers set status = 'active', dni_verified = true where id = $1", [ver.pid]);
 await q("update provider_private set dni_verified_at = now() - interval '31 days' where provider_id = $1", [ver.pid]);
+// caso 2: la baja pide el borrado en el momento, pero esa llamada no llega (acá no hay URL ni clave en Vault, como con
+// la red o la función caídas): la baja se hace igual y las fotos las borra la corrida del cron
+await q("delete from net.requests");
 await q("select delete_my_provider()", [], baja.uid);
+ok("D24) caso 2: la baja se hace aunque la llamada a dni-cleanup no salga", (await one("select status from providers where id = $1", [baja.pid])) === "deleted"
+   && Number(await one("select count(*) from net.requests where url like '%/dni-cleanup'")) === 0 && (await archivo(baja.fotos[0])));
 r = await dniRun("otra-clave-cualquiera-de-mas-de-32-caracteres");
 ok("D24) dni-cleanup sin la clave del cron: 403 y no borra nada", r.status === 403 && (await archivo(ver.fotos[0])));
 r = await dniRun();
 let dj = await body(r);
-ok("D24) dni-cleanup borra las fotos del verificado hace 31 días y las de la baja", r.status === 200 && dj.files === 4 && dj.failed === 0, JSON.stringify(dj));
+ok("D24) la corrida del cron borra las fotos del verificado hace 31 días y las de la baja (caso 2)", r.status === 200 && dj.files === 4 && dj.failed === 0, JSON.stringify(dj));
 ok("D24) …el archivo ya no existe y su fila tampoco", (await Promise.all([...ver.fotos, ...baja.fotos].map(async (f) => !(await archivo(f)) && (await fila(f)) === 0))).every(Boolean));
 ok("D24) …el verificado queda con dni_paths vacío, la fecha del borrado y su verificación",
    (await q("select pp.dni_paths, pp.dni_photos_deleted_at is not null as borrado, pp.dni_number, p.dni_verified from provider_private pp join providers p on p.id = pp.provider_id where p.id = $1", [ver.pid]))

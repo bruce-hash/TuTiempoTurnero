@@ -4507,13 +4507,16 @@ grant execute on function public.admin_set_site_url(text) to authenticated;
 -- =====================================================================
 -- TuTiempo · Bloque 2b · Retención de las fotos del DNI (D24)
 -- Las fotos (bucket privado "dni", carpeta <usuario>/) se borran:
---   - prestador verificado: a los 30 días de la verificación (quedan el número, la fecha y quién verificó);
+--   - prestador verificado (con fecha de verificación): a los 30 días de verificarlo (quedan el número, la fecha y
+--     quién verificó). Uno verificado antes del 2b, sin fecha, conserva las fotos: sin ellas no se podría reactivar;
 --   - alta no aprobada o abandonada: a los 90 días de la última foto subida;
 --   - baja del prestador: en el momento (y las de una carpeta que ya no es de ningún prestador).
 -- Las borra la Edge Function dni-cleanup con la API de Storage (un DELETE en storage.objects deja el archivo huérfano):
 -- pide la lista a dni_photos_due(), borra y avisa con dni_photos_deleted(). La llama pg_cron una vez por día y la baja
 -- del prestador en el momento (run_dni_cleanup, con la misma URL y CRON_SECRET de Vault que run_refunds).
--- Un prestador ya verificado se puede volver a activar (después de suspenderlo) sin las fotos.
+-- Activar pide las fotos O una verificación anterior con fecha: un verificado se reactiva (después de suspenderlo) sin
+-- las fotos.
+-- Si la llamada de la baja falla (red, función caída), la corrida diaria borra las fotos de las bajas que queden.
 -- No cambia datos al correr: el borrado lo hace la función.
 -- =====================================================================
 set search_path = public, extensions;
@@ -4542,8 +4545,8 @@ language sql stable security definer set search_path = public as $$
            case
              -- baja: la carpeta ya no es de ningún prestador (provider_teardown deja owner_id en null)
              when w.provider_id is null then 'baja'
-             -- verificado: 30 días después de verificar (sin fecha, de antes del 2b: desde la última foto)
-             when w.dni_verified and coalesce(w.dni_verified_at, w.last_upload) <= now() - interval '30 days' then 'verificado'
+             -- verificado: 30 días después de verificar (sin fecha, de antes del 2b, no: necesita las fotos para reactivarse)
+             when w.dni_verified and w.dni_verified_at <= now() - interval '30 days' then 'verificado'
              -- sin aprobar: 90 días desde la última foto subida
              when not w.dni_verified and w.last_upload <= now() - interval '90 days' then 'sin_aprobar'
            end as reason
@@ -4617,26 +4620,28 @@ do $$ begin
 end $$;
 
 -- ---------- Activar = verificar, una sola vez ----------
--- Igual que en 20261025194744_dni.sql, salvo que un prestador ya verificado (por ejemplo, suspendido y vuelto a
--- activar) no necesita las fotos: a los 30 días de verificarlo ya no están (D24).
+-- Igual que en 20261025194744_dni.sql, salvo que para activar alcanzan las fotos O una verificación anterior con fecha
+-- (dni_verified y dni_verified_at): a los 30 días de verificarlo las fotos ya no están (D24), y un prestador suspendido
+-- se tiene que poder reactivar.
 create or replace function public.admin_set_provider(pid bigint, p_status text, p_verified boolean) returns void
 language plpgsql security definer set search_path = public as $$
 declare p record; ph jsonb;
 begin
   if not public.is_admin() then raise exception 'forbidden'; end if;
   if p_status not in ('pending','active','suspended') then raise exception 'bad_status'; end if;
-  select pr.id, pr.owner_id, pr.dni_verified, pp.dni_number into p
+  select pr.id, pr.owner_id, pr.dni_verified, pp.dni_number, pp.dni_verified_at into p
     from public.providers pr left join public.provider_private pp on pp.provider_id = pr.id
    where pr.id = pid and pr.status <> 'deleted' for update of pr;
   if p.id is null then return; end if;
   if p_status = 'active' then
-    if not p.dni_verified then
+    if not (p.dni_verified and p.dni_verified_at is not null) then
       if p.dni_number is null then raise exception 'dni_missing'; end if;
       ph := public.dni_photos(p.owner_id);
       if not ((ph->>'front')::boolean and (ph->>'back')::boolean) then raise exception 'dni_photos_missing'; end if;
     end if;
     update public.providers set status = 'active', dni_verified = true, updated_at = now() where id = pid;
-    if not p.dni_verified then
+    -- verificar con las fotos deja quién y cuándo (también a uno verificado antes del 2b, sin fecha)
+    if not (p.dni_verified and p.dni_verified_at is not null) then
       update public.provider_private set dni_verified_at = now(), dni_verified_by = auth.uid() where provider_id = pid;
     end if;
   else

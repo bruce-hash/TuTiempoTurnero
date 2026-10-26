@@ -95,7 +95,8 @@ prestadores no eliminados (`dni_taken`). `admin_set_provider(…, 'active')` exi
 `provider_private`. La migración `20261025194744_dni.sql` borra el DNI de `raw_user_meta_data` (prueba: `test_mudanza.py`).
 Retención de las fotos (D24, `20261026025356_dni_retencion.sql`): la Edge Function `dni-cleanup` las borra con la API de
 Storage a los 30 días de verificar, a los 90 de la última foto de un alta sin aprobar y en el momento de una baja (cron
-diario y la baja, con `CRON_SECRET`). Pruebas: `test_db.py` (qué se borra y cuándo) y `test:funciones` (la función real
+diario y la baja, con `CRON_SECRET`; si la llamada de la baja falla, la corrida diaria). Activar pide las fotos o una
+verificación anterior con fecha. Pruebas: `test_db.py` (qué se borra y cuándo) y `test:funciones` (la función real
 contra el Storage del server del e2e: el archivo ya no existe y `dni_paths` queda vacío).
 
 ### H11 · Baja · "Identidad verificada" siempre visible (resuelto en el Bloque 2b)

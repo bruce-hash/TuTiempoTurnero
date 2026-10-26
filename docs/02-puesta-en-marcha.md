@@ -107,13 +107,14 @@ Vault que `mp-refunds`), cinco migraciones y el frontend:
      abierta lo puede tener en su token hasta que se renueve (1 hora).
    - Desde esta migración, **activar a un prestador exige el número de DNI y las dos fotos** (frente y dorso, que el
      prestador sube en Perfil → Verificación). Los prestadores de prueba que crees los tenés que cargar así. Uno ya
-     verificado (suspendido y vuelto a activar) no las necesita.
+     verificado con fecha (suspendido y vuelto a activar) no las necesita.
    - La de la dirección del sitio (`…_site_url_https.sql`) solo acepta `https://` y el dominio. Si la guardada no
      cumple (por ejemplo, con `http://`), la migración sigue y deja el aviso `site_url: …`: cambiala en el paso 3.
    - La de retención (`…_dni_retencion.sql`, D24) arma la tarea `tt-dni-cleanup` (todos los días a las 3:37 UTC) y
      pide el borrado en el momento en cada baja de prestador. La función borra con la API de Storage las fotos de los
      verificados hace 30 días o más, de las altas sin aprobar con la última foto de hace 90 días o más y de las bajas
-     (si ya tenías prestadores verificados con fotos viejas, se borran en la primera corrida).
+     (los verificados antes del 2b no tienen fecha de verificación: conservan las fotos hasta que los vuelvas a
+     verificar). Si la llamada de una baja falla, la corrida diaria borra esas fotos.
 3. Panel admin → Comisión → **Dirección del sitio**: en el entorno de prueba, `https://prueba.tutiempo.com.ar` (con
    ella se arman los links de los avisos; por defecto es `https://tutiempo.com.ar`).
 4. Frontend: `npm run build` y subir `dist/` como siempre.

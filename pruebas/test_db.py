@@ -456,8 +456,23 @@ ok("D24: borradas, la base lo registra: dni_paths vacío y la fecha del borrado"
 ok("D24: quedan el número, la fecha y quién verificó", q("select dni_number is not null and dni_verified_at is not null and dni_verified_by = %s from provider_private where provider_id = %s", (adm, pn_))[0][0] is True
    and q("select dni_verified from providers where id = %s", (pn_,))[0][0] is True and due(nu) == [])
 q("select admin_set_provider(%s,'suspended',null)", (pn_,), uid=adm)
-ok("D24: un verificado sin fotos se puede volver a activar (después de suspenderlo)", not err(q("select admin_set_provider(%s,'active',null)", (pn_,), uid=adm))
-   and q("select status from providers where id = %s", (pn_,))[0][0] == "active")
+ok("D24 caso 1: un verificado (con fecha) suspendido se reactiva sin las fotos ya borradas", not err(q("select admin_set_provider(%s,'active',null)", (pn_,), uid=adm))
+   and q("select status, dni_verified from providers where id = %s", (pn_,))[0] == ("active", True)
+   and q("select dni_verified_by = %s from provider_private where provider_id = %s", (adm, pn_))[0][0] is True)   # no cambia quién verificó
+# verificado antes del 2b, sin fecha: sus fotos no se borran (sin ellas no podría reactivarse) y reactivarlo las pide
+vie = mkuser("viejo-d24@test.ar", "Viejo D24")
+pvie = q("select register_provider('Viejo D24', 'Calle 8', array['b'], '2284 8', '30111900')", uid=vie)[0][0]
+q("update providers set status = 'suspended', dni_verified = true where id = %s", (pvie,))
+q("insert into storage.objects (bucket_id, name, created_at) values ('dni', %s, now() - interval '400 days'), ('dni', %s, now() - interval '400 days')",
+  (f"{vie}/frente-1.jpg", f"{vie}/dorso-1.jpg"))
+ok("D24 caso 1: un verificado sin fecha (de antes del 2b) conserva las fotos", due(vie) == [])
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(vie),))
+ok("D24 caso 1: …y sin fotos ni fecha de verificación no se puede activar", err(q("select admin_set_provider(%s,'active',null)", (pvie,), uid=adm), "dni_photos_missing"))
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{vie}/frente-2.jpg", f"{vie}/dorso-2.jpg"))
+ok("D24 caso 1: …con las fotos sí, y queda la fecha de la verificación", not err(q("select admin_set_provider(%s,'active',null)", (pvie,), uid=adm))
+   and q("select status from providers where id = %s", (pvie,))[0][0] == "active"
+   and q("select dni_verified_at > now() - interval '1 minute' and dni_verified_by = %s from provider_private where provider_id = %s", (adm, pvie))[0][0] is True)
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(vie),))
 # alta sin aprobar: 90 días desde la última foto
 pend = mkuser("pendiente-d24@test.ar", "Pendiente D24")
 q("select register_provider('Pendiente D24', 'Calle 9', array['b'], '2284 9', '30111901')", uid=pend)
@@ -483,6 +498,21 @@ ok("D24: el cron diario llama a la misma función", q("select run_dni_cleanup()"
 q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
 ok("D24: sin los secretos en Vault, una baja no falla ni llama a nada", not err(q("update providers set status = 'deleted' where owner_id = %s", (pend,)))
    and q("select count(*) from net.requests")[0][0] == 0 and due(pend)[0][0] == "baja")
+# caso 2: la llamada de la baja falla (pg_net con error): la baja sigue y la corrida diaria encuentra las fotos
+caida = mkuser("caida-d24@test.ar", "Caída D24")
+q("select register_provider('Caída D24', 'Calle 11', array['b'], '2284 11', '30111903')", uid=caida)
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{caida}/frente-1.jpg", f"{caida}/dorso-1.jpg"), uid=caida)
+q("select vault.create_secret('https://proyecto.supabase.co/', 'tt_project_url')"); q("select vault.create_secret('secreto-del-cron', 'tt_cron_secret')")
+q("alter function net.http_post(text, jsonb, jsonb, jsonb, int) rename to http_post_ok")
+q("create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000) "
+  "returns bigint language plpgsql as $$ begin raise exception 'sin red'; end $$")
+ok("D24 caso 2: si falla la llamada a dni-cleanup, la baja se hace igual", not err(q("select delete_my_provider()", uid=caida))
+   and q("select count(*) from providers where name = 'Caída D24' and status = 'deleted'")[0][0] == 1)
+q("drop function net.http_post(text, jsonb, jsonb, jsonb, int)"); q("alter function net.http_post_ok(text, jsonb, jsonb, jsonb, int) rename to http_post")
+q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')")
+ok("D24 caso 2: …y la corrida diaria las borra (siguen en la lista hasta que se borran)", due(caida) == [("baja", sorted([f"{caida}/frente-1.jpg", f"{caida}/dorso-1.jpg"]))])
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(caida),))
+ok("D24 caso 2: …borradas, ya no aparecen", due(caida) == [] and q("select dni_photos_deleted(%s, '{}')", (str(caida),), role="service_role")[0][0] == 0)
 huerfana = uuid.uuid4()
 q("insert into storage.objects (bucket_id, name) values ('dni', %s)", (f"{huerfana}/frente-1.jpg",))
 ok("D24: una carpeta que no es de ningún prestador se borra", due(huerfana) == [("baja", [f"{huerfana}/frente-1.jpg"])])
