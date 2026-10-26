@@ -9,8 +9,7 @@ on:
   workflow_dispatch:
   # Todas las noches a las 23:30 de Argentina (02:30 UTC), sobre developer: a esa hora en UTC ya es mañana (y a fin de
   # mes, otro mes), así que una prueba que use el "hoy" del runner en lugar del de Buenos Aires falla acá y no sola un
-  # día cualquiera. GitHub corre los cron desde el workflow de la rama por defecto (main): empieza a correr cuando este
-  # archivo llegue a main.
+  # día cualquiera. GitHub corre los cron con el workflow y el código de la rama por defecto, que es developer.
   schedule:
     - cron: "30 2 * * *"
 
@@ -45,8 +44,6 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'developer' || '' }}
 
       - name: TODO_EN_UNO.sql idéntico a las migraciones
         run: node tools/todo_en_uno.mjs --check
@@ -86,8 +83,6 @@ jobs:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'developer' || '' }}
 
       - uses: actions/setup-node@v5
         with:
@@ -130,7 +125,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'schedule' && 'developer' || '' }}
           fetch-depth: 0 # comparar.mjs arma el build de referencia desde su commit
 
       - uses: actions/setup-node@v5
@@ -190,8 +184,6 @@ jobs:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'developer' || '' }}
 
       - uses: actions/setup-node@v5
         with:
@@ -224,8 +216,6 @@ jobs:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'developer' || '' }}
 
       - uses: actions/setup-node@v5
         with:

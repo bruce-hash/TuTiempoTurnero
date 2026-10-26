@@ -79,8 +79,9 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 
 - Bloques numerados. Al terminar cada bloque **te detenés** y entregás: qué hiciste, archivos tocados, cómo probarlo,
   resultado de las pruebas y riesgos. No empezás el siguiente sin autorización.
-- Ramas: `main` (lo que está en producción) y `developer`. Cada bloque en `feature/<bloque>` desde `developer`, con PR.
-  Nunca commit directo a `main`. Commits chicos, en español.
+- Ramas: `main` es producción (solo recibe lo que Bruno despliega); `developer` es la rama de trabajo y la rama por
+  defecto del repo (ahí corre también la prueba nocturna). Cada bloque en `feature/<bloque>` desde `developer`, con PR a
+  `developer`. Nunca commit directo a `main`. Commits chicos, en español.
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
   `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` si tocás las
@@ -93,9 +94,10 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 - Las pruebas usan el mismo "hoy" que la base: el de Buenos Aires (`(now() at time zone 'America/Argentina/Buenos_Aires')::date`
   en SQL, `dt.datetime.now(TZ)` en Python), nunca `current_date` ni `date.today()`: el CI corre en UTC y de 21 a 24 h de
   Argentina ya es mañana (y a fin de mes, otro mes). El workflow corre todas las noches a las 23:30 de Argentina sobre
-  `developer` para cazarlas. Para simular una hora localmente: un Postgres aparte levantado con
-  `FAKETIME="+<segundos>s" LD_PRELOAD=…/libfaketimeMT.so.1` y las pruebas con `faketime -f "+<segundos>s"` (el mismo
-  desplazamiento para todos los procesos; con `@fecha` cada proceso arranca su propio reloj y se desfasan).
+  `developer` (la rama por defecto) para cazarlas: si una falla ahí, se arregla igual (mismo "hoy" que la base). Para
+  simular una hora localmente: un Postgres aparte levantado con `FAKETIME="+<segundos>s" LD_PRELOAD=…/libfaketimeMT.so.1`
+  y las pruebas con `faketime -f "+<segundos>s"` (el mismo desplazamiento para todos los procesos; con `@fecha` cada
+  proceso arranca su propio reloj y se desfasan).
 - No inventes reglas de negocio: si algo no está en el SQL ni en `docs/01-decisiones.md`, preguntá.
 - Textos de interfaz en español rioplatense (voseo), con el tono actual de la app.
 
