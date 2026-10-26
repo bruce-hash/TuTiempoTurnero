@@ -34,7 +34,7 @@ def err(x, txt=None):
 
 def conectar_mp(provider_id):
     """Cuenta de Mercado Pago activa (Bloque 1): sin ella no se puede reservar con seña."""
-    return q("select mp_connect(%s, %s, 'tok-prueba', 'ref-prueba', 15552000)", (provider_id, f"mp-{provider_id}"), role="service_role")
+    return q("select mp_connect(%s, %s, 'v1:aXY=:dG9r', 'v1:aXY=:cmVm', 15552000)", (provider_id, f"mp-{provider_id}"), role="service_role")   # llaves con el formato cifrado
 
 def mkuser(email, name):
     uid = uuid.uuid4()
@@ -74,7 +74,7 @@ ok("anon no puede leer columnas privadas (select *)", err(anon_cols))
 ok("anon lee la vitrina", q("select name from providers where id=%s", (pid,), role="anon")[0][0] == "Sofía Benítez Studio")
 ok("anon no ve datos privados", err(q("select phone from provider_private", role="anon")) or q("select count(*) from provider_private", role="anon")[0][0] == 0)
 ok("otro usuario no ve el teléfono ni el DNI", q("select count(*) from provider_private", uid=cli1)[0][0] == 0)
-ok("nadie lee los tokens de Mercado Pago", err(q("select * from provider_secrets", uid=prov)) or q("select count(*) from provider_secrets", uid=prov)[0][0] == 0)
+ok("nadie lee las llaves de Mercado Pago", err(q("select * from mp_accounts", uid=prov)) and err(q("select access_token from mp_accounts", role="anon")))
 g = q("select get_provider(%s)", (pid,), role="anon")[0][0]
 ok("ficha pública con 3 rubros y servicios", g and len(g["categories"]) == 3 and len(g["services"]) == 3 and "phone" not in json.dumps(g))
 cc = dict(q("select * from category_counts('olavarria')", role="anon"))
@@ -582,6 +582,28 @@ ok("…pero no cambiarlo por otro reservado", err(q("update providers set slug =
 ok("…y sí por uno libre", not err(q("update providers set slug = 'turnos-viejo' where id = %s", (pv,))))
 ok("…una vez libre, tampoco puede volver al reservado", err(q("update providers set slug = 'turnos' where id = %s", (pv,)), "reserved_slug"))
 ok("a un prestador común no se le puede poner un slug reservado", err(q("update providers set slug = 'Panel' where id = %s", (pid2,)), "reserved_slug"))
+
+# Bloque 2a (H14): el seed de ejemplos es ficticio y no carga sin el aviso explícito (todo en una transacción que se deshace)
+import pathlib, re
+SEED = (pathlib.Path(__file__).resolve().parent.parent / "supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql").read_text()
+with conn.cursor() as c:
+    c.execute("begin")
+    try:
+        c.execute(SEED); sin_aviso = None
+    except Exception as e:
+        sin_aviso = e
+    c.execute("rollback")
+    ok("el seed de ejemplos no carga sin set tt.ejemplos = 'si'", err(sin_aviso, "ejemplos_no_autorizados"))
+    c.execute("begin")
+    c.execute("set local tt.ejemplos = 'si'")
+    c.execute(SEED)
+    c.execute("select count(*), count(*) filter (where status = 'active') from providers where slug like 'ej-%'")
+    ok("…con el aviso carga los 13 prestadores de ejemplo", c.fetchone() == (13, 13))
+    c.execute("rollback")
+REALES = ["Hidro", "Kevin Ortiz", "la fama", "Niko_barberr", "Mary Garcia", "Carina Saitti", "2284727692", "9 de julio 2381",
+          "Antártida Argentina 4762", "Rivadavia 2684", "Islas Malvinas 3974", "Colon 3794", "Belgrano 2683"]
+ok("el seed no tiene nombres, direcciones ni teléfonos de negocios reales", not [r for r in REALES if r.lower() in SEED.lower()])
+ok("…ni teléfonos que puedan existir (después de 2284 va un 0)", all(t.startswith("0") for t in re.findall(r"'2284 ?(\d+)'", SEED)))
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

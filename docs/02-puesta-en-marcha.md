@@ -17,7 +17,8 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
 3. Cargar la base con la CLI (recomendado: `supabase link --project-ref <proyecto-prueba>` y `supabase db push`, que aplica
    `supabase/migrations/` en orden) o pegando `supabase/TODO_EN_UNO.sql` en el SQL Editor.
    Usá siempre la versión del repo **después** de los arreglos de Claude Code.
-4. **No** cargues `ejemplos.NO-USAR-EN-PRODUCCION.sql`: creá 1 o 2 prestadores de prueba propios desde la app.
+4. **No** cargues `ejemplos.NO-USAR-EN-PRODUCCION.sql` (es solo para una base local; sin `set tt.ejemplos = 'si'` no
+   carga nada): creá 1 o 2 prestadores de prueba propios desde la app.
 5. Auth: seguir el PASO 2 del LEEME (URL del subdominio, plantillas de email, Google). Para prueba alcanza el email de Supabase.
    En **Redirect URLs** alcanza con la raíz del sitio (`https://prueba.tutiempo.com.ar/`): desde el Bloque B la app siempre
    pide volver a la raíz y recuerda aparte a qué pantalla iba.
@@ -29,26 +30,93 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
 2. Crear **usuarios de prueba**: uno vendedor (hace de prestador) y uno comprador (hace de cliente).
 3. Redirect URL: `https://<proyecto-prueba>.supabase.co/functions/v1/mp-oauth`.
    Webhook: `https://<proyecto-prueba>.supabase.co/functions/v1/mp-webhook`, evento Pagos. Copiar la clave secreta.
-4. Desde la carpeta del repo:
+4. Generar las claves propias de TuTiempo (en tu compu, una vez por entorno; prueba y producción con claves distintas).
+   No las guardes en el repo ni en un chat: van directo a `supabase secrets set` y a Vault.
+   ```bash
+   openssl rand -base64 48   # CRON_SECRET: la clave con la que el cron llama a mp-refunds (mínimo 32 caracteres)
+   openssl rand -base64 32   # MP_TOKENS_KEY: cifra las llaves de Mercado Pago de cada prestador (exactamente 32 bytes)
+   ```
+   `MP_OWNER_USER_ID` es el id de usuario de Mercado Pago de la cuenta de TuTiempo (developers.mercadopago.com → Tus
+   integraciones → la aplicación → Credenciales, "User ID"; en modo prueba, el de la cuenta dueña de la aplicación).
+   `mp-oauth` rechaza conectar esa cuenta como prestador (H12) y, si falta la variable, no conecta ninguna.
+5. Desde la carpeta del repo:
    ```bash
    supabase login
    supabase link --project-ref <proyecto-prueba>
-   supabase secrets set SITE_URL=https://prueba.tutiempo.com.ar MP_CLIENT_ID=... MP_CLIENT_SECRET=... MP_WEBHOOK_SECRET=... MP_OWNER_USER_ID=...
+   supabase secrets set SITE_URL=https://prueba.tutiempo.com.ar MP_CLIENT_ID=... MP_CLIENT_SECRET=... MP_WEBHOOK_SECRET=... \
+     MP_OWNER_USER_ID=... CRON_SECRET=... MP_TOKENS_KEY=...
    supabase functions deploy mp-create-preference
    supabase functions deploy mp-webhook --no-verify-jwt
    supabase functions deploy mp-oauth --no-verify-jwt
    supabase functions deploy mp-refunds --no-verify-jwt
    ```
-   (`MP_OWNER_USER_ID` lo agrega Claude Code en el bloque 2: id de usuario de Mercado Pago de TuTiempo.)
    **Nunca** cargues `MP_API_URL` en Supabase: existe solo para las pruebas (un Mercado Pago falso). Sin ese secreto las
    funciones usan la API real. Si alguna vez aparece en `supabase secrets list`, borralo (`supabase secrets unset MP_API_URL`).
-   Bloque 1: las 4 funciones cambian juntas con las migraciones `20261023215124_cobros.sql`,
-   `20261024043027_cobros_ajustes.sql` y `20261024142729_cancelar_con_pago_bloqueado.sql` (llaves en `mp_accounts`,
-   pagos en `payments`): primero las migraciones, después
-   el deploy de las 4. **Hasta terminar el Bloque 2 esto va solo al entorno de prueba:** las devoluciones automáticas
-   dependen del cron de `mp-refunds` con la clave en Vault (H13). Las llaves que ya estuvieran en
-   `provider_secrets` se copian solas a `mp_accounts`; `provider_secrets` queda sin uso hasta el Bloque 2 (D21).
-5. Tarea de devoluciones: la deja armada Claude Code usando Vault (no pegues la `service_role` key en el cron).
+6. Vault (Supabase → SQL Editor). La tarea de devoluciones automáticas lee de acá la dirección del proyecto y la
+   `CRON_SECRET` (la **misma** que cargaste en el paso 5). Nada de eso queda escrito en el SQL ni en el repo, y el cron
+   ya no usa la `service_role` key: `mp-refunds` solo acepta `CRON_SECRET`.
+   ```sql
+   select vault.create_secret('https://<proyecto-prueba>.supabase.co', 'tt_project_url');
+   select vault.create_secret('<la CRON_SECRET del paso 5>', 'tt_cron_secret');
+   ```
+   Conviene hacerlo **antes** de la migración `20261025171952_seguridad.sql` (si va después, el cron corre igual pero
+   cada 10 minutos deja un aviso "faltan tt_project_url o tt_cron_secret" hasta que los cargues).
+
+#### Orden del despliegue del Bloque 2a (entorno de prueba)
+1. Extensiones `pg_cron` y `pg_net` activas (paso 2 de Supabase).
+2. Secretos de las funciones (paso 5) y deploy de las 4 funciones. Las funciones nuevas cifran las llaves y funcionan
+   con la base anterior; las viejas no funcionan con la base nueva (la base rechaza llaves sin cifrar).
+3. Vault (paso 6).
+4. Migraciones: `supabase db push` (o `TODO_EN_UNO.sql`). La del Bloque 2a (`20261025171952_seguridad.sql`):
+   - arma las tareas programadas `tt-refunds` (cada 10 minutos) y `tt-cleanup` (todos los días a las 3:17 UTC: borra
+     intentos de conexión con Mercado Pago de más de 1 día y avisos descartados de más de 180 días);
+   - borra `provider_secrets` (sin uso desde el Bloque 1);
+   - pasa a "solo devoluciones" las cuentas activas sin id de Mercado Pago (con aviso al prestador) y desde ahí lo exige;
+   - rechaza llaves de Mercado Pago sin cifrar.
+   La siguiente (`20261025181645_llaves_sin_cifrar.sql`) borra las llaves viejas sin cifrar (las copiadas de
+   `provider_secrets` en el Bloque 1; no debería haber, no hay cuentas reales conectadas): quedan en null con
+   "Llave sin cifrar: hay que reconectar" en `last_error`, y si la cuenta cobraba pasa a "solo devoluciones" con aviso
+   al prestador para que vuelva a conectar. Comprobación: `select count(*) from mp_accounts where access_token !~ '^v[0-9]+:'
+   or refresh_token !~ '^v[0-9]+:';` tiene que dar 0.
+   Si `pg_cron` o `pg_net` no estaban activos, activalos y volvé a correr la migración (es idempotente).
+5. Verificar en el SQL Editor:
+   ```sql
+   select jobname, schedule, command from cron.job;                                   -- tt-refunds y tt-cleanup
+   select status, return_message, start_time from cron.job_run_details order by start_time desc limit 5;
+   select status_code, content from net._http_response order by created desc limit 5;  -- 200 y {"done":…,"failed":…}
+   ```
+   Un 403 en `net._http_response` es que la `CRON_SECRET` de Vault no es igual a la de las funciones; un 500 con
+   "config", que a la función le falta `CRON_SECRET` o tiene menos de 32 caracteres.
+
+#### Rotar la CRON_SECRET
+Si se filtró, o una vez por año. Generá una nueva (`openssl rand -base64 48`) y cambiala en los dos lados, uno atrás del
+otro:
+```bash
+supabase secrets set CRON_SECRET=<nueva>
+```
+```sql
+select vault.update_secret((select id from vault.secrets where name = 'tt_cron_secret'), '<nueva>');
+```
+Entre un paso y el otro, una corrida del cron puede dar 403: no se pierde nada, las devoluciones pendientes salen en la
+corrida siguiente (10 minutos).
+
+#### Rotar la clave de las llaves de Mercado Pago (MP_TOKENS_KEY)
+Las funciones leen las llaves con cualquier versión cargada y escriben siempre con la más nueva. Cada llave guardada
+dice con qué versión se cifró (`v1:…`, `v2:…`).
+1. Generá la nueva (`openssl rand -base64 32`) y cargala **sin borrar la anterior**:
+   `supabase secrets set MP_TOKENS_KEY_V2=<nueva>` (la siguiente vez, `MP_TOKENS_KEY_V3`, y así hasta la 9).
+   Desde ese momento las llaves nuevas o renovadas se guardan con v2; las otras se siguen leyendo con v1.
+2. La anterior se puede borrar recién cuando ninguna llave la usa (incluye las cuentas desconectadas, que se guardan
+   hasta 180 días después del último pago para poder devolver):
+   ```sql
+   select count(*) from mp_accounts where access_token like 'v1:%' or refresh_token like 'v1:%';   -- tiene que dar 0
+   ```
+   Con 0, `supabase secrets unset MP_TOKENS_KEY`. Si borrás una clave que todavía se usa, esas cuentas no se pueden
+   descifrar: no cobran ni devuelven y queda el error en el log y en la cuenta (`last_error`), pero no se desactivan;
+   volver a cargar la clave las arregla.
+3. Si la clave se filtró: cargá la nueva como en el paso 1, borrá la vieja enseguida y pedile a cada prestador con
+   cuentas cifradas con ella que vuelva a conectar Mercado Pago (Perfil → Cobros). Las devoluciones de esas cuentas
+   quedan pendientes hasta que reconecten la misma cuenta.
 
 ### 3. Hostinger (subdominio de prueba)
 1. hPanel → Dominios → Subdominios → crear `prueba.tutiempo.com.ar`. Activar SSL.
@@ -88,7 +156,9 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
 ## Etapa B · Producción
 1. Supabase: proyecto nuevo `tutiempo` en plan **Pro** (backups diarios). Mismos pasos 1 a 7.
 2. Auth: SMTP propio (Resend o Brevo, D14) y Google con el dominio definitivo. CAPTCHA (Turnstile) activado.
-3. Mercado Pago: credenciales de producción de la misma aplicación; nueva clave de webhook; `supabase secrets set` en el proyecto de producción y deploy de las 4 funciones.
+3. Mercado Pago: credenciales de producción de la misma aplicación; nueva clave de webhook; `MP_OWNER_USER_ID` de la
+   cuenta real de TuTiempo; `CRON_SECRET` y `MP_TOKENS_KEY` **nuevas** (no las del entorno de prueba);
+   `supabase secrets set` en el proyecto de producción, deploy de las 4 funciones y Vault (pasos 4 a 6 de Mercado Pago).
 4. Textos legales revisados por abogado (D13).
 5. Hostinger: subdominio definitivo o reemplazo de la raíz según D12. Antes de tocar la raíz: backup completo del Laravel.
 6. Primera compra real chica con tu propia tarjeta y devolución desde el panel.

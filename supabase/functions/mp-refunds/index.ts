@@ -2,12 +2,15 @@
 // monto no alcanzaba, etc. Cada devolución usa la llave de la cuenta que COBRÓ ese pago (aunque el prestador haya
 // desconectado o reconectado otra). Cada intento queda registrado; si falla, se reintenta con backoff (D19) y desde el
 // primer fallo aparece en "Para revisar" del panel admin.
-// La llama pg_cron cada 10 minutos con la service_role key; cualquier otra llamada se rechaza.
+// La llama pg_cron cada 10 minutos (public.run_refunds) con CRON_SECRET, que el cron lee de Vault; cualquier otra
+// llamada se rechaza (ni la service_role sirve: la clave del cron solo dispara esto).
 import { accountById, accountToken, admin, env, json, safeEqual, MP_API, type MpAccount } from "../_shared/util.ts";
 
 Deno.serve(async (req) => {
   const auth = req.headers.get("Authorization") ?? "";
-  if (!safeEqual(auth, `Bearer ${env("SUPABASE_SERVICE_ROLE_KEY")}`)) return json({ error: "forbidden" }, 403);
+  const secret = env("CRON_SECRET");
+  if (secret.length < 32) { console.error("CRON_SECRET demasiado corta (mínimo 32 caracteres)"); return json({ error: "config" }, 500); }
+  if (!safeEqual(auth, `Bearer ${secret}`)) return json({ error: "forbidden" }, 403);
   const db = admin();
   const { data: rows, error } = await db.rpc("refunds_due", { p_limit: 50 });
   if (error) return json({ error: error.message }, 500);

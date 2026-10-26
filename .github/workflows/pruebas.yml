@@ -64,6 +64,12 @@ jobs:
       - name: test_cobros.py (pagos, devoluciones, cuentas de Mercado Pago)
         run: python3 pruebas/test_cobros.py "host=localhost port=5432 dbname=tt_cobros user=postgres password=postgres"
 
+      - name: test_mudanza.py (base de la versión 31 con llaves en texto plano → última migración)
+        run: |
+          createdb tt_mudanza
+          psql -v ON_ERROR_STOP=1 -q -d tt_mudanza -f pruebas/supabase_emulation.sql
+          python3 pruebas/test_mudanza.py "host=localhost port=5432 dbname=tt_mudanza user=postgres password=postgres"
+
   frontend:
     name: Frontend (sin demo · crawl · clicks)
     runs-on: ubuntu-24.04

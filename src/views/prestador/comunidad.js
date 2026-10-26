@@ -1,79 +1,14 @@
 import qrcode from "qrcode-generator";
 import { LIVE } from "../../config.js";
 import { esc } from "../../lib/dom.js";
-import { pr } from "../../lib/prestadores.js";
 import { profileLinkText, profileUrl } from "../../router.js";
+import { seedComm } from "../../demo/comunidad.js";
 import { store } from "../../store.js";
 import { gallery, rating, reviewsHtml } from "../../ui/resenas.js";
 
-const WORKS = {
-  b: ["Fade + barba", "Corte clásico", "Perfilado"],
-  p: ["Balayage", "Corte en capas", "Brushing"],
-  m: ["Sala de masajes", "Piedras calientes", "Aromaterapia"],
-  l: ["Pelo a pelo", "Volumen ruso", "Lifting"],
-  u: ["Nail art", "Esculpidas", "Semipermanente"],
-  d: ["Cabina", "Cera tibia", "Láser"],
-};
-// comunidad del prestador (seguidores, reseñas, trabajos). En vivo arranca vacía y la completa la carga del
-// perfil; en la demo se inventa a partir del rubro.
-function seedComm(pid) {
-  const prov = pr(pid) || {
-    cats: ["n"],
-    hue: 0,
-    name: "",
-  };
-  const cat = prov.cats[0];
-  const hue = +prov.hue || 0;
-  if (LIVE) {
-    return {
-      followers: 0,
-      reviews: [],
-      media: [],
-    };
-  }
-  const reviewsByCat = {
-    b: [
-      ["Martín G.", 5, "Impecable el fade y súper puntual."],
-      ["Leandro S.", 4, "Muy buen corte, el lugar es cómodo."],
-    ],
-    p: [
-      ["Florencia A.", 5, "Me hizo el balayage que quería, divino."],
-      ["Silvia P.", 5, "Atención de diez, el color quedó parejo."],
-    ],
-    m: [
-      ["Laura B.", 5, "Salí nueva. La presión justa y el lugar muy tranquilo."],
-      ["Graciela F.", 4, "Muy buen masaje descontracturante."],
-    ],
-    l: [
-      ["Valentina R.", 5, "Las extensiones me duraron un montón. Súper prolija."],
-      ["Martina G.", 5, "El lifting quedó natural, como pedí."],
-    ],
-    u: [
-      ["Camila S.", 5, "El semipermanente me duró tres semanas perfecto."],
-      ["Rocío P.", 4, "Muy lindo diseño, volvería."],
-    ],
-    d: [
-      ["Julieta M.", 5, "Casi no dolió y es muy higiénico todo."],
-      ["Daniela M.", 4, "Me explicó bien cómo cuidarme después del láser."],
-    ],
-  };
-  return {
-    followers: 20 + ((pid * 37) % 90),
-    reviews: (reviewsByCat[cat] || reviewsByCat.b).map((review, index) => ({
-      n: review[0],
-      s: review[1],
-      t: review[2],
-      d: index ? "hace 3 semanas" : "hace 4 días",
-      reply: "",
-    })),
-    media: (WORKS[cat] || ["Trabajo", "Trabajo", "Trabajo"]).map((label, index) => ({
-      label: label,
-      hue: (hue + index * 25) % 360,
-    })),
-  };
-}
 // comunidad de un prestador, creada la primera vez que se pide
-export const comm = (pid) => (store.COMMBY[pid] ||= seedComm(pid));
+// (en vivo arranca vacía y la completa la carga del perfil; en la demo se inventa a partir del rubro: src/demo/comunidad.js)
+export const comm = (pid) => (store.COMMBY[pid] ||= LIVE ? { followers: 0, reviews: [], media: [] } : seedComm(pid));
 export function vBComunidad(prov) {
   return `<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><p class="lbl" style="margin:0">Mis trabajos</p>${store.COMM.media.length ? '<button class="btn btn-ghost btn-sm" data-act="story" data-i="0">▶ Ver como historia</button>' : ""}</div>
    <p class="note" style="text-align:left;margin:4px 0 10px">Tus clientes los ven en tu perfil y como historias.</p>${gallery(true)}</div>

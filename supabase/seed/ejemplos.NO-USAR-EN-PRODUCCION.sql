@@ -3,17 +3,25 @@
 -- Carga los 13 prestadores de ejemplo de los 6 rubros, con servicios,
 -- indicaciones, horarios, reseñas y tarjetas de sellos (una por servicio), para ver la app llena desde el primer día.
 -- No tienen dueño (nadie puede entrar a su panel) y se reservan como cualquier otro.
+-- Todos ficticios (H14): ningún nombre, dirección, teléfono ni Instagram es de un negocio real. Los teléfonos empiezan
+-- con 0 después de la característica (no existen).
+-- Solo para una base local de pruebas: NUNCA en producción ni en el entorno de prueba (docs/02).
+-- Para correrlo hay que avisar antes, en la misma sesión:   set tt.ejemplos = 'si';
+-- Sin eso, el script no carga nada y da error.
 -- Para borrarlos:  delete from public.providers where slug like 'ej-%';
--- Correr DESPUÉS de TODO_EN_UNO.sql, en el SQL Editor de Supabase.
+-- Correr DESPUÉS de TODO_EN_UNO.sql.
 -- =====================================================================
 do $$
 declare cid smallint := (select id from public.cities where slug = 'olavarria'); pid bigint; sid bigint; d int;
 begin
+  if coalesce(current_setting('tt.ejemplos', true), '') <> 'si' then
+    raise exception 'ejemplos_no_autorizados: datos de ejemplo solo para una base local de pruebas. Si es eso, corré antes: set tt.ejemplos = ''si'';';
+  end if;
   insert into public.providers (slug, name, address, city_id, instagram, hue, status, dni_verified)
-    values ('ej-hidro-style', 'Hidro.Style', '9 de julio 2381', cid, 'Hidro.Style', 221, 'active', true)
+    values ('ej-filo-barber-club', 'Filo Barber Club', 'Alsina 2100', cid, 'filo.barber.demo', 221, 'active', true)
     on conflict (slug) do nothing returning id into pid;
   if pid is not null then
-    insert into public.provider_private (provider_id, phone) values (pid, '2284727692');
+    insert into public.provider_private (provider_id, phone) values (pid, '2284 000123');
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
       values (pid, true, 60, 0, true, 20, '{1,2,3,4}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
@@ -31,7 +39,7 @@ begin
     insert into public.reviews (provider_id, author, stars, body) values (pid, 'Lucía R.', 5, 'Le cortó a mi papá con mucha paciencia. Excelente trato.');
   end if;
   insert into public.providers (slug, name, address, city_id, instagram, hue, status, dni_verified)
-    values ('ej-kevin-ortiz', 'Kevin Ortiz', 'Antártida Argentina 4762', cid, null, 262, 'active', true)
+    values ('ej-tomas-herrera-barbero', 'Tomás Herrera barbero', 'Lavalle 3100', cid, null, 262, 'active', true)
     on conflict (slug) do nothing returning id into pid;
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
@@ -50,7 +58,7 @@ begin
     insert into public.reviews (provider_id, author, stars, body) values (pid, 'Leandro S.', 4, 'Muy buen corte, el lugar es cómodo.');
   end if;
   insert into public.providers (slug, name, address, city_id, instagram, hue, status, dni_verified)
-    values ('ej-barberia-la-fama-santiago', 'Barbería la fama santiago', 'Rivadavia 2684', cid, null, 12, 'active', true)
+    values ('ej-barberia-el-molino', 'Barbería El Molino', 'Moreno 2400', cid, null, 12, 'active', true)
     on conflict (slug) do nothing returning id into pid;
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
@@ -67,7 +75,7 @@ begin
     insert into public.reviews (provider_id, author, stars, body) values (pid, 'Leandro S.', 4, 'Muy buen corte, el lugar es cómodo.');
   end if;
   insert into public.providers (slug, name, address, city_id, instagram, hue, status, dni_verified)
-    values ('ej-niko-barberr', 'Niko_barberr', 'Islas Malvinas 3974', cid, null, 168, 'active', true)
+    values ('ej-nacho-barber', 'Nacho barber', 'Sarmiento 3200', cid, null, 168, 'active', true)
     on conflict (slug) do nothing returning id into pid;
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
@@ -86,7 +94,7 @@ begin
     insert into public.reviews (provider_id, author, stars, body) values (pid, 'Leandro S.', 4, 'Muy buen corte, el lugar es cómodo.');
   end if;
   insert into public.providers (slug, name, address, city_id, instagram, hue, status, dni_verified)
-    values ('ej-mary-garcia-peluqueria', 'Mary Garcia peluquería', 'Av. Colon 3794', cid, null, 330, 'active', true)
+    values ('ej-marta-ruiz-peluqueria', 'Marta Ruiz peluquería', 'Av. Pringles 3800', cid, null, 330, 'active', true)
     on conflict (slug) do nothing returning id into pid;
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
@@ -103,7 +111,7 @@ begin
     insert into public.reviews (provider_id, author, stars, body) values (pid, 'Silvia P.', 5, 'Atención de diez, el color quedó parejo.');
   end if;
   insert into public.providers (slug, name, address, city_id, instagram, hue, status, dni_verified)
-    values ('ej-carina-saitti', 'Carina Saitti', 'Belgrano 2683', cid, null, 38, 'active', true)
+    values ('ej-valeria-sosa-estilista', 'Valeria Sosa estilista', 'Rufino Fal 2600', cid, null, 38, 'active', true)
     on conflict (slug) do nothing returning id into pid;
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
@@ -120,10 +128,10 @@ begin
     insert into public.reviews (provider_id, author, stars, body) values (pid, 'Silvia P.', 5, 'Atención de diez, el color quedó parejo.');
   end if;
   insert into public.providers (slug, name, address, city_id, instagram, hue, status, dni_verified)
-    values ('ej-sofia-benitez-studio', 'Sofía Benítez Studio', 'Belgrano 1200', cid, 'sofi.studio', 280, 'active', true)
+    values ('ej-sofia-benitez-studio', 'Sofía Benítez Studio', 'Belgrano 1200', cid, 'sofi.studio.demo', 280, 'active', true)
     on conflict (slug) do nothing returning id into pid;
   if pid is not null then
-    insert into public.provider_private (provider_id, phone) values (pid, '2284 111222');
+    insert into public.provider_private (provider_id, phone) values (pid, '2284 000456');
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
       values (pid, true, 60, 10, true, 15, '{2,3}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;

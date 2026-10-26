@@ -1,8 +1,8 @@
 import { LIVE } from "../../config.js";
 import { esc } from "../../lib/dom.js";
-import { TODAY, addDays, dkey, relDate } from "../../lib/fechas.js";
+import { relDate } from "../../lib/fechas.js";
 import { ME, avatar, pr } from "../../lib/prestadores.js";
-import { CAT, RUBRO, catInfo, catName, pcat } from "../../lib/rubros.js";
+import { CAT, catInfo, catName, pcat } from "../../lib/rubros.js";
 import { cfg } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
@@ -14,142 +14,14 @@ import { comm, vBComunidad } from "./comunidad.js";
 import { vBStats } from "./estadisticas.js";
 import { vBFinanzas } from "./finanzas.js";
 import { vBHorarios } from "./horarios.js";
+import { seedStore } from "../../demo/panel.js";
 import { MSG_DEF } from "./mensajes.js";
 import { vBPerfil } from "./perfil.js";
 import { vBProductos } from "./productos.js";
 
-// cierres de caja de ejemplo: todos los días del mes con movimientos, menos los dos últimos
-export function demoClosings(fin) {
-  const closings = {};
-  const today = TODAY();
-  const days = fin.filter(
-    (day) => day.date.slice(0, 7) === today.slice(0, 7) && day.date < today && day.app + day.man + day.walk + day.prod > 0,
-  );
-  days.slice(0, Math.max(0, days.length - 2)).forEach((day) => {
-    const income = day.app + day.man + day.walk + day.prod;
-    closings["day|" + day.date] = {
-      income: income,
-      cash: Math.round(income * 0.55),
-      mp: income - Math.round(income * 0.55),
-      counted: null,
-      at: "21:0" + (day.date.slice(-1) % 10),
-    };
-  });
-  return closings;
-}
 export const STORE = {};
-// datos de ejemplo del panel de un prestador (clientes, últimos 29 días de finanzas, productos, gastos, avisos).
-// No está en src/demo y llega al build de producción: ver el informe de A2.
-function seedStore(pid) {
-  const clients = {};
-  store.BOOK.filter((booking) => booking.pid == pid && booking.cliente && booking.type !== "block").forEach((booking, index) => {
-    clients[booking.cliente] = {
-      v: 2 + (index % 5),
-      n: 0,
-      last: 7 + index * 3,
-      spend: booking.price,
-      tel: "2284 4" + String(1e4 + index * 731).slice(-5),
-      notes: "",
-      bday: "",
-    };
-  });
-  const fin = [];
-  for (let daysAgo = 29; daysAgo >= 1; daysAgo--) {
-    const date = dkey(addDays(-daysAgo));
-    const dow = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
-    const factor = ((daysAgo * pid) % 11) / 10;
-    fin.push(
-      dow === 0
-        ? {
-            date: date,
-            app: 0,
-            man: 0,
-            walk: 0,
-            prod: 0,
-          }
-        : {
-            date: date,
-            app: Math.round((18e3 + factor * 15e3) / 100) * 100,
-            man: Math.round((9e3 + factor * 7e3) / 100) * 100,
-            walk: Math.round((6e3 + (1 - factor) * 9e3) / 100) * 100,
-            prod: daysAgo % 4 === 0 ? 6e3 : 0,
-          },
-    );
-  }
-  const cat = (
-    pr(pid) || {
-      cats: ["b"],
-    }
-  ).cats[0];
-  const rubro = RUBRO[cat] || RUBRO.b;
-  const profileByCat = {
-    b: {
-      corte: "Fade 1 a los costados, tijera arriba",
-      barba: "Perfilada, sin degradé",
-    },
-    p: {
-      formula: "Koleston 7.1 + oxidante 20 vol",
-      tecnica: "Balayage, corte en capas",
-    },
-    m: {
-      presion: "Fuerte",
-      zonas: "Trabajar cervicales; evitar lumbar",
-      salud: "Contractura crónica en hombros",
-    },
-    l: {
-      mapa: "Ojo de gato · C · 9-12 mm",
-      adhesivo: "Sensitive, sin molestias",
-    },
-    u: {
-      forma: "Almendra media",
-      colores: "Nudes y rojo",
-      unas: "Cutículas secas",
-    },
-    d: {
-      fototipo: "III",
-      zonas: "Piernas completas · sesión 3 de 8",
-      reacciones: "Leve enrojecimiento",
-    },
-  };
-  Object.keys(clients)
-    .slice(0, 2)
-    .forEach((name) => {
-      clients[name].profile = Object.assign({}, profileByCat[cat] || {});
-      clients[name].notes = "";
-    });
-  return {
-    CLOSINGS: demoClosings(fin),
-    CLIENTS: clients,
-    PRODS: rubro.prods.map((row) => ({
-      n: row[0],
-      p: row[1],
-      stock: row[2],
-      min: row[3],
-    })),
-    GASTOS: [
-      {
-        id: store.GID++,
-        c: "Alquiler",
-        m: 12e4,
-        cat: "Alquiler",
-        d: dkey(addDays(-10)),
-      },
-      {
-        id: store.GID++,
-        c: "Insumos de " + catName(cat).toLowerCase(),
-        m: 35e3,
-        cat: "Insumos",
-        d: dkey(addDays(-4)),
-      },
-    ],
-    FIN: fin,
-    MSGS: MSG_DEF(cat),
-    walk: [],
-    earn: 0,
-    jobs: 0,
-    mp: "none",
-  };
-}
+// datos vacíos del panel de un prestador: en vivo los completa la base (loadMine); en la demo, src/demo/panel.js
+const emptyStore = () => ({ CLOSINGS: {}, CLIENTS: {}, PRODS: [], GASTOS: [], FIN: [], MSGS: MSG_DEF(), walk: [], earn: 0, jobs: 0, mp: "none" });
 // cambia el prestador activo del panel: guarda los datos del anterior en STORE y carga (o siembra) los del nuevo
 export function useProvider(pid) {
   pid = +pid;
@@ -171,7 +43,7 @@ export function useProvider(pid) {
     };
   }
   S.me = pid;
-  const kept = STORE[pid] || seedStore(pid);
+  const kept = STORE[pid] || (LIVE ? emptyStore() : seedStore(pid));
   store.CLIENTS = kept.CLIENTS;
   store.PRODS = kept.PRODS;
   store.GASTOS = kept.GASTOS;

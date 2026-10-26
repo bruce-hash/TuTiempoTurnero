@@ -50,9 +50,12 @@ const one = async (sql: string, args: unknown[] = [], uid?: string) => Object.va
 const mp = mpFalso();
 const SITE = "http://sitio.test", WHSEC = "whsec-prueba";
 const SERVICE = await jwt({ role: "service_role" });
+const rnd = (n: number) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n))));
+const CRON = rnd(36), TOKENS_KEY = rnd(32), OWNER_MP = "9000";
 for (const [k, v] of Object.entries({
   SUPABASE_URL: BASE, SUPABASE_SERVICE_ROLE_KEY: SERVICE, SUPABASE_ANON_KEY: await jwt({ role: "anon" }), MP_API_URL: mp.url,
   MP_WEBHOOK_SECRET: WHSEC, MP_CLIENT_ID: "cliente-tutiempo", MP_CLIENT_SECRET: "secreto-tutiempo", SITE_URL: SITE,
+  CRON_SECRET: CRON, MP_TOKENS_KEY: TOKENS_KEY, MP_OWNER_USER_ID: OWNER_MP,
 })) Deno.env.set(k, v);
 const handlers: Record<string, (req: Request) => Promise<Response>> = {};
 let loading = "";
@@ -62,6 +65,7 @@ for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds"]
   await import(`../../supabase/functions/${n}/index.ts`);
 }
 const fn = (name: string, req: Request) => handlers[name](req);
+const utilMod = await import("../../supabase/functions/_shared/util.ts");
 async function body(res: Response) { return await res.json().catch(() => ({})); }
 
 // sinReqId: el aviso llega sin x-request-id. completa: se firma con la plantilla entera aunque falte el encabezado.
@@ -76,7 +80,7 @@ async function webhook(pid: number, acc: number | null, payId: string, { firma =
 }
 const evento = async (payId: string, reason: string) =>
   Number(await one("select count(*) from mp_webhook_events where mp_payment_id = $1 and reason = $2", [payId, reason]));
-const refundsRun = async (key = SERVICE) => fn("mp-refunds", new Request("https://fn.test/functions/v1/mp-refunds", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
+const refundsRun = async (key = CRON) => fn("mp-refunds", new Request("https://fn.test/functions/v1/mp-refunds", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
 async function preference(uid: string, ids: number[]) {
   return fn("mp-create-preference", new Request("https://fn.test/functions/v1/mp-create-preference", {
     method: "POST", headers: { Authorization: `Bearer ${await jwt({ sub: uid, role: "authenticated" })}`, Origin: SITE, "Content-Type": "application/json" },
@@ -107,7 +111,12 @@ async function book(): Promise<number[]> {
   const r = await one("select book_slot($1, $2)", [sv, start], cli);
   return r.booking_ids.map(Number);
 }
-const acc = async (user: string) => (await q("select id, status, access_token, mp_user_id, last_error, refreshed_at, expires_at from mp_accounts where provider_id = $1 and mp_user_id = $2", [pid, user]))[0];
+// cuenta de MP del prestador, con la llave descifrada en `token` (la base solo guarda el texto cifrado)
+const acc = async (user: string) => {
+  const row = (await q("select id, provider_id, status, access_token, mp_user_id, last_error, refreshed_at, expires_at from mp_accounts where provider_id = $1 and mp_user_id = $2", [pid, user]))[0];
+  if (row) row.token = row.access_token ? await utilMod.decryptToken(row.access_token, Number(row.provider_id), row.mp_user_id, "access_token").catch(() => null) : null;
+  return row;
+};
 const st = async (id: number) => await one("select status from bookings where id = $1", [id]);
 const refundRow = async (bid: number) => (await q("select id, status, attempts, last_error, mp_refund_id, mp_account_id, next_attempt_at, mp_payment_id from refunds where booking_id = $1 order by id desc", [bid]))[0];
 
@@ -116,8 +125,8 @@ mp.codigo("c-A", "1001");
 let r = await oauth(owner, "c-A");
 ok("mp-oauth: vuelve al sitio con mp_connected=1", r.status === 302 && r.headers.get("location") === `${SITE}/?mp_connected=1`, `${r.status} ${r.headers.get("location")}`);
 const A = await acc("1001");
-ok("mp-oauth: cuenta 1001 activa con su llave (no en provider_secrets)", A?.status === "active" && /^tok-1001-/.test(A.access_token)
-   && Number(await one("select count(*) from provider_secrets where provider_id = $1", [pid])) === 0);
+ok("mp-oauth: cuenta 1001 activa con su llave, cifrada", A?.status === "active" && /^tok-1001-/.test(A.token) && /^v1:/.test(A.access_token)
+   && !A.access_token.includes("tok-1001"));
 ok("mp-oauth: provider_private.mp_connected", (await one("select mp_connected from provider_private where provider_id = $1", [pid])) === true);
 r = await fn("mp-oauth", new Request(`https://fn.test/functions/v1/mp-oauth?code=c-A&state=otro`));
 ok("mp-oauth: un state inválido no conecta nada", r.headers.get("location") === `${SITE}/?mp_connected=0`);
@@ -126,7 +135,7 @@ ok("mp-oauth: un state inválido no conecta nada", r.headers.get("location") ===
 const b1 = await book();
 r = await preference(cli, b1);
 const pref = mp.preferencias.at(-1)!;
-ok("mp-create-preference: cobra con la llave de la cuenta activa", r.status === 200 && pref?.llave === A.access_token, String(r.status));
+ok("mp-create-preference: cobra con la llave de la cuenta activa", r.status === 200 && pref?.llave === A.token, String(r.status));
 ok("mp-create-preference: el aviso dice prestador y cuenta", pref?.body.notification_url === `${BASE}/functions/v1/mp-webhook?provider=${pid}&account=${A.id}`, pref?.body.notification_url);
 ok("mp-create-preference: monto y comisión salen de la base", pref?.body.items[0].unit_price === 6000 && pref?.body.marketplace_fee === 1000);
 
@@ -175,7 +184,7 @@ ok("H23: el hold que ya estaba pagando se paga después → confirmado con la cu
 await one("select cancel_by_provider($1)", [b1[0]], owner);
 r = await refundsRun();
 let dv = mp.devoluciones.at(-1);
-ok("H23: cancelar después de desconectar → mp-refunds devuelve con la llave guardada", r.status === 200 && dv?.pago === "9001" && dv.monto === 6000 && dv.llave === A.access_token);
+ok("H23: cancelar después de desconectar → mp-refunds devuelve con la llave guardada", r.status === 200 && dv?.pago === "9001" && dv.monto === 6000 && dv.llave === A.token);
 let rf = await refundRow(b1[0]);
 ok("mp-refunds: la devolución queda hecha, con el id de MP y un intento", rf?.status === "done" && rf.mp_refund_id === dv?.id && rf.attempts === 1
    && Number(await one("select refund_pending from bookings where id = $1", [b1[0]])) === 0);
@@ -186,20 +195,20 @@ mp.codigo("c-B", "1002");
 await oauth(owner, "c-B");
 const B = await acc("1002");
 ok("reconectar con otra cuenta: 1002 activa y 1001 sigue con su llave (solo devoluciones)", B?.status === "active"
-   && (await acc("1001")).status === "refunds_only" && (await acc("1001")).access_token === A.access_token);
+   && (await acc("1001")).status === "refunds_only" && (await acc("1001")).token === A.token);
 await one("select cancel_by_provider($1)", [h1[0]], owner);
 await refundsRun();
 dv = mp.devoluciones.at(-1);
-ok("devolver un pago de la cuenta vieja usa la llave de la cuenta vieja", dv?.pago === "9004" && dv.llave === A.access_token);
+ok("devolver un pago de la cuenta vieja usa la llave de la cuenta vieja", dv?.pago === "9004" && dv.llave === A.token);
 const b4 = await book();
 await preference(cli, b4);
-ok("los cobros nuevos salen con la cuenta nueva", mp.preferencias.at(-1)?.llave === B.access_token
+ok("los cobros nuevos salen con la cuenta nueva", mp.preferencias.at(-1)?.llave === B.token
    && mp.preferencias.at(-1)?.body.notification_url.endsWith(`account=${B.id}`));
 mp.pago({ id: "9005", collector: "1002", status: "approved", amount: 6000, fee: 1000, ref: b4.join(",") });
 await webhook(pid, B.id, "9005");
 await one("select cancel_by_provider($1)", [b4[0]], owner);
 await refundsRun();
-ok("…y sus devoluciones con la llave nueva", mp.devoluciones.at(-1)?.pago === "9005" && mp.devoluciones.at(-1)?.llave === B.access_token);
+ok("…y sus devoluciones con la llave nueva", mp.devoluciones.at(-1)?.pago === "9005" && mp.devoluciones.at(-1)?.llave === B.token);
 
 // ---------- 8. Aviso viejo sin la cuenta: prueba con las cuentas del prestador ----------
 const b5 = await book();
@@ -218,10 +227,10 @@ mp.codigo("c-A2", "1001");
 await oauth(owner, "c-A2");
 const A2 = await acc("1001");
 ok("reconectar la misma cuenta: misma fila, llave nueva, activa; la otra queda para devoluciones",
-   Number(A2.id) === Number(A.id) && A2.status === "active" && A2.access_token !== A.access_token && (await acc("1002")).status === "refunds_only");
+   Number(A2.id) === Number(A.id) && A2.status === "active" && A2.token !== A.token && (await acc("1002")).status === "refunds_only");
 await one("select cancel_by_provider($1)", [b5[0]], owner);
 await refundsRun();
-ok("las devoluciones de esa cuenta usan la llave nueva", mp.devoluciones.at(-1)?.pago === "9006" && mp.devoluciones.at(-1)?.llave === A2.access_token);
+ok("las devoluciones de esa cuenta usan la llave nueva", mp.devoluciones.at(-1)?.pago === "9006" && mp.devoluciones.at(-1)?.llave === A2.token);
 
 // ---------- 10. D19: devolución que falla y se reintenta ----------
 const b6 = await book();
@@ -289,11 +298,13 @@ ok("1) …el pago queda en 'Para revisar' (no como bueno) y con el collector que
 ok("1) …y queda el rastro en mp_webhook_events", (await evento("9020", "wrong_collector")) === 1);
 r = await webhook(pid, A.id, "9020");
 ok("1) el mismo aviso otra vez no confirma nada", (await st(bw[0])) === "hold" && Number(await one("select count(*) from payments where mp_payment_id = '9020'")) === 1);
-await q("update mp_accounts set mp_user_id = null where id = $1", [A.id]);
+// una cuenta vieja de solo devoluciones sin mp_user_id (las activas ya no pueden: CHECK del Bloque 2a)
+mp.cuentas.set("tok-sin-id", "1001");
+const sinId = Number(await one("insert into mp_accounts (provider_id, mp_user_id, status, access_token) values ($1, null, 'refunds_only', $2) returning id",
+  [pid, await utilMod.encryptToken("tok-sin-id", pid, null, "access_token")]));
 const bn = await book();
 mp.pago({ id: "9021", collector: "1001", status: "approved", amount: 6000, fee: 1000, ref: bn.join(",") });
-await webhook(pid, A.id, "9021");
-await q("update mp_accounts set mp_user_id = '1001' where id = $1", [A.id]);
+await webhook(pid, sinId, "9021");
 ok("2) cuenta sin mp_user_id: no se saltea el control, se trata como cobrador equivocado", (await st(bn[0])) === "hold"
    && (await evento("9021", "wrong_collector")) === 1 && (await one("select outcome from payments where mp_payment_id = '9021'")) === "review");
 const bu = await book();
@@ -315,10 +326,9 @@ r = await webhook(pid, A.id, "9023");
 ok("8) …y el reintento lo procesa", r.status === 200 && (await st(bs[0])) === "cancelled_refunded");
 
 // ---------- 13. Llaves que vencen ----------
-const utilMod = await import("../../supabase/functions/_shared/util.ts");
 const dbfn = utilMod.admin();
 await q("update mp_accounts set expires_at = now() + interval '5 days', refreshing_until = null where id = $1", [A.id]);
-let antes0 = (await acc("1001")).access_token;
+let antes0 = (await acc("1001")).token;
 const pedidos0 = mp.refrescos_pedidos.length;
 mp.demorarRefresco(300);
 const accRow = await utilMod.accountById(dbfn, Number(A.id));
@@ -326,11 +336,12 @@ const [t1, t2] = await Promise.all([utilMod.accountToken(dbfn, accRow), utilMod.
 mp.demorarRefresco(0);
 const Ar = await acc("1001");
 ok("1·R) dos renovaciones al mismo tiempo: se pide una sola a Mercado Pago y la cuenta queda activa, sin error",
-   mp.refrescos_pedidos.length === pedidos0 + 1 && Ar.status === "active" && !Ar.last_error && Ar.access_token !== antes0 && !!t1 && !!t2);
+   mp.refrescos_pedidos.length === pedidos0 + 1 && Ar.status === "active" && !Ar.last_error && Ar.token !== antes0 && !!t1 && !!t2);
 await q("update mp_accounts set expires_at = now() + interval '5 days', refreshing_until = null where id = $1", [A.id]);
 mp.fallarRefrescoTras(async () => {
   // mientras tanto, otro proceso ya la renovó (por ejemplo, con la reserva vencida)
-  await q("update mp_accounts set access_token = 'tok-de-otro', refresh_token = 'ref-de-otro', expires_at = now() + interval '170 days' where id = $1", [A.id]);
+  await q("update mp_accounts set access_token = $2, refresh_token = $3, expires_at = now() + interval '170 days' where id = $1",
+    [A.id, await utilMod.encryptToken("tok-de-otro", pid, "1001", "access_token"), await utilMod.encryptToken("ref-de-otro", pid, "1001", "refresh_token")]);
 });
 const t3 = await utilMod.accountToken(dbfn, await utilMod.accountById(dbfn, Number(A.id)));
 const Ao = await acc("1001");
@@ -338,13 +349,13 @@ ok("1·R) si la renovación falla pero otro ya renovó, usa la llave nueva y no 
 mp.codigo("c-A3", "1001");
 await oauth(owner, "c-A3");   // vuelve a una llave que el Mercado Pago falso conoce
 await q("update mp_accounts set expires_at = now() + interval '5 days' where id = $1", [A.id]);
-const antes = (await acc("1001")).access_token;
+const antes = (await acc("1001")).token;
 await refundsRun();
-ok("mp-refunds renueva la llave que vence en menos de 15 días", (await acc("1001")).access_token !== antes && (await acc("1001")).refreshed_at);
+ok("mp-refunds renueva la llave que vence en menos de 15 días", (await acc("1001")).token !== antes && (await acc("1001")).refreshed_at);
 await q("update mp_accounts set expires_at = now() + interval '5 days' where id = $1", [B.id]);
-const antesB = (await acc("1002")).access_token;
+const antesB = (await acc("1002")).token;
 await refundsRun();
-ok("…también las de solo devoluciones", (await acc("1002")).access_token !== antesB);
+ok("…también las de solo devoluciones", (await acc("1002")).token !== antesB);
 mp.romperRefresco(true);
 await q("update mp_accounts set expires_at = now() - interval '1 minute' where id = $1", [A.id]);
 await refundsRun();
@@ -356,6 +367,45 @@ mp.romperRefresco(false);
 // ---------- 14. Seguridad y configuración ----------
 r = await refundsRun(await jwt({ sub: owner, role: "authenticated" }));
 ok("mp-refunds rechaza a cualquiera que no sea el cron", r.status === 403);
+r = await refundsRun(SERVICE);
+ok("2a) mp-refunds tampoco acepta la service_role: solo CRON_SECRET", r.status === 403);
+
+// ---------- 15. Bloque 2a: H12 y llaves cifradas ----------
+mp.codigo("c-OWN", OWNER_MP);
+r = await oauth(owner, "c-OWN");
+ok("H12) la cuenta de Mercado Pago de TuTiempo no se puede conectar como prestador", r.headers.get("location") === `${SITE}/?mp_connected=0`
+   && Number(await one("select count(*) from mp_accounts where mp_user_id = $1", [OWNER_MP])) === 0);
+Deno.env.delete("MP_OWNER_USER_ID");
+mp.codigo("c-SIN", "1003");
+r = await oauth(owner, "c-SIN");
+Deno.env.set("MP_OWNER_USER_ID", OWNER_MP);
+ok("H12) sin MP_OWNER_USER_ID configurado no se conecta ninguna cuenta", r.headers.get("location") === `${SITE}/?mp_connected=0`
+   && Number(await one("select count(*) from mp_accounts where mp_user_id = '1003'")) === 0);
+ok("H13) nada en la base empieza sin 'v1:'", Number(await one("select count(*) from mp_accounts where (access_token is not null and access_token !~ '^v1:') or (refresh_token is not null and refresh_token !~ '^v1:')")) === 0
+   && Number(await one("select count(*) from mp_accounts where access_token is not null")) > 0);
+const cif = await utilMod.encryptToken("APP_USR-secreto", 5, "123", "access_token");
+ok("H13) ida y vuelta (formato v1:<iv>:<cifrado>, IV de 12 bytes)", /^v1:[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+$/.test(cif) && atob(cif.split(":")[1]).length === 12
+   && (await utilMod.decryptToken(cif, 5, "123", "access_token")) === "APP_USR-secreto" && !cif.includes("APP_USR"));
+ok("H13) cada valor lleva su IV: cifrar dos veces da textos distintos", cif !== (await utilMod.encryptToken("APP_USR-secreto", 5, "123", "access_token")));
+const falla = async (p: Promise<unknown>) => { try { await p; return false; } catch { return true; } };
+ok("H13) con otro prestador, otra cuenta u otro campo (AAD) no se descifra", (await falla(utilMod.decryptToken(cif, 6, "123", "access_token")))
+   && (await falla(utilMod.decryptToken(cif, 5, "124", "access_token"))) && (await falla(utilMod.decryptToken(cif, 5, "123", "refresh_token"))));
+Deno.env.set("MP_TOKENS_KEY", rnd(32));
+ok("H13) con la clave equivocada no se descifra", await falla(utilMod.decryptToken(cif, 5, "123", "access_token")));
+Deno.env.set("MP_TOKENS_KEY", TOKENS_KEY);
+Deno.env.set("MP_TOKENS_KEY_V2", rnd(32));
+const cif2 = await utilMod.encryptToken("APP_USR-nueva", 5, "123", "access_token");
+ok("H13) rotación: con MP_TOKENS_KEY_V2 se escribe con v2 y se siguen leyendo las v1", cif2.startsWith("v2:")
+   && (await utilMod.decryptToken(cif2, 5, "123", "access_token")) === "APP_USR-nueva" && (await utilMod.decryptToken(cif, 5, "123", "access_token")) === "APP_USR-secreto");
+Deno.env.delete("MP_TOKENS_KEY_V2");
+// una llave vieja en texto plano (de antes del Bloque 2a): la cuenta queda para reconectar, con el error
+await q("alter table mp_accounts disable trigger mp_accounts_encrypted");
+await q("update mp_accounts set access_token = 'APP_USR-texto-plano', expires_at = now() + interval '100 days' where id = $1", [A.id]);
+await q("alter table mp_accounts enable trigger mp_accounts_encrypted");
+const tPlano = await utilMod.accountToken(dbfn, await utilMod.accountById(dbfn, Number(A.id)));
+const Ap = await acc("1001");
+ok("H13) llave sin 'v1:': no se usa, la cuenta queda para reconectar y queda el error", tPlano === null && Ap.status === "refunds_only" && /sin cifrar/.test(Ap.last_error)
+   && (await one("select mp_connected from provider_private where provider_id = $1", [pid])) === false);
 const cfg = new URL("./deno.json", import.meta.url).pathname;
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;
 const leer = async (extra: Record<string, string>) => {

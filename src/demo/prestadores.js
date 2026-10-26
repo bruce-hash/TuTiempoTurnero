@@ -1,14 +1,16 @@
 import { isReservedSlug } from "../lib/rutas.js";
 import { P } from "../store.js";
 
+// Prestadores de ejemplo de la demo: todos ficticios (nombres, direcciones, teléfonos e Instagram), ninguno es un
+// negocio real de Olavarría (H14). Los teléfonos empiezan con 0 después de la característica: no existen.
 P.push(...[
   {
     id: 7,
     cats: ["b"],
-    name: "Hidro.Style",
-    addr: "9 de julio 2381",
-    tel: "2284727692",
-    ig: "Hidro.Style",
+    name: "Filo Barber Club",
+    addr: "Alsina 2100",
+    tel: "2284 000123",
+    ig: "filo.barber.demo",
     hue: 221,
     svcs: [
       ["Corte de cabello y barba", 30, 12500, "b"],
@@ -19,8 +21,8 @@ P.push(...[
   {
     id: 9,
     cats: ["b"],
-    name: "Kevin Ortiz",
-    addr: "Antártida Argentina 4762",
+    name: "Tomás Herrera barbero",
+    addr: "Lavalle 3100",
     hue: 262,
     svcs: [
       ["Corte de cabello", 25, 12e3, "b"],
@@ -30,16 +32,16 @@ P.push(...[
   {
     id: 15,
     cats: ["b"],
-    name: "Barbería la fama santiago",
-    addr: "Rivadavia 2684",
+    name: "Barbería El Molino",
+    addr: "Moreno 2400",
     hue: 12,
     svcs: [["Corte premium", 40, 22e3, "b"]],
   },
   {
     id: 18,
     cats: ["b"],
-    name: "Niko_barberr",
-    addr: "Islas Malvinas 3974",
+    name: "Nacho barber",
+    addr: "Sarmiento 3200",
     hue: 168,
     svcs: [
       ["Corte de cabello", 25, 12500, "b"],
@@ -49,16 +51,16 @@ P.push(...[
   {
     id: 12,
     cats: ["p"],
-    name: "Mary Garcia peluquería",
-    addr: "Av. Colon 3794",
+    name: "Marta Ruiz peluquería",
+    addr: "Av. Pringles 3800",
     hue: 330,
     svcs: [["Color y corte", 120, 62500, "p"]],
   },
   {
     id: 16,
     cats: ["p"],
-    name: "Carina Saitti",
-    addr: "Belgrano 2683",
+    name: "Valeria Sosa estilista",
+    addr: "Rufino Fal 2600",
     hue: 38,
     svcs: [["Color y corte", 120, 5e4, "p"]],
   },
@@ -67,8 +69,8 @@ P.push(...[
     cats: ["l", "u", "d"],
     name: "Sofía Benítez Studio",
     addr: "Belgrano 1200",
-    tel: "2284 111222",
-    ig: "sofi.studio",
+    tel: "2284 000456",
+    ig: "sofi.studio.demo",
     hue: 280,
     svcs: [
       ["Extensiones pelo a pelo", 120, 3e4, "l"],

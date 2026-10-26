@@ -65,8 +65,14 @@ def svc_role(sql, args=None):
     return one(sql, args, role="service_role")
 
 
+def enc(text):
+    """Llave "cifrada" de prueba: el formato que guardan las Edge Functions (v1:<iv>:<cifrado>). La base no descifra."""
+    import base64
+    return "v1:" + base64.b64encode(b"iv-de-prueba").decode() + ":" + base64.b64encode(text.encode()).decode()
+
+
 def connect(pid, mp_user):
-    return svc_role("select mp_connect(%s, %s, %s, %s, 15552000)", (pid, mp_user, f"tok-{mp_user}", f"ref-{mp_user}"))
+    return svc_role("select mp_connect(%s, %s, %s, %s, 15552000)", (pid, mp_user, enc(f"tok-{mp_user}"), enc(f"ref-{mp_user}")))
 
 
 def book(sv, start, uid, weeks=0, extra=0):
@@ -387,8 +393,8 @@ ok("H23: cancelar un turno pagado después de desconectar → devolución con la
 # reconectar con OTRA cuenta
 acc2 = connect(pid, "222")
 ok("H23: reconectar con otra cuenta crea otra llave y no pisa la anterior", acc2 != acc1
-   and q("select status, access_token from mp_accounts where id = %s", (acc1,))[0] == ("refunds_only", "tok-111")
-   and q("select status, access_token from mp_accounts where id = %s", (acc2,))[0] == ("active", "tok-222"))
+   and q("select status, access_token from mp_accounts where id = %s", (acc1,))[0] == ("refunds_only", enc("tok-111"))
+   and q("select status, access_token from mp_accounts where id = %s", (acc2,))[0] == ("active", enc("tok-222")))
 ok("H23: con la cuenta nueva vuelve a cobrar", one("select my_mp_status()", uid=owner)["can_charge"] is True and one("select my_mp_status()", uid=owner)["account"] == "222")
 q("select cancel_by_provider(%s)", (h_mp,), uid=owner)
 ok("H23: devolver un pago de la cuenta vieja usa la llave de la cuenta vieja", refunds_of(h_mp)[0][5] == acc1)
@@ -396,9 +402,9 @@ r = book(sv, at(11, 9), cli2)[0][0]
 pay(r["booking_ids"], "P-NEW", 6000, 1000, pid)
 ok("H23: los pagos nuevos quedan con la cuenta nueva", one("select mp_account_id from payments where mp_payment_id = 'P-NEW'") == acc2)
 # reconectar con la MISMA cuenta
-acc1b = svc_role("select mp_connect(%s, '111', 'tok-111-nuevo', 'ref-111-nuevo', 15552000)", (pid,))
+acc1b = svc_role("select mp_connect(%s, '111', %s, %s, 15552000)", (pid, enc("tok-111-nuevo"), enc("ref-111-nuevo")))
 ok("H23: reconectar la misma cuenta actualiza esa llave (no crea otra)", acc1b == acc1
-   and q("select status, access_token from mp_accounts where id = %s", (acc1,))[0] == ("active", "tok-111-nuevo")
+   and q("select status, access_token from mp_accounts where id = %s", (acc1,))[0] == ("active", enc("tok-111-nuevo"))
    and one("select status from mp_accounts where id = %s", (acc2,)) == "refunds_only"
    and one("select count(*) from mp_accounts where provider_id = %s", (pid,)) == 2)
 ok("una sola cuenta activa por prestador", one("select count(*) from mp_accounts where provider_id = %s and status = 'active'", (pid,)) == 1)
@@ -415,8 +421,7 @@ q("update payments set created_at = now() - interval '181 days' where mp_account
 ok("purga: sin nada pendiente, se borra la llave y queda la fila", svc_role("select purge_mp_accounts()") == 1
    and q("select status, access_token, refresh_token, mp_user_id from mp_accounts where id = %s", (acc2,))[0] == ("purged", None, None, "222"))
 ok("purga: la cuenta activa nunca se borra", one("select status from mp_accounts where id = %s", (acc1,)) == "active")
-ok("purga: purge_deleted_secrets (cron viejo) hace lo mismo y no toca provider_secrets",
-   svc_role("select purge_deleted_secrets()") == 0 and one("select count(*) from provider_secrets") == 0)
+ok("purga: purge_deleted_secrets (cron viejo) hace lo mismo", svc_role("select purge_deleted_secrets()") == 0)
 
 # ---------- Nunca falla ante un pago aprobado ----------
 res = pay([], "P-VACIO", 3000, 0, pid, acc1)
@@ -521,8 +526,8 @@ ok("…nadie más los lee ni los escribe", one("select count(*) from mp_webhook_
 
 # ---------- Renovación de llaves: una sola a la vez ----------
 ok("reservar la renovación: la toma uno solo", svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is True and svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is False)
-svc_role("select mp_account_refreshed(%s, 'tok-nuevo', 'ref-nuevo', 15552000)", (acc1,))
-ok("guardar la llave nueva libera la reserva", q("select access_token, refresh_token, refreshing_until from mp_accounts where id = %s", (acc1,))[0] == ("tok-nuevo", "ref-nuevo", None)
+svc_role("select mp_account_refreshed(%s, %s, %s, 15552000)", (acc1, enc("tok-nuevo"), enc("ref-nuevo")))
+ok("guardar la llave nueva libera la reserva", q("select access_token, refresh_token, refreshing_until from mp_accounts where id = %s", (acc1,))[0] == (enc("tok-nuevo"), enc("ref-nuevo"), None)
    and svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is True)
 svc_role("select mp_account_error(%s, 'No se pudo renovar', false)", (acc1,))
 ok("un error también la libera (y no desconecta si la llave no venció)", q("select refreshing_until, status from mp_accounts where id = %s", (acc1,))[0] == (None, "active"))
@@ -578,24 +583,43 @@ for fn in ("confirm_payment(array[1]::bigint[], 'x', 1)", "payment_mp_update('x'
 ok("el cliente no puede desconectar a un prestador", err(q("select mp_disconnect()", uid=cli), "not_provider"))
 ok("los avisos del prestador son solo suyos", one("select my_provider_notices()", uid=otro) == [] and err(q("select * from provider_notices", role="anon")) is not None)
 
-# ---------- Mudanza de provider_secrets (D21) y migración idempotente ----------
-import glob, os
-vie = mkuser("viejo@cobros.ar", "Viejo")
-pv = one("select register_provider('Prov Viejo', 'Calle 3', array['b'], '2284 2', '30111444')", uid=vie)
-q("update providers set status = 'active' where id = %s", (pv,))
-q("update provider_private set mp_connected = true, mp_user_id = '999' where provider_id = %s", (pv,))
-q("insert into provider_secrets (provider_id, mp_access_token, mp_refresh_token) values (%s, 'tok-viejo', 'ref-viejo')", (pv,))
-mig = sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "supabase", "migrations", "*_cobros.sql")))[-1]
-sql = open(mig, encoding="utf8").read()
+# ---------- Bloque 2a: llaves cifradas, cuentas activas con id, cron con Vault, limpieza ----------
+ok("2a) no hay ninguna llave en texto plano: todas empiezan con 'v1:'",
+   one("select count(*) from mp_accounts where (access_token is not null and access_token !~ '^v[0-9]+:') or (refresh_token is not null and refresh_token !~ '^v[0-9]+:')") == 0
+   and one("select count(*) from mp_accounts where access_token is not null") > 0)
+ok("2a) la base rechaza una llave nueva en texto plano", err(q("select mp_connect(%s, '333', 'APP_USR-texto-plano', null, 100)", (pid,), role="service_role"), "token_not_encrypted")
+   and err(q("select mp_account_refreshed(%s, 'APP_USR-otra', 'ref', 100)", (acc1,), role="service_role"), "token_not_encrypted"))
+ok("2a) una cuenta activa siempre tiene mp_user_id", err(q("update mp_accounts set mp_user_id = null where id = %s", (acc1,)), "mp_accounts_active_user"))
+ok("2a) provider_secrets ya no existe (D21)", one("select to_regclass('public.provider_secrets')") is None)
+# cron de devoluciones: lee la URL y la clave de Vault y llama a mp-refunds con pg_net
+q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
+ok("2a) sin los secretos en Vault, el cron no llama a nada (y avisa)", svc_role("select run_refunds()") is None and one("select count(*) from net.requests") == 0)
+q("select vault.create_secret('https://proyecto.supabase.co/', 'tt_project_url')"); q("select vault.create_secret('secreto-del-cron', 'tt_cron_secret')")
+rq = svc_role("select run_refunds()")
+req = q("select url, headers from net.requests where id = %s", (rq,))[0]
+ok("2a) con Vault: llama a mp-refunds con la clave del cron (no la service_role)", req[0] == "https://proyecto.supabase.co/functions/v1/mp-refunds"
+   and req[1].get("Authorization") == "Bearer secreto-del-cron")
+ok("2a) la app no puede disparar el cron ni la limpieza", err(q("select run_refunds()", uid=adm)) and err(q("select daily_cleanup()", uid=adm)))
+ok("2a) la app no lee Vault", err(q("select * from vault.decrypted_secrets", uid=adm)) and err(q("select * from vault.decrypted_secrets", role="anon")))
+# limpieza diaria
+q("insert into mp_oauth_states (state, provider_id, created_at) values ('viejo', %s, now() - interval '2 days'), ('nuevo', %s, now())", (pid, pid))
+q("insert into mp_webhook_events (mp_payment_id, reason, created_at) values ('E-VIEJO', 'payment_not_found', now() - interval '200 days'), ('E-RECIENTE', 'payment_not_found', now() - interval '10 days')")
+q("insert into mp_webhook_events (mp_payment_id, reason, created_at) values ('P-WRONG', 'wrong_collector', now() - interval '200 days')")   # su pago sigue en revisión
+cl = svc_role("select daily_cleanup()")
+ok("2a) limpieza: borra intentos de conexión de más de 1 día", q("select state from mp_oauth_states where state in ('viejo', 'nuevo')") == [("nuevo",)])
+ok("2a) limpieza: borra avisos descartados de más de 180 días, salvo los de un pago en revisión",
+   sorted(r[0] for r in q("select mp_payment_id from mp_webhook_events where mp_payment_id in ('E-VIEJO', 'E-RECIENTE') or (mp_payment_id = 'P-WRONG' and created_at < now() - interval '100 days')"))
+   == ["E-RECIENTE", "P-WRONG"] and cl["oauth_states"] >= 1 and cl["webhook_events"] >= 1)
+
+# ---------- La migración completa se puede volver a correr sobre una base con datos ----------
+import os
+todo = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "supabase", "TODO_EN_UNO.sql"), encoding="utf8").read()
 for vez in (1, 2):
     with conn.cursor() as c:
-        c.execute(sql)
-ok("la migración se puede volver a correr sobre una base con datos (2 veces)", True)
-ok("la llave vieja se copia a mp_accounts como cuenta activa y 'legacy', una sola vez",
-   q("select mp_user_id, status, access_token, legacy from mp_accounts where provider_id = %s", (pv,)) == [("999", "active", "tok-viejo", True)])
-ok("provider_secrets queda intacta (se borra en el Bloque 2)", q("select mp_access_token from provider_secrets where provider_id = %s", (pv,)) == [("tok-viejo",)])
-ok("los datos de las pruebas siguen igual después de volver a correrla", one("select count(*) from payments") > 10
-   and one("select status from mp_accounts where id = %s", (acc1,)) == "active")
+        c.execute(todo)
+ok("TODO_EN_UNO.sql se puede volver a correr 2 veces sobre esta base", one("select to_regclass('public.provider_secrets')") is None)
+ok("…y los datos siguen igual", one("select count(*) from payments") > 10 and one("select status from mp_accounts where id = %s", (acc1,)) == "active"
+   and one("select count(*) from mp_accounts where access_token !~ '^v[0-9]+:'") == 0)
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

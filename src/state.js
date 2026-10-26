@@ -25,11 +25,10 @@ export const fresh = () => ({
     email: "",
     err: "",
   },
-  // email y contraseña de demo precargados en el ingreso de prestadores: llegan a producción (H18)
   blogin: {
     step: "form",
-    email: "hidro.style@tutiempo.demo",
-    pass: "barbero123",
+    email: "",
+    pass: "",
     err: "",
     fails: 0,
     show: false,

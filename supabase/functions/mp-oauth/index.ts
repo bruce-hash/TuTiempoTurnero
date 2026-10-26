@@ -2,7 +2,7 @@
 //  POST /mp-oauth            → (usuario logueado) devuelve la URL de autorización.
 //  GET  /mp-oauth?code&state → (vuelve de MP) guarda los tokens y redirige al sitio.
 // Desplegar con verify_jwt = false: el GET lo abre el navegador al volver de MP; el POST valida el usuario adentro.
-import { admin, caller, cors, env, json, MP_API } from "../_shared/util.ts";
+import { admin, caller, cors, encryptToken, env, json, MP_API } from "../_shared/util.ts";
 
 const b64url = (a: Uint8Array) => btoa(String.fromCharCode(...a)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
@@ -50,11 +50,21 @@ Deno.serve(async (req) => {
     });
     const tok = await r.json();
     if (!r.ok || !tok.access_token) { console.error("MP oauth", r.status, tok); return Response.redirect(`${site}/?mp_connected=0`, 302); }
-    // Llaves por cuenta (Bloque 1): la misma cuenta actualiza su llave; otra cuenta crea una fila nueva y la anterior queda
-    // para devoluciones y consultas (mp_connect). provider_private.mp_connected lo actualiza la base.
+    const mpUser = String(tok.user_id ?? "");
+    // H12: la cuenta de Mercado Pago de TuTiempo (la que recibe las comisiones) no puede ser la de un prestador.
+    // Sin MP_OWNER_USER_ID configurado no se conecta ninguna cuenta (mejor cerrado que abierto).
+    const owner = Deno.env.get("MP_OWNER_USER_ID") ?? "";
+    if (!owner || mpUser === owner) {
+      console.error("mp-oauth rechazada", owner ? "cuenta de TuTiempo" : "falta MP_OWNER_USER_ID", st.provider_id);
+      return Response.redirect(`${site}/?mp_connected=0`, 302);
+    }
+    // Llaves por cuenta (Bloque 1), cifradas (Bloque 2a): la misma cuenta actualiza su llave; otra cuenta crea una fila
+    // nueva y la anterior queda para devoluciones y consultas (mp_connect). mp_connected lo actualiza la base.
     const { error } = await db.rpc("mp_connect", {
-      p_provider: st.provider_id, p_mp_user_id: String(tok.user_id ?? ""), p_access: tok.access_token,
-      p_refresh: tok.refresh_token ?? null, p_expires_in: Number(tok.expires_in) || 0,
+      p_provider: st.provider_id, p_mp_user_id: mpUser,
+      p_access: await encryptToken(tok.access_token, st.provider_id, mpUser, "access_token"),
+      p_refresh: tok.refresh_token ? await encryptToken(tok.refresh_token, st.provider_id, mpUser, "refresh_token") : null,
+      p_expires_in: Number(tok.expires_in) || 0,
     });
     if (error) { console.error("mp_connect", error); return Response.redirect(`${site}/?mp_connected=0`, 302); }
     return Response.redirect(`${site}/?mp_connected=1`, 302);

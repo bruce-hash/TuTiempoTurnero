@@ -1,6 +1,6 @@
 // Enrutador (Bloque B): cada pantalla tiene su dirección, sin "#".
 // - Después de cada render(), syncUrl() arma la dirección que corresponde al estado S y la pone en la barra (pushState
-//   si es otra pantalla, replaceState si es la misma con otra forma, por ejemplo /p/7 → /hidro-style).
+//   si es otra pantalla, replaceState si es la misma con otra forma, por ejemplo /p/7 → /filo-barber-club).
 // - Al abrir una dirección (carga, recarga o atrás/adelante), applyUrl() arma el estado desde la URL: pantalla,
 //   prestador, pestaña, horario elegido… Si la pantalla pide sesión y no la hay, va al ingreso y vuelve después.
 // - Las historias y la ficha de un cliente abren una entrada propia: "atrás" las cierra. Las confirmaciones no.

@@ -75,7 +75,7 @@ async function functions(req, res, url) {
     await db.query("select public.confirm_payment($1::bigint[], $2, $3, p_provider => $4, p_fee_mp => $5)", [j.booking_ids, "mp-test-" + Date.now(), r.rows[0].amount, r.rows[0].pid, r.rows[0].fee]);
     return send(res, 200, { init_point: `${req.headers.origin || "http://localhost:" + PORT}/?mp=success&b=${j.booking_ids[0]}` });
   }
-  if (name === "mp-oauth") { await db.query("select public.mp_connect(id, 'mp-test-' || id, 'TEST-token', null, 15552000) from public.providers where owner_id=$1 and status<>'deleted'", [claims.sub]); return send(res, 200, { url: `/?mp_connected=1` }) }
+  if (name === "mp-oauth") { await db.query("select public.mp_connect(id, 'mp-test-' || id, 'v1:aXY=:VEVTVC10b2tlbg==', null, 15552000) from public.providers where owner_id=$1 and status<>'deleted'", [claims.sub]); return send(res, 200, { url: `/?mp_connected=1` }) }
   send(res, 404, {});
 }
 

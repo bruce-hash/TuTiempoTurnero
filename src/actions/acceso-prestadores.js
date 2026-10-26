@@ -167,12 +167,12 @@ registerSubmit("fBarb", (ev) => {
     window.scrollTo(0, 0);
     return;
   }
-  if (login.email.toLowerCase() === "hidro.style@tutiempo.demo" && pr(7).deleted) {
+  if (login.email.toLowerCase() === "filo@tutiempo.demo" && pr(7).deleted) {
     login.err = "Esta cuenta fue eliminada. Si querés volver, creá un perfil nuevo.";
     render();
     return;
   }
-  if (login.email.toLowerCase() === "hidro.style@tutiempo.demo" && login.pass === "barbero123") {
+  if (login.email.toLowerCase() === "filo@tutiempo.demo" && login.pass === "barbero123") {
     login.err = "";
     login.fails = 0;
     useProvider(7);
@@ -180,7 +180,7 @@ registerSubmit("fBarb", (ev) => {
     S.barberAuth = true;
     S.role = "barbero";
     S.btab = "agenda";
-    toast("Bienvenido, Hidro.Style");
+    toast("Bienvenido, " + pr(7).name);
     if (afterPanelLogin()) {
       return;
     }
@@ -205,7 +205,7 @@ registerSubmit("fBarb", (ev) => {
     return;
   }
   login.err =
-    login.email.toLowerCase() === "hidro.style@tutiempo.demo"
+    login.email.toLowerCase() === "filo@tutiempo.demo"
       ? `Contraseña incorrecta. Te quedan ${5 - login.fails} intentos.`
       : "No encontramos una cuenta con ese email.";
   login.pass = "";

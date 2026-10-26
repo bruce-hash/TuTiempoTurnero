@@ -79,48 +79,123 @@ export async function providerAccounts(db: SupabaseClient, pid: number): Promise
   return (data as MpAccount[]) ?? [];
 }
 
+// ---------- Llaves cifradas (Bloque 2a, H13) ----------
+// AES-256-GCM con Web Crypto. Cada valor: "v<n>:<iv>:<cifrado>" en base64, con un IV aleatorio de 12 bytes. La clave es
+// MP_TOKENS_KEY (v1) o MP_TOKENS_KEY_V2, _V3… (32 bytes en base64, secretos de las funciones): se lee con cualquier
+// versión y se escribe siempre con la última. Datos asociados (AAD): prestador + cuenta de MP + campo, así un valor
+// copiado a otra fila u otro campo no se puede descifrar.
+export class TokenError extends Error {
+  constructor(public kind: "plaintext" | "undecryptable", message: string) { super(message); }
+}
+const b64 = (a: Uint8Array) => btoa(String.fromCharCode(...a));
+const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+function tokenKeys(): Map<number, string> {
+  const keys = new Map<number, string>();
+  const v1 = Deno.env.get("MP_TOKENS_KEY");
+  if (v1) keys.set(1, v1);
+  for (let v = 2; v <= 9; v++) {
+    const k = Deno.env.get(`MP_TOKENS_KEY_V${v}`);
+    if (k) keys.set(v, k);
+  }
+  return keys;
+}
+async function aesKey(version: number): Promise<CryptoKey> {
+  const raw = tokenKeys().get(version);
+  if (!raw) throw new TokenError("undecryptable", `Falta la clave MP_TOKENS_KEY${version === 1 ? "" : "_V" + version}`);
+  const bytes = unb64(raw);
+  if (bytes.length !== 32) throw new Error(`MP_TOKENS_KEY${version === 1 ? "" : "_V" + version} tiene que ser de 32 bytes (base64)`);
+  return await crypto.subtle.importKey("raw", bytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+const aad = (providerId: number, mpUserId: string | null, field: string) =>
+  new TextEncoder().encode(`tutiempo:${providerId}:${mpUserId ?? ""}:${field}`);
+export async function encryptToken(plain: string, providerId: number, mpUserId: string | null, field: "access_token" | "refresh_token"): Promise<string> {
+  const versions = [...tokenKeys().keys()];
+  if (!versions.length) throw new Error("Falta la variable MP_TOKENS_KEY");
+  const version = Math.max(...versions);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad(providerId, mpUserId, field) }, await aesKey(version), new TextEncoder().encode(plain));
+  return `v${version}:${b64(iv)}:${b64(new Uint8Array(ct))}`;
+}
+export async function decryptToken(value: string, providerId: number, mpUserId: string | null, field: "access_token" | "refresh_token"): Promise<string> {
+  const m = /^v(\d+):([A-Za-z0-9+/=]+):([A-Za-z0-9+/=]+)$/.exec(value);
+  if (!m) throw new TokenError("plaintext", "Llave sin cifrar");
+  try {
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(m[2]), additionalData: aad(providerId, mpUserId, field) },
+      await aesKey(Number(m[1])), unb64(m[3]));
+    return new TextDecoder().decode(pt);
+  } catch (e) {
+    if (e instanceof TokenError) throw e;
+    throw new TokenError("undecryptable", "No se pudo descifrar la llave (clave o datos asociados distintos)");
+  }
+}
+// Llaves en claro de una cuenta. Una llave sin cifrar (de antes del Bloque 2a) deja la cuenta para reconectar; una que no
+// se puede descifrar (clave mal cargada) solo deja el error, sin desconectar a nadie.
+async function plainTokens(db: SupabaseClient, acc: MpAccount): Promise<{ access: string | null; refresh: string | null } | null> {
+  try {
+    return {
+      access: acc.access_token ? await decryptToken(acc.access_token, acc.provider_id, acc.mp_user_id, "access_token") : null,
+      refresh: acc.refresh_token ? await decryptToken(acc.refresh_token, acc.provider_id, acc.mp_user_id, "refresh_token") : null,
+    };
+  } catch (e) {
+    const plaintext = e instanceof TokenError && e.kind === "plaintext";
+    console.error("mp_accounts", acc.id, plaintext ? "llave sin cifrar: hay que reconectar la cuenta" : String(e));
+    await db.rpc("mp_account_error", {
+      p_account: acc.id, p_error: plaintext ? "Llave sin cifrar: hay que volver a conectar la cuenta" : String((e as Error).message).slice(0, 200),
+      p_expired: plaintext,
+    });
+    return null;
+  }
+}
+
 // Llave de una cuenta. Las llaves duran 180 días: si faltan menos de `days` días, se renueva con el refresh_token y se
 // guarda la nueva (MP entrega un refresh_token nuevo cada vez y el viejo deja de servir). `charge`: solo sirve la cuenta
 // activa (crear cobros). Una sola renovación a la vez por cuenta (mp_account_refresh_claim): los demás siguen con la
 // llave actual mientras no venza.
 const msLeft = (acc: MpAccount) => (acc.expires_at ? new Date(acc.expires_at).getTime() - Date.now() : Infinity);
-function usable(acc: MpAccount | null, charge?: boolean): string | null {
-  if (!acc?.access_token || acc.status === "purged" || (charge && acc.status !== "active")) return null;
-  return msLeft(acc) > 0 ? acc.access_token : null;
+async function usable(db: SupabaseClient, acc: MpAccount | null, charge?: boolean): Promise<string | null> {
+  if (!acc?.access_token || acc.status === "purged" || (charge && acc.status !== "active") || msLeft(acc) <= 0) return null;
+  return (await plainTokens(db, acc))?.access ?? null;
 }
 export async function accountToken(db: SupabaseClient, acc: MpAccount | null, opts: { days?: number; charge?: boolean } = {}): Promise<string | null> {
   const days = opts.days ?? 15;
   if (!acc || acc.status === "purged" || (opts.charge && acc.status !== "active")) return null;
-  if (msLeft(acc) > days * 864e5 || !acc.refresh_token) return usable(acc, opts.charge);
+  if (msLeft(acc) > days * 864e5 || !acc.refresh_token) return await usable(db, acc, opts.charge);
   const { data: claimed } = await db.rpc("mp_account_refresh_claim", { p_account: acc.id });
   // otro proceso la está renovando: la llave que haya guardada (la actual o la nueva), si sirve
-  if (!claimed) return usable(await accountById(db, acc.id), opts.charge);
+  if (!claimed) return await usable(db, await accountById(db, acc.id), opts.charge);
   const release = () => db.rpc("mp_account_refresh_release", { p_account: acc.id });
   // se relee: puede que otro la haya renovado entre la lectura y la reserva
   const cur = await accountById(db, acc.id);
   if (!cur?.refresh_token || cur.status === "purged" || msLeft(cur) > days * 864e5) {
     await release();
-    return usable(cur, opts.charge);
+    return await usable(db, cur, opts.charge);
   }
+  const plain = await plainTokens(db, cur);
+  if (!plain?.refresh) return null;   // sin cifrar o sin descifrar: ya quedó el error (y la reserva se liberó)
   const r = await fetch(`${MP_API}/oauth/token`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: env("MP_CLIENT_ID"), client_secret: env("MP_CLIENT_SECRET"), grant_type: "refresh_token", refresh_token: cur.refresh_token }),
+    body: JSON.stringify({ client_id: env("MP_CLIENT_ID"), client_secret: env("MP_CLIENT_SECRET"), grant_type: "refresh_token", refresh_token: plain.refresh }),
   }).catch(() => null);
   const tok = r ? await r.json().catch(() => ({})) : {};
   if (r?.ok && tok.access_token) {
-    await db.rpc("mp_account_refreshed", { p_account: cur.id, p_access: tok.access_token, p_refresh: tok.refresh_token ?? null, p_expires_in: Number(tok.expires_in) || 0 });
+    await db.rpc("mp_account_refreshed", {
+      p_account: cur.id,
+      p_access: await encryptToken(tok.access_token, cur.provider_id, cur.mp_user_id, "access_token"),
+      p_refresh: tok.refresh_token ? await encryptToken(tok.refresh_token, cur.provider_id, cur.mp_user_id, "refresh_token") : null,
+      p_expires_in: Number(tok.expires_in) || 0,
+    });
     return opts.charge && cur.status !== "active" ? null : tok.access_token;
   }
   // falló: si mientras tanto otro proceso ya la renovó (cambió el refresh_token), se usa esa y no hay error
   const again = await accountById(db, cur.id);
   if (again?.refresh_token && again.refresh_token !== cur.refresh_token) {
     await release();
-    return usable(again, opts.charge);
+    return await usable(db, again, opts.charge);
   }
   console.error("MP refresh", cur.id, r?.status);
   // venció y no se pudo renovar: si era la activa, deja de cobrar (tiene que reconectar)
   await db.rpc("mp_account_error", { p_account: cur.id, p_error: `No se pudo renovar la llave (${r?.status ?? "sin respuesta"})`, p_expired: msLeft(cur) <= 0 });
-  return usable(cur, opts.charge);
+  return await usable(db, cur, opts.charge);
 }
 
 // Respuesta de Mercado Pago: solo los campos permitidos (nada del comprador ni de la tarjeta). La base vuelve a filtrar
