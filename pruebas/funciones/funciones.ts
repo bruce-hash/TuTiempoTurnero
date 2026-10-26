@@ -505,7 +505,35 @@ await body(await emailRun());
 ok("una dirección que Resend rechaza (422) queda fallida, sin reintentos", (await estado(eMal)).status === "failed" && (await estado(eMal)).attempts === 1);
 await q("update profiles set email_notices = false where id = $1", [mailUser]);
 const eOff = await aviso("rev", "999005", "No va");
-ok("con la opción apagada en Mi perfil, el aviso no entra a la cola", Number.isNaN(eOff) && rs.enviados.length === 4);
+ok("con «Recordatorios y novedades» apagada, la reseña no entra a la cola", Number.isNaN(eOff) && rs.enviados.length === 4);
+const eCan = await aviso("cancel", "999006", "Prov Funciones tuvo que cancelar tu turno del lunes 2/11 a las 10:00.");
+ej = await body(await emailRun());
+ok("…pero una cancelación igual sale por email", !Number.isNaN(eCan) && ej.sent === 1 && (await estado(eCan)).status === "sent"
+   && rs.enviados.some((e) => e.clave === `tt-email-${eCan}`));
+await q("update profiles set email_notices = true where id = $1", [mailUser]);
+// texto que viene del prestador con HTML (plantilla, nombre del negocio y dirección): todo escapado y ningún link ajeno
+const [nombre0, dir0] = Object.values((await q("select name, address from providers where id = $1", [pid]))[0]);
+const plantilla0 = await one("select body from message_templates where provider_id = $1 and key = 'rev'", [pid]);
+await q("update providers set name = $1, address = $2 where id = $3", [`Barbería "La <b>Esquina</b>" & Cía`, `<img src=x onerror="alert(1)"> Calle 'Uno'`, pid]);
+await q("update message_templates set body = $1, enabled = true where provider_id = $2 and key = 'rev'",
+  [`<a href="https://otro.com">Promo</a> <script>alert("x")</script> "{barberia}" te espera en {direccion}. ¿Nos dejás tu opinión? {link}`, pid]);
+const bRev = Number(await one("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) "
+  + "values ($1, $2, 'Cliente Mail', 'Corte', 'app', 'done', now() - interval '3 hours', now() - interval '150 minutes', 10000) returning id", [pid, mailUser]));
+await q("select notify_booking($1, 'rev')", [bRev]);
+const eHtml = Number(await one("select o.id from email_outbox o where o.booking_id = $1 and o.kind = 'rev'", [bRev]));
+ej = await body(await emailRun());
+const mHtml = rs.enviados.find((e) => e.clave === `tt-email-${eHtml}`)?.body?.html ?? "";
+const hrefs = [...mHtml.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+ok("HTML del prestador: la plantilla, el nombre y la dirección llegan escapados (ni <a>, ni <script>, ni <img>, ni <b>)",
+   ej.sent === 1 && !/<a href="https:\/\/otro|<script|<img|<b>/.test(mHtml)
+   && mHtml.includes("&lt;a href=&quot;https://otro.com&quot;&gt;Promo&lt;/a&gt;") && mHtml.includes("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;")
+   && mHtml.includes("Barbería &quot;La &lt;b&gt;Esquina&lt;/b&gt;&quot; &amp; Cía") && mHtml.includes("&lt;img src=x onerror=&quot;alert(1)&quot;&gt; Calle &#39;Uno&#39;"),
+   mHtml.slice(0, 600));
+ok("…y todos los links son del sitio: el del aviso, el único botón (Ver mis turnos) y el de Mi perfil",
+   hrefs.length === 3 && hrefs.every((h) => h.startsWith("https://tutiempo.com.ar/")) && hrefs.includes(LINK)
+   && (mHtml.match(/display:inline-block/g) ?? []).length === 1 && hrefs.includes("https://tutiempo.com.ar/mis-turnos"), JSON.stringify(hrefs));
+await q("update providers set name = $1, address = $2 where id = $3", [nombre0, dir0, pid]);
+await q("update message_templates set body = $1 where provider_id = $2 and key = 'rev'", [plantilla0, pid]);
 
 const cfg = new URL("./deno.json", import.meta.url).pathname;
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;

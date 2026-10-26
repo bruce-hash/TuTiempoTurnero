@@ -73,8 +73,10 @@ firma con la clave de la aplicación de TuTiempo los avisos de pagos cobrados co
 **Bloque 3:** cada aviso de confirmación, recordatorio (24 h y 2 h), reseña, cumpleaños y cancelación entra a
 `email_outbox` (trigger en `client_messages`, una sola vez por turno y tipo) y la Edge Function `email-send` lo manda
 con Resend cada 5 minutos, con el mismo texto, reintentos y clave de idempotencia. Solo a emails confirmados; un
-recordatorio no sale si el turno ya empezó o se canceló; el cliente los apaga en Mi perfil. El turno que el sistema no
-pudo confirmar (expired con devolución) ahora también deja su aviso en la app. Web Push sigue afuera (prompt original).
+recordatorio no sale si el turno ya empezó o se canceló; en Mi perfil el cliente apaga los recordatorios, la reseña y el
+cumpleaños (la confirmación y las cancelaciones salen siempre). El HTML escapa todo el texto del prestador y solo enlaza
+al sitio. La limpieza diaria borra lo enviado, descartado o fallido con más de 90 días. El turno que el sistema no pudo
+confirmar (expired con devolución) ahora también deja su aviso en la app. Web Push sigue afuera (prompt original).
 
 ### H08 · Media · Precios ×100 con coma decimal (heredado del prototipo · resuelto en el Bloque 2b)
 Los campos de precio usan `parseInt(valor.replace(/\D/g, ""))`: "12500,50" se guarda como 1.250.050.
@@ -285,6 +287,15 @@ disponible, monto de menos y pago sin turno.
 **En el Bloque 2:** borrar los de más de 180 días que no estén ligados a un pago en revisión sin resolver, en la misma
 tarea programada que limpia `mp_oauth_states` (H13).
 **Bloque 2a:** `daily_cleanup()`, en la tarea `tt-cleanup` de todos los días.
+
+### H30 · Media · CAPTCHA (Turnstile) no soportado (pendiente antes de producción)
+docs/02 (Etapa B) pedía activar el CAPTCHA de Supabase Auth (Turnstile), pero la app no lo soporta: `signUp`,
+`signInWithPassword`, `signInWithOtp` y `resetPasswordForEmail` no mandan `captchaToken`, y la CSP del `.htaccess` no deja
+cargar `https://challenges.cloudflare.com` (script-src y frame-src). Con el CAPTCHA activado, nadie podría crear cuenta,
+ingresar ni recuperar la contraseña. **No activarlo** hasta resolverlo. Para hacerlo: el widget de Turnstile en crear
+cuenta, ingresar (contraseña y código) y recuperar contraseña, `options.captchaToken` en esas llamadas, la CSP con
+`challenges.cloudflare.com`, la clave del sitio en `config.js` y prueba en el e2e (el server del e2e tendría que
+validar el token como Supabase).
 
 ## Mejoras futuras (no son hallazgos; después del lanzamiento)
 

@@ -99,11 +99,22 @@ ok("una sola vez por turno y tipo (el aviso repetido no suma otro email)", len(c
 q("insert into client_messages (provider_id, user_id, body) values (%s, %s, 'Hola, tengo lugar el sábado')", (pid, ana))
 ok("los mensajes que escribe el prestador (msg) no van por email",
    one("select count(*) from email_outbox o join client_messages m on m.id = o.message_id where m.kind = 'msg'") == 0)
+# "Recordatorios y novedades por email" apagada: los recordatorios, la reseña y el cumpleaños no van; la confirmación y
+# las cancelaciones, siempre (avisos del servicio)
 q("update profiles set email_notices = false where id = %s", (apagado,))
 b_ap = turno(apagado, 48)
 q("select notify_booking(%s, 'conf')", (b_ap,))
-ok("si el cliente los apagó en Mi perfil, no entra a la cola (el aviso en la app, sí)", cola(b_ap) == []
-   and one("select count(*) from client_messages where kind = 'conf' and ref = %s", (str(b_ap),)) == 1)
+ok("con la casilla apagada, la confirmación igual va por email", cola(b_ap) == [("conf", "pending", None, 0)])
+b_ap24 = turno(apagado, 20)
+q("select send_scheduled_notices()")
+ok("…el recordatorio no entra a la cola (el aviso en la app, sí)", cola(b_ap24) == []
+   and one("select count(*) from client_messages where kind = 'r24' and ref = %s", (str(b_ap24),)) == 1)
+q("insert into client_messages (provider_id, user_id, body, kind, ref) values (%s, %s, '¡Feliz cumpleaños!', 'bday', '2026'), (%s, %s, '¿Nos dejás tu opinión?', 'rev', '1')",
+  (pid, apagado, pid, apagado))
+ok("…ni la reseña ni el cumpleaños", one("select count(*) from email_outbox where user_id = %s and kind in ('rev','bday')", (apagado,)) == 0)
+q("update bookings set status = 'cancelled_provider' where id = %s", (b_ap24,))
+q("select notify_booking(%s, 'cancel')", (b_ap24,))
+ok("…y una cancelación igual sale por email", cola(b_ap24, "cancel") == [("cancel", "pending", None, 0)])
 q("update message_templates set enabled = false where provider_id = %s and key = 'conf'", (pid,))
 b_off = turno(ana, 50)
 q("select notify_booking(%s, 'conf')", (b_off,))
@@ -134,13 +145,17 @@ b_nc = turno(sin_confirmar, 48)
 q("select notify_booking(%s, 'conf')", (b_nc,))
 b_tarde = turno(ana, 20)
 q("select send_scheduled_notices()")
-b_lo_apaga = turno(cambia, 49)
-q("select notify_booking(%s, 'conf')", (b_lo_apaga,))
-q("update profiles set email_notices = false where id = %s", (cambia,))   # lo apaga con el email ya en la cola
+b_lo_apaga = turno(cambia, 21)
+b_conf_cambia = turno(cambia, 49)
+q("select send_scheduled_notices()")
+q("select notify_booking(%s, 'conf')", (b_conf_cambia,))
+q("update profiles set email_notices = false where id = %s", (cambia,))   # la apaga con los emails ya en la cola
 q("update bookings set status = 'cancelled_client' where id = %s", (b_tarde,))
 D = due()
 ok("sin email confirmado: no se manda", cola(b_nc) == [("conf", "skipped", "no_email", 0)])
-ok("si lo apagó con el email ya en la cola: no se manda", cola(b_lo_apaga) == [("conf", "skipped", "opt_out", 0)])
+ok("si apagó la casilla con el recordatorio ya en la cola: no se manda", cola(b_lo_apaga, "r24") == [("r24", "skipped", "opt_out", 0)])
+ok("…pero la confirmación sí", cola(b_conf_cambia, "conf") == [("conf", "pending", None, 0)] and outbox_id(b_conf_cambia, "conf") in D
+   and D[outbox_id(b_conf_cambia, "conf")][0] == "cambia@mail.test")
 ok("recordatorio de un turno que ya no está confirmado: no se manda", cola(b_tarde, "r24") == [("r24", "skipped", "stale", 0)])
 b_empezo = turno(ana, 20)
 q("select send_scheduled_notices()")
@@ -222,6 +237,16 @@ q("select vault.create_secret('https://proyecto.supabase.co/', 'tt_project_url')
 q("select run_email_send()", role="service_role")
 ok("con los secretos, llama a email-send con la clave del cron", q("select url, headers->>'Authorization' from net.requests")
    == [("https://proyecto.supabase.co/functions/v1/email-send", "Bearer secreto-del-cron")])
+
+# ---------- 8. Retención (D25): la limpieza diaria borra lo enviado, descartado o fallido con más de 90 días ----------
+viejos = [x[0] for x in q("select id from email_outbox where status in ('sent','skipped','failed') order by id limit 3")]
+pend = one("select id from email_outbox where status = 'pending' order by id limit 1")
+nuevo = one("select id from email_outbox where status in ('sent','skipped','failed') and id <> all(%s) order by id limit 1", (viejos,))
+q("update email_outbox set created_at = now() - interval '91 days' where id = any(%s)", (viejos + [pend],))
+cl = one("select daily_cleanup()", role="service_role")
+quedan = {x[0] for x in q("select id from email_outbox where id = any(%s)", (viejos + [pend, nuevo],))}
+ok("retención: borra lo enviado, descartado o fallido con más de 90 días", len(viejos) == 3 and not (set(viejos) & quedan) and cl["emails"] >= 3)
+ok("…pero no lo pendiente ni lo reciente", pend in quedan and nuevo in quedan)
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

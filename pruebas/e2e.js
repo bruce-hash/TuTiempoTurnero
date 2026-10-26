@@ -104,7 +104,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("foto de la clienta guardada en su carpeta", !!av[0].avatar_path && av[0].avatar_path.startsWith((await q("select id::text from auth.users where email='ana@test.ar'"))[0].id + "/a-") && (await pg.locator("nav .avbtn img").count()) === 1);
   // Bloque 3: su reserva dejó el email de confirmación en la cola, y en Mi perfil apaga y prende los emails
   ok("Bloque 3: la reserva de la clienta dejó su email de confirmación en la cola", (await q("select count(*)::int c from email_outbox o join auth.users u on u.id = o.user_id where u.email = 'ana@test.ar' and o.kind = 'conf'"))[0].c >= 1);
-  ok("Bloque 3: Mi perfil tiene la opción de avisos por email, prendida", await pg.isChecked("#uMail") && (await txt()).includes("Recibir por email la confirmación, los recordatorios y las cancelaciones"));
+  ok("Bloque 3: Mi perfil tiene la opción de avisos por email, prendida", await pg.isChecked("#uMail") && (await txt()).includes("Recordatorios y novedades por email"));
   await pg.uncheck("#uMail");
   ok("Bloque 3: apagarla queda en la base", await until("select p.email_notices from profiles p join auth.users u on u.id = p.id where u.email = 'ana@test.ar'", [], (r) => r[0].email_notices === false));
   await pg.evaluate(() => go("home")); await wait(); await pg.click("nav [data-go=cuenta]"); await wait();

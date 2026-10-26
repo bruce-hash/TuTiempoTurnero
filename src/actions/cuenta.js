@@ -142,12 +142,12 @@ registerChange("upAv", (ev) => {
   onPhoto(ev.target, "me");
   return;
 });
-// Bloque 3: avisos de los turnos por email
+// Bloque 3: recordatorios y novedades por email (la confirmación y las cancelaciones salen siempre)
 registerChange("uMail", (ev) => {
   const on = ev.target.checked;
   S.user.emailNotices = on;
   api.m.setEmailNotices(on);
-  toast(on ? "Listo: te mandamos los avisos de tus turnos por email." : "Listo: ya no te mandamos emails. Los avisos siguen en Mis turnos.");
+  toast(on ? "Listo: te mandamos los recordatorios y novedades por email." : "Listo: ya no te mandamos recordatorios ni novedades por email. La confirmación y las cancelaciones te siguen llegando.");
   return;
 });
 registerSubmit("fCuenta", (ev) => {

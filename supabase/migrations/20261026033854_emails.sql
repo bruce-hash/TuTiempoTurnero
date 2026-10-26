@@ -4,13 +4,16 @@
 -- cumpleaños y cancelaciones) también salen por email, con el mismo texto (ya armado con la plantilla y respetando el
 -- interruptor del prestador). Un email por aviso, y client_messages ya tiene un aviso por turno y tipo
 -- (client_messages_once): una sola vez por turno y tipo.
--- - profiles.email_notices: el cliente los apaga en Mi perfil (por defecto, encendidos).
+-- - profiles.email_notices ("Recordatorios y novedades por email" en Mi perfil, por defecto encendida): apaga los
+--   recordatorios de 24 h y de 2 h, la reseña y el cumpleaños. La confirmación y las cancelaciones salen siempre: son
+--   avisos del servicio, no promoción (D25).
 -- - email_outbox: la cola. La llena un trigger en client_messages; la Edge Function email-send (pg_cron cada 5 minutos,
 --   con CRON_SECRET de Vault, como mp-refunds) pide los pendientes (emails_due), los manda con Resend y avisa el
 --   resultado (email_result), con reintentos.
 -- - Solo a emails confirmados. Un recordatorio no sale si el turno ya empezó o dejó de estar confirmado.
 -- - Turno que el sistema no pudo confirmar (expired con devolución): ahora también deja su aviso de cancelación en la
 --   app (antes solo se veía en Mis turnos), con el mismo texto.
+-- - Retención: la limpieza diaria (daily_cleanup) borra de la cola lo enviado, descartado o fallido con más de 90 días.
 -- No cambia datos: los avisos que ya existían no se mandan.
 -- =====================================================================
 set search_path = public, extensions;
@@ -66,13 +69,19 @@ create index if not exists email_outbox_due on public.email_outbox (next_attempt
 alter table public.email_outbox enable row level security;   -- sin políticas: solo las funciones de abajo
 revoke all on public.email_outbox from anon, authenticated;
 
--- cada aviso de estos tipos, si el cliente no los apagó, entra a la cola
+-- avisos que el cliente puede apagar en Mi perfil; la confirmación y las cancelaciones salen siempre
+create or replace function public.email_optional(p_kind text) returns boolean
+language sql immutable set search_path = public as $$ select p_kind in ('r24','r2','rev','bday') $$;
+
+-- cada aviso de estos tipos entra a la cola (los opcionales, si el cliente no los apagó)
 create or replace function public.client_messages_email() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare bid bigint; starts timestamptz;
 begin
   if new.kind not in ('conf','r24','r2','rev','bday','cancel') then return null; end if;
-  if not coalesce((select email_notices from public.profiles where id = new.user_id), true) then return null; end if;
+  if public.email_optional(new.kind) and not coalesce((select email_notices from public.profiles where id = new.user_id), true) then
+    return null;
+  end if;
   if new.kind <> 'bday' and new.ref ~ '^[0-9]{1,18}$' then
     select id, starts_at into bid, starts from public.bookings where id = new.ref::bigint;
   end if;
@@ -89,8 +98,8 @@ create trigger client_messages_email after insert on public.client_messages
 
 -- ---------- Lo que la función tiene que mandar ----------
 -- Toma hasta p_limit pendientes (los reserva 15 minutos para que dos corridas no manden lo mismo) y descarta los que
--- ya no van: cliente que los apagó, sin email confirmado, recordatorio de un turno que ya empezó o no está confirmado,
--- o vencidos.
+-- ya no van: opcional que el cliente apagó, sin email confirmado, recordatorio de un turno que ya empezó o no está
+-- confirmado, o vencidos.
 create or replace function public.emails_due(p_limit int default 50)
 returns table (id bigint, to_email text, subject text, body text, provider_name text, site_url text)
 language plpgsql security definer set search_path = public as $$
@@ -109,7 +118,7 @@ begin
             order by o.next_attempt_at, o.id
             limit greatest(coalesce(p_limit, 50), 1)
             for update of o skip locked loop
-    skip := case when not r.wants then 'opt_out'
+    skip := case when not r.wants and public.email_optional(r.kind) then 'opt_out'
                  when r.email is null or r.email_confirmed_at is null then 'no_email'
                  when r.expires_at <= now() then 'stale'
                  when r.kind in ('r24','r2','conf') and (r.bstatus is distinct from 'confirmed' or r.starts_at <= now()) then 'stale'
@@ -184,7 +193,28 @@ do $$ begin
   end if;
 end $$;
 
+-- ---------- Limpieza diaria ----------
+-- La de 20261025171952_seguridad.sql (intentos de conexión con Mercado Pago y avisos descartados) más la cola de emails:
+-- lo enviado, descartado o fallido con más de 90 días (D25). Lo pendiente no se borra.
+create or replace function public.daily_cleanup() returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare n_states int; n_events int; n_emails int;
+begin
+  delete from public.mp_oauth_states where created_at < now() - interval '1 day';
+  get diagnostics n_states = row_count;
+  delete from public.mp_webhook_events e
+   where e.created_at < now() - interval '180 days'
+     and not exists (select 1 from public.payments p where p.mp_payment_id = e.mp_payment_id
+                     and p.outcome = 'review' and p.review_resolved_at is null);
+  get diagnostics n_events = row_count;
+  delete from public.email_outbox where status in ('sent','skipped','failed') and created_at < now() - interval '90 days';
+  get diagnostics n_emails = row_count;
+  return jsonb_build_object('oauth_states', n_states, 'webhook_events', n_events, 'emails', n_emails);
+end $$;
+
 -- ---------- Permisos ----------
 revoke execute on function public.refunds_expired_notice(), public.client_messages_email(), public.emails_due(int),
   public.email_result(bigint, boolean, text, text, boolean), public.run_email_send() from public, anon, authenticated;
 grant execute on function public.emails_due(int), public.email_result(bigint, boolean, text, text, boolean), public.run_email_send() to service_role;
+revoke execute on function public.daily_cleanup() from public, anon, authenticated;
+grant execute on function public.daily_cleanup() to service_role;

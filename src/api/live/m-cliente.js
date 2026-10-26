@@ -51,7 +51,7 @@ Object.assign(LM, {
         })
         .eq("id", S.user.id),
     ),
-  // Bloque 3: avisos de los turnos por email (Mi perfil); la base no encola los emails de quien los apaga
+  // Bloque 3: recordatorios y novedades por email (Mi perfil); la base no encola esos emails de quien los apaga
   setEmailNotices: (on) =>
     saved(
       sb

@@ -8,6 +8,93 @@ Claude Code termine los bloques 1 y 2 y la prueba con Mercado Pago salga bien.
 
 Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marcadas acá.
 
+## Instalación desde cero (entorno nuevo)
+Un solo orden, de principio a fin, para armar un entorno vacío (prueba o producción). Los detalles de cada paso están
+más abajo (Etapa A); las secciones "Bloque 2a / 2b / 3" sirven solo para **actualizar un entorno que ya existía**.
+
+**0. Antes de empezar (una vez por entorno)**
+- Cuenta de Mercado Pago con la aplicación Marketplace creada (Etapa A, paso 2.1 y 2.2): `MP_CLIENT_ID`,
+  `MP_CLIENT_SECRET` y `MP_OWNER_USER_ID`. El `MP_WEBHOOK_SECRET` sale en el paso 9.
+- Resend con el dominio `tutiempo.com.ar` **verificado** (registros DNS en Hostinger), la casilla
+  `soporte@tutiempo.com.ar` y las dos claves del entorno: `<entorno>-funcion` y `<entorno>-auth` (sección 2b, pasos 1 a 4).
+- Hostinger: el subdominio (o dominio) del sitio creado, con SSL (sección 3, paso 1).
+- Las claves propias de TuTiempo, nuevas para este entorno, generadas en tu compu (nunca en el repo ni en un chat):
+  ```bash
+  openssl rand -base64 48   # CRON_SECRET
+  openssl rand -base64 32   # MP_TOKENS_KEY
+  ```
+
+**1. Proyecto de Supabase.** supabase.com → New project, región São Paulo (prueba: plan gratis; producción: Pro).
+
+**2. Extensiones.** Database → Extensions: `pg_cron` y `pg_net`.
+
+**3. Vault** (SQL Editor). Antes de la base, así las tareas programadas y las bajas encuentran la dirección y la clave:
+```sql
+select vault.create_secret('https://<proyecto>.supabase.co', 'tt_project_url');
+select vault.create_secret('<CRON_SECRET>', 'tt_cron_secret');
+```
+
+**4. Secretos de las funciones** (desde la carpeta del repo):
+```bash
+supabase login
+supabase link --project-ref <proyecto>
+supabase secrets set SITE_URL=https://<sitio> MP_CLIENT_ID=... MP_CLIENT_SECRET=... MP_WEBHOOK_SECRET=pendiente \
+  MP_OWNER_USER_ID=... CRON_SECRET=<CRON_SECRET> MP_TOKENS_KEY=<MP_TOKENS_KEY> \
+  RESEND_API_KEY=<entorno>-funcion EMAIL_FROM="TuTiempo <avisos@tutiempo.com.ar>" EMAIL_REPLY_TO=soporte@tutiempo.com.ar
+```
+`CRON_SECRET` es la **misma** que cargaste en Vault. **Nunca** cargues `MP_API_URL`, `EMAIL_API_URL` ni `EMAIL_GAP_MS`:
+existen solo para las pruebas.
+
+**5. Deploy de las 6 funciones:**
+```bash
+supabase functions deploy mp-create-preference
+supabase functions deploy mp-webhook --no-verify-jwt
+supabase functions deploy mp-oauth --no-verify-jwt
+supabase functions deploy mp-refunds --no-verify-jwt
+supabase functions deploy dni-cleanup --no-verify-jwt
+supabase functions deploy email-send --no-verify-jwt
+```
+
+**6. Base:** `supabase db push` (aplica `supabase/migrations/` en orden; o pegar `supabase/TODO_EN_UNO.sql` en el SQL
+Editor). **No** cargues `ejemplos.NO-USAR-EN-PRODUCCION.sql`.
+
+**7. Auth** (Authentication):
+- URL Configuration: Site URL = la dirección del sitio; Redirect URLs = la raíz del sitio (`https://<sitio>/`).
+- Sign In / Providers → Email y las plantillas: PASO 2 B y C del LEEME.
+- SMTP propio de Resend (sección 2b, paso 6), **también en prueba**: el SMTP que trae Supabase solo manda a los
+  miembros del equipo del proyecto, así que cualquier otro usuario no recibe el email para activar la cuenta.
+- Google: PASO 2 del LEEME, con la dirección de este entorno.
+- CAPTCHA (Turnstile): **no lo actives todavía**. La app no lo soporta (H30): con CAPTCHA activado, nadie puede crear
+  cuenta, ingresar ni recuperar la contraseña.
+
+**8. Mercado Pago** (la aplicación, Etapa A paso 2.3): Redirect URL `https://<proyecto>.supabase.co/functions/v1/mp-oauth`
+y webhook `https://<proyecto>.supabase.co/functions/v1/mp-webhook` (evento Pagos).
+
+**9. Clave del webhook:** copiá la clave secreta del webhook de Mercado Pago y cargala:
+`supabase secrets set MP_WEBHOOK_SECRET=<clave>` (las funciones la toman sin volver a hacer el deploy).
+
+**10. Frontend:** `npm ci`, `npm run build`, completar `dist/config.js` (URL y clave `anon`, nunca la `service_role`) y
+subir el contenido de `dist/` (con `.htaccess`) a la raíz del sitio (sección 3, pasos 2 a 5).
+
+**11. Admin:** creá tu cuenta desde el sitio y activala con el email (ya llega por Resend). Después, en el SQL Editor:
+`insert into app_admins (user_id) select id from auth.users where email = 'TU-EMAIL';`. En el panel admin →
+Comisión: **4** y la **Dirección del sitio** (`https://<sitio>`).
+
+**12. Verificaciones** (SQL Editor):
+```sql
+select jobname, schedule from cron.job order by jobname;
+-- 7 tareas: tt-cleanup, tt-dni-cleanup, tt-emails, tt-expire-holds, tt-notices, tt-refunds, tt-reshuffle
+select public.run_refunds(); select public.run_dni_cleanup(); select public.run_email_send();
+select status_code, content from net._http_response order by created desc limit 3;   -- tres 200
+select site_url, commission_pct from app_settings;
+```
+Un 403 en `net._http_response`: la `CRON_SECRET` de Vault no es igual a la de las funciones. Un 500 con "config": falta
+un secreto de esa función. Después, la prueba de punta a punta (sección 4).
+
+## Actualizar un entorno existente
+Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
+bloque al siguiente en un entorno que ya estaba armado.
+
 ## Etapa A · Entorno de prueba
 
 ### 1. Supabase (proyecto de prueba)
@@ -19,7 +106,8 @@ Las instrucciones del `LEEME-cliente-v31.txt` sirven, con las correcciones marca
    Usá siempre la versión del repo **después** de los arreglos de Claude Code.
 4. **No** cargues `ejemplos.NO-USAR-EN-PRODUCCION.sql` (es solo para una base local; sin `set tt.ejemplos = 'si'` no
    carga nada): creá 1 o 2 prestadores de prueba propios desde la app.
-5. Auth: seguir el PASO 2 del LEEME (URL del subdominio, plantillas de email, Google). Para prueba alcanza el email de Supabase.
+5. Auth: seguir el PASO 2 del LEEME (URL del subdominio, plantillas de email, Google). El SMTP de Resend (sección 2b) es
+   obligatorio también en prueba: el de Supabase solo manda a los miembros del equipo del proyecto.
    En **Redirect URLs** alcanza con la raíz del sitio (`https://prueba.tutiempo.com.ar/`): desde el Bloque B la app siempre
    pide volver a la raíz y recuerda aparte a qué pantalla iba.
 6. Admin: `insert into app_admins (user_id) select id from auth.users where email = 'TU-EMAIL';`
@@ -209,8 +297,8 @@ la cuenta, recuperar la contraseña). Un solo dominio para los dos entornos; cla
      select kind, status, skip_reason, attempts, last_error from email_outbox order by id desc limit 10;
      select status_code, content from net._http_response order by created desc limit 3;  -- 200 y {"sent":…,"failed":0}
      ```
-   - `skip_reason`: `opt_out` (el cliente los apagó en Mi perfil), `no_email` (email sin confirmar), `stale` (el turno
-     ya empezó o ya no está confirmado).
+   - `skip_reason`: `opt_out` (un recordatorio, reseña o cumpleaños de un cliente que apagó "Recordatorios y novedades
+     por email"), `no_email` (email sin confirmar), `stale` (el turno ya empezó o ya no está confirmado).
    - `last_error` con 403 de Resend: la clave no sirve o el dominio no está verificado. Un 403 en `net._http_response`:
      la `CRON_SECRET` de Vault no es igual a la de las funciones. Un 500 con "config": falta `RESEND_API_KEY` o `EMAIL_FROM`.
    - En Resend → Emails se ve cada envío, entrega o rebote.
@@ -258,16 +346,19 @@ la cuenta, recuperar la contraseña). Un solo dominio para los dos entornos; cla
       ("Pago devuelto por Mercado Pago") y al prestador le llega el aviso.
 - [ ] Emails (Bloque 3): llegan la confirmación, el recordatorio de 24 h y una cancelación, con el mismo texto que en Mis
       turnos y desde `avisos@tutiempo.com.ar`; responder llega a `soporte@`; "Dejar de recibir estos emails" lleva a Mi
-      perfil, y con la opción apagada no llega ninguno más (los avisos siguen en Mis turnos).
+      perfil. Con "Recordatorios y novedades por email" apagada no llegan los recordatorios, la reseña ni el
+      cumpleaños, pero la confirmación y las cancelaciones sí (y todos los avisos siguen en Mis turnos).
 - [ ] Sellos: marcar "Asistió" suma sello; canjear el premio.
 
 ## Etapa B · Producción
 1. Supabase: proyecto nuevo `tutiempo` en plan **Pro** (backups diarios). Mismos pasos 1 a 7.
 2. Auth: SMTP propio (Resend, D14: paso 2b con las claves `prod-funcion` y `prod-auth`) y Google con el dominio
-   definitivo. CAPTCHA (Turnstile) activado.
+   definitivo. CAPTCHA (Turnstile): **no lo actives** hasta resolver H30 (la app todavía no lo soporta); está anotado
+   como pendiente antes de producción.
 3. Mercado Pago: credenciales de producción de la misma aplicación; nueva clave de webhook; `MP_OWNER_USER_ID` de la
    cuenta real de TuTiempo; `CRON_SECRET` y `MP_TOKENS_KEY` **nuevas** (no las del entorno de prueba);
-   `supabase secrets set` en el proyecto de producción, deploy de las 4 funciones y Vault (pasos 4 a 6 de Mercado Pago).
+   `supabase secrets set` en el proyecto de producción (con los de Resend), deploy de las 6 funciones y Vault. Para un
+   proyecto nuevo, seguí "Instalación desde cero".
 4. Textos legales revisados por abogado (D13).
 5. Hostinger: subdominio definitivo o reemplazo de la raíz según D12. Antes de tocar la raíz: backup completo del Laravel.
 6. Primera compra real chica con tu propia tarjeta y devolución desde el panel.

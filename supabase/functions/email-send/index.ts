@@ -33,7 +33,8 @@ Deno.serve(async (req) => {
       const r = await fetch(`${API}/emails`, {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "Idempotency-Key": `tt-email-${e.id}` },
-        body: JSON.stringify({ from, to: [e.to_email], subject: e.subject, html, text, ...(replyTo ? { reply_to: replyTo } : {}) }),
+        // el asunto lleva el nombre del negocio: sin saltos de línea (es un encabezado del email)
+        body: JSON.stringify({ from, to: [e.to_email], subject: e.subject.replace(/[\r\n]+/g, " "), html, text, ...(replyTo ? { reply_to: replyTo } : {}) }),
       });
       const body = await r.json().catch(() => ({}));
       result = r.ok && body.id

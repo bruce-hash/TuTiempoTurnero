@@ -39,8 +39,8 @@ export function vCuenta() {
     <div class="err" id="uerr"></div>
     <button class="btn btn-pri btn-block" type="submit">Guardar</button></form>
    <div class="panel"><p class="lbl">Avisos por email</p>
-    <label class="chk" style="justify-content:flex-start;text-align:left"><input type="checkbox" id="uMail"${user.emailNotices === false ? "" : " checked"}> Recibir por email la confirmación, los recordatorios y las cancelaciones de mis turnos</label>
-    <p class="note" style="text-align:left;margin:8px 0 0">Los avisos siguen llegando a Mis turnos aunque apagues los emails.</p></div>
+    <label class="chk" style="justify-content:flex-start;text-align:left"><input type="checkbox" id="uMail"${user.emailNotices === false ? "" : " checked"}> Recordatorios y novedades por email</label>
+    <p class="note" style="text-align:left;margin:8px 0 0">Los recordatorios de tus turnos, el pedido de reseña y el saludo de cumpleaños. La confirmación y las cancelaciones te llegan siempre por email, y todos los avisos siguen en Mis turnos.</p></div>
    <div class="panel"><p class="lbl">Profesionales que seguís</p>${(() => {
      const followed = P.filter((prov) => isFol(prov.id) && !prov.deleted);
      if (followed.length) {
