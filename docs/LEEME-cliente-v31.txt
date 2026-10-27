@@ -130,11 +130,12 @@ descuenta su propia comisión y después la de TuTiempo, del monto del pago.
       supabase login
       supabase link --project-ref TU-PROYECTO
       supabase secrets set SITE_URL=https://tutiempo.com.ar MP_CLIENT_ID=... MP_CLIENT_SECRET=... MP_WEBHOOK_SECRET=...
-      supabase functions deploy mp-create-preference
+      supabase functions deploy mp-create-preference --no-verify-jwt
       supabase functions deploy mp-webhook --no-verify-jwt
       supabase functions deploy mp-oauth --no-verify-jwt
       supabase functions deploy mp-refunds --no-verify-jwt
-   (SUPABASE_URL, SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY ya los trae Supabase solo.)
+   (SUPABASE_URL y las claves del proyecto ya los trae Supabase solo: las nuevas, SUPABASE_PUBLISHABLE_KEYS y
+   SUPABASE_SECRET_KEYS, o las viejas, SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY. Las funciones usan las que haya.)
 4. Devoluciones automáticas cada 10 minutos (SQL Editor, activar antes la extensión "pg_net"):
       select cron.schedule('tt-refunds', '*/10 * * * *', $$
         select net.http_post(url := 'https://TU-PROYECTO.supabase.co/functions/v1/mp-refunds',
