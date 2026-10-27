@@ -1,7 +1,7 @@
 // Crea el cobro en Mercado Pago, a nombre del prestador: la seña (para el prestador) + la comisión de TuTiempo
 // que paga el cliente aparte (marketplace_fee: va directo a la cuenta de TuTiempo).
 // El monto SIEMPRE sale de la base (turnos en estado 'hold' del usuario), nunca del navegador.
-import { accountToken, activeAccount, admin, caller, cors, env, json, MP_API } from "../_shared/util.ts";
+import { accountToken, activeAccount, admin, caller, cors, env, json, MP_API, must } from "../_shared/util.ts";
 
 Deno.serve(async (req) => {
   const h = cors(req);
@@ -15,10 +15,9 @@ Deno.serve(async (req) => {
     if (!ids.length) return json({ error: "bad_request" }, 400, h);
 
     const db = admin();
-    const { data: rows, error } = await db.from("bookings")
+    const rows = must("leer las reservas", await db.from("bookings")
       .select("id, provider_id, client_id, status, deposit, client_fee, paid_wallet, price, service_name, hold_expires_at")
-      .in("id", ids);
-    if (error) throw error;
+      .in("id", ids));
     const ok = (rows ?? []).filter((b) => b.client_id === user.id && b.status === "hold" && new Date(b.hold_expires_at) > new Date());
     if (ok.length !== ids.length) return json({ error: "hold_expired" }, 409, h);
     const pid = ok[0].provider_id;
@@ -31,7 +30,8 @@ Deno.serve(async (req) => {
 
     // Se cobra con la llave de la cuenta ACTIVA del prestador: la seña entra directo a su cuenta de Mercado Pago.
     // Una cuenta desconectada (solo devoluciones y consultas) nunca crea cobros.
-    const [acc, { data: prov }] = await Promise.all([activeAccount(db, pid), db.from("providers").select("name").eq("id", pid).single()]);
+    const [acc, provRes] = await Promise.all([activeAccount(db, pid), db.from("providers").select("name").eq("id", pid).single()]);
+    const prov = must("leer el nombre del prestador", provRes);
     const token = await accountToken(db, acc, { charge: true });
     if (!acc || !token) return json({ error: "provider_mp_not_connected" }, 409, h);
 
@@ -64,10 +64,12 @@ Deno.serve(async (req) => {
     });
     const mp = await r.json();
     if (!r.ok) { console.error("MP preference error", r.status, mp); return json({ error: "mp_error" }, 502, h); }
-    await db.from("bookings").update({ mp_preference_id: mp.id }).in("id", ids);
+    // solo referencia: si no se guarda, el pago igual se confirma por external_reference (se loguea y sigue)
+    const up = await db.from("bookings").update({ mp_preference_id: mp.id }).in("id", ids);
+    if (up.error) console.error("db: falló guardar mp_preference_id", JSON.stringify({ code: up.error.code, message: up.error.message }));
     return json({ init_point: mp.init_point }, 200, h);
   } catch (e) {
-    console.error(e);
+    console.error("mp-create-preference", e instanceof Error ? e.message : e);
     return json({ error: "server_error" }, 500, h);
   }
 });

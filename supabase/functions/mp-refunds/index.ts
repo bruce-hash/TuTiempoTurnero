@@ -4,7 +4,7 @@
 // primer fallo aparece en "Para revisar" del panel admin.
 // La llama pg_cron cada 10 minutos (public.run_refunds) con CRON_SECRET, que el cron lee de Vault; cualquier otra
 // llamada se rechaza (ni la service_role sirve: la clave del cron solo dispara esto).
-import { accountById, accountToken, admin, cronOnly, json, MP_API, type MpAccount } from "../_shared/util.ts";
+import { accountById, accountToken, admin, cronOnly, json, MP_API, must, type MpAccount } from "../_shared/util.ts";
 
 Deno.serve(async (req) => {
   const denied = cronOnly(req);
@@ -39,11 +39,12 @@ Deno.serve(async (req) => {
     if (result.ok) done++; else { failed++; console.error("refund", rf.id, result.error); }
   }
   // llaves que ya no hacen falta para devoluciones ni consultas: se borran (purge_mp_accounts)
-  await db.rpc("purge_mp_accounts");
+  const pg = await db.rpc("purge_mp_accounts");
+  if (pg.error) console.error("db: falló purge_mp_accounts", JSON.stringify({ code: pg.error.code, message: pg.error.message }));
   // llaves que vencen en menos de 15 días (activas y de solo devoluciones): se renuevan ahora
   const soon = new Date(Date.now() + 15 * 864e5).toISOString();
-  const { data: exp } = await db.from("mp_accounts").select("id, provider_id, mp_user_id, status, access_token, refresh_token, expires_at")
-    .neq("status", "purged").lt("expires_at", soon).not("refresh_token", "is", null).limit(20);
+  const exp = must("leer las llaves por vencer", await db.from("mp_accounts").select("id, provider_id, mp_user_id, status, access_token, refresh_token, expires_at")
+    .neq("status", "purged").lt("expires_at", soon).not("refresh_token", "is", null).limit(20));
   for (const acc of (exp as MpAccount[]) ?? []) await accountToken(db, acc);
   return json({ done, failed });
 });
