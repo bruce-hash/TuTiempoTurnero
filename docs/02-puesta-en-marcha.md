@@ -50,6 +50,8 @@ publishable/secret (`SUPABASE_PUBLISHABLE_KEYS`, `SUPABASE_SECRET_KEYS`) y firma
 (H31). En `config.js`, `supabaseAnonKey` es la clave **publishable** (`sb_publishable_…`) o, en un proyecto viejo, la anon.
 Si "Conectar Mercado Pago" da `login_required`, el motivo exacto está en Edge Functions → mp-oauth → Logs
 (`caller: rechazado (…)`).
+Si una función responde 500, el log dice qué consulta falló y por qué (`db: falló …`, por ejemplo `42501 permission
+denied`: falta una migración, H32).
 
 **5. Deploy de las 6 funciones:**
 ```bash
