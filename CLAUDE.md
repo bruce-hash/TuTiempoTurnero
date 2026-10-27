@@ -52,6 +52,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   plano) y `mp-refunds`, `dni-cleanup` y `email-send` solo aceptan `CRON_SECRET`, que el cron lee de Vault. `MP_API_URL` y
   `EMAIL_API_URL` (opcionales, solo pruebas) cambian la API de Mercado Pago y la de Resend; sin esos secretos, las reales.
   `email-send` usa `RESEND_API_KEY`, `EMAIL_FROM` y `EMAIL_REPLY_TO`; la cola es `email_outbox` (D25).
+  Claves del proyecto: `projectKey()` usa las nuevas (`SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS`) si están, si no las
+  viejas; `caller()` verifica la sesión ES256/RS256 con el JWKS del proyecto y la HS256 con Auth (H31). Ninguna función usa `verify_jwt`.
 - `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: prestadores ficticios. Solo para pruebas locales (pide `set tt.ejemplos = 'si'` antes).
 - `pruebas/`: pruebas del cliente; `unidad.mjs` (reglas de los formularios sin navegador); `test_db.py`, `test_cobros.py` (base: pagos,
   devoluciones, cuentas de MP) y `test_emails.py` (avisos por email: cola, reintentos, opción del cliente);

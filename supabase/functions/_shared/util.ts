@@ -23,19 +23,138 @@ export function cors(req: Request): Record<string, string> {
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
 
+// ---------- Claves del proyecto ----------
+// Proyectos nuevos: claves publishable/secret (sb_publishable_…, sb_secret_…), que Supabase inyecta en las funciones como
+// JSON por nombre en SUPABASE_PUBLISHABLE_KEYS y SUPABASE_SECRET_KEYS ({"default":"sb_…"}); las viejas (SUPABASE_ANON_KEY,
+// SUPABASE_SERVICE_ROLE_KEY) pueden estar desactivadas. Proyectos viejos: solo las viejas. Se usa la nueva si está.
+function namedKey(raw: string): string {
+  const v = raw.trim();
+  if (!v) return "";
+  if (!v.startsWith("{") && !v.startsWith("[")) return v;
+  try {
+    const o = JSON.parse(v);
+    if (Array.isArray(o)) return typeof o[0] === "string" ? o[0] : "";
+    if (o && typeof o === "object") {
+      const k = typeof o.default === "string" ? o.default : Object.values(o).find((x) => typeof x === "string");
+      return (k as string) ?? "";
+    }
+  } catch { /* no es JSON */ }
+  return "";
+}
+export function projectKey(kind: "publishable" | "secret"): string {
+  const fresh = namedKey(Deno.env.get(kind === "secret" ? "SUPABASE_SECRET_KEYS" : "SUPABASE_PUBLISHABLE_KEYS") ?? "");
+  const legacy = (Deno.env.get(kind === "secret" ? "SUPABASE_SERVICE_ROLE_KEY" : "SUPABASE_ANON_KEY") ?? "").trim();
+  const key = fresh || legacy;
+  if (!key) throw new Error(kind === "secret" ? "Falta SUPABASE_SECRET_KEYS o SUPABASE_SERVICE_ROLE_KEY" : "Falta SUPABASE_PUBLISHABLE_KEYS o SUPABASE_ANON_KEY");
+  return key;
+}
+
 // Cliente con permisos totales: NUNCA se expone al navegador.
 export const admin = (): SupabaseClient =>
-  createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false } });
+  createClient(env("SUPABASE_URL"), projectKey("secret"), { auth: { persistSession: false } });
 
-// Usuario que llama (verifica el JWT de Supabase Auth).
-export async function caller(req: Request) {
+// ---------- Usuario que llama ----------
+// Verifica el JWT de Supabase Auth que manda el navegador (supabase-js: Authorization: Bearer <access_token>).
+//  - Firmado con las claves asimétricas (ES256/RS256, proyectos nuevos): se verifica acá con las claves públicas del
+//    proyecto (SUPABASE_JWKS si Supabase la inyecta, si no /auth/v1/.well-known/jwks.json), sin depender de una apikey.
+//  - HS256 (proyectos viejos, secreto compartido): se lo pregunta a Auth (/auth/v1/user) con la clave publishable o anon.
+// Si rechaza, deja en el log el motivo exacto, nunca el token.
+export type Caller = { id: string; email: string | null };
+const b64urlBytes = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));
+const b64urlJson = (s: string) => JSON.parse(new TextDecoder().decode(b64urlBytes(s)));
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type Jwk = { kty?: string; kid?: string; alg?: string; crv?: string; x?: string; y?: string; n?: string; e?: string };
+let jwksCache: { at: number; keys: Jwk[] } | null = null;
+async function jwks(force = false): Promise<Jwk[]> {
+  const injected = Deno.env.get("SUPABASE_JWKS") ?? "";
+  if (injected.trim()) {
+    try {
+      const o = JSON.parse(injected);
+      const keys = Array.isArray(o) ? o : o?.keys;
+      if (Array.isArray(keys) && keys.length) return keys;
+    } catch { /* formato desconocido: se pide al proyecto */ }
+  }
+  if (!force && jwksCache && Date.now() - jwksCache.at < 10 * 60 * 1000) return jwksCache.keys;
+  const r = await fetch(`${env("SUPABASE_URL")}/auth/v1/.well-known/jwks.json`);
+  if (!r.ok) throw new Error(`jwks ${r.status}`);
+  const keys = ((await r.json())?.keys ?? []) as Jwk[];
+  jwksCache = { at: Date.now(), keys };
+  return keys;
+}
+async function verifyAsymmetric(alg: string, kid: string | undefined, signed: string, sig: Uint8Array): Promise<"ok" | "bad_signature" | "unknown_kid"> {
+  for (const force of [false, true]) {   // una clave nueva (rotación): se vuelve a pedir la lista una vez
+    const keys = (await jwks(force)).filter((k) => (!kid || k.kid === kid) && (alg === "ES256" ? k.kty === "EC" : k.kty === "RSA"));
+    if (!keys.length) continue;
+    for (const k of keys) {
+      const jwk = alg === "ES256" ? { kty: "EC", crv: k.crv ?? "P-256", x: k.x, y: k.y } : { kty: "RSA", n: k.n, e: k.e };
+      const params = alg === "ES256" ? { name: "ECDSA", namedCurve: "P-256" } : { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" };
+      const key = await crypto.subtle.importKey("jwk", jwk, params, false, ["verify"]);
+      const good = await crypto.subtle.verify(alg === "ES256" ? { name: "ECDSA", hash: "SHA-256" } : "RSASSA-PKCS1-v1_5", key, sig, new TextEncoder().encode(signed));
+      if (good) return "ok";
+    }
+    return "bad_signature";
+  }
+  return "unknown_kid";
+}
+
+export async function caller(req: Request): Promise<Caller | null> {
+  const reject = (reason: string, info: Record<string, unknown> = {}) => {
+    console.warn(`caller: rechazado (${reason})`, JSON.stringify(info));
+    return null;
+  };
   const auth = req.headers.get("Authorization") ?? "";
-  if (!auth.startsWith("Bearer ")) return null;
-  const c = createClient(env("SUPABASE_URL"), env("SUPABASE_ANON_KEY"), {
-    global: { headers: { Authorization: auth } }, auth: { persistSession: false },
-  });
-  const { data, error } = await c.auth.getUser();
-  return error ? null : data.user;
+  if (!auth) return reject("sin_authorization");
+  if (!/^Bearer /i.test(auth)) return reject("authorization_sin_bearer");
+  const token = auth.slice(7).trim();
+  const parts = token.split(".");
+  // sin sesión, supabase-js manda la clave publishable (no es un JWT) o la anon (un JWT con role anon)
+  if (parts.length !== 3) return reject("no_es_jwt", { prefijo: token.startsWith("sb_") ? token.split("_").slice(0, 2).join("_") : "otro" });
+  let header: Record<string, unknown>, claims: Record<string, unknown>;
+  try {
+    header = b64urlJson(parts[0]);
+    claims = b64urlJson(parts[1]);
+  } catch {
+    return reject("jwt_ilegible");
+  }
+  const alg = String(header.alg ?? ""), kid = typeof header.kid === "string" ? header.kid : undefined;
+  const now = Math.floor(Date.now() / 1000), exp = Number(claims.exp);
+  const info = { alg, kid, role: claims.role ?? null, iss: claims.iss ?? null, exp_en_s: Number.isFinite(exp) ? exp - now : null };
+  if (claims.role !== "authenticated") return reject("rol_no_authenticated (¿sin sesión?)", info);
+  if (!Number.isFinite(exp) || exp <= now) return reject("vencido", info);
+  if (typeof claims.sub !== "string" || !UUID.test(claims.sub)) return reject("sin_sub", info);
+
+  if (alg === "ES256" || alg === "RS256") {
+    // el emisor es el Auth del proyecto (con dominio propio puede no ser SUPABASE_URL: la firma es la que manda)
+    if (typeof claims.iss !== "string" || !/\/auth\/v1$/.test(claims.iss)) return reject("emisor_desconocido", info);
+    let res: string;
+    try {
+      res = await verifyAsymmetric(alg, kid, `${parts[0]}.${parts[1]}`, b64urlBytes(parts[2]));
+    } catch (e) {
+      res = "jwks_no_disponible";
+      console.warn("caller: no se pudieron leer las claves públicas del proyecto; se le pregunta a Auth", String((e as Error)?.message ?? e));
+    }
+    if (res === "ok") return { id: claims.sub, email: typeof claims.email === "string" ? claims.email : null };
+    if (res !== "jwks_no_disponible") return reject(res === "unknown_kid" ? "kid_desconocido" : "firma_invalida", info);
+  } else if (alg !== "HS256") {
+    return reject("alg_no_soportado", info);
+  }
+
+  // HS256 (o sin las claves públicas): Auth dice si el token es válido
+  let apikey: string;
+  try {
+    apikey = projectKey("publishable");
+  } catch (e) {
+    return reject("sin_clave_publishable_ni_anon", { ...info, detalle: String((e as Error).message) });
+  }
+  const r = await fetch(`${env("SUPABASE_URL")}/auth/v1/user`, { headers: { apikey, Authorization: `Bearer ${token}` } });
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    return reject(`auth_${r.status}`, { ...info, apikey: apikey.startsWith("sb_") ? "publishable" : "anon", error_code: b?.error_code ?? b?.code ?? null, msg: String(b?.msg ?? b?.message ?? "").slice(0, 120) });
+  }
+  const u = await r.json().catch(() => null);
+  if (!u?.id) return reject("auth_sin_usuario", info);
+  return { id: String(u.id), email: u.email ?? null };
 }
 
 export async function hmacHex(secret: string, msg: string): Promise<string> {

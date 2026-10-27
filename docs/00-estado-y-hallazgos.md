@@ -297,6 +297,17 @@ cuenta, ingresar (contraseña y código) y recuperar contraseña, `options.captc
 `challenges.cloudflare.com`, la clave del sitio en `config.js` y prueba en el e2e (el server del e2e tendría que
 validar el token como Supabase).
 
+### H31 · Alta · Proyectos nuevos de Supabase: las funciones no reconocían la sesión (resuelto)
+En un proyecto creado con las claves nuevas (publishable/secret y sesiones firmadas con ECC P-256), "Conectar Mercado
+Pago" daba `401 {"error":"login_required"}` con el prestador logueado. El navegador mandaba bien la sesión (supabase-js
+2.45.4: `Authorization: Bearer <access_token>`), pero `caller()` la validaba preguntándole a Auth con
+`SUPABASE_ANON_KEY`, la clave vieja, que Auth ya no acepta; y `admin()` usaba `SUPABASE_SERVICE_ROLE_KEY`, que tampoco.
+**Arreglo:** `caller()` verifica los tokens ES256/RS256 con las claves públicas del proyecto (`SUPABASE_JWKS` o
+`/auth/v1/.well-known/jwks.json`); los HS256 (proyectos viejos) se los sigue preguntando a Auth, con la clave publishable
+si está o la anon. `admin()` usa `SUPABASE_SECRET_KEYS` si está o la service_role. Cada rechazo deja en el log el motivo
+(`caller: rechazado (vencido)`, `firma_invalida`, `no_es_jwt`, `auth_401`…), nunca el token. `mp-create-preference` pasa
+a `--no-verify-jwt` (la sesión la valida la función). Prueba: `test:funciones` (proyecto nuevo simulado y viejo).
+
 ## Mejoras futuras (no son hallazgos; después del lanzamiento)
 
 ### F01 · Vista previa de los links de prestadores (WhatsApp, Instagram)

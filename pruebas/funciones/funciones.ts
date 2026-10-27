@@ -64,6 +64,7 @@ for (const [k, v] of Object.entries({
 })) Deno.env.set(k, v);
 const handlers: Record<string, (req: Request) => Promise<Response>> = {};
 let loading = "";
+const realServe = Deno.serve.bind(Deno);   // el de verdad, para los servidores falsos de la prueba
 (Deno as any).serve = (h: any) => { handlers[loading] = typeof h === "function" ? h : h.handler; return { finished: Promise.resolve(), shutdown: async () => {} }; };
 for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "dni-cleanup", "email-send"]) {
   loading = n;
@@ -538,6 +539,128 @@ ok("…y todos los links son del sitio: el del aviso, el único botón (Ver mis 
    && (mHtml.match(/display:inline-block/g) ?? []).length === 1 && hrefs.includes("https://tutiempo.com.ar/mis-turnos"), JSON.stringify(hrefs));
 await q("update providers set name = $1, address = $2 where id = $3", [nombre0, dir0, pid]);
 await q("update message_templates set body = $1 where provider_id = $2 and key = 'rev'", [plantilla0, pid]);
+
+// ---------- Usuario que llama: proyecto nuevo (claves asimétricas y publishable/secret) y viejo (HS256) ----------
+// Un proyecto nuevo firma las sesiones con ES256 y publica las claves en /auth/v1/.well-known/jwks.json; las claves
+// viejas (anon, service_role) pueden estar desactivadas: Auth las rechaza. Proyecto simulado delante del e2e_server.
+{
+  const PUB = "sb_publishable_prueba";
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]) as CryptoKeyPair;
+  const other = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]) as CryptoKeyPair;
+  const pubJwk = { ...(await crypto.subtle.exportKey("jwk", pair.publicKey)), kid: "k-nueva", alg: "ES256", use: "sig" };
+  let jwksUp = true;
+  const authCalls: string[] = [];
+  const nuevo = realServe({ port: 0, hostname: "127.0.0.1", onListen: () => {} }, async (req) => {
+    const u = new URL(req.url);
+    if (u.pathname === "/auth/v1/.well-known/jwks.json") return jwksUp ? Response.json({ keys: [pubJwk] }) : new Response("caído", { status: 503 });
+    if (u.pathname === "/auth/v1/user") {
+      const key = req.headers.get("apikey") ?? "";
+      authCalls.push(key.startsWith("sb_") ? "publishable" : "vieja");
+      if (key !== PUB) return Response.json({ message: "Legacy API keys are disabled" }, { status: 401 });
+      const tok = (req.headers.get("Authorization") ?? "").slice(7);
+      try {
+        const c = JSON.parse(atob(tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        return Response.json({ id: c.sub, email: c.email ?? null });
+      } catch { return Response.json({ msg: "bad_jwt" }, { status: 403 }); }
+    }
+    // el resto (PostgREST) va al e2e_server de siempre
+    return await fetch(BASE + u.pathname + u.search, { method: req.method, headers: req.headers, body: req.body });
+  });
+  const NUEVO = `http://127.0.0.1:${nuevo.addr.port}`;
+  async function es256(payload: Record<string, unknown>, key = pair.privateKey, kid = "k-nueva") {
+    const h = b64u(JSON.stringify({ alg: "ES256", typ: "JWT", kid }));
+    const p = b64u(JSON.stringify({ iss: `${NUEVO}/auth/v1`, aud: "authenticated", role: "authenticated", exp: Math.floor(Date.now() / 1000) + 3600, ...payload }));
+    const s = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(`${h}.${p}`)));
+    return `${h}.${p}.${b64u(s)}`;
+  }
+  const saved = Object.fromEntries(["SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEYS", "SUPABASE_SECRET_KEYS", "SUPABASE_JWKS"].map((k) => [k, Deno.env.get(k)]));
+  const restore = () => { for (const [k, v] of Object.entries(saved)) v === undefined ? Deno.env.delete(k) : Deno.env.set(k, v); };
+  // las claves viejas siguen en el entorno (SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY), pero Auth ya no las acepta
+  Deno.env.set("SUPABASE_URL", NUEVO);
+  Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: PUB }));
+  Deno.env.set("SUPABASE_SECRET_KEYS", JSON.stringify({ default: SERVICE }));   // en la prueba, la "secreta" es el JWT del e2e
+  const logs: string[] = [];
+  const warn0 = console.warn;
+  console.warn = (...a: unknown[]) => { logs.push(a.map(String).join(" ")); };
+  const post = (name: string, auth: string | null) => fn(name, new Request(`https://fn.test/functions/v1/${name}`, {
+    method: "POST", headers: { ...(auth ? { Authorization: auth } : {}), Origin: SITE, "Content-Type": "application/json" }, body: "{}" }));
+  try {
+    const vieja = await fetch(`${NUEVO}/auth/v1/user`, { headers: { apikey: Deno.env.get("SUPABASE_ANON_KEY")!, Authorization: `Bearer ${await es256({ sub: owner })}` } });
+    await vieja.body?.cancel();
+    ok("proyecto nuevo (simulado): Auth rechaza la clave anon vieja, como en el proyecto de prueba (401)", vieja.status === 401);
+
+    const tok = await es256({ sub: owner, email: "prov@fn.test" });
+    authCalls.length = 0;
+    let rr = await post("mp-oauth", `Bearer ${tok}`);
+    let jj = await body(rr);
+    ok("proyecto nuevo: Conectar Mercado Pago con una sesión ES256 devuelve la URL de autorización (antes: 401 login_required)",
+       rr.status === 200 && String(jj.url).startsWith("https://auth.mercadopago.com/authorization"), `${rr.status} ${JSON.stringify(jj)}`);
+    ok("…la firma se verifica con las claves públicas del proyecto, sin preguntarle a Auth con una apikey", authCalls.length === 0, authCalls.join(","));
+    rr = await post("mp-create-preference", `Bearer ${tok}`);
+    jj = await body(rr);
+    ok("proyecto nuevo: mp-create-preference reconoce al usuario (pasa a validar el pedido: 400 bad_request, no 401)", rr.status === 400 && jj.error === "bad_request", `${rr.status} ${JSON.stringify(jj)}`);
+
+    // rechazos, cada uno con su motivo en el log
+    const cases: [string, string | null, string][] = [
+      ["sin Authorization", null, "sin_authorization"],
+      ["con la clave publishable (sin sesión)", `Bearer ${PUB}`, "no_es_jwt"],
+      ["con la clave anon (JWT con role anon)", `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`, "rol_no_authenticated"],
+      ["vencido", `Bearer ${await es256({ sub: owner, exp: Math.floor(Date.now() / 1000) - 60 })}`, "vencido"],
+      ["firmado con otra clave", `Bearer ${await es256({ sub: owner }, other.privateKey)}`, "firma_invalida"],
+      ["con un kid que el proyecto no tiene", `Bearer ${await es256({ sub: owner }, other.privateKey, "k-ajena")}`, "kid_desconocido"],
+      ["de otro emisor", `Bearer ${await es256({ sub: owner, iss: "https://otro.test" })}`, "emisor_desconocido"],
+      ["alg none", `Bearer ${b64u(JSON.stringify({ alg: "none" }))}.${b64u(JSON.stringify({ sub: owner, role: "authenticated", exp: Math.floor(Date.now() / 1000) + 60 }))}.`, "alg_no_soportado"],
+    ];
+    for (const [name, auth, reason] of cases) {
+      logs.length = 0;
+      const res = await post("mp-oauth", auth);
+      const b = await body(res);
+      const line = logs.find((l) => l.startsWith("caller: rechazado")) ?? "";
+      const secret = auth ? auth.slice(7) : "";
+      const sig = secret.split(".")[2] ?? "";
+      ok(`rechaza ${name}: 401 login_required y el log dice "${reason}" sin el token`,
+         res.status === 401 && b.error === "login_required" && line.includes(`(${reason}`)
+         && (!secret || (!line.includes(secret) && (sig.length < 8 || !line.includes(sig)))), `${res.status} ${line}`);
+    }
+
+    // SUPABASE_JWKS inyectada: sirve aunque el endpoint de claves no responda
+    jwksUp = false;
+    Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [pubJwk] }));
+    rr = await post("mp-oauth", `Bearer ${await es256({ sub: owner })}`);
+    ok("con SUPABASE_JWKS (inyectada por Supabase) no hace falta pedir las claves", rr.status === 200, String(rr.status));
+    await rr.body?.cancel();
+    Deno.env.delete("SUPABASE_JWKS");
+
+    // clave nueva que todavía no está en la lista guardada y el endpoint caído: se le pregunta a Auth con la publishable
+    authCalls.length = 0;
+    rr = await post("mp-oauth", `Bearer ${await es256({ sub: owner }, pair.privateKey, "k-rotada")}`);
+    ok("si no se pueden leer las claves públicas, le pregunta a Auth con la clave publishable",
+       rr.status === 200 && authCalls.length === 1 && authCalls[0] === "publishable", `${rr.status} ${authCalls.join(",")}`);
+    await rr.body?.cancel();
+    jwksUp = true;
+
+    // HS256 en un proyecto con claves nuevas: Auth con la publishable
+    authCalls.length = 0;
+    rr = await post("mp-oauth", `Bearer ${await jwt({ sub: owner, role: "authenticated" })}`);
+    ok("sesión HS256 con claves nuevas: le pregunta a Auth con la publishable y anda", rr.status === 200 && authCalls[0] === "publishable", `${rr.status} ${authCalls.join(",")}`);
+    await rr.body?.cancel();
+
+    // qué clave usa cada cliente
+    ok("projectKey: la nueva por nombre (default) antes que la vieja", utilMod.projectKey("publishable") === PUB && utilMod.projectKey("secret") === SERVICE);
+    Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", "{}");
+    Deno.env.set("SUPABASE_SECRET_KEYS", "");
+    ok("projectKey: sin claves nuevas, las viejas (proyecto viejo)", utilMod.projectKey("publishable") === Deno.env.get("SUPABASE_ANON_KEY") && utilMod.projectKey("secret") === SERVICE);
+  } finally {
+    console.warn = warn0;
+    restore();
+    await nuevo.shutdown();
+  }
+  // proyecto viejo (HS256, solo claves viejas): sigue igual (todo lo de arriba ya lo usó)
+  const rr = await fn("mp-oauth", new Request("https://fn.test/functions/v1/mp-oauth", {
+    method: "POST", headers: { Authorization: `Bearer ${await jwt({ sub: owner, role: "authenticated" })}`, Origin: SITE } }));
+  ok("proyecto viejo (HS256 y clave anon): Conectar Mercado Pago sigue andando", rr.status === 200, String(rr.status));
+  await rr.body?.cancel();
+}
 
 const cfg = fileURLToPath(new URL("./deno.json", import.meta.url));
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;

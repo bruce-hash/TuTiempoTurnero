@@ -1,7 +1,9 @@
 # Configuración de las Edge Functions para `supabase functions deploy`.
-# Las que llama Mercado Pago (o el navegador al volver de MP) no llevan JWT de usuario.
+# Ninguna usa la verificación del gateway (verify_jwt): las que llama el navegador validan la sesión adentro (caller() en
+# _shared/util.ts, con las claves asimétricas de los proyectos nuevos o las HS256 de los viejos) y las demás no llevan JWT
+# de usuario (Mercado Pago, la vuelta de MP en el navegador, el cron con CRON_SECRET).
 [functions.mp-create-preference]
-verify_jwt = true
+verify_jwt = false
 
 [functions.mp-webhook]
 verify_jwt = false

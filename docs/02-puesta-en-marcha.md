@@ -44,10 +44,16 @@ supabase secrets set SITE_URL=https://<sitio> MP_CLIENT_ID=... MP_CLIENT_SECRET=
 ```
 `CRON_SECRET` es la **misma** que cargaste en Vault. **Nunca** cargues `MP_API_URL`, `EMAIL_API_URL` ni `EMAIL_GAP_MS`:
 existen solo para las pruebas.
+Las claves del proyecto **no** se cargan: Supabase las inyecta en las funciones. Un proyecto nuevo trae las claves
+publishable/secret (`SUPABASE_PUBLISHABLE_KEYS`, `SUPABASE_SECRET_KEYS`) y firma las sesiones con claves asimétricas
+(ECC/RSA); uno viejo, `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` y HS256. Las funciones usan las nuevas si están
+(H31). En `config.js`, `supabaseAnonKey` es la clave **publishable** (`sb_publishable_…`) o, en un proyecto viejo, la anon.
+Si "Conectar Mercado Pago" da `login_required`, el motivo exacto está en Edge Functions → mp-oauth → Logs
+(`caller: rechazado (…)`).
 
 **5. Deploy de las 6 funciones:**
 ```bash
-supabase functions deploy mp-create-preference
+supabase functions deploy mp-create-preference --no-verify-jwt
 supabase functions deploy mp-webhook --no-verify-jwt
 supabase functions deploy mp-oauth --no-verify-jwt
 supabase functions deploy mp-refunds --no-verify-jwt
@@ -133,7 +139,7 @@ bloque al siguiente en un entorno que ya estaba armado.
    supabase link --project-ref <proyecto-prueba>
    supabase secrets set SITE_URL=https://prueba.tutiempo.com.ar MP_CLIENT_ID=... MP_CLIENT_SECRET=... MP_WEBHOOK_SECRET=... \
      MP_OWNER_USER_ID=... CRON_SECRET=... MP_TOKENS_KEY=...
-   supabase functions deploy mp-create-preference
+   supabase functions deploy mp-create-preference --no-verify-jwt
    supabase functions deploy mp-webhook --no-verify-jwt
    supabase functions deploy mp-oauth --no-verify-jwt
    supabase functions deploy mp-refunds --no-verify-jwt
