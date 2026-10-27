@@ -662,6 +662,80 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
   await rr.body?.cancel();
 }
 
+// ---------- H32: un error de la base nunca es "no es prestador" (ni "no hay reservas", ni "no hay cuenta") ----------
+// La base de la prueba es como un proyecto nuevo (supabase_emulation.sql sin permisos por defecto): service_role tiene
+// solo los permisos que dan las migraciones. Sacándole uno se ve qué responde cada función.
+{
+  const logs: string[] = [];
+  const e0 = console.error, w0 = console.warn;
+  console.error = (...a: unknown[]) => { logs.push(a.map(String).join(" ")); };
+  console.warn = (...a: unknown[]) => { logs.push(a.map(String).join(" ")); };
+  const asUser = async (uid: string) => ({ Authorization: `Bearer ${await jwt({ sub: uid, role: "authenticated" })}`, Origin: SITE, "Content-Type": "application/json" });
+  const oauthPost = async (uid: string) => fn("mp-oauth", new Request("https://fn.test/functions/v1/mp-oauth", { method: "POST", headers: await asUser(uid) }));
+  const without = async (grant: string, table: string, run: () => Promise<Response>) => {
+    await db.query(`revoke ${grant} on public.${table} from service_role`);
+    try { return await run(); } finally { await db.query(`grant ${grant} on public.${table} to service_role`); }
+  };
+  try {
+    let res = await oauthPost(owner);
+    ok("H32: con los permisos de la migración, Conectar Mercado Pago anda (proyecto nuevo)", res.status === 200, String(res.status));
+    await res.body?.cancel();
+
+    logs.length = 0;
+    res = await without("select", "providers", () => oauthPost(owner));
+    let b = await body(res);
+    ok("H32: sin permiso sobre providers responde 500 server_error, no 403 not_a_provider",
+       res.status === 500 && b.error === "server_error", `${res.status} ${JSON.stringify(b)}`);
+    ok("…y el log dice qué consulta falló y por qué (42501, permission denied)",
+       logs.some((l) => l.includes("db: falló buscar el prestador del usuario") && l.includes("42501") && l.includes("permission denied")), logs.join(" | "));
+
+    logs.length = 0;
+    res = await without("insert", "mp_oauth_states", () => oauthPost(owner));
+    b = await body(res);
+    ok("H32: si no se puede guardar el state del OAuth, 500 (no una URL que después falla)", res.status === 500 && logs.some((l) => l.includes("guardar el state del OAuth")), `${res.status} ${logs.join(" | ")}`);
+
+    logs.length = 0;
+    const nobody = crypto.randomUUID();
+    await q("insert into auth.users (id, email) values ($1, 'nadie@fn.test')", [nobody]);
+    res = await oauthPost(nobody);
+    b = await body(res);
+    ok("H32: un usuario que de verdad no es prestador: 403 not_a_provider, con el motivo en el log",
+       res.status === 403 && b.error === "not_a_provider" && logs.some((l) => l.includes("mp-oauth: not_a_provider") && l.includes(nobody)), `${res.status} ${logs.join(" | ")}`);
+
+    logs.length = 0;
+    // una reserva en hold de la clienta (directo en la base: a esta altura el prestador ya desconectó Mercado Pago)
+    const ids = [Number(await one("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, hold_expires_at) "
+      + "values ($1, $2, $3, 'Ana', 'Corte', 'app', 'hold', now() + interval '20 days', now() + interval '20 days 30 minutes', 10000, 5000, now() + interval '10 minutes') returning id", [pid, sv, cli]))];
+    const cliHeaders = await asUser(cli);
+    res = await without("select", "bookings", () => fn("mp-create-preference", new Request("https://fn.test/functions/v1/mp-create-preference", {
+      method: "POST", headers: cliHeaders, body: JSON.stringify({ booking_ids: ids }) })));
+    b = await body(res);
+    ok("H32: sin permiso sobre bookings, mp-create-preference responde 500 (no hold_expired) y lo loguea",
+       res.status === 500 && b.error === "server_error" && logs.some((l) => l.includes("leer las reservas") && l.includes("42501")), `${res.status} ${JSON.stringify(b)} ${logs.join(" | ")}`);
+    await q("delete from bookings where id = $1", [ids[0]]);
+
+    logs.length = 0;
+    res = await without("select", "mp_accounts", () => webhook(pid, null, "999000111"));
+    ok("H32: si el webhook no puede leer la cuenta, 500 (Mercado Pago reintenta), no 'proveedor desconocido'",
+       res.status === 500 && logs.some((l) => /db: falló leer la(s)? cuenta/.test(l) && l.includes("42501")), `${res.status} ${logs.join(" | ")}`);
+    await res.body?.cancel();
+
+    // las del cron usan solo funciones de la base: sin permisos sobre las tablas, igual andan
+    const tablesOfCron = ["refunds", "payments"];
+    for (const t of tablesOfCron) await db.query(`revoke all on public.${t} from service_role`);
+    try {
+      const rr = await refundsRun();
+      ok("H32: mp-refunds no lee tablas directo (todo por funciones de la base)", rr.status === 200, String(rr.status));
+      await rr.body?.cancel();
+    } finally {
+      await db.query("grant select, insert, update on public.payments, public.refunds to service_role");
+    }
+  } finally {
+    console.error = e0;
+    console.warn = w0;
+  }
+}
+
 const cfg = fileURLToPath(new URL("./deno.json", import.meta.url));
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;
 const leer = async (extra: Record<string, string>) => {
