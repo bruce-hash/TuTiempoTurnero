@@ -72,7 +72,9 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 
 - **Dinero:** montos enteros en pesos. Precios, señas, comisión y descuentos los calcula la base; el navegador solo muestra.
   Un pago aprobado por Mercado Pago **nunca** puede quedar sin turno ni sin devolución registrada.
-- **Seguridad:** RLS en toda tabla nueva; permisos cerrados por defecto y abiertos explícitamente; funciones
+- **Seguridad:** RLS en toda tabla nueva; permisos cerrados por defecto y abiertos explícitamente (los proyectos nuevos de
+  Supabase no dan ninguno: cada tabla nueva lleva sus `grant` a `anon`/`authenticated` y a `service_role` si una función la
+  lee directo, H32); funciones
   `security definer` siempre con `set search_path`. Nada de `service_role` en el frontend.
 - **Hora:** todo "hoy/ahora" en `America/Argentina/Buenos_Aires`, calculado en el servidor o con `NOW()` de la app.
 - **Migraciones nuevas:** archivo nuevo con fecha y hora actuales (`supabase migration new <nombre>` o a mano, por

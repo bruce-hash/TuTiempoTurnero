@@ -6,7 +6,7 @@
 // un cambio de estado (devuelto, contracargo, reclamo), responde 500 para que Mercado Pago lo reintente.
 // Ningún aviso se descarta sin rastro: los que no se procesan quedan en mp_webhook_events (sin datos personales).
 // Desplegar con verify_jwt = false (lo llama Mercado Pago, no un usuario).
-import { accountById, accountToken, admin, env, hmacHex, json, mpClean, providerAccounts, safeEqual, MP_API, type MpAccount } from "../_shared/util.ts";
+import { accountById, accountToken, admin, env, hmacHex, json, mpClean, must, providerAccounts, safeEqual, MP_API, type MpAccount } from "../_shared/util.ts";
 
 const CHANGES = ["refunded", "cancelled", "charged_back", "in_mediation"];
 
@@ -119,6 +119,5 @@ Deno.serve(async (req) => {
 });
 
 async function registered(db: ReturnType<typeof admin>, id: string): Promise<boolean> {
-  const { data } = await db.from("payments").select("id").eq("mp_payment_id", id).maybeSingle();
-  return !!data;
+  return !!must("buscar el pago", await db.from("payments").select("id").eq("mp_payment_id", id).maybeSingle());
 }

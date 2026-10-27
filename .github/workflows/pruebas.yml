@@ -76,6 +76,7 @@ jobs:
         run: |
           createdb tt_mudanza
           psql -v ON_ERROR_STOP=1 -q -d tt_mudanza -f pruebas/supabase_emulation.sql
+          psql -v ON_ERROR_STOP=1 -q -d tt_mudanza -f pruebas/supabase_emulation_proyecto_viejo.sql
           python3 pruebas/test_mudanza.py "host=localhost port=5432 dbname=tt_mudanza user=postgres password=postgres"
 
   frontend:

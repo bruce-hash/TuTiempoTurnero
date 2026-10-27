@@ -53,6 +53,21 @@ export function projectKey(kind: "publishable" | "secret"): string {
 export const admin = (): SupabaseClient =>
   createClient(env("SUPABASE_URL"), projectKey("secret"), { auth: { persistSession: false } });
 
+// ---------- Consultas con la clave del servidor ----------
+// Un error de la base (permiso negado, tabla sin grant en un proyecto nuevo, red) NUNCA se toma como "no hay datos":
+// se loguea el motivo y se corta; la función responde 500 (H32).
+export class DbError extends Error {
+  constructor(public where: string, public code: string) { super(`db: ${where} (${code})`); }
+}
+export function must<T>(where: string, res: { data: T; error: { code?: string; message?: string; hint?: string; details?: string } | null }): T {
+  if (res.error) {
+    const e = res.error;
+    console.error(`db: falló ${where}`, JSON.stringify({ code: e.code ?? null, message: e.message ?? null, hint: e.hint ?? null, details: e.details ?? null }));
+    throw new DbError(where, e.code ?? "error");
+  }
+  return res.data;
+}
+
 // ---------- Usuario que llama ----------
 // Verifica el JWT de Supabase Auth que manda el navegador (supabase-js: Authorization: Bearer <access_token>).
 //  - Firmado con las claves asimétricas (ES256/RS256, proyectos nuevos): se verifica acá con las claves públicas del
@@ -193,17 +208,17 @@ export type MpAccount = {
 const ACCOUNT_COLS = "id, provider_id, mp_user_id, status, access_token, refresh_token, expires_at";
 
 export async function activeAccount(db: SupabaseClient, pid: number): Promise<MpAccount | null> {
-  const { data } = await db.from("mp_accounts").select(ACCOUNT_COLS).eq("provider_id", pid).eq("status", "active").maybeSingle();
+  const data = must("leer la cuenta activa de MP", await db.from("mp_accounts").select(ACCOUNT_COLS).eq("provider_id", pid).eq("status", "active").maybeSingle());
   return (data as MpAccount) ?? null;
 }
 export async function accountById(db: SupabaseClient, id: number): Promise<MpAccount | null> {
-  const { data } = await db.from("mp_accounts").select(ACCOUNT_COLS).eq("id", id).maybeSingle();
+  const data = must("leer la cuenta de MP", await db.from("mp_accounts").select(ACCOUNT_COLS).eq("id", id).maybeSingle());
   return (data as MpAccount) ?? null;
 }
 // Cuentas de un prestador que todavía tienen llave (la activa primero): para avisos viejos que no dicen la cuenta.
 export async function providerAccounts(db: SupabaseClient, pid: number): Promise<MpAccount[]> {
-  const { data } = await db.from("mp_accounts").select(ACCOUNT_COLS).eq("provider_id", pid).neq("status", "purged")
-    .order("status", { ascending: true }).order("connected_at", { ascending: false });
+  const data = must("leer las cuentas de MP del prestador", await db.from("mp_accounts").select(ACCOUNT_COLS).eq("provider_id", pid).neq("status", "purged")
+    .order("status", { ascending: true }).order("connected_at", { ascending: false }));
   return (data as MpAccount[]) ?? [];
 }
 

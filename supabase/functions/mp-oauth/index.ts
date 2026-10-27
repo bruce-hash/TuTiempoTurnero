@@ -2,7 +2,7 @@
 //  POST /mp-oauth            → (usuario logueado) devuelve la URL de autorización.
 //  GET  /mp-oauth?code&state → (vuelve de MP) guarda los tokens y redirige al sitio.
 // Desplegar con verify_jwt = false: el GET lo abre el navegador al volver de MP; el POST valida el usuario adentro.
-import { admin, caller, cors, encryptToken, env, json, MP_API } from "../_shared/util.ts";
+import { admin, caller, cors, encryptToken, env, json, MP_API, must } from "../_shared/util.ts";
 
 const b64url = (a: Uint8Array) => btoa(String.fromCharCode(...a)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
@@ -15,13 +15,17 @@ Deno.serve(async (req) => {
     if (req.method === "POST") {
       const user = await caller(req);
       if (!user) return json({ error: "login_required" }, 401, h);
-      const { data: p } = await db.from("providers").select("id").eq("owner_id", user.id).neq("status", "deleted").maybeSingle();
-      if (!p) return json({ error: "not_a_provider" }, 403, h);
+      // con la clave del servidor: un error (por ejemplo, sin permiso sobre providers) es 500, nunca "no es prestador"
+      const p = must("buscar el prestador del usuario", await db.from("providers").select("id").eq("owner_id", user.id).neq("status", "deleted").maybeSingle());
+      if (!p) {
+        console.warn("mp-oauth: not_a_provider", JSON.stringify({ user: user.id }));
+        return json({ error: "not_a_provider" }, 403, h);
+      }
       const state = crypto.randomUUID();
       // PKCE: verificador secreto que se guarda acá y desafío (SHA-256) que viaja a Mercado Pago
       const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
       const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
-      await db.from("mp_oauth_states").insert({ state, provider_id: p.id, code_verifier: verifier });
+      must("guardar el state del OAuth", await db.from("mp_oauth_states").insert({ state, provider_id: p.id, code_verifier: verifier }));
       const u = new URL("https://auth.mercadopago.com/authorization");
       u.searchParams.set("client_id", env("MP_CLIENT_ID"));
       u.searchParams.set("response_type", "code");
@@ -37,9 +41,10 @@ Deno.serve(async (req) => {
     const code = url.searchParams.get("code") ?? "";
     const state = url.searchParams.get("state") ?? "";
     const site = env("SITE_URL");
-    const { data: st } = await db.from("mp_oauth_states").select("provider_id, created_at, code_verifier").eq("state", state).maybeSingle();
-    await db.from("mp_oauth_states").delete().eq("state", state);
+    const st = must("leer el state del OAuth", await db.from("mp_oauth_states").select("provider_id, created_at, code_verifier").eq("state", state).maybeSingle());
+    must("borrar el state del OAuth", await db.from("mp_oauth_states").delete().eq("state", state));
     if (!st || !code || Date.now() - new Date(st.created_at).getTime() > 15 * 60 * 1000) {
+      console.warn("mp-oauth: vuelta de MP rechazada", JSON.stringify({ motivo: !st ? "state_desconocido" : !code ? "sin_code" : "state_vencido" }));
       return Response.redirect(`${site}/?mp_connected=0`, 302);
     }
     const r = await fetch(`${MP_API}/oauth/token`, {
@@ -69,7 +74,9 @@ Deno.serve(async (req) => {
     if (error) { console.error("mp_connect", error); return Response.redirect(`${site}/?mp_connected=0`, 302); }
     return Response.redirect(`${site}/?mp_connected=1`, 302);
   } catch (e) {
-    console.error(e);
+    console.error("mp-oauth", e instanceof Error ? e.message : e);
+    // la vuelta de MP la abre el navegador: al sitio con el aviso, no un JSON
+    if (req.method === "GET") return Response.redirect(`${env("SITE_URL")}/?mp_connected=0`, 302);
     return json({ error: "server_error" }, 500, h);
   }
 });

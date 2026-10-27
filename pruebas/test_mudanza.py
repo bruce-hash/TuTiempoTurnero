@@ -1,6 +1,7 @@
 """Mudanza de una base de la versión 31 con llaves de Mercado Pago en provider_secrets (texto plano) hasta la última
 migración: después no queda ninguna llave sin cifrar en mp_accounts (Bloque 2a).
-Corre contra una base LIMPIA que solo tiene pruebas/supabase_emulation.sql: aplica las migraciones una por una, con los
+Corre contra una base LIMPIA que solo tiene pruebas/supabase_emulation.sql y supabase_emulation_proyecto_viejo.sql (un
+proyecto creado antes del 30/05/2026, con los permisos por defecto de entonces): aplica las migraciones una por una, con los
 datos viejos cargados después de las de la versión 31 (20261001000001…06)."""
 import pathlib, sys
 import psycopg

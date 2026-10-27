@@ -11,7 +11,9 @@ do $$ begin
 end $$;
 grant anon, authenticated, service_role to authenticator;
 grant usage on schema public, extensions, auth, storage to anon, authenticated, service_role;
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+-- Como un proyecto NUEVO de Supabase (desde el 30/05/2026): las tablas nuevas de public no traen permisos para anon,
+-- authenticated ni service_role; cada migración los da explícitos. Los proyectos viejos sí los traían: test_mudanza
+-- carga además pruebas/supabase_emulation_proyecto_viejo.sql.
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 grant all on schema public to anon, authenticated, service_role;

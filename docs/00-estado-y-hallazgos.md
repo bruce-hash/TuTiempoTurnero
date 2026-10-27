@@ -308,6 +308,19 @@ si está o la anon. `admin()` usa `SUPABASE_SECRET_KEYS` si está o la service_r
 (`caller: rechazado (vencido)`, `firma_invalida`, `no_es_jwt`, `auth_401`…), nunca el token. `mp-create-preference` pasa
 a `--no-verify-jwt` (la sesión la valida la función). Prueba: `test:funciones` (proyecto nuevo simulado y viejo).
 
+### H32 · Alta · Proyectos nuevos de Supabase: las funciones no tenían permiso sobre las tablas (resuelto)
+Desde el 30/05/2026 los proyectos nuevos de Supabase no dan permisos por defecto sobre las tablas nuevas de `public` a
+`anon`, `authenticated` ni `service_role` (desde el 30/10/2026, tampoco los existentes para las tablas que se creen).
+Las migraciones daban explícitos los del navegador, pero los de `service_role` (la clave secreta de las funciones)
+solo en las tablas de cobros. En el proyecto de prueba, `mp-oauth` no podía leer `providers` (`42501 permission denied`)
+y, como el error de la consulta no se miraba, respondía `403 not_a_provider` sin loguear nada.
+**Arreglo:** `20261027190000_permisos_servidor.sql` da a `service_role` lo que las funciones leen o escriben directo
+(`providers` select, `bookings` select/update, `mp_oauth_states` select/insert/delete; lo demás va por funciones
+`security definer`). En las funciones, `must()` (`_shared/util.ts`) corta con 500 y loguea `db: falló <qué>` con el
+código y el mensaje: un error de la base nunca es "no es prestador", "no hay reservas" ni "no hay cuenta". El
+`not_a_provider` de verdad también se loguea. `pruebas/supabase_emulation.sql` ahora es un proyecto nuevo (sin permisos
+por defecto); `test_mudanza` agrega `supabase_emulation_proyecto_viejo.sql`. Prueba: `test:funciones` (H32).
+
 ## Mejoras futuras (no son hallazgos; después del lanzamiento)
 
 ### F01 · Vista previa de los links de prestadores (WhatsApp, Instagram)
