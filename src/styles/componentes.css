@@ -107,3 +107,21 @@
 label.chk+.fe-msg{margin:-6px 0 10px}
 .chk.remember{justify-content:flex-start;margin:-4px 0 12px;font-size:13px;color:var(--muted)}
 .tries{margin:8px 0 0;font-size:13px;color:var(--muted);text-align:center}
+/* Bloque D · respuesta visual: hover (solo con mouse), foco con teclado y presionado; transiciones cortas. Con
+   prefers-reduced-motion no se mueve nada (solo cambian los colores) */
+.btn,.lnk,.card,.segtile,.wd,.slot,.svci,.payopt,.cchip,.gbtn,.tabarr,.pk-nav,.acct-btn,.btabs button,.ptabs button,.authtabs button,.seg3 button{transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,transform .12s}
+@media (hover:hover){
+  .btn-ghost:hover:not([disabled]),.gbtn:hover{background:var(--brand-soft);border-color:var(--brand-line)}
+  .btn-ok:hover:not([disabled]),.btn-bad:hover:not([disabled]){filter:brightness(.95)}
+  .card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.12)}
+  .segtile:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.18)}
+  .svci:hover,.payopt:hover,.slot:hover:not([disabled]),.wd:hover:not([disabled]),.acct-btn:hover,.tabarr:hover:not([disabled]),.pk-nav:hover:not([disabled]){border-color:var(--brand-line)}
+  .btabs button:hover:not([aria-selected="true"]),.ptabs button:hover:not([aria-selected="true"]),.authtabs button:hover:not(.on),.seg3 button:hover:not([aria-pressed="true"]){color:var(--fg);background:var(--brand-soft)}
+  .lnk:hover{text-decoration:underline;text-underline-offset:3px}
+}
+.btn:active:not([disabled]),.gbtn:active,.svci:active,.payopt:active,.slot:active:not([disabled]),.wd:active:not([disabled]),.cchip:active,.acct-btn:active,.seg3 button:active{transform:scale(.97)}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
+  .card:hover,.segtile:hover,.btn:active,.gbtn:active,.svci:active,.payopt:active,.slot:active,.wd:active,.cchip:active,.acct-btn:active,.seg3 button:active{transform:none}
+}

@@ -118,6 +118,8 @@ async function normalizar(page) {
   });
 }
 async function foto(page, pasos, nombre) {
+  // el mouse queda donde fue el último clic: fuera de la pantalla, así ningún hover (Bloque D) entra en la captura
+  await page.mouse.move(0, 0);
   await normalizar(page);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(350);
