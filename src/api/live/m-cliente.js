@@ -1,5 +1,5 @@
 import { LM } from "./index.js";
-import { saved } from "../saved.js";
+import { call, saved } from "../saved.js";
 import { sb } from "../../config.js";
 import { S } from "../../state.js";
 import { avatarUrl } from "../../ui/fotos.js";
@@ -61,6 +61,11 @@ Object.assign(LM, {
         })
         .eq("id", S.user.id),
     ),
+  // Bloque C: opciones de las notificaciones ({ push_notices } o { push_bookings }) y la suscripción de este dispositivo
+  setPushPrefs: (prefs) => saved(sb.from("profiles").update(prefs).eq("id", S.user.id)),
+  pushSubscribe: (endpoint, p256dh, auth, label) =>
+    saved(sb.rpc("push_subscribe", { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth, p_label: label })),
+  pushUnsubscribe: (endpoint) => call(sb.rpc("push_unsubscribe", { p_endpoint: endpoint })),
   deleteAccount: () => saved(sb.rpc("delete_my_account")),
   setAvatar: async (blob) => {
     const path = `${S.user.id}/a-${Date.now()}.jpg`;

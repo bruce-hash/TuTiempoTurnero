@@ -5,7 +5,7 @@ import { store } from "./store.js";
 const STORE_VARS = ["ADM_READY","AEID","BID","BOOK","CFGS","CLIENTS","CLOSINGS","COMISION","COMM","COMMBY","DEMO_ACL","DEMO_AEXP","DEMO_INBOX","DEMO_NOTES","DEMO_OWNER","DEMO_PENDING","DEMO_ST","DEMO_STAMPS","DEMO_USERS","FIN","GASTOS","GID","MSGS","MTOT","NID","OCCD","PRODS","SID","STORY_T","WAIT"];
 
 export function exponerParaPruebas() {
-  const modulos = import.meta.glob(["./**/*.js", "!./main.js", "!./ganchos-prueba.js", "!./demo/barra.js", "!./demo/prestadores.js", "!./demo/sembrar.js", "!./demo/estado.js", "!./demo/reiniciar.js", "!./demo/index.js"], { eager: true });
+  const modulos = import.meta.glob(["./**/*.js", "!./main.js", "!./ganchos-prueba.js", "!./demo/barra.js", "!./demo/prestadores.js", "!./demo/sembrar.js", "!./demo/estado.js", "!./demo/reiniciar.js", "!./demo/index.js", "!./pwa/sw.js"], { eager: true });
   const desde = {};
   for (const mod of Object.values(modulos)) {
     for (const name of Object.keys(mod)) {

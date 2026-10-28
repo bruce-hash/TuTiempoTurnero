@@ -21,7 +21,7 @@ export const liveCuenta = {
     }
     const user = session.user;
     const profile = await call(
-      sb.from("profiles").select("full_name,phone,avatar_path,email_notices").eq("id", user.id).maybeSingle(),
+      sb.from("profiles").select("full_name,phone,avatar_path,email_notices,push_notices,push_bookings").eq("id", user.id).maybeSingle(),
     ).catch(() => null);
     S.user = {
       id: user.id,
@@ -30,6 +30,9 @@ export const liveCuenta = {
       photo: avatarUrl(profile && profile.avatar_path) || (user.user_metadata && user.user_metadata.avatar_url) || null,
       // Bloque 3: avisos de sus turnos por email (por defecto, sí)
       emailNotices: !profile || profile.email_notices !== false,
+      // Bloque C: notificaciones (cliente: recordatorios y novedades; prestador: nuevas reservas y cancelaciones)
+      pushNotices: !profile || profile.push_notices !== false,
+      pushBookings: !profile || profile.push_bookings !== false,
     };
     S.form.tel = (profile && profile.phone) || "";
     let pid = await call(sb.rpc("my_provider"));
@@ -163,6 +166,10 @@ export const liveCuenta = {
         done: row.done,
       };
     });
+  },
+  // Bloque C: ¿este dispositivo (su endpoint de push) está suscripto a esta cuenta?
+  async pushRegistered(endpoint) {
+    return !!(await call(sb.rpc("push_registered", { p_endpoint: endpoint })));
   },
   // Bloque D (D26): "Exigir DNI para aprobar prestadores" (si no se puede leer, se exige, como hasta ahora)
   async requireDni() {

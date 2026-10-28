@@ -3,6 +3,7 @@
 //   npm run build       → dist/ para Hostinger: solo en vivo (liveApi), sin demo ni ganchos de prueba
 //   npm run build:test  → dist-test/: lo mismo que producción, más la demo y los ganchos (lo usan las pruebas)
 // config.js no se genera: en dist/ se copia config.example.js solo si config.js no existe, para no pisar las claves reales.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +34,24 @@ export default defineConfig(({ command, mode }) => {
     },
     plugins: [
       {
+        // Bloque C: /sw.js (el service worker) desde src/pwa/sw.js, con la versión y los archivos de este build: los JS y
+        // CSS con hash, la pantalla sin conexión, el manifest y los íconos. La versión sale del contenido: el mismo build da
+        // el mismo sw.js (no hay actualización), uno distinto da otro (el navegador instala el nuevo y borra la caché vieja).
+        name: "tutiempo:pwa",
+        apply: "build",
+        generateBundle(_, bundle) {
+          const pub = path.join(ROOT, "public");
+          const assets = Object.values(bundle).map((f) => f.fileName).filter((n) => /^assets\/.+\.(js|css)$/.test(n)).sort();
+          const icons = fs.readdirSync(path.join(pub, "icons")).filter((f) => f.endsWith(".png")).sort().map((f) => "icons/" + f);
+          const files = [...assets, "offline.html", "offline.js", "manifest.webmanifest", ...icons].map((f) => "/" + f);
+          const template = fs.readFileSync(path.join(ROOT, "src", "pwa", "sw.js"), "utf8");
+          const hash = crypto.createHash("sha256").update(template).update(files.join("\n"));
+          for (const f of ["offline.html", "offline.js", "manifest.webmanifest", ...icons]) hash.update(fs.readFileSync(path.join(pub, f)));
+          const source = template.replace("__VERSION__", hash.digest("hex").slice(0, 16)).replace("__PRECACHE__", JSON.stringify(files));
+          this.emitFile({ type: "asset", fileName: "sw.js", source });
+        },
+      },
+      {
         // Producción: src/demo/index.js (barra, datos de ejemplo y reinicio de la demo) se reemplaza por un módulo vacío.
         name: "tutiempo:sin-demo",
         enforce: "pre",
@@ -53,7 +72,7 @@ export default defineConfig(({ command, mode }) => {
         },
         buildStart() {
           // lo que generaba el build anterior (y el de tools/build.mjs): todo menos config.js
-          for (const f of ["assets", "index.html", "app.js", "app.css", "fonts", "vendor", ".htaccess", "robots.txt"]) {
+          for (const f of ["assets", "index.html", "app.js", "app.css", "fonts", "vendor", ".htaccess", "robots.txt", "sw.js", "manifest.webmanifest", "offline.html", "offline.js", "icons"]) {
             fs.rmSync(path.join(out, f), { recursive: true, force: true });
           }
         },

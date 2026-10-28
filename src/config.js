@@ -19,6 +19,11 @@ export const sb = CONFIG_OK
     })
   : null;
 export const CITY = CFG.city || "olavarria";
+// Bloque C: la clave pública VAPID de las notificaciones push (npm run vapid; sin ella la app no ofrece avisos) y el freno
+// del service worker (serviceWorker: false en config.js lo desinstala). En la demo, nada de esto.
+export const VAPID_KEY =
+  LIVE && typeof CFG.vapidPublicKey == "string" && /^[A-Za-z0-9_-]{86,88}$/.test(CFG.vapidPublicKey) ? CFG.vapidPublicKey : "";
+export const SW_ON = LIVE && CFG.serviceWorker !== false;
 // H30: clave del sitio de Cloudflare Turnstile (el CAPTCHA de Supabase Auth). Sin clave, o en la demo, no hay CAPTCHA
 export const CAPTCHA_KEY =
   LIVE && typeof CFG.turnstileSiteKey == "string" && /^[\w-]{10,100}$/.test(CFG.turnstileSiteKey) && !/PEGAR/i.test(CFG.turnstileSiteKey)

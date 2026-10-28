@@ -76,7 +76,9 @@ con Resend cada 5 minutos, con el mismo texto, reintentos y clave de idempotenci
 recordatorio no sale si el turno ya empezó o se canceló; en Mi perfil el cliente apaga los recordatorios, la reseña y el
 cumpleaños (la confirmación y las cancelaciones salen siempre). El HTML escapa todo el texto del prestador y solo enlaza
 al sitio. La limpieza diaria borra lo enviado, descartado o fallido con más de 90 días. El turno que el sistema no pudo
-confirmar (expired con devolución) ahora también deja su aviso en la app. Web Push sigue afuera (prompt original).
+confirmar (expired con devolución) ahora también deja su aviso en la app.
+**Bloque C (D27):** los mismos avisos llegan también como notificación push a cada dispositivo que la activó, con la
+misma opción de Mi perfil, envío en el momento y `tt-push` cada minuto de respaldo.
 
 ### H08 · Media · Precios ×100 con coma decimal (heredado del prototipo · resuelto en el Bloque 2b)
 Los campos de precio usan `parseInt(valor.replace(/\D/g, ""))`: "12500,50" se guarda como 1.250.050.

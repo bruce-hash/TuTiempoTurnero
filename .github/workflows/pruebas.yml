@@ -144,7 +144,7 @@ jobs:
         run: node pruebas/revisar_build.mjs
 
   navegador:
-    name: Navegador (e2e · rutas · comparación con la versión anterior)
+    name: Navegador (e2e · rutas · captcha · app instalable · comparación con la versión anterior)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -193,6 +193,9 @@ jobs:
 
       - name: CAPTCHA (Turnstile en cada llamada a Auth; sin clave, nada de Cloudflare)
         run: npm run test:captcha
+
+      - name: App instalable y push (manifest, service worker, sin conexión, versión nueva, notificaciones)
+        run: npm run test:pwa
 
       - name: Comparación con la versión anterior (demo y en vivo, texto y capturas)
         run: npm run test:comparar

@@ -8,6 +8,7 @@ import { pr } from "../../lib/prestadores.js";
 import { PREP } from "../../lib/servicios.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
+import { installCard, pushCard } from "../../ui/avisos.js";
 import { render } from "../../ui/render.js";
 import { vHome } from "./home.js";
 
@@ -96,7 +97,7 @@ export function vTurnoOk() {
      <p style="margin:0">en <b>${esc(prov.name)}</b> · ${esc(prov.addr)}</p>
      <p class="bk-must">${booking.pay === "reward" ? "🎁 Canjeaste tu premio: este turno es gratis" : booking.pay === "cash" ? `Pagaste la seña de ${money(booking.paid)}${booking.fee ? ` + ${money(booking.fee)} de comisión` : ""} de tu ${esc(booking.svc)}${booking.price > booking.paid ? ` · el resto (${money(booking.price - booking.paid)}) en efectivo en el local` : ""}` : `Pagaste ${money(booking.paid)}${booking.fee ? ` + ${money(booking.fee)} de comisión` : ""} de tu ${esc(booking.svc)} con Mercado Pago${booking.price > booking.paid ? ` · en el local: ${money(booking.price - booking.paid)}` : ""}`}</p>
      ${S.seriesMsg ? `<p class="note" style="margin:6px 0 0">${esc(S.seriesMsg)}</p>` : ""}
-</div>`
+</div>${pushCard("cliente")}${installCard()}`
        : '<h1 class="h1">Tu turno</h1>'
    }
    ${(() => {

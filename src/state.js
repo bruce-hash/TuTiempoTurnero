@@ -70,6 +70,11 @@ export const fresh = () => ({
   reprog: null,
   turnoId: null,
   justBooked: false,
+  // Bloque C: app instalable y notificaciones push (src/lib/pwa.js, src/lib/push.js)
+  canInstall: false,
+  updateReady: false,
+  pwaGuide: false,
+  push: { avail: "none", on: false },
   cancelAsk: false,
   aday: null,
   bAsk: null,
