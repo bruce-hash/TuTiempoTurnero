@@ -89,7 +89,7 @@ contraseña, probá "¿Olvidaste tu contraseña?" y entrá con Google.
 
 PANEL DE TUTIEMPO (ADMIN). Para que tu cuenta sea admin, una sola vez en el SQL Editor:
   insert into app_admins (user_id) select id from auth.users where email = 'TU-EMAIL';
-Después entrá a la app con esa cuenta → Mi perfil → "Panel de TuTiempo (admin)". Tiene 4 pestañas:
+Después entrá a la app con esa cuenta → menú de cuenta (tu avatar, arriba a la derecha) → "Panel de TuTiempo". Tiene 4 pestañas:
   - RESUMEN: comisión de TuTiempo del mes (contra el mes pasado), "Para revisar" (DNI pendientes,
     prestadores sin Mercado Pago), Hoy y Ayer (turnos y comisión), "Cómo vienen las semanas"
     (las últimas 4 semanas con turnos, facturado y comisión, en números), 8 indicadores del mes,
@@ -108,6 +108,8 @@ Después entrá a la app con esa cuenta → Mi perfil → "Panel de TuTiempo (ad
     Es un % del precio y LA PAGA EL CLIENTE APARTE, junto con la seña. Ejemplo: corte de $20.000,
     el prestador pide 50% de seña ($10.000) → el cliente paga $10.000 + $2.000 = $12.000 al reservar.
     El prestador recibe sus $10.000 completos (y $10.000 más en el local); TuTiempo cobra $2.000.
+  - VERIFICACIÓN (en Comisión): "Exigir DNI para aprobar prestadores", activada. Si la apagás, el alta y
+    el panel dejan de pedir el DNI y aprobás a los prestadores solo con sus datos (D26).
 
 PASO 3 · Mercado Pago (cobro de señas con comisión)
 ---------------------------------------------------
