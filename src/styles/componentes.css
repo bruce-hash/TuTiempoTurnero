@@ -101,3 +101,9 @@
 .acct-menu [role=menuitem]:hover,.acct-menu [role=menuitem]:focus-visible{background:var(--brand-soft);outline:none}
 .acct-menu .cnt{margin-left:auto}
 .acct-menu [data-act=logout],.acct-menu [data-act=salirBarbero]{margin-top:4px;border-top:1px solid var(--line);border-radius:0 0 10px 10px;color:var(--bad)}
+/* Bloque D · registro e ingreso: error al lado de cada campo, recordar el email y aviso de intentos */
+.f.bad input,.f.bad .pw input{border-color:var(--bad)!important;box-shadow:0 0 0 3px var(--bad-soft)}
+.fe-msg{display:block;margin-top:6px;font-size:13px;line-height:1.35;color:var(--bad);text-align:left}
+label.chk+.fe-msg{margin:-6px 0 10px}
+.chk.remember{justify-content:flex-start;margin:-4px 0 12px;font-size:13px;color:var(--muted)}
+.tries{margin:8px 0 0;font-size:13px;color:var(--muted);text-align:center}

@@ -4,7 +4,7 @@ import { LIVE, sb } from "../config.js";
 import { demoSignIn } from "../demo/usuarios.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
-import { afterLogin, authErr } from "../lib/sesion.js";
+import { RESEND_WAIT_MS, afterLogin, authErr, showFieldErrors, tickResend } from "../lib/sesion.js";
 import { EMAIL, PWRULE, pwOk } from "../lib/validar.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
@@ -17,39 +17,32 @@ registerSubmit("fSignup", (ev) => {
   const email = $("#au_e").value.trim().toLowerCase();
   const tel = $("#au_t").value.trim();
   const pass = $("#au_p").value;
-  const pass2 = $("#au_p2").value;
   Object.assign(S.login, {
     nombre: name,
     email: email,
     tel: tel,
   });
+  // Bloque D: todos los errores a la vez, cada uno al lado de su campo
+  const errs = {};
   if (name.length < 2 || !/[a-záéíóúñü]/i.test(name)) {
-    return authErr("Escribí tu nombre.", "au_n");
+    errs.au_n = "Escribí tu nombre y apellido.";
   }
   if (!EMAIL.test(email)) {
-    return authErr("Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com", "au_e");
+    errs.au_e = "Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com";
   }
   if (tel && !/^[+\d][\d\s()-]{7,19}$/.test(tel)) {
-    return authErr("Ese celular no parece válido. Ejemplo: 2284 123456.", "au_t");
+    errs.au_t = "Ese celular no parece válido. Ejemplo: 2284 123456.";
   }
   if (!pwOk(pass)) {
-    return authErr(
-      "La contraseña tiene que tener " +
-        PWRULE.toLowerCase().replace("mínimo ", "al menos ").replace(".", ""),
-      "au_p",
-    );
-  }
-  if (pass.toLowerCase().includes(email.split("@")[0]) && email.split("@")[0].length >= 4) {
-    return authErr("La contraseña no puede contener tu email.", "au_p");
-  }
-  if (pass !== pass2) {
-    return authErr("Las contraseñas no coinciden.", "au_p2");
+    errs.au_p = "La contraseña tiene que tener " + PWRULE.toLowerCase().replace("mínimo ", "al menos ").replace(".", "") + ".";
+  } else if (pass.toLowerCase().includes(email.split("@")[0]) && email.split("@")[0].length >= 4) {
+    errs.au_p = "La contraseña no puede contener tu email.";
   }
   if (!$("#au_ok").checked) {
-    return authErr(
-      "Para crear la cuenta tenés que aceptar los términos y la política de privacidad.",
-      "au_ok",
-    );
+    errs.au_ok = "Para crear la cuenta tenés que aceptar los términos y la política de privacidad.";
+  }
+  if (Object.keys(errs).length) {
+    return showFieldErrors(errs);
   }
   if (LIVE) {
     const btn = ev.target.querySelector("button[type=submit]");
@@ -84,8 +77,11 @@ registerSubmit("fSignup", (ev) => {
           mode: "confirm",
           email: email,
           err: "",
+          // el email de activación acaba de salir: Reenviar se habilita en un minuto
+          resendAt: Date.now() + RESEND_WAIT_MS,
         };
         render();
+        tickResend();
       })
       .catch((err) => {
         if (btn) {

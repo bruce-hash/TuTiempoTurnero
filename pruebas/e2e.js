@@ -270,12 +270,22 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await menu("[data-act=logout]"); await wait(800);
   // cuentas: crear, activar con el link del email, ingresar con contraseña, recuperar y crear contraseña nueva
   const mailOf = async (em) => (await (await fetch(BASE + "/__mail?email=" + encodeURIComponent(em))).json());
-  await pg.click("nav [data-go=login]"); await wait(); await pg.click("[data-act=authMode][data-m=up]"); await wait(200);
-  await pg.fill("#au_n", "Carla Ruiz"); await pg.fill("#au_e", "carla@test.ar"); await pg.fill("#au_t", "2284 445566"); await pg.fill("#au_p", "Mate2026x"); await pg.fill("#au_p2", "Mate2026x");
+  await pg.click("nav [data-go=login]"); await wait();
+  // Bloque D: el ingreso recuerda el último email (casilla marcada por defecto)
+  ok("Bloque D: el ingreso arranca con el último email y Recordar marcado", (await pg.inputValue("#ai_e")) === "ana@test.ar" && (await pg.isChecked("#ai_rem")), await pg.inputValue("#ai_e"));
+  await pg.click("[data-act=authMode][data-m=up]"); await wait(200);
+  ok("Bloque D: Crear cuenta sin \"Repetí la contraseña\", con el celular opcional", (await pg.locator("#au_p2").count()) === 0 && (await pg.locator("#au_t").count()) === 1);
+  await pg.fill("#au_e", "carla@"); await pg.click("#fSignup button[type=submit]"); await wait(700);
+  const errsUp = await pg.evaluate(() => [...document.querySelectorAll("[aria-invalid=true]")].map((el) => el.id).join(","));
+  ok("Bloque D: Crear cuenta muestra todos los errores a la vez, cada uno al lado de su campo", errsUp === "au_n,au_e,au_p,au_ok" && (await pg.locator(".fe-msg").count()) === 4 && (await pg.evaluate(() => document.activeElement.id)) === "au_n", errsUp);
+  await pg.fill("#au_n", "Carla Ruiz"); await wait(100);
+  ok("Bloque D: al corregir un campo, su error se va", (await pg.locator("#au_n_err").count()) === 0 && (await pg.getAttribute("#au_n", "aria-invalid")) === null);
+  await pg.fill("#au_n", "Carla Ruiz"); await pg.fill("#au_e", "carla@test.ar"); await pg.fill("#au_t", "2284 445566"); await pg.fill("#au_p", "Mate2026x");
   await pg.click("#fSignup button[type=submit]"); await wait(700);   // la app ignora un segundo envío en menos de medio segundo (doble toque)
-  ok("crear cuenta pide aceptar términos", (await pg.locator("#aerr").innerText()).includes("términos"));
+  ok("crear cuenta pide aceptar términos", (await pg.locator("#au_ok_err").innerText()).includes("términos"));
   await pg.check("#au_ok"); await pg.click("#fSignup button[type=submit]"); await wait(800);
-  ok("cuenta creada: pide activarla por email", (await txt()).includes("Activá tu cuenta") && !(await pg.evaluate(() => !!S.user)));
+  ok("cuenta creada: pide activarla por email", (await txt()).includes("Tocá el link del email") && !(await pg.evaluate(() => !!S.user)));
+  ok("Bloque D: Reenviar el email espera un minuto (cuenta regresiva)", await pg.isDisabled("[data-act=resendConfirm]") && /\(en 0:\d\d\)/.test(await pg.locator("[data-act=resendConfirm]").innerText()));
   const pc = await q("select p.full_name, p.phone from profiles p join auth.users u on u.id = p.id where u.email = 'carla@test.ar'");
   ok("en la base: nombre y celular guardados", pc.length === 1 && pc[0].full_name === "Carla Ruiz" && pc[0].phone === "2284 445566");
   probing = true; await pg.goto(BASE + "/?token_hash=" + "f".repeat(32) + "&type=signup"); await wait(1200); probing = false;
@@ -286,6 +296,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.click("nav [data-go=login]"); await wait();
   probing = true; await pg.fill("#ai_e", "carla@test.ar"); await pg.fill("#ai_p", "otra1234"); await pg.click("#fLogin button[type=submit]"); await wait(800); probing = false;
   ok("contraseña incorrecta avisa", (await txt()).includes("Email o contraseña incorrectos"));
+  ok("Bloque D: el error va debajo de la contraseña y avisa cuántos intentos quedan", (await pg.getAttribute("#ai_p", "aria-invalid")) === "true" && (await pg.locator("#ai_p_err").innerText()).includes("incorrectos") && /Te quedan 4 intentos/.test(await pg.locator(".tries").innerText()));
   await pg.fill("#ai_e", "carla@test.ar"); await pg.fill("#ai_p", "Mate2026x"); await pg.click("#fLogin button[type=submit]"); await wait(1200);
   ok("ingresar con email y contraseña", (await pg.evaluate(() => S.user && S.user.name)) === "Carla Ruiz");
   await menu("[data-act=logout]"); await wait(800);

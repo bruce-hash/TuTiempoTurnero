@@ -4,7 +4,7 @@ import { LIVE, sb } from "../config.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { pr } from "../lib/prestadores.js";
-import { saveAfter } from "../lib/sesion.js";
+import { rememberEmail, saveAfter, showFieldErrors } from "../lib/sesion.js";
 import { EMAIL } from "../lib/validar.js";
 import { S } from "../state.js";
 import { go, render } from "../ui/render.js";
@@ -100,16 +100,16 @@ registerSubmit("fBarb", (ev) => {
   const login = S.blogin;
   login.email = $("#be").value.trim();
   login.pass = $("#bp").value;
+  // Bloque D: "Recordar mi email en este dispositivo" y los errores al lado de cada campo
+  login.remember = !$("#be_rem") || $("#be_rem").checked;
+  const keep = login.remember;
   if (!login.email || !login.pass) {
-    login.err = "Completá tu email y tu contraseña.";
-    render();
-    return;
+    return showFieldErrors({ be: login.email ? "" : "Escribí tu email.", bp: login.pass ? "" : "Escribí tu contraseña." }, "berr");
   }
   if (!EMAIL.test(login.email)) {
-    login.err = "Ese email no es válido.";
-    render();
-    return;
+    return showFieldErrors({ be: "Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com" }, "berr");
   }
+  rememberEmail(login.email, keep);
   if (LIVE) {
     login.locked = true;
     render();
