@@ -17,6 +17,8 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const bad = []; pg.on("response", async (r) => { if (r.status() >= 400 && !probing) { let t = ""; try { t = (await r.text()).slice(0, 160) } catch {} bad.push(r.status() + " " + r.request().method() + " " + r.url().replace(BASE, "") + " " + t) } });
   const wait = (ms = 400) => pg.waitForTimeout(ms);
   const txt = () => pg.locator("#app").innerText();
+  // menú de cuenta de la cabecera (Bloque D): lo abre y elige la opción
+  const menu = async (sel) => { await pg.click("nav .acct-btn"); await pg.waitForSelector("#acctMenu:not([hidden])"); await pg.click(`#acctMenu ${sel}`); await wait(); };
   const seg = () => pg.evaluate(() => document.body.dataset.seg);
   // espera hasta que la consulta devuelva algo que cumple la condición (para lo que guarda la app sin avisar cuándo)
   const until = async (sql, args, test, ms = 6000) => { const t0 = Date.now(); let rows; do { rows = await q(sql, args); if (test(rows)) return true; await wait(200) } while (Date.now() - t0 < ms); return false };
@@ -60,7 +62,19 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const bx = await q("select price, addons, intake, buffer_min, extract(epoch from busy_until - ends_at)::int gap, extract(epoch from ends_at - starts_at)::int dur from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
   ok("en la base: precio del servicio y descanso de 10 min", bx[0].price === 12000 && bx[0].addons.length === 0 && bx[0].buffer_min === 10 && bx[0].gap === 600 && bx[0].dur === 60 * 60);
   ok("sin saldo TuTiempo", (await q("select balance from wallets w join auth.users u on u.id=w.user_id where u.email='ana@test.ar'"))[0].balance === 0);
-  await pg.click("nav [data-go=misturnos]"); await wait();
+  // Bloque D: menú de cuenta con teclado y con el mouse
+  await pg.focus("nav .acct-btn"); await pg.keyboard.press("Enter"); await wait(150);
+  ok("Bloque D: Enter abre el menú de cuenta en la primera opción", await pg.evaluate(() => !document.getElementById("acctMenu").hidden && document.activeElement === document.querySelector("#acctMenu [role=menuitem]") && document.querySelector("nav .acct-btn").getAttribute("aria-expanded") === "true"));
+  await pg.keyboard.press("ArrowDown"); await wait(80);
+  ok("Bloque D: ↓ pasa a Mis turnos", await pg.evaluate(() => document.activeElement && document.activeElement.dataset.go === "misturnos"));
+  await pg.keyboard.press("End"); await wait(80);
+  ok("Bloque D: Fin va a Cerrar sesión", await pg.evaluate(() => document.activeElement && document.activeElement.dataset.act === "logout"));
+  await pg.keyboard.press("Escape"); await wait(80);
+  ok("Bloque D: Esc cierra y vuelve al botón", await pg.evaluate(() => document.getElementById("acctMenu").hidden && document.activeElement === document.querySelector("nav .acct-btn") && document.querySelector("nav .acct-btn").getAttribute("aria-expanded") === "false"));
+  await pg.click("nav .acct-btn"); await wait(150); await pg.mouse.click(20, 400); await wait(150);
+  ok("Bloque D: tocar afuera lo cierra", await pg.evaluate(() => document.getElementById("acctMenu").hidden));
+  ok("Bloque D: el menú del cliente tiene Mi perfil, Mis turnos y Cerrar sesión (sin paneles)", await pg.evaluate(() => [...document.querySelectorAll("#acctMenu [role=menuitem]")].map((b) => b.dataset.go || b.dataset.act).join(",") === "cuenta,misturnos,logout"));
+  await menu("[data-go=misturnos]");
   ok("mis turnos desde la base", (await pg.locator(".tcard").count()) >= 1 && (await txt()).includes("Sofía"));
   ok("mis turnos: confirmado sin pedir asistencia ni mostrar saldo", (await txt()).includes("Confirmado") && !(await txt()).includes("Confirmá tu asistencia") && !(await txt()).includes("Saldo"));
   // el mismo horario ya no se ofrece
@@ -96,7 +110,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.evaluate(() => { const b = BOOK.find((x) => x.id === S.turnoId); go("perfil", b ? b.pid : S.pid) }); await pg.waitForSelector(".pcard"); await wait();
   await pg.click("[data-act=seguir]"); await wait();
   ok("seguir guarda en la base", (await q("select count(*)::int c from follows"))[0].c === 1);
-  await pg.click("nav [data-go=cuenta]"); await wait();
+  await menu("[data-go=cuenta]");
   ok("mi perfil muestra a quién sigo, sin saldo", (await txt()).includes("Sofía") && !(await txt()).includes("Saldo TuTiempo"));
   const PNG = { name: "foto.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8DwnwEJMDKgAhQZKgAAZHwCArkOvB0AAAAASUVORK5CYII=", "base64") };
   await pg.setInputFiles("#upAv", PNG); await wait(1200);
@@ -107,11 +121,11 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("Bloque 3: Mi perfil tiene la opción de avisos por email, prendida", await pg.isChecked("#uMail") && (await txt()).includes("Recordatorios y novedades por email"));
   await pg.uncheck("#uMail");
   ok("Bloque 3: apagarla queda en la base", await until("select p.email_notices from profiles p join auth.users u on u.id = p.id where u.email = 'ana@test.ar'", [], (r) => r[0].email_notices === false));
-  await pg.evaluate(() => go("home")); await wait(); await pg.click("nav [data-go=cuenta]"); await wait();
+  await pg.evaluate(() => go("home")); await wait(); await menu("[data-go=cuenta]");
   ok("Bloque 3: …y al volver a Mi perfil sigue apagada", !(await pg.isChecked("#uMail")));
   await pg.check("#uMail");
   ok("Bloque 3: prenderla de nuevo también", await until("select p.email_notices from profiles p join auth.users u on u.id = p.id where u.email = 'ana@test.ar'", [], (r) => r[0].email_notices === true));
-  await pg.click("[data-act=logout]"); await wait();
+  await pg.click("#app [data-act=logout]"); await wait();
 
   // ---------- Prestadora ----------
   await pg.click("[data-go=loginBarbero]"); await wait();
@@ -233,7 +247,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("no puede crear turnos pagos falsos", sec2.ins);
   ok("no puede leer tokens de Mercado Pago", sec2.secrets === 0);
   // volver al público: aparece en Masajes
-  await pg.click("[data-act=salirBarbero]"); await wait(600); await pg.click(".segtile.seg-m"); await wait(800);
+  await menu("[data-act=salirBarbero]"); await wait(600); await pg.click(".segtile.seg-m"); await wait(800);
   ok("ahora aparece también en Masajes", (await pg.locator(".grid .card").innerText()).includes("Sofía"));
   // la clienta ve su tarjeta y reserva el premio gratis
   // los más activos primero
@@ -243,7 +257,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await db.query("update loyalty_cards set stamps = 16 where user_id = (select id from auth.users where email='ana@test.ar') and service_id = $1", [esm]);
   await pg.click("nav [data-go=login]"); await wait(); await pg.click("[data-act=authMode][data-m=code]"); await wait(200);
   await pg.fill("#le", "ana@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc"); await pg.fill("#lc", "123456"); await pg.click("#fCode button[type=submit]"); await wait(1200);
-  await pg.click("nav [data-go=misturnos]"); await wait(800);
+  await menu("[data-go=misturnos]"); await wait(800);
   ok("v31: Mis turnos: el turno cancelado por bloqueo dice que el profesional la va a llamar (sin Reprogramar automático)", /canceló el profesional/i.test(await txt()) && /te va a llamar/i.test(await txt()) && (await pg.locator(".delpanel [data-act=rebook]").count()) === 0);
   ok("Mis sellos: tarjeta de Esmaltado 16 de 16, premio listo", (await pg.locator(".stampcard").count()) === 1 && (await pg.locator(".stampcard").innerText()).includes("Esmaltado semipermanente") && (await pg.locator(".stampcard").innerText()).includes("16 de 16") && /premio listo/i.test(await pg.locator(".stampcard").innerText()));
   const tt = (await txt()).toLowerCase(); ok("Mis turnos: primero los próximos, después avisos y sellos", tt.indexOf("próximos") >= 0 && tt.indexOf("próximos") < tt.indexOf("avisos y mensajes") && tt.indexOf("avisos y mensajes") < tt.indexOf("mis sellos"));
@@ -253,7 +267,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.click("#fTurno button[type=submit]"); await pg.waitForSelector(".booked", { timeout: 8000 }).catch(() => {}); await wait(600);
   const rwb = await q("select price, pay_method, status from bookings where pay_method='reward'");
   ok("en la base: turno de premio gratis y sin sellos", rwb.length === 1 && rwb[0].price === 0 && rwb[0].status === "confirmed" && (await anaStamps()) === 0 && (await txt()).includes("Canjeaste tu premio"));
-  await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
+  await menu("[data-act=logout]"); await wait(800);
   // cuentas: crear, activar con el link del email, ingresar con contraseña, recuperar y crear contraseña nueva
   const mailOf = async (em) => (await (await fetch(BASE + "/__mail?email=" + encodeURIComponent(em))).json());
   await pg.click("nav [data-go=login]"); await wait(); await pg.click("[data-act=authMode][data-m=up]"); await wait(200);
@@ -268,13 +282,13 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("link falso o vencido: no entra", !(await pg.evaluate(() => !!S.user)) && !(await pg.url()).includes("token_hash"));
   await pg.goto(BASE + "/?token_hash=" + (await mailOf("carla@test.ar")).signup + "&type=signup"); await wait(1500);
   ok("link de activación: entra sola y limpia la dirección", (await pg.evaluate(() => S.user && S.user.email)) === "carla@test.ar" && !(await pg.url()).includes("token_hash"));
-  await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
+  await menu("[data-act=logout]"); await wait(800);
   await pg.click("nav [data-go=login]"); await wait();
   probing = true; await pg.fill("#ai_e", "carla@test.ar"); await pg.fill("#ai_p", "otra1234"); await pg.click("#fLogin button[type=submit]"); await wait(800); probing = false;
   ok("contraseña incorrecta avisa", (await txt()).includes("Email o contraseña incorrectos"));
   await pg.fill("#ai_e", "carla@test.ar"); await pg.fill("#ai_p", "Mate2026x"); await pg.click("#fLogin button[type=submit]"); await wait(1200);
   ok("ingresar con email y contraseña", (await pg.evaluate(() => S.user && S.user.name)) === "Carla Ruiz");
-  await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
+  await menu("[data-act=logout]"); await wait(800);
   await pg.click("nav [data-go=login]"); await wait(); await pg.click("[data-act=authMode][data-m=forgot]"); await wait(200);
   await pg.fill("#af_e", "nadie@test.ar"); await pg.click("#fForgot button[type=submit]"); await wait(600);
   ok("recuperar con email inexistente: mismo mensaje", (await txt()).includes("Si nadie@test.ar tiene una cuenta"));
@@ -284,15 +298,16 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("link de recuperación abre “contraseña nueva”", await pg.isVisible("#fNewPass"));
   await pg.fill("#np1", "Nueva2026zz"); await pg.fill("#np2", "Nueva2026zz"); await pg.click("#fNewPass button[type=submit]"); await wait(1200);
   ok("en la base: contraseña nueva guardada", (await q("select encrypted_password from auth.users where email='carla@test.ar'"))[0].encrypted_password === "Nueva2026zz");
-  await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
+  await menu("[data-act=logout]"); await wait(800);
   await pg.click("nav [data-go=login]"); await wait();
   await pg.fill("#ai_e", "carla@test.ar"); await pg.fill("#ai_p", "Nueva2026zz"); await pg.click("#fLogin button[type=submit]"); await wait(1200);
   ok("ingresa con la contraseña nueva", (await pg.evaluate(() => S.user && S.user.email)) === "carla@test.ar");
   // panel de administración (Carla pasa a ser admin)
   await db.query("insert into app_admins (user_id) select id from auth.users where email='carla@test.ar'");
-  await pg.goto(BASE); await wait(1500); await pg.click("nav .avbtn"); await wait();
-  ok("admin: botón del panel en Mi perfil", (await pg.locator("[data-act=toAdmin]").count()) === 1);
-  await pg.click("[data-act=toAdmin]"); await pg.waitForSelector(".kpis.adm", { timeout: 8000 }).catch(() => {}); await wait(500);
+  await pg.goto(BASE); await wait(1500); await menu("[data-go=cuenta]");
+  ok("admin: botón del panel en Mi perfil", (await pg.locator("#app [data-act=toAdmin]").count()) === 1);
+  ok("Bloque D: y en el menú de cuenta", (await pg.locator("#acctMenu [data-act=toAdmin]").count()) === 1);
+  await pg.click("#app [data-act=toAdmin]"); await pg.waitForSelector(".kpis.adm", { timeout: 8000 }).catch(() => {}); await wait(500);
   ok("admin: tablero con datos reales", (await pg.locator(".kpis.adm .kpi").count()) === 8 && (await pg.locator(".admtop li").count()) >= 2);
   ok("v30: sin la proyección y con el tablero simple (hoy/ayer + 4 semanas)", !(await txt()).includes("cerrás el mes") && (await pg.locator(".admday>div").count()) === 2 && (await pg.locator(".wkrow").count()) === 4 && (await pg.locator(".admbars").count()) === 0);
   await pg.click("[data-act=admT][data-t=com]"); await wait(300);
@@ -383,13 +398,14 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.click("[data-act=admMn][data-d='-1']"); await wait(1200);
   await pg.click("[data-act=admClose][data-k=month]"); await wait(200); await pg.click("[data-act=admClose][data-k=month]"); await wait(1500);
   ok("v30: cerrar el mes pasado", (await q("select count(*)::int c from admin_closings where kind='month'"))[0].c === 1 && (await pg.locator(".cclosed").count()) === 1);
-  await pg.click("[data-act=salirAdmin]"); await wait(400);
+  await menu("[data-act=asClient][data-to=cuenta]"); await wait(400);
+  ok("Bloque D: desde el panel de TuTiempo, Mi perfil vuelve a la cuenta como cliente", (await pg.evaluate(() => S.role === "cliente" && S.view === "cuenta")));
   probing = true; const reuse = await pg.evaluate(async (h) => { const r = await sb.auth.verifyOtp({ token_hash: h, type: "recovery" }); return !!r.error }, (await mailOf("carla@test.ar")).recovery); probing = false;
   ok("el link de recuperación sirve una sola vez", reuse);
   // ---------- Bloque 1 (H23): la prestadora desconecta Mercado Pago ----------
   const pay0 = (await q("select mp_payment_id from payments order by id desc limit 1"))[0].mp_payment_id;
   await db.query("select payment_mp_update($1, 'in_mediation')", [pay0]);   // un reclamo abierto: le llega el aviso
-  await pg.goto(BASE); await wait(1200); await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
+  await pg.goto(BASE); await wait(1200); await menu("[data-act=logout]"); await wait(800);
   await pg.click("[data-go=loginBarbero]"); await wait();
   await pg.fill("#be", "sofia@test.ar"); await pg.fill("#bp", "prestador123"); await pg.click("#fBarb button[type=submit]"); await pg.waitForSelector(".bhead"); await wait(800);
   ok("Bloque 1: el panel muestra el aviso del reclamo", /Avisos de cobros/i.test(await txt()) && /reclamo en Mercado Pago/.test(await txt()));
@@ -411,7 +427,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
      accAfter.status === "refunds_only" && accAfter.key && (await q("select mp_connected from provider_private where provider_id=$1", [sofi]))[0].mp_connected === false);
   ok("H23: el prestador ve que hoy no puede cobrar", /Mercado Pago sin conectar/.test(await txt()) && /Hoy no podés cobrar señas/.test(await txt()) && /Sin Mercado Pago conectado/.test(await txt())
      && (!futurePaid || /desde tu cuenta anterior/.test(await txt())));
-  await pg.click("[data-act=salirBarbero]"); await wait(600);
+  await menu("[data-act=salirBarbero]"); await wait(600);
   await pg.goto(BASE + "/p/" + sofi); await pg.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("H23: su perfil público dice que todavía no toma turnos online (con Seguir) y no deja elegir horario",
      /Todavía no toma turnos online/.test(await txt()) && (await pg.locator(".bookbar").count()) === 0 && (await pg.locator("[data-slot]").count()) === 0);
@@ -428,7 +444,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("D22: en el pago solo queda “Usar mi premio”", (await pg.locator("[data-paym=reward]").count()) === 1 && (await pg.locator("[data-paym=mp]").count()) === 0);
   await pg.click("#fTurno button[type=submit]"); await wait(1500);
   ok("D22: el premio queda reservado sin pago", (await q("select count(*)::int c from bookings where pay_method = 'reward' and status = 'confirmed'"))[0].c === rewardsBefore + 1);
-  await pg.click("nav .avbtn"); await wait(); await pg.click("[data-act=logout]"); await wait(800);
+  await menu("[data-act=logout]"); await wait(800);
   // "Volver al panel" cierra la sesión del prestador: se vuelve a ingresar y la app vuelve a Perfil (?volver=)
   await pg.goto(BASE + "/panel/perfil"); await pg.waitForSelector("#fBarb", { timeout: 8000 }).catch(() => {}); await wait(400);
   await pg.fill("#be", "sofia@test.ar"); await pg.fill("#bp", "prestador123"); await pg.click("#fBarb button[type=submit]"); await pg.waitForSelector("[data-act=mpConnect]", { timeout: 8000 }).catch(() => {}); await wait(400);

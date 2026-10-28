@@ -87,3 +87,17 @@
 .bhead{display:grid;gap:12px}
 .swrow{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:12px;text-align:left}
 /* ===== Tipografía y forma por segmento ===== */
+/* menú de cuenta de la cabecera (Bloque D): avatar (y el nombre desde 700 px) que abre las opciones */
+.acct{position:relative}
+.acct-btn{position:relative;display:inline-flex;align-items:center;gap:8px;padding:3px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--fg);font-weight:600;font-size:14px}
+.acct-btn .av{width:32px;height:32px;font-size:12px}
+.acct-name,.acct-car{display:none}
+.acct-btn .dotn{position:absolute;top:1px;left:27px;box-shadow:0 0 0 2px var(--card)}
+@media (min-width:700px){.acct-btn{padding:3px 12px 3px 3px}.acct-name{display:inline;max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.acct-car{display:inline;font-size:10px;color:var(--muted)}}
+.acct-menu{position:absolute;right:0;top:calc(100% + 8px);min-width:250px;max-width:calc(100vw - 32px);display:grid;padding:6px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.18);z-index:60}
+.acct-who{display:grid;padding:9px 12px 10px;margin-bottom:4px;border-bottom:1px solid var(--line);font-size:13px;text-align:left}
+.acct-who span{color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.acct-menu [role=menuitem]{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;border-radius:10px;background:none;color:inherit;font-size:14px;font-weight:500;text-align:left}
+.acct-menu [role=menuitem]:hover,.acct-menu [role=menuitem]:focus-visible{background:var(--brand-soft);outline:none}
+.acct-menu .cnt{margin-left:auto}
+.acct-menu [data-act=logout],.acct-menu [data-act=salirBarbero]{margin-top:4px;border-top:1px solid var(--line);border-radius:0 0 10px 10px;color:var(--bad)}

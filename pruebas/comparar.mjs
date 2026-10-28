@@ -197,8 +197,10 @@ async function recorridoVivo(browser, url) {
   await page.fill("#ai_p", "admin12345");
   await clic(page, "#fLogin button[type=submit]");
   await page.waitForTimeout(600);
-  await clic(page, "[data-go=cuenta]");
-  await clic(page, "[data-act=toAdmin]");
+  // Mi perfil: en la versión de referencia, el avatar; en la nueva, desde el menú de cuenta (Bloque D)
+  await page.evaluate(() => document.querySelector("#nav .acct-btn")?.click());
+  await clic(page, "#nav [data-go=cuenta]");
+  await clic(page, "#app [data-act=toAdmin]");
   await page.waitForTimeout(600);
   for (const t of ADMIN) { await clic(page, `[data-act=admT][data-t=${t}]`); await page.waitForTimeout(400); await foto(page, pasos, `admin · ${t}`); }
   errores.push(...page.errores);

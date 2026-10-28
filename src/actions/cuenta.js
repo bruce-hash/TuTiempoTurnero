@@ -126,6 +126,8 @@ registerClick("logout", (ev, el, act) => {
     demoStash();
   }
   S.user = null;
+  // también desde el panel de TuTiempo (menú de cuenta): se sale como cliente
+  S.role = "cliente";
   S.followingBy = {};
   store.BOOK = store.BOOK.filter((booking) => !booking.mine || !LIVE);
   toast("Cerraste sesión");

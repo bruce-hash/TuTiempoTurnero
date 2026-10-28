@@ -1,9 +1,10 @@
-import { $, ini } from "../lib/dom.js";
-import { ME, avatar, pr } from "../lib/prestadores.js";
+import { $ } from "../lib/dom.js";
+import { ME, pr } from "../lib/prestadores.js";
 import { CAT, pcat } from "../lib/rubros.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { LOGO } from "./iconos.js";
+import { accountMenu } from "./menu-cuenta.js";
 import { syncUrl } from "../router.js";
 import { vAdmin } from "../views/admin/admin.js";
 import { vLoginBarbero } from "../views/auth/acceso-prestadores.js";
@@ -24,19 +25,51 @@ import { vBarbero } from "../views/prestador/panel.js";
 function nav() {
   $("#logoLink").innerHTML = LOGO;
   $("#logoFoot").innerHTML = LOGO;
+  const upcoming = myUpcoming().length;
+  const count = upcoming ? `<span class="cnt">${upcoming}</span>` : "";
+  const email = S.user && S.user.email;
+  // menú de cuenta (Bloque D): las mismas acciones que antes estaban sueltas (Mis turnos, Mi perfil, Salir)
   if (S.role === "admin") {
-    $("#nav").innerHTML =
-      '<span class="user"><span class="chip">🛠️ Admin</span><button class="btn btn-ghost" data-act="salirAdmin">Salir</button></span>';
+    $("#nav").innerHTML = accountMenu({
+      who: S.user || { name: "Admin TuTiempo" },
+      email,
+      items: [
+        ["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"'],
+        ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"'], ["📅", "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
+        ...(S.barberAuth ? [["🏪", "Panel de prestador", 'data-act="toPanel"']] : []),
+        ...(S.user ? [["↪", "Cerrar sesión", 'data-act="logout"']] : [["↪", "Salir del panel", 'data-act="salirAdmin"']]),
+      ],
+    });
     return;
   }
   if (S.role === "barbero") {
-    $("#nav").innerHTML =
-      `<span class="user"><span class="av">${ini(pr(ME()).name)}</span><button class="btn btn-ghost" data-act="salirBarbero">Salir</button></span>`;
+    const prov = pr(ME());
+    $("#nav").innerHTML = accountMenu({
+      who: prov,
+      email,
+      items: [
+        ["🏪", "Panel de prestador", 'data-act="toPanel"'],
+        ["👁", "Ver mi perfil como cliente", 'data-act="preview"'],
+        ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"'], ["📅", "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
+        ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
+        ["↪", "Cerrar sesión", 'data-act="salirBarbero"'],
+      ],
+    });
     return;
   }
-  const upcoming = myUpcoming().length;
   $("#nav").innerHTML = S.user
-    ? `<span class="user"><button class="btn btn-ghost nbtn" data-go="misturnos" aria-label="Mis turnos">📅 <span class="nb-l">Mis turnos</span>${upcoming ? `<span class="cnt">${upcoming}</span>` : ""}${(S.inbox || []).some((msg) => !msg.read) ? '<i class="dotn" title="Tenés avisos nuevos"></i>' : ""}</button><button class="avbtn" data-go="cuenta" aria-label="Mi perfil" title="Mi perfil">${avatar(S.user)}</button></span>`
+    ? accountMenu({
+        who: S.user,
+        email,
+        dot: (S.inbox || []).some((msg) => !msg.read),
+        items: [
+          ["👤", "Mi perfil", 'data-go="cuenta"'],
+          ["📅", "Mis turnos", 'data-go="misturnos"', count],
+          ...(S.barberAuth ? [["🏪", "Panel de prestador", 'data-act="toPanel"']] : []),
+          ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
+          ["↪", "Cerrar sesión", 'data-act="logout"'],
+        ],
+      })
     : '<button class="btn btn-ghost" data-go="loginBarbero">Soy prestador</button><button class="btn btn-pri" data-go="login">Ingresar</button>';
 }
 // rubro que tiñe la página (data-seg del body): el del prestador que se está viendo, o "n" (neutro)
