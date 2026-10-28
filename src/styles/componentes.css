@@ -130,3 +130,6 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .setup .steps .btn,.setup .steps .lnk{margin-top:6px}
 .setup .steps .lnk{display:inline-block;font-size:13px}
 .setup .steps form,.setup .steps .f:last-child{margin-bottom:0}
+/* H30: recuadro de Turnstile (casi siempre invisible: aparece solo si Cloudflare pide tocarlo) */
+.cf-box{display:flex;justify-content:center}
+.cf-box:not(:empty){margin:2px 0 12px}

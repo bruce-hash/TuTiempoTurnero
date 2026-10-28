@@ -1,4 +1,5 @@
 import { LIVE } from "../../config.js";
+import { captchaBox } from "../../lib/captcha.js";
 import { esc } from "../../lib/dom.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
@@ -21,7 +22,7 @@ export function vLogin() {
    <div class="f"><label for="lc">Código</label><input id="lc" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" style="text-align:center;letter-spacing:.3em;font-size:20px;font-weight:700"></div>
    <div class="err" id="lerr">${esc(login.err || "")}</div>
    <button class="btn btn-pri btn-block" type="submit">Verificar e ingresar</button>
-   <div class="authrow"><button type="button" class="lnk" data-act="loginBack">Cambiar email</button>${resendBtn("reenviar", "Reenviar código", login.resendAt)}</div>
+   ${captchaBox("reenviar")}<div class="authrow"><button type="button" class="lnk" data-act="loginBack">Cambiar email</button>${resendBtn("reenviar", "Reenviar código", login.resendAt)}</div>
   </form></div>`;
   }
   if (mode === "forgot") {
@@ -29,7 +30,7 @@ export function vLogin() {
    ${authHead("Recuperar contraseña", "Escribí el email de tu cuenta y te mandamos un link para crear una contraseña nueva.")}
    <div class="f"><label for="af_e">Email</label><input id="af_e" type="email" autocomplete="email" maxlength="120" value="${esc(login.email || "")}"></div>
    <div class="err" id="aerr">${esc(login.err || "")}</div>
-   <button class="btn btn-pri btn-block" type="submit">Enviarme el link</button>
+   ${captchaBox("fForgot")}<button class="btn btn-pri btn-block" type="submit">Enviarme el link</button>
    <div class="authrow"><button type="button" class="lnk" data-act="authMode" data-m="in">← Volver a ingresar</button></div>
   </form></div>`;
   }
@@ -43,7 +44,7 @@ export function vLogin() {
     return `<div class="narrow"><div class="panel" style="margin-top:24px;text-align:center">
    <div style="font-size:40px">✉️</div>${authHead("Revisá tu email", `Te mandamos un link a <b>${esc(login.email)}</b> para activar tu cuenta.`)}
    <ol class="steps" style="margin:4px 0 16px"><li class="done"><span class="dot">✓</span><div><b>Cuenta creada</b></div></li><li class="now"><span class="dot">2</span><div><b>Tocá el link del email</b><span>Mirá también en Spam o Promociones</span></div></li><li><span class="dot">3</span><div><b>Listo: entrás solo</b><span>Si lo abrís en otro dispositivo, después ingresá acá con tu email y contraseña</span></div></li></ol>
-   ${resendBtn("resendConfirm", "Reenviar el email", login.resendAt, "btn btn-ghost btn-block")}
+   ${captchaBox("resendConfirm")}${resendBtn("resendConfirm", "Reenviar el email", login.resendAt, "btn btn-ghost btn-block")}
    <div class="authrow"><button class="lnk" data-act="authMode" data-m="up">Cambiar email</button><button class="lnk" data-act="authMode" data-m="in">Ya la activé · Ingresar</button></div></div></div>`;
   }
   const tabs = `<div class="authtabs" role="tablist"><button type="button" role="tab" class="${mode === "up" ? "" : "on"}" aria-selected="${mode !== "up"}" data-act="authMode" data-m="in">Ingresar</button><button type="button" role="tab" class="${mode === "up" ? "on" : ""}" aria-selected="${mode === "up"}" data-act="authMode" data-m="up">Crear cuenta</button></div>`;
@@ -57,7 +58,7 @@ export function vLogin() {
     <div class="f"><label for="le">Email</label><input id="le" type="email" autocomplete="email" maxlength="120" placeholder="tu@email.com" value="${esc(login.email || rememberedEmail())}"></div>
     ${rememberBox("le_rem", login)}
     <div class="err" id="lerr">${esc(login.err || "")}</div>
-    <button class="btn btn-pri btn-block" type="submit">Enviarme un código</button>
+    ${captchaBox("fMail")}<button class="btn btn-pri btn-block" type="submit">Enviarme un código</button>
    </form>
    <div class="authrow"><button type="button" class="lnk" data-act="authMode" data-m="in">← Ingresar con contraseña</button></div></div></div>`;
   } else if (mode === "up") {
@@ -70,7 +71,7 @@ export function vLogin() {
     ${pwField("au_p", "Contraseña", "new-password", true)}
     <label class="chk"><input type="checkbox" id="au_ok"> <span>Acepto los <u class="lnk" role="link" tabindex="0" data-go="terminos" style="cursor:pointer">términos y la política de privacidad</u>.</span></label>
     <div class="err" id="aerr">${esc(login.err || "")}</div>
-    <button class="btn btn-pri btn-block" type="submit">Crear cuenta</button>
+    ${captchaBox("fSignup")}<button class="btn btn-pri btn-block" type="submit">Crear cuenta</button>
    </form>${provLinks}</div></div>`;
   } else {
     return `<div class="narrow"><div class="panel" style="margin-top:24px">
@@ -81,7 +82,7 @@ export function vLogin() {
     ${rememberBox("ai_rem", login)}
     ${pwField("ai_p", "Contraseña", "current-password", false)}
     <div class="err" id="aerr">${esc(login.err || "")}</div>
-    <button class="btn btn-pri btn-block" type="submit" ${login.locked ? "disabled" : ""}>Ingresar</button>
+    ${captchaBox("fLogin")}<button class="btn btn-pri btn-block" type="submit" ${login.locked ? "disabled" : ""}>Ingresar</button>
     ${login.fails && !login.locked ? `<p class="tries">Por seguridad, después de 5 intentos fallidos tenés que esperar 30 segundos. Te ${5 - login.fails === 1 ? "queda 1 intento" : `quedan ${5 - login.fails} intentos`}.</p>` : ""}
    </form>
    <div class="authrow"><button type="button" class="lnk" data-act="authMode" data-m="forgot" ${login.fails >= 2 ? 'style="font-weight:700"' : ""}>¿Olvidaste tu contraseña?</button><button type="button" class="lnk" data-act="authMode" data-m="code">Entrar con un código</button></div>

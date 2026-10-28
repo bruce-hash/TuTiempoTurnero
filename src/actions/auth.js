@@ -2,6 +2,7 @@ import { registerClick, registerInput, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
 import { demoSignIn } from "../demo/usuarios.js";
+import { captchaToken } from "../lib/captcha.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { RESEND_WAIT_MS, afterLogin, authErr, goAfter, rememberEmail, resendLeft, saveAfter, showFieldErrors, tickResend } from "../lib/sesion.js";
@@ -67,10 +68,16 @@ registerClick("demoRecoveryLink", (ev, el, act) => {
   S.npMode = "recover";
   go("newpass");
 });
-registerClick("resendConfirm", (ev, el, act) => {
+registerClick("resendConfirm", async (ev, el, act) => {
   // una vez por minuto (Supabase rechaza los repetidos): el botón muestra cuánto falta
   if (resendLeft(S.login.resendAt) > 0) {
     return;
+  }
+  let token;
+  try {
+    token = await captchaToken("resendConfirm");
+  } catch (err) {
+    return toast(errMsg(err));
   }
   S.login.resendAt = Date.now() + RESEND_WAIT_MS;
   render();
@@ -82,6 +89,7 @@ registerClick("resendConfirm", (ev, el, act) => {
         email: S.login.email,
         options: {
           emailRedirectTo: location.origin + "/",
+          captchaToken: token,
         },
       })
       .then((res) => toast(res.error ? errMsg(res.error) : "Te lo reenviamos a " + S.login.email));
@@ -97,9 +105,15 @@ registerClick("loginBack", (ev, el, act) => {
   };
   render();
 });
-registerClick("reenviar", (ev, el, act) => {
+registerClick("reenviar", async (ev, el, act) => {
   if (resendLeft(S.login.resendAt) > 0) {
     return;
+  }
+  let token;
+  try {
+    token = await captchaToken("reenviar");
+  } catch (err) {
+    return toast(errMsg(err));
   }
   S.login.err = "";
   S.login.resendAt = Date.now() + RESEND_WAIT_MS;
@@ -107,6 +121,9 @@ registerClick("reenviar", (ev, el, act) => {
     sb.auth
       .signInWithOtp({
         email: S.login.email,
+        options: {
+          captchaToken: token,
+        },
       })
       .then((res) => {
         if (res.error) {
@@ -181,11 +198,16 @@ registerSubmit("fLogin", (ev) => {
     if (btn) {
       btn.disabled = true;
     }
-    sb.auth
-      .signInWithPassword({
-        email: email,
-        password: pass,
-      })
+    captchaToken("fLogin")
+      .then((token) =>
+        sb.auth.signInWithPassword({
+          email: email,
+          password: pass,
+          options: {
+            captchaToken: token,
+          },
+        }),
+      )
       .then(async (res) => {
         if (res.error) {
           if (/Email not confirmed/.test(res.error.message || "")) {
@@ -233,16 +255,20 @@ registerSubmit("fForgot", (ev) => {
     render();
   };
   if (LIVE) {
-    sb.auth
-      .resetPasswordForEmail(email, {
-        redirectTo: location.origin + "/",
-      })
+    captchaToken("fForgot")
+      .then((token) =>
+        sb.auth.resetPasswordForEmail(email, {
+          redirectTo: location.origin + "/",
+          captchaToken: token,
+        }),
+      )
       .then((res) => {
-        if (res.error && /rate|security purposes|Failed to fetch/i.test(res.error.message || "")) {
+        if (res.error && /rate|security purposes|captcha|Failed to fetch/i.test(res.error.message || "")) {
           return authErr(errMsg(res.error));
         }
         showSent();
-      });
+      })
+      .catch((err) => authErr(errMsg(err)));
     return;
   }
   showSent();
@@ -260,13 +286,16 @@ registerSubmit("fMail", (ev) => {
   const keep = !$("#le_rem") || $("#le_rem").checked;
   S.login.remember = keep;
   if (LIVE) {
-    sb.auth
-      .signInWithOtp({
-        email: email,
-        options: {
-          shouldCreateUser: true,
-        },
-      })
+    captchaToken("fMail")
+      .then((token) =>
+        sb.auth.signInWithOtp({
+          email: email,
+          options: {
+            shouldCreateUser: true,
+            captchaToken: token,
+          },
+        }),
+      )
       .then((res) => {
         if (res.error) {
           S.login.err = errMsg(res.error);

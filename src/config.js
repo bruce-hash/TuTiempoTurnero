@@ -19,5 +19,10 @@ export const sb = CONFIG_OK
     })
   : null;
 export const CITY = CFG.city || "olavarria";
+// H30: clave del sitio de Cloudflare Turnstile (el CAPTCHA de Supabase Auth). Sin clave, o en la demo, no hay CAPTCHA
+export const CAPTCHA_KEY =
+  LIVE && typeof CFG.turnstileSiteKey == "string" && /^[\w-]{10,100}$/.test(CFG.turnstileSiteKey) && !/PEGAR/i.test(CFG.turnstileSiteKey)
+    ? CFG.turnstileSiteKey
+    : "";
 export const TZ = "America/Argentina/Buenos_Aires";
 export const PAGE = 12;
