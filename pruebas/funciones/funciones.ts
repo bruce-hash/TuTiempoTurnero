@@ -6,6 +6,8 @@ import pg from "npm:pg@8.12.0";
 import { fileURLToPath } from "node:url";
 import { mpFalso } from "./mp_falso.ts";
 import { resendFalso } from "./resend_falso.ts";
+import { pushFalso } from "./push_falso.ts";
+import { b64u as b64uBytes } from "../../supabase/functions/_shared/webpush.ts";
 
 const BASE = Deno.env.get("E2E_URL")!, PG = Deno.env.get("E2E_PG")!, SECRET = Deno.env.get("E2E_SECRET")!;
 if (!BASE || !PG || !SECRET) throw new Error("Correr dentro de pruebas/entorno_e2e.mjs (npm run test:funciones)");
@@ -51,6 +53,11 @@ const one = async (sql: string, args: unknown[] = [], uid?: string) => Object.va
 // ---------- Mercado Pago falso y funciones ----------
 const mp = mpFalso();
 const RESEND_KEY = "re_llave_de_prueba", rs = resendFalso(RESEND_KEY);
+// Bloque C: claves VAPID de prueba (como las de npm run vapid) y un servicio de push falso
+const vapidPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]) as CryptoKeyPair;
+const VAPID_PUB = b64uBytes(new Uint8Array(await crypto.subtle.exportKey("raw", vapidPair.publicKey)));
+const VAPID_PRIV = (await crypto.subtle.exportKey("jwk", vapidPair.privateKey)).d!;
+const ps = pushFalso(VAPID_PUB);
 const SITE = "http://sitio.test", WHSEC = "whsec-prueba";
 const SERVICE = await jwt({ role: "service_role" });
 const rnd = (n: number) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n))));
@@ -61,12 +68,13 @@ for (const [k, v] of Object.entries({
   CRON_SECRET: CRON, MP_TOKENS_KEY: TOKENS_KEY, MP_OWNER_USER_ID: OWNER_MP,
   RESEND_API_KEY: RESEND_KEY, EMAIL_FROM: "TuTiempo <avisos@tutiempo.com.ar>", EMAIL_REPLY_TO: "soporte@tutiempo.com.ar",
   EMAIL_API_URL: rs.url, EMAIL_GAP_MS: "0",
+  VAPID_PUBLIC_KEY: VAPID_PUB, VAPID_PRIVATE_KEY: VAPID_PRIV, VAPID_SUBJECT: "mailto:contacto@tutiempo.com.ar", PUSH_TEST_ORIGINS: ps.origin,
 })) Deno.env.set(k, v);
 const handlers: Record<string, (req: Request) => Promise<Response>> = {};
 let loading = "";
 const realServe = Deno.serve.bind(Deno);   // el de verdad, para los servidores falsos de la prueba
 (Deno as any).serve = (h: any) => { handlers[loading] = typeof h === "function" ? h : h.handler; return { finished: Promise.resolve(), shutdown: async () => {} }; };
-for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "dni-cleanup", "email-send"]) {
+for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "dni-cleanup", "email-send", "push-send"]) {
   loading = n;
   await import(`../../supabase/functions/${n}/index.ts`);
 }
@@ -734,6 +742,75 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
     console.error = e0;
     console.warn = w0;
   }
+}
+
+// ---------- Bloque C: push-send manda las notificaciones (servicio de push falso que verifica VAPID y descifra) ----------
+{
+  const pushRun = (key = CRON) => fn("push-send", new Request("https://fn.test/functions/v1/push-send", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
+  const cli = crypto.randomUUID();
+  await q("insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values ($1, 'push@fn.test', '{\"full_name\":\"Paula Push Gómez\"}', now())", [cli]);
+  const subDev = async (user: string, nombre: string) => {
+    const d = await ps.dispositivo(nombre);
+    // directo en la tabla (push_subscribe solo acepta servicios de push reales; el falso es localhost)
+    await q("insert into push_subscriptions (user_id, endpoint, p256dh, auth, label) values ($1, $2, $3, $4, $5)", [user, d.endpoint, d.p256dh, d.auth, nombre]);
+    return d;
+  };
+  const dA = await subDev(cli, "celu"), dB = await subDev(cli, "viejo"), dC = await subDev(cli, "caido"), dD = await subDev(cli, "otra-clave");
+  const dOwner = await subDev(owner, "prestador");
+  await q("delete from push_outbox where subscription_id not in (select id from push_subscriptions where endpoint like $1)", [ps.origin + "%"]);
+  const bk = Number(await one("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Paula Push Gómez', 'Corte', 'app', 'hold', now() + interval '30 hours', now() + interval '31 hours', 12500) returning id", [pid, cli]));
+  await q("update bookings set status = 'confirmed' where id = $1", [bk]);
+  await q("select notify_booking($1, 'conf')", [bk]);
+  const outbox = async () => (await q("select o.id, o.kind, o.status, o.attempts, o.last_status, s.label from push_outbox o left join push_subscriptions s on s.id = o.subscription_id where o.booking_id = $1 order by o.id", [bk]));
+  ok("push: la confirmación quedó en la cola para los 4 dispositivos y la nueva reserva para el prestador",
+     (await outbox()).filter((x: any) => x.kind === "conf").length === 4 && (await outbox()).filter((x: any) => x.kind === "new_booking").length === 1);
+  let rr = await pushRun("otra-clave-cualquiera-de-mas-de-32-caracteres");
+  ok("push-send sin la clave del cron: 403 y no manda nada", rr.status === 403 && ps.recibidos.length === 0);
+  Deno.env.delete("VAPID_PRIVATE_KEY");
+  const e0 = console.error; console.error = () => {};
+  rr = await pushRun();
+  console.error = e0;
+  ok("push-send sin las claves VAPID: 500 (config) y no toma los pendientes", rr.status === 500 && (await body(rr)).error === "config"
+     && (await outbox()).every((x: any) => x.status === "pending") && Number(await one("select count(*) from push_outbox where next_attempt_at > now()")) === 0);
+  Deno.env.set("VAPID_PRIVATE_KEY", VAPID_PRIV);
+  ps.responder("viejo", 410); ps.responder("caido", 503); ps.responder("otra-clave", 403);
+  const logs: string[] = []; console.error = (...a: unknown[]) => logs.push(a.join(" "));
+  rr = await pushRun();
+  console.error = e0;
+  const res = await body(rr);
+  ok("push-send manda: 2 enviadas (celu y prestador), 1 vencida, 2 fallidas", rr.status === 200 && res.sent === 2 && res.gone === 1 && res.failed === 2, JSON.stringify(res));
+  const rCelu = ps.recibidos.find((x) => x.device === "celu")!;
+  ok("el servicio de push verificó la firma VAPID (RFC 8292: ES256 con la clave k, para su origen, por menos de 24 h)", rCelu.vapidOk, rCelu.vapidWhy);
+  ok("…cifrado aes128gcm, con TTL hasta el turno, urgencia alta y Topic del turno", rCelu.encoding === "aes128gcm" && rCelu.ttl > 29 * 3600 && rCelu.ttl <= 30 * 3600
+     && rCelu.urgency === "high" && rCelu.topic === `turno-${bk}`, JSON.stringify({ ...rCelu, payload: undefined }));
+  ok("el dispositivo descifra el mensaje (RFC 8291): título, texto, adónde lleva y la etiqueta", rCelu.payload.title === "Turno confirmado"
+     && /^Prov Funciones · (dom|lun|mar|mié|jue|vie|sáb) \d\d\/\d\d, \d\d:\d\d$/.test(rCelu.payload.body) && rCelu.payload.url === `/turno/${bk}` && rCelu.payload.tag === `turno-${bk}`, JSON.stringify(rCelu.payload));
+  ok("…y nada más (sin montos ni datos de otros)", JSON.stringify(Object.keys(rCelu.payload).sort()) === '["body","tag","title","url"]' && !JSON.stringify(rCelu.payload).includes("$"));
+  const rOwner = ps.recibidos.find((x) => x.device === "prestador")!;
+  ok("al prestador: «Nueva reserva» con el nombre de pila del cliente (sin apellido)", rOwner.payload.title === "Nueva reserva" && rOwner.payload.body.startsWith("Paula · Corte · ")
+     && !rOwner.payload.body.includes("Gómez") && /^\/panel\/agenda\?dia=\d{4}-\d\d-\d\d$/.test(rOwner.payload.url), JSON.stringify(rOwner.payload));
+  const after = await outbox();
+  ok("en la base: enviadas, la del 503 para reintentar, la del 403 fallida", after.filter((x: any) => x.status === "sent").length === 2
+     && after.some((x: any) => x.label === "caido" && x.status === "pending" && x.attempts === 1 && x.last_status === 503)
+     && after.some((x: any) => x.label === "otra-clave" && x.status === "failed" && x.last_status === 403));
+  ok("410: la suscripción vencida se borró", Number(await one("select count(*) from push_subscriptions where endpoint = $1", [dB.endpoint])) === 0);
+  ok("el log dice qué pasó con el 403 (clave VAPID) sin el contenido ni el endpoint completo", logs.some((l) => l.includes("rechazó la firma VAPID (403)"))
+     && !logs.some((l) => l.includes(dA.endpoint) || l.includes(dD.endpoint) || l.includes("Turno confirmado")));
+  const n0 = ps.recibidos.length;
+  ok("una segunda corrida no manda nada otra vez", (await body(await pushRun())).sent === 0 && ps.recibidos.length === n0);
+  await q("update push_outbox set next_attempt_at = now() where status = 'pending'");
+  ok("el reintento del 503 sale", (await body(await pushRun())).sent === 1 && ps.recibidos.filter((x) => x.device === "caido").length === 2
+     && (await outbox()).some((x: any) => x.label === "caido" && x.status === "sent"));
+  // endpoint de un servicio desconocido (no debería estar en la tabla, pero si está, la función no lo llama)
+  await q("insert into push_subscriptions (user_id, endpoint, p256dh, auth) values ($1, 'https://interno.evil.test/robar', $2, $3)", [cli, dA.p256dh, dA.auth]);
+  const bk2 = Number(await one("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Paula', 'Corte', 'app', 'confirmed', now() + interval '50 hours', now() + interval '51 hours', 12500) returning id", [pid, cli]));
+  await q("select notify_booking($1, 'conf')", [bk2]);
+  console.error = () => {};
+  await pushRun();
+  console.error = e0;
+  ok("un endpoint de un servicio desconocido no se llama: falla sin reintentos", (await q("select o.status, o.last_status from push_outbox o join push_subscriptions s on s.id = o.subscription_id where s.endpoint = 'https://interno.evil.test/robar'"))[0]?.status === "failed");
+  ok("sin el secreto PUSH_TEST_ORIGINS, el servicio falso tampoco sería aceptado (solo los conocidos)", !(await import("../../supabase/functions/_shared/webpush.ts")).knownEndpoint(dA.endpoint));
+  await ps.cerrar();
 }
 
 const cfg = fileURLToPath(new URL("./deno.json", import.meta.url));

@@ -206,7 +206,7 @@ jobs:
           if-no-files-found: ignore
 
   funciones:
-    name: Edge Functions (Deno · Mercado Pago falso)
+    name: Edge Functions (Deno · Mercado Pago falso · Web Push con vectores RFC)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -249,6 +249,12 @@ jobs:
 
       - name: Tipos de las Edge Functions (deno check)
         run: deno check --config pruebas/funciones/deno.json supabase/functions/*/index.ts
+
+      - name: Web Push (cifrado aes128gcm y VAPID) contra los vectores oficiales de RFC 8291 y RFC 8292
+        run: |
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/rfc8291.txt" https://www.rfc-editor.org/rfc/rfc8291.txt
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/rfc8292.txt" https://www.rfc-editor.org/rfc/rfc8292.txt
+          deno run --config pruebas/funciones/deno.json --allow-read pruebas/funciones/webpush_rfc.ts --rfc "$RUNNER_TEMP/rfc8291.txt" "$RUNNER_TEMP/rfc8292.txt"
 
       - name: Funciones reales contra la base, PostgREST y un Mercado Pago falso
         run: npm run test:funciones
