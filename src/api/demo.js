@@ -48,6 +48,10 @@ export const demoApi = {
   async session() {
     return null;
   },
+  // Bloque C: en la demo no hay notificaciones push
+  async pushRegistered() {
+    return false;
+  },
   async providerIdBySlug(slug) {
     const prov = P.find((item) => item.slug === slug);
     return prov ? prov.id : null;

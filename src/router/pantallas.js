@@ -155,6 +155,12 @@ function openPanel(parts, params, path) {
   if (tab !== S.btab) {
     setBtab(tab);
   }
+  // Bloque C: desde la notificación de una reserva, la Agenda en ese día (/panel/agenda?dia=AAAA-MM-DD)
+  const day = params.get("dia");
+  if (tab === "agenda" && /^\d{4}-\d\d-\d\d$/.test(day || "")) {
+    S.aday = day;
+    S.awk = null;
+  }
   const clientId = params.get("cliente");
   if (tab === "clientes" && clientId) {
     const name = Object.keys(store.CLIENTS).find((key) => String(store.CLIENTS[key].id) === clientId);

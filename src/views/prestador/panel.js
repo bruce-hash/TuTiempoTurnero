@@ -6,6 +6,7 @@ import { CAT, catInfo, catName, pcat } from "../../lib/rubros.js";
 import { cfg } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
+import { pushCard } from "../../ui/avisos.js";
 import { render } from "../../ui/render.js";
 import { vBAgendaT } from "./agenda.js";
 import { vCaja } from "./caja.js";
@@ -114,7 +115,7 @@ export function vBarbero() {
   const body = (
     {
       caja: () => vCaja(prov),
-      agenda: () => setupSteps(prov, "agenda") + vBAgendaT(),
+      agenda: () => setupSteps(prov, "agenda") + pushCard("prestador") + vBAgendaT(),
       clientes: () => vBClientes(),
       finanzas: () => vBFinanzas(),
       horarios: () => vBHorarios(),

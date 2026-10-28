@@ -6,6 +6,7 @@ import { $ } from "../lib/dom.js";
 import { TODAY, nowHM } from "../lib/fechas.js";
 import { onPhoto } from "../lib/imagenes.js";
 import { ME, pr } from "../lib/prestadores.js";
+import { disablePush } from "../lib/push.js";
 import { freed } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
@@ -121,7 +122,10 @@ registerClick("delYes", (ev, el, act) => {
 });
 registerClick("logout", (ev, el, act) => {
   if (LIVE) {
-    sb.auth.signOut();
+    // Bloque C: que nadie reciba en este dispositivo los avisos de esta cuenta (la base solo deja borrar la propia)
+    disablePush()
+      .catch(() => {})
+      .finally(() => sb.auth.signOut());
   } else {
     demoStash();
   }

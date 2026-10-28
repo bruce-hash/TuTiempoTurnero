@@ -7,6 +7,7 @@ import { svcMeta } from "../../lib/servicios.js";
 import { cfg, skey } from "../../lib/turnero.js";
 import { approved, dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
+import { pushPanel } from "../../ui/avisos.js";
 import { photoPicker } from "../../ui/fotos.js";
 import { stampCfg, stampSvcs } from "../../ui/sellos.js";
 import { delBox } from "../cliente/cuenta.js";
@@ -196,6 +197,7 @@ export function vBPerfil(prov) {
    <button class="btn btn-pri btn-block" type="submit">Guardar cambios</button>
   </form>
   ${vMensajes()}
+  ${pushPanel("prestador")}
   <div class="panel"><p class="lbl">Verificación</p><dl class="kv">${verifRow(prov)}<dt>Email</dt><dd>${esc(LIVE ? (S.user ? S.user.email : "") : prov.id === 21 ? "sofia@tutiempo.demo" : "filo@tutiempo.demo")}</dd></dl></div>
   ${delBox("pro")}
   <button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;

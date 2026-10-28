@@ -326,6 +326,68 @@ la cuenta, recuperar la contraseña). Un solo dominio para los dos entornos; cla
 3. Verificar: panel admin → Comisión → **Verificación**, con "Exigir DNI para aprobar prestadores" activada. Si TuTiempo
    decide no pedir más el DNI, se apaga ahí: el alta y el panel dejan de pedirlo y el admin aprueba solo con los datos.
 
+#### Bloque C (después del Bloque D): app instalable y notificaciones push (D27)
+Claves VAPID **distintas** para prueba y para producción. No se rotan salvo que se filtren: cambiarlas anula todas las
+suscripciones y cada persona tiene que volver a tocar "Activar avisos".
+1. **Claves VAPID.** En tu compu, en la carpeta del repo: `npm run vapid`. Muestra la clave pública, la privada y el
+   comando de Supabase ya armado. No guarda nada en disco; copiá la privada directo al paso 2 y no la pegues en ningún
+   otro lado.
+2. **Secretos de Supabase** (con el proyecto vinculado):
+   `supabase secrets set VAPID_PUBLIC_KEY=<pública> VAPID_PRIVATE_KEY=<privada> VAPID_SUBJECT=mailto:contacto@tutiempo.com.ar`
+   (`VAPID_SUBJECT` es el contacto que ven Google, Apple y Mozilla si hay un problema con los envíos).
+3. **Migración:** `supabase db push` (o `TODO_EN_UNO.sql`): `20261028160000_push.sql`. Crea `push_subscriptions` y
+   `push_outbox`, las opciones de Mi perfil y del panel, los triggers y la tarea `tt-push` (cada minuto). Usa los mismos
+   `tt_project_url` y `tt_cron_secret` de Vault que los emails (Bloque 2a): no hay que crear nada nuevo en Vault.
+4. **Función:** `supabase functions deploy push-send --no-verify-jwt` (como `email-send`: solo acepta `CRON_SECRET`).
+5. **`config.js`** del sitio: `vapidPublicKey: "<pública>"`. Sin esa clave la app se instala igual pero no ofrece avisos.
+6. **Frontend:** `npm run build` y subir `dist/`, que ahora incluye `sw.js`, `manifest.webmanifest`, `offline.html`,
+   `offline.js` e `icons/`. Todo en la raíz del sitio, como siempre (el `.htaccess` ya trae los encabezados).
+7. **Verificar en Supabase:** `select jobname, schedule from cron.job where jobname = 'tt-push';` → `* * * * *`. En
+   Edge Functions → push-send → Logs, cada corrida dice cuántas salieron. Si el log dice "rechazó la firma VAPID (401 o
+   403)", `VAPID_PUBLIC_KEY` (secreto) y `vapidPublicKey` (`config.js`) son de pares distintos.
+8. **Probar en celulares reales** (abajo, "Notificaciones en un celular real").
+
+**Freno de emergencia:** si el service worker diera problemas, `serviceWorker: false` en `config.js` lo desinstala en
+todos los navegadores la próxima vez que abran la app (y borra su caché), sin publicar código. Para volver, sacás esa línea.
+
+#### Notificaciones en un celular real (entorno de prueba)
+Hace falta el sitio en HTTPS (el subdominio de prueba ya lo tiene), los pasos de arriba hechos y dos cuentas: una de
+cliente y la del prestador de prueba (con Mercado Pago de prueba conectado).
+
+Los avisos le llegan a un dispositivo desde que activa las notificaciones: lo que pasó antes (por ejemplo, la confirmación
+del turno que acabás de reservar) no se manda de nuevo. Los recordatorios salen cada 10 minutos (`tt-notices`): el de 2 h,
+si el turno se reservó más de 2 h antes; el de 24 h, si se reservó más de 24 h antes.
+
+**Android (Chrome):**
+1. Abrí `https://prueba.tutiempo.com.ar` en Chrome, ingresá como cliente y reservá un turno (pagá con el comprador de prueba).
+2. En "¡Listo! Tenés turno" aparece "¿Te avisamos antes del turno?": tocá **Activar avisos** y aceptá el permiso de
+   Chrome. Mi perfil → Notificaciones tiene que decir "Activadas".
+3. Reservá otro turno para dentro de unas **2 h 30 min** (con más de 2 h de anticipación): enseguida llega **"Turno confirmado"** (probalo también con el
+   celular bloqueado). Tocala: abre la app en ese turno.
+4. Dejá pasar el tiempo hasta que falten menos de 2 h: en los 10 minutos siguientes llega el **recordatorio de 2 h**.
+5. Mi perfil → apagá "Recordatorios y novedades por notificación" y repetí los pasos 3 y 4 con otro turno: la
+   confirmación llega, el recordatorio no. Volvé a prenderla.
+6. Menú de cuenta → **Instalar la app** (o la tarjeta "Instalá TuTiempo para tener tus turnos a mano", que sale una sola vez): queda el ícono en la pantalla de inicio. Abrila
+   desde ahí: se abre sin la barra del navegador.
+7. Con el prestador de prueba (otro celular, o el mismo en otro navegador): Panel → Agenda → tarjeta "Enterate al toque
+   de cada reserva" → **Activar avisos**. Desde la cuenta de cliente, reservá para mañana o más adelante: le llega **"Nueva reserva"** con el nombre
+   de pila del cliente; cancelá ese turno desde Mis turnos: le llega **"Se canceló una reserva"**. Mi perfil del
+   prestador → apagá "Nuevas reservas y cancelaciones de clientes" y repetí: no llega nada.
+8. Modo avión y abrí la app instalada: tiene que aparecer **"Sin conexión"**. Sacá el modo avión: se recarga sola.
+9. Cerrá sesión en el celular y, desde la compu con la misma cuenta, reservá: al celular ya no le llega nada.
+
+**iPhone (Safari, iOS 16.4 o más nuevo):**
+1. Abrí el sitio en **Safari** (no en el navegador de Instagram ni de WhatsApp) e ingresá como cliente.
+2. Mi perfil → Notificaciones: dice que en el iPhone funcionan con la app agregada a inicio, con los 3 pasos.
+3. Tocá **Compartir** (el cuadrado con la flecha) → **Agregar a inicio** → **Agregar**.
+4. Abrí TuTiempo **desde el ícono** (no desde Safari) e ingresá de nuevo (la app instalada tiene su propia sesión).
+5. Mi perfil → **Activar avisos** → **Permitir**.
+6. Seguí desde el paso 3 de Android (confirmación, recordatorio, opción, prestador, modo avión, cerrar sesión). El paso 6
+   no hace falta: ya está agregada a inicio.
+
+Si en algún celular no llega nada: Edge Functions → push-send → Logs (el código de cada envío y el servicio) y la tabla
+`push_outbox` (`last_status`, `last_error`). 410 o 404 quiere decir que ese dispositivo se dio de baja: se borra solo.
+
 ### 3. Hostinger (subdominio de prueba)
 1. hPanel → Dominios → Subdominios → crear `prueba.tutiempo.com.ar`. Activar SSL.
 2. En tu compu (Node 22, ver `.nvmrc`): `npm ci` y `npm run build` → carpeta `dist/`.
@@ -391,6 +453,8 @@ prendido en Supabase y sin la clave en `config.js`, nadie puede ingresar.
    cuenta real de TuTiempo; `CRON_SECRET` y `MP_TOKENS_KEY` **nuevas** (no las del entorno de prueba);
    `supabase secrets set` en el proyecto de producción (con los de Resend), deploy de las 6 funciones y Vault. Para un
    proyecto nuevo, seguí "Instalación desde cero".
+   Notificaciones push: claves VAPID **nuevas** de producción (`npm run vapid`), los tres secretos `VAPID_*`, deploy de
+   `push-send` y `vapidPublicKey` en el `config.js` de producción (Bloque C, pasos 1 a 7).
 4. Textos legales revisados por abogado (D13).
 5. Hostinger: subdominio definitivo o reemplazo de la raíz según D12. Antes de tocar la raíz: backup completo del Laravel.
 6. Primera compra real chica con tu propia tarjeta y devolución desde el panel.

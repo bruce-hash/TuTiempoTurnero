@@ -1,10 +1,12 @@
 import { mountCaptchas } from "../lib/captcha.js";
+import { pwaAfterRender } from "../lib/pwa.js";
 import { $ } from "../lib/dom.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { CAT, pcat } from "../lib/rubros.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { LOGO } from "./iconos.js";
+import { installGuide, installMenuItem, updateBar } from "./avisos.js";
 import { accountMenu } from "./menu-cuenta.js";
 import { syncUrl } from "../router.js";
 import { vAdmin } from "../views/admin/admin.js";
@@ -38,6 +40,7 @@ function nav() {
         ["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"'],
         ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"'], ["📅", "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
         ...(S.barberAuth ? [["🏪", "Panel de prestador", 'data-act="toPanel"']] : []),
+        ...installItem(),
         ...(S.user ? [["↪", "Cerrar sesión", 'data-act="logout"']] : [["↪", "Salir del panel", 'data-act="salirAdmin"']]),
       ],
     });
@@ -53,6 +56,7 @@ function nav() {
         ["👁", "Ver mi perfil como cliente", 'data-act="preview"'],
         ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"'], ["📅", "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
         ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
+        ...installItem(),
         ["↪", "Cerrar sesión", 'data-act="salirBarbero"'],
       ],
     });
@@ -68,6 +72,7 @@ function nav() {
           ["📅", "Mis turnos", 'data-go="misturnos"', count],
           ...(S.barberAuth ? [["🏪", "Panel de prestador", 'data-act="toPanel"']] : []),
           ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
+          ...installItem(),
           ["↪", "Cerrar sesión", 'data-act="logout"'],
         ],
       })
@@ -131,9 +136,19 @@ function renderInner() {
     app.insertAdjacentHTML("beforeend", vStory());
     storyTick();
   }
+  // Bloque C: la guía de "Agregar a inicio" y la barra de versión nueva (si corresponden)
+  if (app) {
+    app.insertAdjacentHTML("beforeend", installGuide() + updateBar());
+  }
+  pwaAfterRender();
   // H30: el CAPTCHA de los formularios de ingreso (si hay clave de Turnstile)
   mountCaptchas();
 }
+// Bloque C: "Instalar la app" en el menú de cuenta, si este navegador lo permite
+const installItem = () => {
+  const item = installMenuItem();
+  return item ? [item] : [];
+};
 function renderMain() {
   document.body.dataset.seg = segNow();
   nav();

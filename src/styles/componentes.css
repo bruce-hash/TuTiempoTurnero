@@ -133,3 +133,23 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 /* H30: recuadro de Turnstile (casi siempre invisible: aparece solo si Cloudflare pide tocarlo) */
 .cf-box{display:flex;justify-content:center}
 .cf-box:not(:empty){margin:2px 0 12px}
+/* Bloque C: tarjetas de notificaciones e instalación, panel de Mi perfil, guía de iPhone y barra de versión nueva */
+.pwa-card{text-align:left}
+.pwa-row{display:flex;gap:12px;align-items:flex-start}
+.pwa-ic{font-size:26px;line-height:1}
+.pwa-note{text-align:left;margin:6px 0 0}
+.pwa-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.pwa-acts.one{grid-template-columns:1fr}
+.pwa-steps{margin:10px 0 0;padding-left:20px;font-size:14px;line-height:1.5;text-align:left}
+.pwa-steps li{margin:4px 0}
+.pwa-share{display:inline-block;vertical-align:-3px;width:15px;height:17px;border:1.6px solid currentColor;border-top:0;border-radius:0 0 3px 3px;position:relative;margin:0 2px}
+.pwa-share::before{content:"";position:absolute;left:5px;top:-6px;width:1.6px;height:11px;background:currentColor}
+.pwa-share::after{content:"";position:absolute;left:2.6px;top:-6px;width:5px;height:5px;border-left:1.6px solid currentColor;border-top:1.6px solid currentColor;transform:rotate(45deg)}
+.pwa-dev{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 10px}
+.pill-ok{font-size:12px;font-weight:700;border-radius:99px;padding:3px 9px;background:var(--ok-soft);color:var(--ok);white-space:nowrap}
+.pwa-opt{justify-content:flex-start;text-align:left;margin-top:12px}
+.pwa-guide{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.45);display:grid;place-items:end center;padding:16px}
+.pwa-guide .panel{width:100%;max-width:420px;text-align:left}
+.pwa-gt{display:block;font-size:17px;margin-bottom:4px}
+.pwa-update{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;display:flex;gap:12px;align-items:center;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:14px;padding:10px 12px 10px 16px;box-shadow:0 12px 30px rgba(0,0,0,.18);max-width:calc(100vw - 32px)}
+@media (min-width:700px){.pwa-guide{place-items:center}}

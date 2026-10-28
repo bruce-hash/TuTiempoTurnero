@@ -4,6 +4,7 @@ Options -Indexes
 AddDefaultCharset UTF-8
 AddType font/woff2 .woff2
 AddType application/javascript .js .cjs
+AddType application/manifest+json .webmanifest
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
@@ -32,12 +33,21 @@ AddType application/javascript .js .cjs
   # CSP: solo scripts propios; conexiones solo a Supabase. Si usás un dominio propio para Supabase, agregalo en connect-src e img-src.
   # H30: Cloudflare Turnstile (el CAPTCHA de Supabase Auth) carga su script y su recuadro desde challenges.cloudflare.com
   # (script-src y frame-src). Sin turnstileSiteKey en config.js la app no lo carga.
-  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+  # Bloque C: el service worker (/sw.js) y el manifest, solo de este sitio (worker-src y manifest-src).
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
   <FilesMatch "\.(html|js|cjs)$">
     Header set Cache-Control "no-cache"
   </FilesMatch>
   <FilesMatch "^config\.(js|cjs)$">
     Header set Cache-Control "no-store"
+  </FilesMatch>
+  # Bloque C: el service worker, el manifest y la pantalla sin conexión, siempre al día (el navegador revisa sw.js y
+  # el manifest seguido: con caché larga, una versión nueva tardaría en llegar)
+  <FilesMatch "^(sw\.js|manifest\.webmanifest|offline\.(html|js))$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  <FilesMatch "\.png$">
+    Header set Cache-Control "public, max-age=604800"
   </FilesMatch>
   <FilesMatch "\.(woff2|css)$">
     Header set Cache-Control "public, max-age=31536000, immutable"

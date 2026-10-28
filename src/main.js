@@ -12,6 +12,7 @@ import "./actions/admin-balance.js";
 import "./actions/admin.js";
 import "./actions/alta-prestador.js";
 import "./actions/auth.js";
+import "./actions/avisos.js";
 import "./actions/cambios.js";
 import "./actions/cliente.js";
 import "./actions/contrasena-nueva.js";
@@ -32,6 +33,8 @@ import { exponerParaPruebas } from "./ganchos-prueba.js";
 import { api } from "./api/index.js";
 import { CONFIG_OK, LIVE, sb } from "./config.js";
 import { errMsg } from "./lib/errores.js";
+import { refreshPush } from "./lib/push.js";
+import { startPwa } from "./lib/pwa.js";
 import { S } from "./state.js";
 import { P, store } from "./store.js";
 import { startRouter } from "./router.js";
@@ -137,6 +140,11 @@ async function boot() {
     } catch (err) {
       toast(errMsg(err));
     }
+    // Bloque C: el service worker y si este dispositivo ya recibe notificaciones
+    startPwa(() => render());
+    refreshPush()
+      .then(() => render())
+      .catch(() => {});
     api.commission().catch(() => {});
     api.requireDni().catch(() => {});
     // dirección con la que arranca el enrutador: la actual, salvo que el arranque ya decida la pantalla

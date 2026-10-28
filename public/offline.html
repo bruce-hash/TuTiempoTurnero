@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<title>Sin conexión · TuTiempo</title>
+<!-- Bloque C: la pantalla que muestra el service worker cuando no hay internet. Sola, sin depender de la app. -->
+<style>
+:root{color-scheme:light dark}
+body{margin:0;font:16px/1.5 Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:#fafaf9;color:#121212;min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;text-align:center}
+@media (prefers-color-scheme:dark){body{background:#121212;color:#f5f5f4}p{color:#c8c6c1!important}.logo i{background:#f5f5f4!important;color:#121212!important}a.btn{background:#f5f5f4!important;color:#121212!important}}
+.c{max-width:340px}
+.logo{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:22px;letter-spacing:-.02em}
+.logo i{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#121212;color:#fff;font-style:normal;font-size:20px}
+h1{font-size:24px;margin:24px 0 8px;letter-spacing:-.02em}
+p{color:#4d4c48;margin:0 0 20px}
+a.btn{display:block;font-weight:700;background:#121212;color:#fff;border-radius:10px;padding:12px 20px;text-decoration:none}
+small{display:block;margin-top:14px;color:#77756f}
+</style>
+</head>
+<body>
+<main class="c">
+  <div class="logo"><i aria-hidden="true">◷</i>TuTiempo</div>
+  <div style="font-size:44px;margin-top:24px" aria-hidden="true">📡</div>
+  <h1>Sin conexión</h1>
+  <p>No hay internet en este momento. Tus turnos y los horarios se muestran siempre al día, así que necesitamos conexión para verlos.</p>
+  <a class="btn" href="">Reintentar</a>
+  <small>Cuando vuelva la conexión, la página se recarga sola.</small>
+</main>
+<script src="/offline.js"></script>
+</body>
+</html>

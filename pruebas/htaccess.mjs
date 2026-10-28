@@ -105,6 +105,19 @@ for (const route of ["/assets/", "/fonts"]) {
   const res = await get(HTTPS + "/ingresar");
   ok("CSP: script-src solo propio y Turnstile (sin unsafe-inline ni unsafe-eval)", directive(res, "script-src") === "script-src 'self' https://challenges.cloudflare.com", directive(res, "script-src"));
   ok("CSP: frame-src solo Turnstile", directive(res, "frame-src") === "frame-src https://challenges.cloudflare.com", directive(res, "frame-src"));
+  ok("CSP: worker-src y manifest-src solo de este sitio (Bloque C)", directive(res, "worker-src") === "worker-src 'self'" && directive(res, "manifest-src") === "manifest-src 'self'");
+}
+// Bloque C: el service worker, el manifest y la pantalla sin conexión sin caché larga (el navegador ve enseguida una
+// versión nueva); los íconos, una semana
+{
+  const sw = await get(HTTPS + "/sw.js");
+  ok("/sw.js → 200, JavaScript y no-cache", sw.status === 200 && /javascript/.test(sw.headers["content-type"] || "") && /no-cache/.test(sw.headers["cache-control"] || ""), `${sw.status} ${sw.headers["content-type"]} ${sw.headers["cache-control"]}`);
+  const man = await get(HTTPS + "/manifest.webmanifest");
+  ok("/manifest.webmanifest → application/manifest+json y no-cache", man.status === 200 && /application\/manifest\+json/.test(man.headers["content-type"] || "") && /no-cache/.test(man.headers["cache-control"] || ""), `${man.status} ${man.headers["content-type"]} ${man.headers["cache-control"]}`);
+  const off = await get(HTTPS + "/offline.html");
+  ok("/offline.html → 200 y no-cache", off.status === 200 && /no-cache/.test(off.headers["cache-control"] || "") && /Sin conexión/.test(off.body));
+  const icon = await get(HTTPS + "/icons/icon-192.png");
+  ok("/icons/icon-192.png → image/png con una semana de caché", icon.status === 200 && /image\/png/.test(icon.headers["content-type"] || "") && /max-age=604800/.test(icon.headers["cache-control"] || ""), `${icon.status} ${icon.headers["content-type"]} ${icon.headers["cache-control"]}`);
 }
 
 console.log(fails ? `${fails} FALLAS` : "TODO OK");

@@ -7,6 +7,9 @@
 //  /__captcha?key= → H30: prende (con la clave del sitio) o apaga (vacía) el CAPTCHA: config.js trae turnstileSiteKey y
 //                    Auth pide un token en signup, token (contraseña), otp, recover y resend, como Supabase con
 //                    Turnstile: válido si empieza con "ok-" y una sola vez (lo emite el Turnstile falso de captcha.js)
+//  /__pwa?sw=1&vapid= → Bloque C: con sw=1 la app registra el service worker (por defecto no, para que las demás pruebas
+//                    corran igual que siempre) y con vapid= ofrece notificaciones (config.js trae vapidPublicKey)
+//  /__down?on=1    → Bloque C: el sitio "se cae" (corta cada conexión) para probar la pantalla sin conexión
 //  resto           → archivos del paquete para Hostinger, con la CSP y el fallback de direcciones del .htaccess
 //                    (misma regla que Apache: pruebas/fallback.cjs)
 // Uso: node e2e_server.js <carpeta web> <puerto> <jwt_secret> <pg_conn> <postgrest_url>
@@ -46,6 +49,8 @@ const body = (req) => new Promise((ok) => { const c = []; req.on("data", (d) => 
 const LOG = [];
 const CONFIRM = true; // igual que Supabase con "Confirm email" activado
 let CAPTCHA = ""; // H30: clave del sitio de Turnstile ("" = sin CAPTCHA)
+const PWA = { sw: false, vapid: "" }; // Bloque C
+let DOWN = false; // Bloque C: /__down?on=1 simula el sitio caído (sin conexión): cierra toda conexión salvo /__down
 const USED = new Set(); // tokens ya usados (Cloudflare acepta cada uno una sola vez)
 const CAPTCHA_PATHS = ["/signup", "/otp", "/recover", "/resend"];
 
@@ -169,11 +174,14 @@ function proxy(req, res, url) {
 
 const HT = fs.readFileSync(path.join(WEB, ".htaccess"), "utf8");
 const CSP = HT.match(/Content-Security-Policy "([^"]+)"/)[1].replace(/https:\/\/\*\.supabase\.co/g, "").replace(/wss:\/\/\*\.supabase\.co/g, "").replace("upgrade-insecure-requests", "");
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "application/javascript", ".cjs": "application/javascript", ".css": "text/css", ".woff2": "font/woff2", ".txt": "text/plain" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "application/javascript", ".cjs": "application/javascript", ".css": "text/css", ".woff2": "font/woff2", ".txt": "text/plain", ".png": "image/png", ".webmanifest": "application/manifest+json" };
 http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   try {
     if (url.pathname === "/__log") return send(res, 200, LOG);
+    if (url.pathname === "/__down") { DOWN = url.searchParams.get("on") === "1"; return send(res, 200, { down: DOWN }) }
+    if (DOWN) return req.socket.destroy();
+    if (url.pathname === "/__pwa") { PWA.sw = url.searchParams.get("sw") === "1"; PWA.vapid = url.searchParams.get("vapid") || ""; return send(res, 200, PWA) }
     if (url.pathname === "/__captcha") { CAPTCHA = url.searchParams.get("key") || ""; return send(res, 200, { captcha: CAPTCHA }) }
     // ¿existe el archivo del bucket dni? (las pruebas miran el disco, no solo storage.objects)
     if (url.pathname === "/__dni") { const name = url.searchParams.get("name") || ""; return send(res, 200, { exists: !!name && fs.statSync(fileOf(name), { throwIfNoEntry: false })?.isFile() === true }) }
@@ -183,7 +191,7 @@ http.createServer(async (req, res) => {
     if (url.pathname.startsWith("/functions/v1")) return await functions(req, res, url);
     if (url.pathname.startsWith("/storage/v1")) return await storage(req, res, url);
     const f = url.pathname;
-    if (f === "/config.js" || f === "/config.cjs") { res.writeHead(200, { "Content-Type": "application/javascript" }); return res.end(`window.TT_CONFIG={supabaseUrl:"http://localhost:${PORT}",supabaseAnonKey:"${ANON}",city:"olavarria"${CAPTCHA ? `,turnstileSiteKey:${JSON.stringify(CAPTCHA)}` : ""}};`) }
+    if (f === "/config.js" || f === "/config.cjs") { res.writeHead(200, { "Content-Type": "application/javascript" }); return res.end(`window.TT_CONFIG={supabaseUrl:"http://localhost:${PORT}",supabaseAnonKey:"${ANON}",city:"olavarria"${CAPTCHA ? `,turnstileSiteKey:${JSON.stringify(CAPTCHA)}` : ""},serviceWorker:${PWA.sw}${PWA.vapid ? `,vapidPublicKey:${JSON.stringify(PWA.vapid)}` : ""}};`) }
     const { status, file: fp } = resolver(WEB, f);
     if (!fp) { res.writeHead(status, { "Content-Security-Policy": CSP }); return res.end("no") }
     res.writeHead(200, { "Content-Type": TYPES[path.extname(fp)] || "application/octet-stream", "Content-Security-Policy": CSP });

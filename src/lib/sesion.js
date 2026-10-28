@@ -1,10 +1,15 @@
 import { $ } from "./dom.js";
 import { S } from "../state.js";
-import { go } from "../ui/render.js";
+import { go, render } from "../ui/render.js";
+import { refreshPush } from "./push.js";
 import { afterPathFor, navigate } from "../router.js";
 import { toast } from "../ui/toast.js";
 
 export function afterLogin() {
+  // Bloque C: ¿este dispositivo ya recibe las notificaciones de esta cuenta?
+  refreshPush()
+    .then(() => render())
+    .catch(() => {});
   S.login = {
     mode: "in",
     email: "",

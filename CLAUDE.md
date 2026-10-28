@@ -37,6 +37,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - H30: `src/lib/captcha.js` (Cloudflare Turnstile para Supabase Auth, solo si `config.js` trae `turnstileSiteKey`):
     toda llamada nueva a `signUp`, `signInWithPassword`, `signInWithOtp`, `resetPasswordForEmail` o `resend` lleva
     `captchaToken: await captchaToken("<formulario>")` y su vista, `captchaBox("<formulario>")`.
+  - Bloque C: `src/lib/pwa.js` (service worker, instalar la app, versiones nuevas, freno `serviceWorker: false`),
+    `src/lib/push.js` (permiso y suscripción de este dispositivo; el permiso se pide solo con un toque), `src/ui/avisos.js`
+    (tarjetas, Mi perfil, guía de iPhone) y `src/pwa/sw.js` (plantilla del service worker: el build la escribe en `/sw.js`
+    con la versión y los archivos; NUNCA guarda nada de otro origen ni `config.js`).
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en
@@ -50,7 +54,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   (`AAAAMMDDHHMMSS_nombre.sql`, por ejemplo `20261001000001_schema.sql`). `supabase/TODO_EN_UNO.sql` es su concatenación
   exacta: si cambiás o agregás una migración, regeneralo con `npm run sql:build` y verificá con `npm run sql:check`
   (el CI falla si no son idénticos).
-- `supabase/functions/`: Edge Functions de Mercado Pago, `dni-cleanup` (borra las fotos del DNI, D24) y `email-send` (avisos por
+- `supabase/functions/`: Edge Functions de Mercado Pago, `dni-cleanup` (borra las fotos del DNI, D24), `push-send` (notificaciones
+  push, Bloque C: cola `push_outbox`, cifrado y VAPID en `_shared/webpush.ts`, secretos `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y
+  `VAPID_SUBJECT`; `PUSH_TEST_ORIGINS` solo en pruebas) y `email-send` (avisos por
   email con Resend, Bloque 3; el HTML sale de `_shared/email.ts`); `_shared/util.ts` compartido. Desde el Bloque 1 las llaves están
   en `mp_accounts` (una por prestador y cuenta de MP; solo la `active` cobra) y cada pago en `payments`, ligado a la
   cuenta que lo cobró: las devoluciones y consultas usan esa llave, no la actual. Desde el Bloque 2a las llaves se guardan
@@ -98,9 +104,9 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
   `developer`. Nunca commit directo a `main`. Commits chicos, en español.
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
-  `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` si tocás las
+  `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py`, `pruebas/test_push.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` y `npm run test:webpush` si tocás las
   Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:unidad`, `npm run test:crawl`,
-  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha` y `npm run test:comparar` (navegador
+  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:pwa` y `npm run test:comparar` (navegador
   real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` si tocás el `.htaccess` (Apache local; en
   el CI corre en un contenedor `httpd:2.4`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
@@ -134,6 +140,7 @@ python3 pruebas/test_emails.py "host=... dbname=OTRA_BASE_LIMPIA user=postgres" 
 # Deno 2.1.4 (https://github.com/denoland/deno/releases) en el PATH, más Postgres y PostgREST como en el navegador
 npm run test:funciones  # mp-oauth, mp-create-preference, mp-webhook, mp-refunds, dni-cleanup y email-send reales (MP y Resend falsos)
 deno check --config pruebas/funciones/deno.json supabase/functions/*/index.ts   # tipos
+npm run test:webpush    # cifrado aes128gcm y VAPID contra los vectores de RFC 8291 y RFC 8292 (sin base)
 ```
 
 ## Cómo correr las pruebas en navegador
@@ -145,6 +152,7 @@ export PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=...
 npm run test:e2e        # recorrido completo en vivo (base nueva + PostgREST + pruebas/e2e_server.js)
 npm run test:rutas      # direcciones: cada ruta, recarga, atrás/adelante, sesión, reservadas, QR (mismo entorno)
 npm run test:captcha    # H30: Turnstile (falso) en cada llamada a Auth, sin clave no carga nada (mismo entorno)
+npm run test:pwa        # Bloque C: manifest, service worker (sin Supabase en la caché), sin conexión, versión nueva, push (mismo entorno)
 npm run test:htaccess   # el .htaccess real con el apache2 local (apt install apache2): fallback, 404, HTTPS, CSP
 npm run test:comparar   # versión anterior al Bloque A vs. la actual: demo y en vivo, texto y capturas
 ```

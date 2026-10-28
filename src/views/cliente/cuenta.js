@@ -4,6 +4,7 @@ import { ME, isFol } from "../../lib/prestadores.js";
 import { CAT } from "../../lib/rubros.js";
 import { S } from "../../state.js";
 import { P, store } from "../../store.js";
+import { pushPanel } from "../../ui/avisos.js";
 import { photoPicker } from "../../ui/fotos.js";
 import { myUpcoming } from "./home.js";
 
@@ -41,6 +42,7 @@ export function vCuenta() {
    <div class="panel"><p class="lbl">Avisos por email</p>
     <label class="chk" style="justify-content:flex-start;text-align:left"><input type="checkbox" id="uMail"${user.emailNotices === false ? "" : " checked"}> Recordatorios y novedades por email</label>
     <p class="note" style="text-align:left;margin:8px 0 0">Los recordatorios de tus turnos, el pedido de reseña y el saludo de cumpleaños. La confirmación y las cancelaciones te llegan siempre por email, y todos los avisos siguen en Mis turnos.</p></div>
+   ${pushPanel("cliente")}
    <div class="panel"><p class="lbl">Profesionales que seguís</p>${(() => {
      const followed = P.filter((prov) => isFol(prov.id) && !prov.deleted);
      if (followed.length) {
