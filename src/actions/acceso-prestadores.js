@@ -1,6 +1,7 @@
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
+import { captchaToken } from "../lib/captcha.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { pr } from "../lib/prestadores.js";
@@ -85,14 +86,28 @@ registerSubmit("fRecover", (ev) => {
     render();
     return;
   }
+  const showSent = () => {
+    S.blogin.step = "sent";
+    S.blogin.err = "";
+    render();
+  };
   if (LIVE) {
-    sb.auth.resetPasswordForEmail(email, {
-      redirectTo: location.origin + "/",
-    });
+    // siempre "te mandamos el link" (no revela qué emails tienen cuenta), salvo que falte la verificación (H30)
+    captchaToken("fRecover")
+      .then((token) =>
+        sb.auth.resetPasswordForEmail(email, {
+          redirectTo: location.origin + "/",
+          captchaToken: token,
+        }),
+      )
+      .then(showSent)
+      .catch((err) => {
+        S.blogin.err = errMsg(err);
+        render();
+      });
+    return;
   }
-  S.blogin.step = "sent";
-  S.blogin.err = "";
-  render();
+  showSent();
   return;
 });
 // ingreso de prestadores. En vivo, Supabase Auth; en la demo, cuentas fijas (H18) y bloqueo de 30 s a los 5 intentos
@@ -113,11 +128,16 @@ registerSubmit("fBarb", (ev) => {
   if (LIVE) {
     login.locked = true;
     render();
-    sb.auth
-      .signInWithPassword({
-        email: login.email,
-        password: login.pass,
-      })
+    captchaToken("fBarb")
+      .then((token) =>
+        sb.auth.signInWithPassword({
+          email: login.email,
+          password: login.pass,
+          options: {
+            captchaToken: token,
+          },
+        }),
+      )
       .then(async (res) => {
         login.locked = false;
         if (res.error) {

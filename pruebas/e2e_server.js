@@ -4,6 +4,9 @@
 //  /functions/v1/* → Edge Functions simuladas (Mercado Pago "aprueba" al instante)
 //  /storage/v1/*   → Storage simulado (aplica la misma regla de carpeta; el bucket dni, las políticas reales de la base,
 //                    con los archivos en disco y su fila en storage.objects, como Storage: borrar por la API saca los dos)
+//  /__captcha?key= → H30: prende (con la clave del sitio) o apaga (vacía) el CAPTCHA: config.js trae turnstileSiteKey y
+//                    Auth pide un token en signup, token (contraseña), otp, recover y resend, como Supabase con
+//                    Turnstile: válido si empieza con "ok-" y una sola vez (lo emite el Turnstile falso de captcha.js)
 //  resto           → archivos del paquete para Hostinger, con la CSP y el fallback de direcciones del .htaccess
 //                    (misma regla que Apache: pruebas/fallback.cjs)
 // Uso: node e2e_server.js <carpeta web> <puerto> <jwt_secret> <pg_conn> <postgrest_url>
@@ -42,9 +45,19 @@ const send = (res, code, obj, headers = {}) => { res.writeHead(code, { "Content-
 const body = (req) => new Promise((ok) => { const c = []; req.on("data", (d) => c.push(d)); req.on("end", () => ok(Buffer.concat(c))) });
 const LOG = [];
 const CONFIRM = true; // igual que Supabase con "Confirm email" activado
+let CAPTCHA = ""; // H30: clave del sitio de Turnstile ("" = sin CAPTCHA)
+const USED = new Set(); // tokens ya usados (Cloudflare acepta cada uno una sola vez)
+const CAPTCHA_PATHS = ["/signup", "/otp", "/recover", "/resend"];
 
 async function auth(req, res, url) {
   const p = url.pathname.replace("/auth/v1", ""); const raw = await body(req); const j = raw.length ? JSON.parse(raw.toString() || "{}") : {};
+  if (CAPTCHA && (CAPTCHA_PATHS.includes(p) || (p === "/token" && url.searchParams.get("grant_type") === "password"))) {
+    const token = (j.gotrue_meta_security || {}).captcha_token;
+    const valid = typeof token === "string" && token.startsWith("ok-") && !USED.has(token);
+    LOG.push({ captcha: p, token: token || null, valid });
+    if (!valid) return send(res, 400, { code: 400, error_code: "captcha_failed", msg: "captcha protection: request disallowed (captcha verification process failed)", message: "captcha protection: request disallowed (captcha verification process failed)" });
+    USED.add(token);
+  }
   if (p === "/otp") { OTP[j.email] = "123456"; if (!(await userRow("email", j.email))) await db.query("insert into auth.users (email, raw_user_meta_data) values ($1, $2)", [j.email, JSON.stringify({ full_name: j.email.split("@")[0] })]); return send(res, 200, {}) }
   if (p === "/verify" && j.token_hash) { const t = HASH[j.token_hash]; if (!t || (t.type !== j.type && !(t.type === "signup" && j.type === "email"))) return send(res, 403, { error_code: "otp_expired", msg: "Email link is invalid or has expired", message: "Email link is invalid or has expired" });
     delete HASH[j.token_hash]; if (t.type === "signup") await db.query("update auth.users set email_confirmed_at = now() where email = $1", [t.email]).catch(() => {}); return send(res, 200, session(await userRow("email", t.email))) }
@@ -65,6 +78,7 @@ async function auth(req, res, url) {
     if (j.password) { if (String(j.password).length < 8) return send(res, 422, { msg: "Password should be at least 8 characters", message: "Password should be at least 8 characters" }); await db.query("update auth.users set encrypted_password=$1 where id=$2", [j.password, claims.sub]) }
     await db.query("update auth.users set raw_user_meta_data=$1 where id=$2", [JSON.stringify(md), claims.sub]); return send(res, 200, userObj(await userRow("id", claims.sub))) }
   if (p === "/logout") return send(res, 204);
+  if (p === "/resend") { if (await userRow("email", j.email)) mail(j.email, j.type || "signup"); return send(res, 200, {}) }
   if (p === "/recover") { if (await userRow("email", j.email)) mail(j.email, "recovery"); return send(res, 200, {}) }
   send(res, 404, { msg: "not mocked " + p });
 }
@@ -160,6 +174,7 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   try {
     if (url.pathname === "/__log") return send(res, 200, LOG);
+    if (url.pathname === "/__captcha") { CAPTCHA = url.searchParams.get("key") || ""; return send(res, 200, { captcha: CAPTCHA }) }
     // ¿existe el archivo del bucket dni? (las pruebas miran el disco, no solo storage.objects)
     if (url.pathname === "/__dni") { const name = url.searchParams.get("name") || ""; return send(res, 200, { exists: !!name && fs.statSync(fileOf(name), { throwIfNoEntry: false })?.isFile() === true }) }
     if (url.pathname === "/__mail") return send(res, 200, MAIL[url.searchParams.get("email")] || {});
@@ -168,7 +183,7 @@ http.createServer(async (req, res) => {
     if (url.pathname.startsWith("/functions/v1")) return await functions(req, res, url);
     if (url.pathname.startsWith("/storage/v1")) return await storage(req, res, url);
     const f = url.pathname;
-    if (f === "/config.js" || f === "/config.cjs") { res.writeHead(200, { "Content-Type": "application/javascript" }); return res.end(`window.TT_CONFIG={supabaseUrl:"http://localhost:${PORT}",supabaseAnonKey:"${ANON}",city:"olavarria"};`) }
+    if (f === "/config.js" || f === "/config.cjs") { res.writeHead(200, { "Content-Type": "application/javascript" }); return res.end(`window.TT_CONFIG={supabaseUrl:"http://localhost:${PORT}",supabaseAnonKey:"${ANON}",city:"olavarria"${CAPTCHA ? `,turnstileSiteKey:${JSON.stringify(CAPTCHA)}` : ""}};`) }
     const { status, file: fp } = resolver(WEB, f);
     if (!fp) { res.writeHead(status, { "Content-Security-Policy": CSP }); return res.end("no") }
     res.writeHead(200, { "Content-Type": TYPES[path.extname(fp)] || "application/octet-stream", "Content-Security-Policy": CSP });

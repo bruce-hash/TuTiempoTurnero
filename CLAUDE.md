@@ -34,6 +34,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - Bloque D: `src/styles/compu.css` (pantallas desde 1024 px; en el celular sus contenedores van con `display:contents`
     y nada cambia), `src/ui/menu-cuenta.js` (menú de cuenta de la cabecera, con teclado) y `src/lib/verificacion.js`
     (todo lo que depende de "Exigir DNI para aprobar prestadores", D26: si se deja de pedir el DNI, se apaga en el admin).
+  - H30: `src/lib/captcha.js` (Cloudflare Turnstile para Supabase Auth, solo si `config.js` trae `turnstileSiteKey`):
+    toda llamada nueva a `signUp`, `signInWithPassword`, `signInWithOtp`, `resetPasswordForEmail` o `resend` lleva
+    `captchaToken: await captchaToken("<formulario>")` y su vista, `captchaBox("<formulario>")`.
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en
@@ -97,7 +100,7 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
   `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` si tocás las
   Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:unidad`, `npm run test:crawl`,
-  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas` y `npm run test:comparar` (navegador
+  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha` y `npm run test:comparar` (navegador
   real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` si tocás el `.htaccess` (Apache local; en
   el CI corre en un contenedor `httpd:2.4`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
@@ -141,6 +144,7 @@ npx playwright install chromium                  # una sola vez
 export PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=...
 npm run test:e2e        # recorrido completo en vivo (base nueva + PostgREST + pruebas/e2e_server.js)
 npm run test:rutas      # direcciones: cada ruta, recarga, atrás/adelante, sesión, reservadas, QR (mismo entorno)
+npm run test:captcha    # H30: Turnstile (falso) en cada llamada a Auth, sin clave no carga nada (mismo entorno)
 npm run test:htaccess   # el .htaccess real con el apache2 local (apt install apache2): fallback, 404, HTTPS, CSP
 npm run test:comparar   # versión anterior al Bloque A vs. la actual: demo y en vivo, texto y capturas
 ```

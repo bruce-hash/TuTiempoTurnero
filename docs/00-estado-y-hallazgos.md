@@ -288,14 +288,21 @@ disponible, monto de menos y pago sin turno.
 tarea programada que limpia `mp_oauth_states` (H13).
 **Bloque 2a:** `daily_cleanup()`, en la tarea `tt-cleanup` de todos los días.
 
-### H30 · Media · CAPTCHA (Turnstile) no soportado (pendiente antes de producción)
-docs/02 (Etapa B) pedía activar el CAPTCHA de Supabase Auth (Turnstile), pero la app no lo soporta: `signUp`,
-`signInWithPassword`, `signInWithOtp` y `resetPasswordForEmail` no mandan `captchaToken`, y la CSP del `.htaccess` no deja
-cargar `https://challenges.cloudflare.com` (script-src y frame-src). Con el CAPTCHA activado, nadie podría crear cuenta,
-ingresar ni recuperar la contraseña. **No activarlo** hasta resolverlo. Para hacerlo: el widget de Turnstile en crear
-cuenta, ingresar (contraseña y código) y recuperar contraseña, `options.captchaToken` en esas llamadas, la CSP con
-`challenges.cloudflare.com`, la clave del sitio en `config.js` y prueba en el e2e (el server del e2e tendría que
-validar el token como Supabase).
+### H30 · Media · CAPTCHA (Turnstile) no soportado (resuelto)
+docs/02 (Etapa B) pedía activar el CAPTCHA de Supabase Auth (Turnstile), pero la app no lo soportaba: `signUp`,
+`signInWithPassword`, `signInWithOtp`, `resetPasswordForEmail` y `resend` no mandaban `captchaToken`, y la CSP del
+`.htaccess` no dejaba cargar `https://challenges.cloudflare.com`. Con el CAPTCHA activado, nadie podía crear cuenta,
+ingresar ni recuperar la contraseña.
+**Arreglo:** `turnstileSiteKey` (opcional) en `config.js`. Con la clave, `src/lib/captcha.js` carga el script de Cloudflare
+(render explícito) y arma un widget por formulario: crear cuenta, ingresar con contraseña, pedir código, reenviar el
+código y el email de activación, recuperar contraseña, y el ingreso y el alta de prestadores. Con
+`appearance: "interaction-only"`, casi nunca se ve: solo aparece si Cloudflare pide tocarlo. Cada una de esas 9
+llamadas manda `options.captchaToken` con un token nuevo (cada token sirve una sola vez). Si no llega a tiempo, la
+app avisa "Completá la verificación de seguridad" y no llama a Auth. Sin la clave no carga nada de Cloudflare y todo
+queda como antes. CSP: `https://challenges.cloudflare.com` en `script-src` y `frame-src`, nada más.
+Prueba: `npm run test:captcha` (`pruebas/captcha.js`, en el CI). Usa un Turnstile falso servido en la dirección de
+Cloudflare (no sale a internet) y un Auth que exige el token como Supabase, una sola vez; `test:htaccess` revisa la CSP.
+Cómo activarlo: docs/02 → "CAPTCHA (Turnstile)".
 
 ### H31 · Alta · Proyectos nuevos de Supabase: las funciones no reconocían la sesión (resuelto)
 En un proyecto creado con las claves nuevas (publishable/secret y sesiones firmadas con ECC P-256), "Conectar Mercado

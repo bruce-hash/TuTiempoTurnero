@@ -1,4 +1,5 @@
 import { LIVE } from "../../config.js";
+import { captchaBox } from "../../lib/captcha.js";
 import { esc } from "../../lib/dom.js";
 import { CATS } from "../../lib/rubros.js";
 import { S } from "../../state.js";
@@ -35,7 +36,7 @@ export function vRegPrest() {
    <div class="f"><label for="ptel">Celular * <span class="hint">(privado: solo lo ve TuTiempo)</span></label><input id="ptel" inputmode="tel" value="${esc(reg.tel || "")}" autocomplete="off">${errOf("tel")}</div>
    ${dniRequired() ? '<p class="note" style="text-align:left;margin:0 0 12px">🪪 El DNI lo cargás después, desde tu panel: lo pedimos para que tus clientes sepan quién sos.</p>' : ""}
    <label class="chk" style="justify-content:flex-start"><input type="checkbox" id="ptc" ${reg.tc ? "checked" : ""}> Acepto los <button type="button" class="lnk" data-go="terminos">términos y condiciones</button></label>${errOf("tc")}
-   <button class="btn btn-pri btn-block" type="submit">Crear cuenta de prestador</button>
+   ${captchaBox("fPrest")}<button class="btn btn-pri btn-block" type="submit">Crear cuenta de prestador</button>
    <p class="note" style="margin-top:12px">¿Ya tenés cuenta? <button type="button" class="lnk" data-go="loginBarbero">Ingresá</button></p>
   </form></div>`;
 }

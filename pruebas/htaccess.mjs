@@ -56,6 +56,9 @@ const secure = (res) =>
   res.headers["x-frame-options"] === "DENY" &&
   res.headers["x-content-type-options"] === "nosniff";
 
+// H30: la CSP deja cargar Turnstile (script y recuadro de challenges.cloudflare.com) y nada más de afuera
+const directive = (res, name) => ((res.headers["content-security-policy"] || "").split(";").map((d) => d.trim()).find((d) => d.startsWith(name + " ")) || "");
+
 // 1. HTTP → HTTPS, con la dirección y la query como estaban
 for (const route of ["/panel/agenda?x=1", "/?mp=success&b=12", "/?token_hash=abc123&type=recovery", "/filo-barber-club/reservar?servicio=5&dia=2026-10-24&hora=17%3A30"]) {
   const res = await get(HTTP + route);
@@ -97,6 +100,11 @@ for (const route of ["/assets/", "/fonts"]) {
   let res = await get(HTTPS + route);
   if (res.status === 301 && res.headers.location) res = await get(new URL(res.headers.location, HTTPS).href);
   ok(`HTTPS ${route} → 403/404 sin listado`, [403, 404].includes(res.status) && !/Index of/i.test(res.body) && res.body !== INDEX, String(res.status));
+}
+{
+  const res = await get(HTTPS + "/ingresar");
+  ok("CSP: script-src solo propio y Turnstile (sin unsafe-inline ni unsafe-eval)", directive(res, "script-src") === "script-src 'self' https://challenges.cloudflare.com", directive(res, "script-src"));
+  ok("CSP: frame-src solo Turnstile", directive(res, "frame-src") === "frame-src https://challenges.cloudflare.com", directive(res, "frame-src"));
 }
 
 console.log(fails ? `${fails} FALLAS` : "TODO OK");

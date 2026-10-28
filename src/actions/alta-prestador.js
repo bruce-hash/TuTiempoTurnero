@@ -1,6 +1,7 @@
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
+import { captchaToken } from "../lib/captcha.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { CATS } from "../lib/rubros.js";
@@ -37,6 +38,8 @@ async function liveRegister(reg) {
           provider_reg: providerReg,
         },
         emailRedirectTo: location.origin + "/",
+        // H30: el token de Turnstile, si hay CAPTCHA
+        captchaToken: await captchaToken("fPrest"),
       },
     });
     if (res.error) {

@@ -26,6 +26,9 @@ const ERRS = {
   "Password should contain": "La contraseña tiene que tener letras y números.",
   weak: "Esa contraseña es muy común o apareció en filtraciones. Elegí otra.",
   "New password should be different": "La contraseña nueva tiene que ser distinta de la anterior.",
+  // H30: CAPTCHA (Turnstile) sin resolver, o rechazado por Supabase Auth
+  captcha_missing: "Completá la verificación de seguridad y probá de nuevo.",
+  "captcha protection": "No pudimos comprobar la verificación de seguridad. Probá de nuevo.",
   "For security purposes": "Por seguridad, esperá un minuto antes de pedirlo de nuevo.",
   "rate limit": "Demasiados intentos. Esperá un rato y probá de nuevo.",
   "Auth session missing": "El link venció o ya se usó. Pedí uno nuevo.",

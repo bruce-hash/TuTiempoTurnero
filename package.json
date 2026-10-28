@@ -17,6 +17,7 @@
     "test:ancho": "vite build --mode test --logLevel warn && node pruebas/ancho.mjs dist-test",
     "test:e2e": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/e2e.js {url} {pg}",
     "test:rutas": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/rutas.js {url} {pg}",
+    "test:captcha": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/captcha.js {url} {pg}",
     "test:funciones": "node pruebas/entorno_e2e.mjs public -- deno run --config pruebas/funciones/deno.json --allow-net --allow-env --allow-read --allow-run pruebas/funciones/funciones.ts",
     "test:htaccess": "vite build --logLevel warn && bash pruebas/apache/local.sh",
     "test:comparar": "vite build --logLevel warn && vite build --mode test --logLevel warn && node pruebas/comparar.mjs",

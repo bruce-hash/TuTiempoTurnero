@@ -2,6 +2,7 @@ import { registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
 import { demoSignIn } from "../demo/usuarios.js";
+import { captchaToken } from "../lib/captcha.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { RESEND_WAIT_MS, afterLogin, authErr, showFieldErrors, tickResend } from "../lib/sesion.js";
@@ -49,18 +50,22 @@ registerSubmit("fSignup", (ev) => {
     if (btn) {
       btn.disabled = true;
     }
-    sb.auth
-      .signUp({
-        email: email,
-        password: pass,
-        options: {
-          data: {
-            full_name: name,
-            phone: tel || null,
+    // H30: con CAPTCHA, primero el token de Turnstile (sin CAPTCHA es undefined y la llamada queda igual)
+    captchaToken("fSignup")
+      .then((token) =>
+        sb.auth.signUp({
+          email: email,
+          password: pass,
+          options: {
+            data: {
+              full_name: name,
+              phone: tel || null,
+            },
+            emailRedirectTo: location.origin + "/",
+            captchaToken: token,
           },
-          emailRedirectTo: location.origin + "/",
-        },
-      })
+        }),
+      )
       .then(async (res) => {
         if (res.error) {
           if (btn) {

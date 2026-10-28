@@ -1,3 +1,4 @@
+import { mountCaptchas } from "../lib/captcha.js";
 import { $ } from "../lib/dom.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { CAT, pcat } from "../lib/rubros.js";
@@ -130,6 +131,8 @@ function renderInner() {
     app.insertAdjacentHTML("beforeend", vStory());
     storyTick();
   }
+  // H30: el CAPTCHA de los formularios de ingreso (si hay clave de Turnstile)
+  mountCaptchas();
 }
 function renderMain() {
   document.body.dataset.seg = segNow();
