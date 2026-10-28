@@ -6,6 +6,7 @@ import "./styles/agenda.css";
 import "./styles/componentes.css";
 import "./styles/rubros.css";
 import "./styles/marketplace.css";
+import "./styles/compu.css";
 import "./actions/acceso-prestadores.js";
 import "./actions/admin-balance.js";
 import "./actions/admin.js";
@@ -137,6 +138,7 @@ async function boot() {
       toast(errMsg(err));
     }
     api.commission().catch(() => {});
+    api.requireDni().catch(() => {});
     // dirección con la que arranca el enrutador: la actual, salvo que el arranque ya decida la pantalla
     let start = location.href;
     if (S.recovering && S.user) {
@@ -152,6 +154,11 @@ async function boot() {
       } catch (ignored) {}
       if (after && S.user && typeof after.path === "string" && /^\/(?!\/)/.test(after.path)) {
         start = after.path;
+      }
+      // primer ingreso de un prestador nuevo (al tocar el link del email): a Perfil, con los pasos para activarlo
+      if (S.firstPanel && S.barberAuth) {
+        S.firstPanel = false;
+        start = "/panel/perfil";
       }
     }
     // vuelta de Mercado Pago: ?b=<turno>&mp=success (la dirección de vuelta la arma la Edge Function: no cambia)

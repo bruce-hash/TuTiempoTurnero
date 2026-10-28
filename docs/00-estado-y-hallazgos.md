@@ -334,6 +334,14 @@ Encontrados al armar la propuesta del Bloque D:
 Prueba: `npm run test:ancho` (`pruebas/ancho.mjs`, en el CI): visitante, cliente, las 9 pestañas del panel y las 4 del
 admin, en 390 y 1366 px, sin nada más ancho que la ventana ni con `hidden` a la vista.
 
+### H34 · Media · El alta de prestador pedía el DNI dos veces y, con confirmación de email, lo perdía (resuelto)
+El alta pedía número de DNI y las dos fotos, y después Perfil → Verificación los volvía a pedir. En vivo, si Supabase
+pide confirmar el email (como en el proyecto de prueba), lo cargado en el alta se perdía: el número y las fotos solo se
+pueden guardar con sesión (H10). **Arreglo (Bloque D):** el alta ya no pide el DNI. El primer ingreso lleva a
+Panel → Perfil, con los 3 pasos para activar el perfil y el formulario del DNI adentro; mientras falte, los pasos
+aparecen también arriba de la Agenda. Todo lo que depende del DNI pasa por `src/lib/verificacion.js` y por la opción
+"Exigir DNI para aprobar prestadores" (D26). Prueba: `test:e2e` (alta, primer ingreso, Agenda, y la opción apagada).
+
 ## Mejoras futuras (no son hallazgos; después del lanzamiento)
 
 ### F01 · Vista previa de los links de prestadores (WhatsApp, Instagram)

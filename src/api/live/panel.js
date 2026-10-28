@@ -3,6 +3,7 @@ import { call } from "../saved.js";
 import { sb } from "../../config.js";
 import { TODAY, addDays, daysAgo, dkey, isoToLocal, localToIso, minsBetween } from "../../lib/fechas.js";
 import { p0cat, pr } from "../../lib/prestadores.js";
+import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { feeOf } from "../../views/prestador/finanzas.js";
@@ -78,6 +79,9 @@ export const livePanel = {
     ]);
     // H10: mientras no está verificado, qué le falta cargar (número, frente, dorso); el número no viaja al navegador
     S.dniSt = pr(pid).verified === false ? await call(sb.rpc("my_dni_status")).catch(() => null) : null;
+    // Bloque D (D26): si TuTiempo exige el DNI para aprobar y, si no lo exige, si el perfil ya está aprobado (los pasos)
+    await liveApi.requireDni();
+    S.provStatus = pr(pid).verified === false && !dniRequired() ? await call(sb.rpc("my_provider_status")).catch(() => null) : null;
     const statusMap = {
       confirmed: "confirmed",
       done: "done",

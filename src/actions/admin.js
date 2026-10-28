@@ -6,6 +6,7 @@ import { $ } from "../lib/dom.js";
 import { TODAY, nowHM } from "../lib/fechas.js";
 import { pr } from "../lib/prestadores.js";
 import { SITE_URL_ERR, siteUrl } from "../lib/sitio.js";
+import { dniRequired } from "../lib/verificacion.js";
 import { S } from "../state.js";
 import { P, store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -200,7 +201,8 @@ registerClick("admSet", (ev, el, act) => {
       cats: pending.cats,
       svcs: [["Servicio principal", 45, 9e3, pending.cats[0]]],
       status: "active",
-      verified: true,
+      // sin DNI exigido (D26), se aprueba sin el sello de identidad verificada
+      verified: dniRequired(),
     });
     S.list = null;
     S.counts = null;
@@ -255,6 +257,27 @@ registerSubmit("fCom", (ev) => {
   toast(`Comisión guardada: ${pctTxt(pct)}%. Se aplica a las reservas nuevas.`);
   render();
   return;
+});
+// Bloque D (D26): "Exigir DNI para aprobar prestadores"
+registerClick("admReqDni", (ev, el, act) => {
+  const on = !dniRequired();
+  const done = () => {
+    toast(on ? "Listo: para aprobar a un prestador hace falta su DNI." : "Listo: los prestadores nuevos se aprueban sin DNI.");
+    render();
+  };
+  if (LIVE) {
+    el.disabled = true;
+    api.m
+      .adminSetRequireDni(on)
+      .then(() => api.adminLoad())
+      .then(done)
+      .catch(() => {
+        el.disabled = false;
+      });
+    return;
+  }
+  S.requireDni = on;
+  done();
 });
 // dirección del sitio (H24): solo en vivo; https:// y el dominio, nada más (la base vuelve a validarla)
 registerSubmit("fSite", (ev) => {

@@ -4,7 +4,7 @@ import { LIVE, sb } from "../config.js";
 import { demoSignIn } from "../demo/usuarios.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
-import { afterLogin, authErr, goAfter, saveAfter } from "../lib/sesion.js";
+import { RESEND_WAIT_MS, afterLogin, authErr, goAfter, rememberEmail, resendLeft, saveAfter, showFieldErrors, tickResend } from "../lib/sesion.js";
 import { EMAIL, PWRULE, pwOk, pwScore } from "../lib/validar.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
@@ -68,6 +68,13 @@ registerClick("demoRecoveryLink", (ev, el, act) => {
   go("newpass");
 });
 registerClick("resendConfirm", (ev, el, act) => {
+  // una vez por minuto (Supabase rechaza los repetidos): el botón muestra cuánto falta
+  if (resendLeft(S.login.resendAt) > 0) {
+    return;
+  }
+  S.login.resendAt = Date.now() + RESEND_WAIT_MS;
+  render();
+  tickResend();
   if (LIVE) {
     sb.auth
       .resend({
@@ -91,7 +98,11 @@ registerClick("loginBack", (ev, el, act) => {
   render();
 });
 registerClick("reenviar", (ev, el, act) => {
+  if (resendLeft(S.login.resendAt) > 0) {
+    return;
+  }
   S.login.err = "";
+  S.login.resendAt = Date.now() + RESEND_WAIT_MS;
   if (LIVE) {
     sb.auth
       .signInWithOtp({
@@ -105,6 +116,7 @@ registerClick("reenviar", (ev, el, act) => {
   }
   toast("Te reenviamos el código a " + S.login.email);
   render();
+  tickResend();
 });
 // barra de fuerza de la contraseña mientras se escribe
 registerInput(["au_p", "np1"], (ev) => {
@@ -126,7 +138,10 @@ registerSubmit("fLogin", (ev) => {
   const login = S.login;
   const email = $("#ai_e").value.trim().toLowerCase();
   const pass = $("#ai_p").value;
+  // Bloque D: "Recordar mi email en este dispositivo" (marcada por defecto)
+  const keep = !$("#ai_rem") || $("#ai_rem").checked;
   login.email = email;
+  login.remember = keep;
   if (login.locked) {
     return;
   }
@@ -136,7 +151,8 @@ registerSubmit("fLogin", (ev) => {
   if (!EMAIL.test(email)) {
     return authErr("Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com", "ai_e");
   }
-  const fail = (msg) => {
+  // credenciales incorrectas: el error va debajo de la contraseña; otros (red, límite de Supabase), en el general
+  const fail = (msg, onPassword) => {
     login.fails = (login.fails || 0) + 1;
     if (login.fails >= 5) {
       login.locked = true;
@@ -152,11 +168,12 @@ registerSubmit("fLogin", (ev) => {
       }, 3e4);
       return;
     }
-    login.err = msg;
+    login.err = onPassword ? "" : msg;
     render();
-    const field = $("#ai_p");
-    if (field) {
-      field.focus();
+    if (onPassword) {
+      showFieldErrors({ ai_p: msg });
+    } else if ($("#ai_p")) {
+      $("#ai_p").focus();
     }
   };
   if (LIVE) {
@@ -176,12 +193,14 @@ registerSubmit("fLogin", (ev) => {
               mode: "confirm",
               email: email,
               err: "",
+              resendAt: 0,
             };
             render();
             return;
           }
-          return fail(errMsg(res.error));
+          return fail(errMsg(res.error), /invalid login credentials/i.test(res.error.message || ""));
         }
+        rememberEmail(email, keep);
         await api.session();
         afterLogin();
       })
@@ -190,8 +209,9 @@ registerSubmit("fLogin", (ev) => {
   }
   const user = store.DEMO_USERS[email];
   if (!user || user.pass !== pass) {
-    return fail("Email o contraseña incorrectos.");
+    return fail("Email o contraseña incorrectos.", true);
   }
+  rememberEmail(email, keep);
   demoSignIn(email, user.name);
   afterLogin();
   return;
@@ -232,15 +252,13 @@ registerSubmit("fMail", (ev) => {
   const email = $("#le").value.trim();
   S.login.email = email;
   if (!email) {
-    S.login.err = "Ingresá tu email.";
-    render();
-    return;
+    return showFieldErrors({ le: "Escribí tu email." }, "lerr");
   }
   if (!EMAIL.test(email)) {
-    S.login.err = "Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com";
-    render();
-    return;
+    return showFieldErrors({ le: "Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com" }, "lerr");
   }
+  const keep = !$("#le_rem") || $("#le_rem").checked;
+  S.login.remember = keep;
   if (LIVE) {
     sb.auth
       .signInWithOtp({
@@ -255,23 +273,29 @@ registerSubmit("fMail", (ev) => {
           render();
           return;
         }
+        rememberEmail(email, keep);
         S.login = {
           mode: "codeSent",
           email: email,
           err: "",
+          resendAt: Date.now() + RESEND_WAIT_MS,
         };
         toast("Código enviado a " + email);
         render();
+        tickResend();
       });
     return;
   }
+  rememberEmail(email, keep);
   S.login = {
     mode: "codeSent",
     email: email,
     err: "",
+    resendAt: Date.now() + RESEND_WAIT_MS,
   };
   toast("Código enviado a " + email);
   render();
+  tickResend();
   return;
 });
 // ingreso con código por email (en la demo el código es 123456)

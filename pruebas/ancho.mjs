@@ -1,4 +1,4 @@
-// Ninguna pantalla más ancha que la ventana, y nada con `hidden` a la vista: npm run test:ancho
+// Ninguna pantalla más ancha que la ventana, y nada con `hidden` a la vista (y la respuesta visual del Bloque D): npm run test:ancho
 // Recorre la demo (dist-test) en celular (390 px) y compu (1366 px): las pantallas del visitante, del cliente (mis turnos,
 // mi perfil, reservar, turno confirmado), las 9 pestañas del panel del prestador y las 4 del admin. En cada una:
 //  - el documento no es más ancho que la ventana (si lo es, dice qué elementos se pasan del borde);
@@ -108,6 +108,17 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
     await check(`admin · ${tab}`);
   }
   ok(`${name}: sin errores de JavaScript`, errors.length === 0, errors.join(" | "));
+  await page.close();
+}
+// Bloque D · respuesta visual: con mouse, la tarjeta sube al pasar por encima; con prefers-reduced-motion, no se mueve
+for (const motion of ["no-preference", "reduce"]) {
+  const page = await browser.newPage({ viewport: { width: 1366, height: 860 }, reducedMotion: motion });
+  await page.goto(BASE + "/");
+  await page.waitForSelector(".grid .card");
+  await page.hover(".grid .card");
+  await page.waitForTimeout(300);
+  const lift = await page.evaluate(() => getComputedStyle(document.querySelector(".grid .card")).transform);
+  ok(`respuesta visual (${motion}): la tarjeta ${motion === "reduce" ? "no se mueve" : "sube"} con el mouse`, motion === "reduce" ? lift === "none" : lift !== "none", lift);
   await page.close();
 }
 await browser.close();

@@ -203,7 +203,7 @@ Vault que `mp-refunds`), cinco migraciones y el frontend:
    - Borra el DNI que haya quedado en los metadatos de las cuentas (`auth.users.raw_user_meta_data`). Una sesión ya
      abierta lo puede tener en su token hasta que se renueve (1 hora).
    - Desde esta migración, **activar a un prestador exige el número de DNI y las dos fotos** (frente y dorso, que el
-     prestador sube en Perfil → Verificación). Los prestadores de prueba que crees los tenés que cargar así. Uno ya
+     prestador sube en su panel, en Perfil; desde el Bloque D, solo con "Exigir DNI para aprobar prestadores" activada, D26). Los prestadores de prueba que crees los tenés que cargar así. Uno ya
      verificado con fecha (suspendido y vuelto a activar) no las necesita.
    - La de la dirección del sitio (`…_site_url_https.sql`) solo acepta `https://` y el dominio. Si la guardada no
      cumple (por ejemplo, con `http://`), la migración sigue y deja el aviso `site_url: …`: cambiala en el paso 3.
@@ -318,6 +318,14 @@ la cuenta, recuperar la contraseña). Un solo dominio para los dos entornos; cla
 3. Frontend: `npm run build` y subir `dist/` (Mi perfil → Avisos por email).
 4. Verificar (paso 7) y `select jobname, schedule from cron.job where jobname = 'tt-emails';` → `*/5 * * * *`.
 
+#### Bloque D (después del Bloque 3)
+1. `supabase db push` (o `TODO_EN_UNO.sql`): `20261028120000_exigir_dni.sql` (D26). Agrega la opción "Exigir DNI para
+   aprobar prestadores", activada: todo sigue como hasta ahora. No cambia datos ni las Edge Functions (no hay que volver
+   a desplegar ninguna).
+2. Frontend: `npm run build` y subir `dist/` (pantallas de la compu, menú de cuenta, registro e ingreso, alta sin DNI).
+3. Verificar: panel admin → Comisión → **Verificación**, con "Exigir DNI para aprobar prestadores" activada. Si TuTiempo
+   decide no pedir más el DNI, se apaga ahí: el alta y el panel dejan de pedirlo y el admin aprueba solo con los datos.
+
 ### 3. Hostinger (subdominio de prueba)
 1. hPanel → Dominios → Subdominios → crear `prueba.tutiempo.com.ar`. Activar SSL.
 2. En tu compu (Node 22, ver `.nvmrc`): `npm ci` y `npm run build` → carpeta `dist/`.
@@ -337,8 +345,9 @@ la cuenta, recuperar la contraseña). Un solo dominio para los dos entornos; cla
       verificar que en Supabase → Auth → URL Configuration → Redirect URLs esté la raíz del subdominio
       (`https://prueba.tutiempo.com.ar/`).
 - [ ] Crear cuenta, activar por email, ingresar, recuperar contraseña, entrar con Google.
-- [ ] Alta de prestador, cargar el número de DNI y las fotos del frente y del dorso (Perfil → Verificación), aprobarlo
-      desde el panel admin (sin el número o sin una foto no deja: H10), conectar Mercado Pago (vendedor de prueba).
+- [ ] Alta de prestador (sin DNI), confirmar el email: la app abre Panel → Perfil con los 3 pasos. Cargar el número de
+      DNI y las fotos del frente y del dorso, aprobarlo desde el panel admin (sin el número o sin una foto no deja: H10),
+      conectar Mercado Pago (vendedor de prueba).
 - [ ] Un recordatorio o aviso de cancelación trae el link del subdominio de prueba (Comisión → Dirección del sitio, H24).
 - [ ] Reservar y pagar con el comprador de prueba: el turno se confirma solo (verifica H06: firma del webhook).
 - [ ] La seña llega al vendedor de prueba y el 4% a la cuenta de TuTiempo.

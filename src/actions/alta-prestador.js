@@ -1,4 +1,4 @@
-import { registerChange, registerClick, registerSubmit } from "./registro.js";
+import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
 import { $ } from "../lib/dom.js";
@@ -7,14 +7,13 @@ import { CATS } from "../lib/rubros.js";
 import { cfg } from "../lib/turnero.js";
 import { EMAIL } from "../lib/validar.js";
 import { S } from "../state.js";
-import { P, store } from "../store.js";
+import { P } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { useProvider } from "../views/prestador/panel.js";
 
 // alta en vivo: los datos del negocio viajan en provider_reg (metadatos de la cuenta) y session() crea el perfil
-// en el primer ingreso. El DNI no (H10): si Supabase no pide confirmar el email, la sesión empieza acá mismo y se
-// guardan el número y las fotos; si lo pide, los carga después en Perfil → Verificación.
+// en el primer ingreso. El DNI no se pide acá (H10, Bloque D): lo carga en el panel, en los pasos de Perfil.
 async function liveRegister(reg) {
   const btn = $("#fPrest button[type=submit]");
   if (btn) {
@@ -45,18 +44,11 @@ async function liveRegister(reg) {
     }
     if (res.data.session) {
       await api.session();
-      // si algo de esto falla, la cuenta ya existe: saved() avisa y lo completa en Perfil → Verificación
-      await api.m.setDni(reg.dni).catch(() => {});
-      for (const side of ["frente", "dorso"]) {
-        if (store.REGFILES[side]) {
-          await api.m.uploadDni(side, store.REGFILES[side]).catch(() => {});
-        }
-      }
-      await api.loadMine().catch(() => {});
+      S.firstPanel = false;
       S.reg = {};
       S.role = "barbero";
       S.btab = "perfil";
-      toast("Cuenta creada. Completá tus servicios y conectá Mercado Pago.");
+      toast("Cuenta creada. Seguí los pasos para activar tu perfil.");
       render();
       window.scrollTo(0, 0);
       return;
@@ -85,7 +77,6 @@ export function readReg() {
     reg.nombre = val("pn").trim();
     reg.email = val("pe").trim();
     reg.pass = val("pp");
-    reg.dni = val("pd").replace(/\D/g, "");
     reg.addr = (val("pa") || "").trim();
     reg.tel = (val("ptel") || "").trim();
     reg.cats = CATS.map((row) => row[0]).filter((cat) => $("#rr-" + cat) && $("#rr-" + cat).checked);
@@ -93,7 +84,6 @@ export function readReg() {
   }
   return reg;
 }
-store.REGFILES = {};
 // solo la demo (no viaja a producción): completar con Google y entrar al panel del prestador nuevo
 if (!LIVE) {
   // demo: completa el formulario como si viniera de Google
@@ -139,7 +129,7 @@ if (!LIVE) {
     S.barberAuth = true;
     S.role = "barbero";
     S.btab = "perfil";
-    toast("Bienvenido. Completá tu perfil y conectá Mercado Pago.");
+    toast("Bienvenido. Seguí los pasos para activar tu perfil.");
     render();
     window.scrollTo(0, 0);
   });
@@ -165,12 +155,6 @@ registerSubmit("fPrest", (ev) => {
   }
   if (!reg.pass || reg.pass.length < 8) {
     errs.pass = "La contraseña debe tener al menos 8 caracteres.";
-  }
-  if (!/^\d{7,8}$/.test(reg.dni || "")) {
-    errs.dni = "El DNI tiene que tener 7 u 8 números, sin puntos.";
-  }
-  if (!reg.frente || !reg.dorso) {
-    errs.files = "Subí las fotos del frente y del dorso de tu DNI.";
   }
   if (!reg.tc) {
     errs.tc = "Tenés que aceptar los términos para continuar.";

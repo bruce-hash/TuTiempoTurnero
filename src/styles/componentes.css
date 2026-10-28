@@ -87,3 +87,46 @@
 .bhead{display:grid;gap:12px}
 .swrow{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:12px;text-align:left}
 /* ===== Tipografía y forma por segmento ===== */
+/* menú de cuenta de la cabecera (Bloque D): avatar (y el nombre desde 700 px) que abre las opciones */
+.acct{position:relative}
+.acct-btn{position:relative;display:inline-flex;align-items:center;gap:8px;padding:3px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--fg);font-weight:600;font-size:14px}
+.acct-btn .av{width:32px;height:32px;font-size:12px}
+.acct-name,.acct-car{display:none}
+.acct-btn .dotn{position:absolute;top:1px;left:27px;box-shadow:0 0 0 2px var(--card)}
+@media (min-width:700px){.acct-btn{padding:3px 12px 3px 3px}.acct-name{display:inline;max-width:16ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.acct-car{display:inline;font-size:10px;color:var(--muted)}}
+.acct-menu{position:absolute;right:0;top:calc(100% + 8px);min-width:250px;max-width:calc(100vw - 32px);display:grid;padding:6px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.18);z-index:60}
+.acct-who{display:grid;padding:9px 12px 10px;margin-bottom:4px;border-bottom:1px solid var(--line);font-size:13px;text-align:left}
+.acct-who span{color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.acct-menu [role=menuitem]{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;border-radius:10px;background:none;color:inherit;font-size:14px;font-weight:500;text-align:left}
+.acct-menu [role=menuitem]:hover,.acct-menu [role=menuitem]:focus-visible{background:var(--brand-soft);outline:none}
+.acct-menu .cnt{margin-left:auto}
+.acct-menu [data-act=logout],.acct-menu [data-act=salirBarbero]{margin-top:4px;border-top:1px solid var(--line);border-radius:0 0 10px 10px;color:var(--bad)}
+/* Bloque D · registro e ingreso: error al lado de cada campo, recordar el email y aviso de intentos */
+.f.bad input,.f.bad .pw input{border-color:var(--bad)!important;box-shadow:0 0 0 3px var(--bad-soft)}
+.fe-msg{display:block;margin-top:6px;font-size:13px;line-height:1.35;color:var(--bad);text-align:left}
+label.chk+.fe-msg{margin:-6px 0 10px}
+.chk.remember{justify-content:flex-start;margin:-4px 0 12px;font-size:13px;color:var(--muted)}
+.tries{margin:8px 0 0;font-size:13px;color:var(--muted);text-align:center}
+/* Bloque D · respuesta visual: hover (solo con mouse), foco con teclado y presionado; transiciones cortas. Con
+   prefers-reduced-motion no se mueve nada (solo cambian los colores) */
+.btn,.lnk,.card,.segtile,.wd,.slot,.svci,.payopt,.cchip,.gbtn,.tabarr,.pk-nav,.acct-btn,.btabs button,.ptabs button,.authtabs button,.seg3 button{transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,transform .12s}
+@media (hover:hover){
+  .btn-ghost:hover:not([disabled]),.gbtn:hover{background:var(--brand-soft);border-color:var(--brand-line)}
+  .btn-ok:hover:not([disabled]),.btn-bad:hover:not([disabled]){filter:brightness(.95)}
+  .card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.12)}
+  .segtile:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.18)}
+  .svci:hover,.payopt:hover,.slot:hover:not([disabled]),.wd:hover:not([disabled]),.acct-btn:hover,.tabarr:hover:not([disabled]),.pk-nav:hover:not([disabled]){border-color:var(--brand-line)}
+  .btabs button:hover:not([aria-selected="true"]),.ptabs button:hover:not([aria-selected="true"]),.authtabs button:hover:not(.on),.seg3 button:hover:not([aria-pressed="true"]){color:var(--fg);background:var(--brand-soft)}
+  .lnk:hover{text-decoration:underline;text-underline-offset:3px}
+}
+.btn:active:not([disabled]),.gbtn:active,.svci:active,.payopt:active,.slot:active:not([disabled]),.wd:active:not([disabled]),.cchip:active,.acct-btn:active,.seg3 button:active{transform:scale(.97)}
+:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
+  .card:hover,.segtile:hover,.btn:active,.gbtn:active,.svci:active,.payopt:active,.slot:active,.wd:active,.cchip:active,.acct-btn:active,.seg3 button:active{transform:none}
+}
+/* Bloque D: pasos para activar el perfil (Perfil y Agenda): cada texto y cada botón en su renglón */
+.setup .steps span{display:block}
+.setup .steps .btn,.setup .steps .lnk{margin-top:6px}
+.setup .steps .lnk{display:inline-block;font-size:13px}
+.setup .steps form,.setup .steps .f:last-child{margin-bottom:0}

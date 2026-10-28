@@ -6,6 +6,7 @@ import { S } from "../state.js";
 import { store } from "../store.js";
 import { go, render } from "../ui/render.js";
 import { profileUrl } from "../router.js";
+import { toggleAccountMenu } from "../ui/menu-cuenta.js";
 import { toast } from "../ui/toast.js";
 import { comm } from "../views/prestador/comunidad.js";
 
@@ -20,6 +21,17 @@ registerClick("recover", (ev, el, act) => {
   render();
   window.scrollTo(0, 0);
   return;
+});
+// menú de cuenta de la cabecera (Bloque D)
+registerClick("acctMenu", (ev, el, act) => {
+  toggleAccountMenu(ev);
+});
+// desde el panel del prestador o el de TuTiempo: Mi perfil o Mis turnos, como cliente
+registerClick("asClient", (ev, el, act) => {
+  S.role = "cliente";
+  S.preview = false;
+  go(el.dataset.to === "misturnos" ? "misturnos" : "cuenta");
+  window.scrollTo(0, 0);
 });
 registerClick("salirAdmin", (ev, el, act) => {
   S.role = "cliente";

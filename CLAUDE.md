@@ -31,6 +31,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     la URL (carga, recarga, atrás/adelante). Una pantalla nueva = su ruta en los dos archivos. Las palabras que no puede
     tomar un prestador como slug están en `src/lib/rutas.js` (`RESERVED_SLUGS`) y en la base (`reserved_slugs()`):
     `test_db.py` verifica que coincidan.
+  - Bloque D: `src/styles/compu.css` (pantallas desde 1024 px; en el celular sus contenedores van con `display:contents`
+    y nada cambia), `src/ui/menu-cuenta.js` (menú de cuenta de la cabecera, con teclado) y `src/lib/verificacion.js`
+    (todo lo que depende de "Exigir DNI para aprobar prestadores", D26: si se deja de pedir el DNI, se apaga en el admin).
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en

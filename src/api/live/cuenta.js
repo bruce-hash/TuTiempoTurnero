@@ -54,6 +54,8 @@ export const liveCuenta = {
             provider_reg: null,
           },
         });
+        // primer ingreso (Bloque D): al entrar, a Perfil, donde están los pasos para activar el perfil
+        S.firstPanel = true;
       } catch (err) {
         toast(errMsg(err));
       }
@@ -161,6 +163,12 @@ export const liveCuenta = {
         done: row.done,
       };
     });
+  },
+  // Bloque D (D26): "Exigir DNI para aprobar prestadores" (si no se puede leer, se exige, como hasta ahora)
+  async requireDni() {
+    const row = await call(sb.from("app_settings").select("require_dni").maybeSingle()).catch(() => null);
+    S.requireDni = !row || row.require_dni !== false;
+    return S.requireDni;
   },
   async commission() {
     const rate = await call(sb.rpc("commission")).catch(() => null);

@@ -3,7 +3,8 @@ import { esc } from "../../lib/dom.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { GLOGO } from "../../ui/iconos.js";
-import { authHead, pwField } from "./campos.js";
+import { rememberedEmail } from "../../lib/sesion.js";
+import { authHead, pwField, rememberBox, resendBtn } from "./campos.js";
 
 // ingreso del cliente según S.login.mode: in (contraseña), up (crear cuenta), code / codeSent (código por email),
 // forgot / sent (recuperar contraseña) y confirm (falta activar la cuenta)
@@ -20,7 +21,7 @@ export function vLogin() {
    <div class="f"><label for="lc">Código</label><input id="lc" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" style="text-align:center;letter-spacing:.3em;font-size:20px;font-weight:700"></div>
    <div class="err" id="lerr">${esc(login.err || "")}</div>
    <button class="btn btn-pri btn-block" type="submit">Verificar e ingresar</button>
-   <div class="authrow"><button type="button" class="lnk" data-act="loginBack">Cambiar email</button><button type="button" class="lnk" data-act="reenviar">Reenviar código</button></div>
+   <div class="authrow"><button type="button" class="lnk" data-act="loginBack">Cambiar email</button>${resendBtn("reenviar", "Reenviar código", login.resendAt)}</div>
   </form></div>`;
   }
   if (mode === "forgot") {
@@ -40,9 +41,10 @@ export function vLogin() {
   }
   if (mode === "confirm") {
     return `<div class="narrow"><div class="panel" style="margin-top:24px;text-align:center">
-   <div style="font-size:40px">✉️</div>${authHead("Activá tu cuenta", `Te mandamos un link a <b>${esc(login.email)}</b>. Tocalo para activar tu cuenta y entrar. Mirá también en Spam o Promociones.`)}
-   <button class="btn btn-ghost btn-block" data-act="resendConfirm">Reenviar el email</button>
-   <div class="authrow" style="justify-content:center"><button class="lnk" data-act="authMode" data-m="in">Ya la activé · Ingresar</button></div></div></div>`;
+   <div style="font-size:40px">✉️</div>${authHead("Revisá tu email", `Te mandamos un link a <b>${esc(login.email)}</b> para activar tu cuenta.`)}
+   <ol class="steps" style="margin:4px 0 16px"><li class="done"><span class="dot">✓</span><div><b>Cuenta creada</b></div></li><li class="now"><span class="dot">2</span><div><b>Tocá el link del email</b><span>Mirá también en Spam o Promociones</span></div></li><li><span class="dot">3</span><div><b>Listo: entrás solo</b><span>Si lo abrís en otro dispositivo, después ingresá acá con tu email y contraseña</span></div></li></ol>
+   ${resendBtn("resendConfirm", "Reenviar el email", login.resendAt, "btn btn-ghost btn-block")}
+   <div class="authrow"><button class="lnk" data-act="authMode" data-m="up">Cambiar email</button><button class="lnk" data-act="authMode" data-m="in">Ya la activé · Ingresar</button></div></div></div>`;
   }
   const tabs = `<div class="authtabs" role="tablist"><button type="button" role="tab" class="${mode === "up" ? "" : "on"}" aria-selected="${mode !== "up"}" data-act="authMode" data-m="in">Ingresar</button><button type="button" role="tab" class="${mode === "up" ? "on" : ""}" aria-selected="${mode === "up"}" data-act="authMode" data-m="up">Crear cuenta</button></div>`;
   const provLinks =
@@ -52,7 +54,8 @@ export function vLogin() {
     return `<div class="narrow"><div class="panel" style="margin-top:24px">
    ${authHead("Entrar con un código", "Te mandamos un código de 6 dígitos a tu email. Sin contraseña.")}
    <form id="fMail" novalidate>
-    <div class="f"><label for="le">Email</label><input id="le" type="email" autocomplete="email" maxlength="120" placeholder="tu@email.com" value="${esc(login.email || "")}"></div>
+    <div class="f"><label for="le">Email</label><input id="le" type="email" autocomplete="email" maxlength="120" placeholder="tu@email.com" value="${esc(login.email || rememberedEmail())}"></div>
+    ${rememberBox("le_rem", login)}
     <div class="err" id="lerr">${esc(login.err || "")}</div>
     <button class="btn btn-pri btn-block" type="submit">Enviarme un código</button>
    </form>
@@ -65,7 +68,6 @@ export function vLogin() {
     <div class="f"><label for="au_e">Email</label><input id="au_e" type="email" autocomplete="email" maxlength="120" value="${esc(login.email || "")}"></div>
     <div class="f"><label for="au_t">Celular <span class="hint">(opcional)</span></label><input id="au_t" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="2284 123456" value="${esc(login.tel || "")}"></div>
     ${pwField("au_p", "Contraseña", "new-password", true)}
-    ${pwField("au_p2", "Repetí la contraseña", "new-password", false)}
     <label class="chk"><input type="checkbox" id="au_ok"> <span>Acepto los <u class="lnk" role="link" tabindex="0" data-go="terminos" style="cursor:pointer">términos y la política de privacidad</u>.</span></label>
     <div class="err" id="aerr">${esc(login.err || "")}</div>
     <button class="btn btn-pri btn-block" type="submit">Crear cuenta</button>
@@ -75,10 +77,12 @@ export function vLogin() {
    ${authHead(forBooking ? "Ingresá para reservar" : "Ingresá a TuTiempo", forBooking ? "Tu horario queda guardado mientras ingresás." : "")}${tabs}${google}
    ${LIVE ? "" : '<div class="demohint">Demo: <b>juan.perez@tutiempo.demo</b> · <b>cliente123</b> (o creá una cuenta nueva)</div>'}
    <form id="fLogin" novalidate>
-    <div class="f"><label for="ai_e">Email</label><input id="ai_e" type="email" autocomplete="email" maxlength="120" value="${esc(login.email || "")}"></div>
+    <div class="f"><label for="ai_e">Email</label><input id="ai_e" type="email" autocomplete="email" maxlength="120" value="${esc(login.email || rememberedEmail())}"></div>
+    ${rememberBox("ai_rem", login)}
     ${pwField("ai_p", "Contraseña", "current-password", false)}
     <div class="err" id="aerr">${esc(login.err || "")}</div>
     <button class="btn btn-pri btn-block" type="submit" ${login.locked ? "disabled" : ""}>Ingresar</button>
+    ${login.fails && !login.locked ? `<p class="tries">Por seguridad, después de 5 intentos fallidos tenés que esperar 30 segundos. Te ${5 - login.fails === 1 ? "queda 1 intento" : `quedan ${5 - login.fails} intentos`}.</p>` : ""}
    </form>
    <div class="authrow"><button type="button" class="lnk" data-act="authMode" data-m="forgot" ${login.fails >= 2 ? 'style="font-weight:700"' : ""}>¿Olvidaste tu contraseña?</button><button type="button" class="lnk" data-act="authMode" data-m="code">Entrar con un código</button></div>
    ${provLinks}</div></div>`;

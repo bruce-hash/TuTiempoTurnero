@@ -2,6 +2,7 @@ import { money, pctTxt } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { dm } from "../../lib/fechas.js";
 import { CATS } from "../../lib/rubros.js";
+import { dniRequired } from "../../lib/verificacion.js";
 import { admIc } from "./admin.js";
 import { admReview } from "./revisar.js";
 
@@ -62,7 +63,7 @@ export function admRes(data) {
   };
   const alerts = [
     pending.length
-      ? `🪪 <b>${pending.length}</b> prestador${pending.length > 1 ? "es esperan" : " espera"} la verificación del DNI. <button class="lnk" data-act="admT" data-t="prov">Revisar</button>`
+      ? `🪪 <b>${pending.length}</b> prestador${pending.length > 1 ? "es esperan" : " espera"} ${dniRequired() ? "la verificación del DNI" : "aprobación"}. <button class="lnk" data-act="admT" data-t="prov">Revisar</button>`
       : "",
     +st.mp_missing
       ? `💳 <b>${st.mp_missing}</b> prestador${+st.mp_missing > 1 ? "es activos no conectaron" : " activo no conectó"} Mercado Pago: no pueden cobrar señas.`

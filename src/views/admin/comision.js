@@ -1,6 +1,7 @@
 import { LIVE } from "../../config.js";
 import { money, pctTxt } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
+import { dniRequired } from "../../lib/verificacion.js";
 
 // comisión de la plataforma; el ejemplo con un corte de $20.000 es solo para mostrar (la base calcula la real)
 export function admCom(data) {
@@ -13,7 +14,7 @@ export function admCom(data) {
       <div><span>Corte de cabello</span><span>${money(2e4)}</span></div><div><span>Seña que pidió el prestador (50%)</span><span>${money(1e4)}</span></div>
       <div><span>Comisión TuTiempo (${pctTxt(pct)}%)</span><span>${money(fee)}</span></div><div class="tot"><span>El cliente paga al reservar</span><span>${money(1e4 + fee)}</span></div></div>
       <p class="note" style="text-align:left;margin:6px 0 0">El prestador recibe ${money(1e4)} ahora y ${money(1e4)} en el local. TuTiempo cobra ${money(fee)}.</p></div>
-    <div class="err" id="comerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar comisión</button></form>${LIVE ? siteForm(data.siteUrl) : ""}`;
+    <div class="err" id="comerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar comisión</button></form>${dniPanel()}${LIVE ? siteForm(data.siteUrl) : ""}`;
 }
 // H24: dirección del sitio con la que la base arma los links de los avisos a los clientes (recordatorios, cancelaciones)
 function siteForm(url) {
@@ -21,4 +22,11 @@ function siteForm(url) {
     <input id="admSite" type="url" inputmode="url" maxlength="100" value="${esc(url || "")}" placeholder="https://prueba.tutiempo.com.ar" aria-label="Dirección del sitio" autocomplete="off">
     <p class="note" style="text-align:left;margin:8px 0 10px">La que abren los clientes: <b>https://</b> y el dominio, sin barra al final ni nada después. Con ella se arman los links de los avisos (por ejemplo <i>${esc(url || "https://tutiempo.com.ar")}/nombre-del-negocio</i>). En el entorno de prueba, la del subdominio de prueba.</p>
     <div class="err" id="siteerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar dirección</button></form>`;
+}
+// Bloque D (D26): "Exigir DNI para aprobar prestadores" (hoy activada). Apagada, se aprueba sin DNI y nadie gana el sello
+// "Identidad verificada" sin haberse verificado.
+function dniPanel() {
+  const on = dniRequired();
+  return `<div class="panel"><p class="lbl">Verificación</p><div class="swrow"><div><b>🪪 Exigir DNI para aprobar prestadores</b><div class="hint">${on ? "Para aprobar a un prestador hacen falta su número de DNI y las fotos del frente y del dorso" : "Los prestadores nuevos se aprueban sin DNI"}</div></div><button class="tg" data-act="admReqDni" aria-pressed="${on}" aria-label="Exigir DNI para aprobar prestadores"></button></div>
+    <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si la apagás, el alta y el panel dejan de pedir el DNI y aprobás a los prestadores nuevos solo con sus datos." : "Si la volvés a activar, los prestadores pendientes tienen que cargar su DNI antes de que los apruebes."} Los que ya tienen el DNI verificado siguen mostrando “Identidad verificada”.</p></div>`;
 }

@@ -3,7 +3,9 @@ import { esc } from "../../lib/dom.js";
 import { CAT } from "../../lib/rubros.js";
 import { S } from "../../state.js";
 import { P } from "../../store.js";
+import { rememberedEmail } from "../../lib/sesion.js";
 import { GLOGO, LOGO } from "../../ui/iconos.js";
+import { rememberBox } from "./campos.js";
 
 // ingreso de prestadores en tres pasos (S.blogin.step): formulario, recuperar contraseña y link enviado.
 // En la demo muestra botones para entrar como cada prestador de ejemplo (credenciales de demo: H18).
@@ -41,7 +43,8 @@ export function vLoginBarbero() {
             )}</div><span class="hint">O con email y contraseña: filo@tutiempo.demo · barbero123</span>`
     }</div>
    <button type="button" class="gbtn" data-act="googleProv">${GLOGO} Entrar con Google</button><div class="or">o con tu email</div>
-   <div class="f"><label for="be">Email</label><input id="be" type="email" value="${esc(login.email)}" autocomplete="email"></div>
+   <div class="f"><label for="be">Email</label><input id="be" type="email" value="${esc(login.email || rememberedEmail())}" autocomplete="email"></div>
+   ${rememberBox("be_rem", login)}
    <div class="f"><label for="bp">Contraseña</label><div class="pw"><input id="bp" type="${login.show ? "text" : "password"}" value="${esc(login.pass)}" autocomplete="off"><button type="button" class="lnk" data-act="bShow">${login.show ? "Ocultar" : "Mostrar"}</button></div></div>
    <div class="err" id="berr">${esc(login.err || "")}</div>
    <button class="btn btn-pri btn-block" type="submit" ${login.locked ? "disabled" : ""}>Entrar al panel</button>

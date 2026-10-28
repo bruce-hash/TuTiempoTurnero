@@ -18,6 +18,7 @@ import { seedStore } from "../../demo/panel.js";
 import { MSG_DEF } from "./mensajes.js";
 import { vBPerfil } from "./perfil.js";
 import { vBProductos } from "./productos.js";
+import { setupSteps } from "./verificacion.js";
 
 export const STORE = {};
 // datos vacíos del panel de un prestador: en vivo los completa la base (loadMine); en la demo, src/demo/panel.js
@@ -93,7 +94,7 @@ function noticesPanel() {
   if (!unread.length) {
     return "";
   }
-  return `<div class="panel inbox"><p class="lbl">🔔 Avisos de cobros <span class="cnt">${unread.length}</span></p><ul class="ag">${unread
+  return `<div class="panel inbox pb-notices"><p class="lbl">🔔 Avisos de cobros <span class="cnt">${unread.length}</span></p><ul class="ag">${unread
     .slice(0, 5)
     .map((notice) => `<li class="unread"><div><span class="msgb">${esc(notice.body)}</span><span class="hint">${esc(relDate(notice.at))}</span></div></li>`)
     .join("")}</ul><button class="btn btn-ghost btn-sm" data-act="noticesRead">Entendido</button></div>`;
@@ -113,7 +114,7 @@ export function vBarbero() {
   const body = (
     {
       caja: () => vCaja(prov),
-      agenda: () => vBAgendaT(),
+      agenda: () => setupSteps(prov, "agenda") + vBAgendaT(),
       clientes: () => vBClientes(),
       finanzas: () => vBFinanzas(),
       horarios: () => vBHorarios(),
@@ -123,5 +124,7 @@ export function vBarbero() {
       perfil: () => vBPerfil(prov),
     }[S.btab] || (() => vBAgendaT())
   )();
-  return `<div class="narrow stack" style="margin-top:20px">${head}${noticesPanel()}${tabBar}${body}</div>`;
+  // en la compu: menú lateral (cabecera y pestañas) y la sección a la derecha; en el celular, todo en una columna, en el
+  // orden de siempre (cabecera, avisos, pestañas, sección: ver .pb en compu.css)
+  return `<div class="narrow stack cols2 pb" style="margin-top:20px"><div class="pb-side">${head}${tabBar}</div><div class="pb-main">${noticesPanel()}${body}</div></div>`;
 }

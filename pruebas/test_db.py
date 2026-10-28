@@ -470,6 +470,21 @@ q("insert into storage.objects (bucket_id, name, created_at) values ('dni', %s, 
 ok("D24 caso 1: un verificado sin fecha (de antes del 2b) conserva las fotos", due(vie) == [])
 q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(vie),))
 ok("D24 caso 1: …y sin fotos ni fecha de verificación no se puede activar", err(q("select admin_set_provider(%s,'active',null)", (pvie,), uid=adm), "dni_photos_missing"))
+
+# ---- D26 (Bloque D): "Exigir DNI para aprobar prestadores", opción del admin, hoy activada ----
+ok("D26: por defecto se exige el DNI", q("select require_dni from app_settings")[0][0] is True)
+ok("D26: el navegador puede leer la opción (anon y authenticated)", q("select require_dni from app_settings", role="anon")[0][0] is True and q("select require_dni from app_settings", uid=cli1)[0][0] is True)
+ok("D26: un usuario que no es admin no la cambia", err(q("select admin_set_require_dni(false)", uid=cli1), "forbidden") and err(q("select admin_set_require_dni(false)", role="anon")))
+nodni = mkuser("sin-dni@test.ar", "Sin DNI")
+pnd = q("select register_provider('Sin DNI Studio','Calle 9', array['u'], '2284 000999', null)", uid=nodni)[0][0]
+ok("D26: con la opción activada, un alta sin DNI no se aprueba", err(q("select admin_set_provider(%s,'active',null)", (pnd,), uid=adm), "dni_missing"))
+ok("D26: el admin la apaga", q("select admin_set_require_dni(false)", uid=adm)[0][0] is False and q("select require_dni from app_settings")[0][0] is False)
+ok("D26: apagada, se aprueba sin DNI y sin el sello de identidad verificada",
+   not err(q("select admin_set_provider(%s,'active',null)", (pnd,), uid=adm)) and q("select status, dni_verified from providers where id=%s", (pnd,))[0] == ("active", False)
+   and q("select dni_verified_at from provider_private where provider_id=%s", (pnd,))[0][0] is None)
+ok("D26: el prestador ve el estado de su perfil (y nadie más el ajeno)", q("select my_provider_status()", uid=nodni)[0][0] == "active" and q("select my_provider_status()", uid=cli1)[0][0] is None and err(q("select my_provider_status()", role="anon")))
+q("select admin_set_require_dni(true)", uid=adm)
+ok("D26: de nuevo activada, todo como antes", q("select require_dni from app_settings")[0][0] is True and err(q("select admin_set_provider(%s,'active',null)", (pvie,), uid=adm), "dni_photos_missing"))
 q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{vie}/frente-2.jpg", f"{vie}/dorso-2.jpg"))
 ok("D24 caso 1: …con las fotos sí, y queda la fecha de la verificación", not err(q("select admin_set_provider(%s,'active',null)", (pvie,), uid=adm))
    and q("select status from providers where id = %s", (pvie,))[0][0] == "active"

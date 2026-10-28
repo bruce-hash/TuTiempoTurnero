@@ -1,0 +1,57 @@
+/* Bloque D · pantallas grandes (desde 1024 px). Las pantallas principales arman contenedores para dos columnas; en el
+   celular y la tablet esos contenedores no existen para el diseño (display:contents) y todo queda en una columna, en el
+   mismo orden de siempre. */
+.pp-l,.pp-r,.co-main,.co-side,.mt-a,.mt-b,.mt-c,.mt-s,.pb-side,.pb-main,.adm-body{display:contents}
+/* como .stack>*: que nada ensanche la columna (la barra de pestañas tiene scroll propio) */
+:is(.pp-l,.pp-r,.co-main,.co-side,.mt-a,.mt-b,.mt-c,.mt-s,.pb-side,.pb-main,.adm-body)>*{min-width:0}
+/* panel del prestador en una columna: cabecera, avisos de cobros, pestañas y la sección (los avisos están en pb-main) */
+.pb .pb-side>.btabw{order:1}
+.pb .pb-main>*{order:2}
+.pb .pb-main>.pb-notices{order:0}
+
+@media (min-width:1024px){
+  main{max-width:1200px}
+  .top .in,footer .in{max-width:1200px}
+  .cols2{max-width:1140px;column-gap:28px;align-items:start}
+  .cols2 .c-all{grid-column:1/-1}
+  .pp-l,.pp-r,.co-main,.co-side,.mt-a,.mt-b,.mt-c,.mt-s,.pb-side,.pb-main{display:grid;gap:14px;align-content:start;min-width:0}
+  /* "← Volver" y "← Cambiar horario": a la izquierda, sobre la primera columna */
+  .back{width:100%;max-width:1140px;justify-content:flex-start}
+  .co .h1{text-align:left}
+  .pb .pb-side>.btabw,.pb .pb-main>*,.pb .pb-main>.pb-notices{order:0}
+  /* columnas que acompañan al bajar (debajo de la cabecera fija) */
+  .pp-l,.co-side,.pb-side{position:sticky;top:84px}
+
+  /* inicio: el buscador y los rubros lado a lado; la grilla ocupa el ancho */
+  .hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);grid-template-areas:"tag tiles" "h1 tiles" "p tiles" "srch tiles" "all tiles";column-gap:40px;align-content:center;text-align:left;padding:32px 36px}
+  .hero>.tag{grid-area:tag;justify-self:start}
+  .hero>h1{grid-area:h1;margin:12px 0 8px}
+  .hero>p{grid-area:p;margin:0}
+  .hero>.srch{grid-area:srch;margin:18px 0 0;max-width:none}
+  .hero>.segpick{grid-area:tiles;margin:0;align-self:center;max-width:none}
+  .hero>.hero-all{grid-area:all;justify-self:start}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(250px,1fr));justify-content:stretch}
+  .card .ph{aspect-ratio:16/9}
+
+  /* perfil del prestador: foto y datos | pestañas, servicios y turnero */
+  .pp{grid-template-columns:minmax(0,420px) minmax(0,1fr)}
+  /* reservar: forma de pago | resumen y botón de pagar */
+  .co{grid-template-columns:minmax(0,1fr) minmax(0,400px)}
+  /* mis turnos: próximos y anteriores | avisos; debajo, los sellos de a dos */
+  .mt{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"h h" "a b" "c b" "s s";grid-template-rows:auto auto 1fr auto}
+  .mt>.h1{grid-area:h}.mt-a{grid-area:a}.mt-b{grid-area:b}.mt-c{grid-area:c}.mt-s{grid-area:s}
+  .mt-s .stampgrid{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+  /* panel del prestador: menú lateral */
+  .pb{grid-template-columns:minmax(0,250px) minmax(0,1fr)}
+  .pb-side .tabarr{display:none}
+  .pb-side .btabw{display:block}
+  .pb-side .btabs{display:grid;gap:2px;overflow:visible;padding:6px}
+  .pb-side .btabs button{text-align:left;padding:10px 12px;width:100%}
+  /* panel de TuTiempo: el resumen en dos columnas (la comisión del mes, a lo ancho) */
+  .admin{max-width:1140px}
+  .adm-body{display:grid;gap:14px;align-content:start;min-width:0}
+  .adm-res{display:block;columns:2;column-gap:16px}
+  .adm-res>*{break-inside:avoid;margin-bottom:14px}
+  .adm-res>:first-child{column-span:all}
+  .adm-bal,.adm-com{max-width:760px;width:100%;justify-self:center}
+}

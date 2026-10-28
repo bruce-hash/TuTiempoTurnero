@@ -43,7 +43,10 @@ function vMisTurnosBase() {
       api.m.readMessages();
     }, 1500);
   }
-  return `<div class="narrow stack" style="margin-top:20px"><h1 class="h1">Mis turnos</h1>
+  // en la compu: próximos y anteriores a la izquierda, avisos a la derecha y los sellos debajo, a lo ancho (mt-a, mt-b,
+  // mt-c, mt-s); en el celular, en el orden de siempre
+  return `<div class="narrow stack cols2 mt" style="margin-top:20px"><h1 class="h1 c-all">Mis turnos</h1>
+   <div class="mt-a">
    ${(() => {
      // turnos que canceló el profesional y el cliente todavía no volvió a sacar
      const cancelled = store.BOOK.filter(
@@ -83,6 +86,8 @@ function vMisTurnosBase() {
    })()}
    <p class="lbl" style="margin:4px 0 0">Próximos</p>
    ${upcoming.length ? upcoming.map(cardOf).join("") : '<div class="panel" style="text-align:center"><p class="note" style="margin:0 0 10px">No tenés turnos reservados.</p><button class="btn btn-pri btn-block" data-act="goLocal">Reservar un turno</button></div>'}
+   </div>
+   <div class="mt-b">
    ${
      inbox.length
        ? `<div class="panel inbox"><p class="lbl">🔔 Avisos y mensajes de tus profesionales${unread ? ` <span class="cnt">${unread}</span>` : ""}</p><ul class="ag">${inbox
@@ -100,8 +105,11 @@ function vMisTurnosBase() {
            )}</ul>${inbox.length > 3 && !S.inboxAll ? `<button class="lnk" data-act="inboxAll">Ver todos (${inbox.length})</button>` : ""}</div>`
        : ""
    }
-   <!--SELLOS-->
+   </div>
+   <div class="mt-s"><!--SELLOS--></div>
+   <div class="mt-c">
    ${past.length ? `<p class="lbl" style="margin:8px 0 0">Anteriores</p><div class="panel"><ul class="ag">${past.map((booking) => `<li><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(pr(booking.pid).name)} · ${booking.time}</b><span>${esc(booking.svc)} · ${money(booking.price)}</span>${booking.stamped ? '<span class="hint">🎟️ +1 sello</span>' : ""}${booking.status === "done" && !booking.reviewed ? (S.rateFor === booking.id ? rateForm(booking) : `<button class="lnk" data-act="rateOpen" data-id="${booking.id}">★ Calificar</button>`) : booking.reviewed ? '<span class="hint">✓ Calificaste</span>' : ""}</div>${chipOf(booking)}</li>`).join("")}</ul></div>` : ""}
+   </div>
   </div>`;
 }
 function vMisTurnosCards() {
