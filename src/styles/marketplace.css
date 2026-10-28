@@ -21,7 +21,8 @@ button.cchip{cursor:pointer}
 .svcrow3 input,.svcrow3 select{padding:8px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;background:var(--bg);color:var(--fg);min-width:0}
 .svcrow3+.svcrow3{border-top:1px dashed var(--line);padding-top:8px}
 .catpick{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
-.catpick label{cursor:pointer}.catpick input{position:absolute;opacity:0;pointer-events:none}
+/* el checkbox va oculto dentro de su rubro: chico y relativo a la etiqueta (si no, toma el ancho de los campos y ensancha la página) */
+.catpick label{cursor:pointer;position:relative}.catpick input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;margin:0;left:0;top:0}
 .catpick span{display:inline-flex;gap:4px;align-items:center;border:1.5px solid var(--line);border-radius:99px;padding:6px 10px;font-size:13px;font-weight:600;background:var(--card);color:var(--fg)}
 .catpick input:checked+span{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
 .catpick input:focus-visible+span{outline:2px solid var(--brand)}
