@@ -80,7 +80,7 @@ jobs:
           python3 pruebas/test_mudanza.py "host=localhost port=5432 dbname=tt_mudanza user=postgres password=postgres"
 
   frontend:
-    name: Frontend (unidad · sin demo · crawl · clicks)
+    name: Frontend (unidad · sin demo · crawl · ancho · clicks)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -104,6 +104,9 @@ jobs:
 
       - name: Crawl (cada botón de cada pantalla, reloj fijo)
         run: npm run test:crawl
+
+      - name: Ancho (ninguna pantalla más ancha que la ventana en 390 y 1366 px, nada con hidden a la vista)
+        run: npm run test:ancho
 
       - name: Clicks (cada data-act con su acción, cada formulario con su envío)
         run: npm run test:clicks
