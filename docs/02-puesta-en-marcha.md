@@ -343,8 +343,8 @@ suscripciones y cada persona tiene que volver a tocar "Activar avisos".
 6. **Frontend:** `npm run build` y subir `dist/`, que ahora incluye `sw.js`, `manifest.webmanifest`, `offline.html`,
    `offline.js` e `icons/`. Todo en la raíz del sitio, como siempre (el `.htaccess` ya trae los encabezados).
 7. **Verificar en Supabase:** `select jobname, schedule from cron.job where jobname = 'tt-push';` → `* * * * *`. En
-   Edge Functions → push-send → Logs, cada corrida dice cuántas salieron. Panel de TuTiempo: si alguna vez aparece
-   "las claves VAPID no coinciden", `VAPID_PUBLIC_KEY` (secreto) y `vapidPublicKey` (`config.js`) son de pares distintos.
+   Edge Functions → push-send → Logs, cada corrida dice cuántas salieron. Si el log dice "rechazó la firma VAPID (401 o
+   403)", `VAPID_PUBLIC_KEY` (secreto) y `vapidPublicKey` (`config.js`) son de pares distintos.
 8. **Probar en celulares reales** (abajo, "Notificaciones en un celular real").
 
 **Freno de emergencia:** si el service worker diera problemas, `serviceWorker: false` en `config.js` lo desinstala en
