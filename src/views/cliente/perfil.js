@@ -81,8 +81,8 @@ export function vPerfil() {
     <div class="pstats"><span><b>★ ${rating(provComm).toFixed(1)}</b> ${nReviews} reseña${nReviews === 1 ? "" : "s"}</span><span><b>${provComm.followers}</b> seguidores</span><span><b>${nMedia}</b> trabajos</span></div>
     ${prov.verified !== false || prov.ig ? `<div class="chips" style="margin-top:8px">${prov.verified !== false ? '<span class="chip ok">Identidad verificada</span>' : ""}${prov.ig ? `<span class="chip">Instagram: ${esc(prov.ig)}</span>` : ""}</div>` : ""}
     <dl class="kv" style="margin-top:12px"><dt>Dirección</dt><dd>${esc(prov.addr)}</dd><dt>Pago</dt><dd>Seña con Mercado Pago${conf.cash !== false ? " · resto en efectivo o Mercado Pago" : ""}</dd></dl>
-   </div>
-   <div class="ptabs" role="tablist">${[
+   </div>`;
+  const tabsBar = `<div class="ptabs" role="tablist">${[
      ["svc", "Servicios"],
      ["works", "Trabajos" + (nMedia ? ` · ${nMedia}` : "")],
      ["reviews", "Reseñas" + (nReviews ? ` · ${nReviews}` : "")],
@@ -124,10 +124,11 @@ export function vPerfil() {
    ${bookable(prov) ? bookBar(prov) : ""}`
       : '<div class="panel" style="text-align:center"><p class="note">Todavía no cargó sus servicios. Seguilo para enterarte cuando abra su agenda.</p></div>';
   }
+  // en la compu, dos columnas (pp-l: foto y datos; pp-r: pestañas, servicios y turnero); en el celular, una sola
   return `<button class="back" data-go="home">← Volver</button>
-  <div class="narrow stack">
-   ${S.reprog ? '<div class="okbanner" style="background:var(--brand-soft);color:var(--fg)">Elegí el nuevo horario para tu turno <button class="lnk" data-act="reprogCancel">Volver</button></div>' : ""}
-   ${head}${body}
+  <div class="narrow stack cols2 pp">
+   ${S.reprog ? '<div class="okbanner c-all" style="background:var(--brand-soft);color:var(--fg)">Elegí el nuevo horario para tu turno <button class="lnk" data-act="reprogCancel">Volver</button></div>' : ""}
+   <div class="pp-l">${head}</div><div class="pp-r">${tabsBar}${body}</div>
   </div>`;
 }
 // formulario de reseña de un turno hecho (estrellas y texto)

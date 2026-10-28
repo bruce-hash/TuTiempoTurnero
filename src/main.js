@@ -6,6 +6,7 @@ import "./styles/agenda.css";
 import "./styles/componentes.css";
 import "./styles/rubros.css";
 import "./styles/marketplace.css";
+import "./styles/compu.css";
 import "./actions/acceso-prestadores.js";
 import "./actions/admin-balance.js";
 import "./actions/admin.js";

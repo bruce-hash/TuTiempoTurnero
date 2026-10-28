@@ -17,7 +17,7 @@ export function vAdmin() {
   const tab = ["res", "prov", "bal", "com"].includes(S.admT) ? S.admT : "res";
   const pending = data.pv.filter((prov) => prov.status === "pending");
   const now = NOW();
-  return `<div class="narrow stack admin" style="margin-top:20px">
+  return `<div class="narrow stack cols2 admin" style="margin-top:20px">
    <div><h1 class="h1" style="margin:0">Panel de TuTiempo</h1><p class="note" style="text-align:left;margin:4px 0 0">Olavarría · ${esc(MESES[now.getMonth()])} ${now.getFullYear()}${data.st.demo ? " · datos de ejemplo" : ""}</p></div>
    <div class="ptabs admtabs" role="tablist" aria-label="Secciones del panel">${[
      ["res", "Resumen"],
@@ -30,7 +30,7 @@ export function vAdmin() {
          `<button role="tab" data-act="admT" data-t="${id}" aria-selected="${tab === id}">${label}${id === "prov" && pending.length ? ` <span class="tbadge">${pending.length}</span>` : ""}</button>`,
      )
      .join("")}</div>
-   ${tab === "prov" ? admProv(data) : tab === "bal" ? admBal() : tab === "com" ? admCom(data) : admRes(data)}
+   <div class="adm-body adm-${tab}">${tab === "prov" ? admProv(data) : tab === "bal" ? admBal() : tab === "com" ? admCom(data) : admRes(data)}</div>
   </div>`;
 }
 // íconos de los rubros de un prestador
