@@ -188,6 +188,9 @@ jobs:
       - name: Rutas (cada dirección, atrás/adelante, recarga, sesión, reservadas, QR)
         run: npm run test:rutas
 
+      - name: CAPTCHA (Turnstile en cada llamada a Auth; sin clave, nada de Cloudflare)
+        run: npm run test:captcha
+
       - name: Comparación con la versión anterior (demo y en vivo, texto y capturas)
         run: npm run test:comparar
 

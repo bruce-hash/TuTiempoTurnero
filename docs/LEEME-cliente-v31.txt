@@ -83,6 +83,7 @@ D) Google (botones "Continuar con Google" y "Entrar con Google")
 
 E) Authentication → Rate Limits: dejá los valores por defecto (frenan fuerza bruta y abuso de emails).
    Authentication → Attack Protection → CAPTCHA (Cloudflare Turnstile): recomendado al abrir al público.
+   Antes, la Site Key en config.js (turnstileSiteKey); el paso a paso está en docs/02 → "CAPTCHA (Turnstile)".
 
 Cómo probarlo: creá una cuenta con tu email, tocá el link de activación, cerrá sesión, entrá con la
 contraseña, probá "¿Olvidaste tu contraseña?" y entrá con Google.

@@ -72,8 +72,8 @@ Editor). **No** cargues `ejemplos.NO-USAR-EN-PRODUCCION.sql`.
 - SMTP propio de Resend (sección 2b, paso 6), **también en prueba**: el SMTP que trae Supabase solo manda a los
   miembros del equipo del proyecto, así que cualquier otro usuario no recibe el email para activar la cuenta.
 - Google: PASO 2 del LEEME, con la dirección de este entorno.
-- CAPTCHA (Turnstile): **no lo actives todavía**. La app no lo soporta (H30): con CAPTCHA activado, nadie puede crear
-  cuenta, ingresar ni recuperar la contraseña.
+- CAPTCHA (Turnstile): opcional en prueba, **obligatorio en producción**. Seguí "CAPTCHA (Turnstile)" más abajo, en ese
+  orden: primero la clave del sitio en `config.js`, después activarlo en Supabase.
 
 **8. Mercado Pago** (la aplicación, Etapa A paso 2.3): Redirect URL `https://<proyecto>.supabase.co/functions/v1/mp-oauth`
 y webhook `https://<proyecto>.supabase.co/functions/v1/mp-webhook` (evento Pagos).
@@ -367,11 +367,26 @@ la cuenta, recuperar la contraseña). Un solo dominio para los dos entornos; cla
       cumpleaños, pero la confirmación y las cancelaciones sí (y todos los avisos siguen en Mis turnos).
 - [ ] Sellos: marcar "Asistió" suma sello; canjear el premio.
 
+### CAPTCHA (Turnstile, H30)
+Protege crear cuenta, ingresar, pedir código, reenviar y recuperar contraseña (el ingreso con Google no lo usa). Un
+widget por entorno: uno para el de prueba y otro para producción.
+1. Cloudflare (cuenta gratuita) → **Turnstile** → **Add widget**: nombre (por ejemplo `TuTiempo prueba`), hostname del
+   sitio (`prueba.tutiempo.com.ar`; en producción `tutiempo.com.ar`), modo **Managed**. Te da una **Site Key** (pública)
+   y una **Secret Key** (privada).
+2. `config.js` del sitio (en Hostinger): `turnstileSiteKey: "<Site Key>"`. Subilo y abrí `/ingresar`: tiene que andar
+   igual que siempre. Mientras Supabase no lo exija, el token viaja y nadie lo mira.
+3. Supabase → Authentication → **Attack Protection** → **Enable Captcha protection** → proveedor **Turnstile** → pegá la
+   **Secret Key** → Save. La Secret Key va solo ahí: nunca en `config.js` ni en el repo.
+4. Verificá crear cuenta, ingresar con contraseña y con código, recuperar contraseña y el ingreso de prestadores. Si
+   algo falla, primero apagá el CAPTCHA en Supabase (paso 3, al instante) y después revisá.
+Para sacarlo, el orden inverso: primero apagarlo en Supabase, después borrar la clave de `config.js`. Con el CAPTCHA
+prendido en Supabase y sin la clave en `config.js`, nadie puede ingresar.
+
 ## Etapa B · Producción
 1. Supabase: proyecto nuevo `tutiempo` en plan **Pro** (backups diarios). Mismos pasos 1 a 7.
 2. Auth: SMTP propio (Resend, D14: paso 2b con las claves `prod-funcion` y `prod-auth`) y Google con el dominio
-   definitivo. CAPTCHA (Turnstile): **no lo actives** hasta resolver H30 (la app todavía no lo soporta); está anotado
-   como pendiente antes de producción.
+   definitivo. CAPTCHA (Turnstile): **activalo**, con un widget propio de producción (hostname
+   `tutiempo.com.ar`), siguiendo "CAPTCHA (Turnstile)" en orden.
 3. Mercado Pago: credenciales de producción de la misma aplicación; nueva clave de webhook; `MP_OWNER_USER_ID` de la
    cuenta real de TuTiempo; `CRON_SECRET` y `MP_TOKENS_KEY` **nuevas** (no las del entorno de prueba);
    `supabase secrets set` en el proyecto de producción (con los de Resend), deploy de las 6 funciones y Vault. Para un
