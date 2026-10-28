@@ -105,6 +105,9 @@ jobs:
       - name: Crawl (cada botón de cada pantalla, reloj fijo)
         run: npm run test:crawl
 
+      - name: Chromium (para test:ancho)
+        run: npx playwright install --with-deps chromium
+
       - name: Ancho (ninguna pantalla más ancha que la ventana en 390 y 1366 px, nada con hidden a la vista)
         run: npm run test:ancho
 
