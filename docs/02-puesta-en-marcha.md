@@ -354,27 +354,36 @@ todos los navegadores la próxima vez que abran la app (y borra su caché), sin 
 Hace falta el sitio en HTTPS (el subdominio de prueba ya lo tiene), los pasos de arriba hechos y dos cuentas: una de
 cliente y la del prestador de prueba (con Mercado Pago de prueba conectado).
 
+Los avisos le llegan a un dispositivo desde que activa las notificaciones: lo que pasó antes (por ejemplo, la confirmación
+del turno que acabás de reservar) no se manda de nuevo. Los recordatorios salen cada 10 minutos (`tt-notices`): el de 2 h,
+si el turno se reservó más de 2 h antes; el de 24 h, si se reservó más de 24 h antes.
+
 **Android (Chrome):**
 1. Abrí `https://prueba.tutiempo.com.ar` en Chrome, ingresá como cliente y reservá un turno (pagá con el comprador de prueba).
 2. En "¡Listo! Tenés turno" aparece "¿Te avisamos antes del turno?": tocá **Activar avisos** y aceptá el permiso de
-   Chrome. Tiene que llegar enseguida la notificación **"Turno confirmado"** (con el celular bloqueado también).
-3. Tocala: abre la app en el turno.
-4. Menú de cuenta → **Instalar la app** (o la tarjeta "Instalá TuTiempo"): queda el ícono en la pantalla de inicio. Abrila
+   Chrome. Mi perfil → Notificaciones tiene que decir "Activadas".
+3. Reservá otro turno para dentro de unas **2 h 30 min** (con más de 2 h de anticipación): enseguida llega **"Turno confirmado"** (probalo también con el
+   celular bloqueado). Tocala: abre la app en ese turno.
+4. Dejá pasar el tiempo hasta que falten menos de 2 h: en los 10 minutos siguientes llega el **recordatorio de 2 h**.
+5. Mi perfil → apagá "Recordatorios y novedades por notificación" y repetí los pasos 3 y 4 con otro turno: la
+   confirmación llega, el recordatorio no. Volvé a prenderla.
+6. Menú de cuenta → **Instalar la app** (o la tarjeta "Instalá TuTiempo para tener tus turnos a mano", que sale una sola vez): queda el ícono en la pantalla de inicio. Abrila
    desde ahí: se abre sin la barra del navegador.
-5. Mi perfil → Notificaciones: "Activadas". Apagá "Recordatorios y novedades por notificación" y reservá otro turno para
-   mañana: la confirmación llega, el recordatorio de 24 h no.
-6. Con el celular del prestador (o el mismo, ingresando como prestador en otro navegador): Panel → tarjeta "Enterate al
-   toque de cada reserva" → **Activar avisos**. Desde la cuenta de cliente, reservá: le llega **"Nueva reserva"** con el
-   nombre de pila del cliente; cancelá el turno desde Mis turnos: le llega **"Se canceló una reserva"**.
-7. Modo avión y abrí la app instalada: tiene que aparecer **"Sin conexión"**. Sacá el modo avión: se recarga sola.
+7. Con el prestador de prueba (otro celular, o el mismo en otro navegador): Panel → Agenda → tarjeta "Enterate al toque
+   de cada reserva" → **Activar avisos**. Desde la cuenta de cliente, reservá para mañana o más adelante: le llega **"Nueva reserva"** con el nombre
+   de pila del cliente; cancelá ese turno desde Mis turnos: le llega **"Se canceló una reserva"**. Mi perfil del
+   prestador → apagá "Nuevas reservas y cancelaciones de clientes" y repetí: no llega nada.
+8. Modo avión y abrí la app instalada: tiene que aparecer **"Sin conexión"**. Sacá el modo avión: se recarga sola.
+9. Cerrá sesión en el celular y, desde la compu con la misma cuenta, reservá: al celular ya no le llega nada.
 
 **iPhone (Safari, iOS 16.4 o más nuevo):**
 1. Abrí el sitio en **Safari** (no en el navegador de Instagram ni de WhatsApp) e ingresá como cliente.
 2. Mi perfil → Notificaciones: dice que en el iPhone funcionan con la app agregada a inicio, con los 3 pasos.
 3. Tocá **Compartir** (el cuadrado con la flecha) → **Agregar a inicio** → **Agregar**.
 4. Abrí TuTiempo **desde el ícono** (no desde Safari) e ingresá de nuevo (la app instalada tiene su propia sesión).
-5. Mi perfil → **Activar avisos** → **Permitir**. Reservá un turno: llega "Turno confirmado".
-6. Repetí los pasos 5 a 7 de Android (opciones, prestador, modo avión).
+5. Mi perfil → **Activar avisos** → **Permitir**.
+6. Seguí desde el paso 3 de Android (confirmación, recordatorio, opción, prestador, modo avión, cerrar sesión). El paso 6
+   no hace falta: ya está agregada a inicio.
 
 Si en algún celular no llega nada: Edge Functions → push-send → Logs (el código de cada envío y el servicio) y la tabla
 `push_outbox` (`last_status`, `last_error`). 410 o 404 quiere decir que ese dispositivo se dio de baja: se borra solo.
