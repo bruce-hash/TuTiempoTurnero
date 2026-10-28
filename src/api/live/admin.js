@@ -23,8 +23,10 @@ export const liveAdmin = {
           p_status: null,
         }),
       ),
-      call(sb.from("app_settings").select("site_url").maybeSingle()).catch(() => null),
+      call(sb.from("app_settings").select("site_url,require_dni").maybeSingle()).catch(() => null),
     ]);
+    // Bloque D (D26): "Exigir DNI para aprobar prestadores" (si no se puede leer, se exige, como hasta ahora)
+    S.requireDni = !settings || settings.require_dni !== false;
     S.adm = {
       stats: stats,
       // H24: la dirección del sitio con la que la base arma los links de los avisos

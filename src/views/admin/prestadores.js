@@ -3,11 +3,14 @@ import { esc } from "../../lib/dom.js";
 import { relDate } from "../../lib/fechas.js";
 import { avatar } from "../../lib/prestadores.js";
 import { CAT, CATS, catName } from "../../lib/rubros.js";
+import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { admIc } from "./admin.js";
 import { admFile } from "./ficha.js";
 
-// H10: lo que cargó el prestador para verificarlo (para aprobar hacen falta el número y las dos fotos)
+// H10: lo que cargó el prestador para verificarlo (para aprobar hacen falta el número y las dos fotos, si TuTiempo exige
+// el DNI: D26; si no, la línea y "Ver DNI" aparecen solo si cargó algo)
+const asksDni = (prov) => dniRequired() || !!prov.dni || prov.dniPhotos.front || prov.dniPhotos.back;
 const dniLine = (prov) => {
   const photo = (side, label) => `${label} ${prov.dniPhotos[side] ? "✓" : "falta"}`;
   return `DNI ${prov.dni ? esc(prov.dni) : "sin cargar"} · ${photo("front", "Frente")} · ${photo("back", "Dorso")}`;
@@ -63,14 +66,14 @@ export function admProv(data) {
   };
   return `${
     pending.length
-      ? `<div class="panel"><p class="lbl">Para verificar · ${pending.length}</p><ul class="ag">${pending
+      ? `<div class="panel"><p class="lbl">${dniRequired() ? "Para verificar" : "Para aprobar"} · ${pending.length}</p><ul class="ag">${pending
           .map(
             (
               prov,
             ) => `<li>${avatar(prov)}<div><b>${esc(prov.name)}</b><span>${(prov.cats || []).map(catName).join(" · ")}${prov.created ? " · " + esc(typeof prov.created == "string" && prov.created.length > 12 ? relDate(prov.created) : prov.created) : ""}</span>
-     ${LIVE ? `<span>${dniLine(prov)}</span>` : ""}
+     ${LIVE && asksDni(prov) ? `<span>${dniLine(prov)}</span>` : ""}
      ${S.admDni && S.admDni.id === prov.id ? `<span>${S.admDni.urls.length ? S.admDni.urls.map((file) => `<a class="lnk" href="${esc(file.url)}" target="_blank" rel="noopener">${esc(file.side)}</a>`).join(" · ") : "Sin archivos de DNI"}</span>` : ""}</div>
-     <span class="admact">${LIVE ? `<button class="btn btn-ghost btn-sm" data-act="admDni" data-id="${prov.id}">Ver DNI</button>` : ""}<button class="btn btn-ok btn-sm" data-act="admSet" data-id="${prov.id}" data-s="active">Aprobar</button></span></li>`,
+     <span class="admact">${LIVE && asksDni(prov) ? `<button class="btn btn-ghost btn-sm" data-act="admDni" data-id="${prov.id}">Ver DNI</button>` : ""}<button class="btn btn-ok btn-sm" data-act="admSet" data-id="${prov.id}" data-s="active">Aprobar</button></span></li>`,
           )
           .join("")}</ul></div>`
       : ""

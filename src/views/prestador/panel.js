@@ -18,6 +18,7 @@ import { seedStore } from "../../demo/panel.js";
 import { MSG_DEF } from "./mensajes.js";
 import { vBPerfil } from "./perfil.js";
 import { vBProductos } from "./productos.js";
+import { setupSteps } from "./verificacion.js";
 
 export const STORE = {};
 // datos vacíos del panel de un prestador: en vivo los completa la base (loadMine); en la demo, src/demo/panel.js
@@ -113,7 +114,7 @@ export function vBarbero() {
   const body = (
     {
       caja: () => vCaja(prov),
-      agenda: () => vBAgendaT(),
+      agenda: () => setupSteps(prov, "agenda") + vBAgendaT(),
       clientes: () => vBClientes(),
       finanzas: () => vBFinanzas(),
       horarios: () => vBHorarios(),

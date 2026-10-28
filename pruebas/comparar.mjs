@@ -103,6 +103,8 @@ async function normalizar(page) {
     });
     // Bloque 2b (H24, cambio a propósito): en vivo, la pestaña Comisión suma "Dirección del sitio"
     document.querySelectorAll("#app #fSite").forEach((form) => form.remove());
+    // Bloque D (D26, cambio a propósito): la pestaña Comisión suma "Verificación" (Exigir DNI para aprobar prestadores)
+    document.querySelectorAll("#app [data-act=admReqDni]").forEach((toggle) => toggle.closest(".panel").remove());
     // los avisos flotantes (toast, notif) duran unos segundos: según lo rápido que vaya la máquina, el del paso anterior
     // todavía se ve o ya no. No son parte de la pantalla: se esconden en las dos versiones
     // (además display:none: en la versión de referencia el CSS de .notif le gana a hidden y la pastilla vacía se veía siempre)

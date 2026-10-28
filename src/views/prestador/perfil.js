@@ -5,11 +5,13 @@ import { ME } from "../../lib/prestadores.js";
 import { CATS, catInfo } from "../../lib/rubros.js";
 import { svcMeta } from "../../lib/servicios.js";
 import { cfg, skey } from "../../lib/turnero.js";
+import { approved, dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { photoPicker } from "../../ui/fotos.js";
 import { stampCfg, stampSvcs } from "../../ui/sellos.js";
 import { delBox } from "../cliente/cuenta.js";
 import { vMensajes } from "./mensajes.js";
+import { setupSteps } from "./verificacion.js";
 
 // editor de rubros y servicios: trabaja sobre una copia (S.edSvcs) que se crea al abrirlo
 function svcEditor(prov) {
@@ -134,21 +136,18 @@ function mpPaidNote(st, past) {
   }
   return `<p class="note" style="text-align:left;margin:8px 0 0">Tenés ${n} turno${n === 1 ? "" : "s"} futuro${n === 1 ? "" : "s"} con la seña pagada: ${n === 1 ? "sigue" : "siguen"} en pie y, si hay que devolver una seña, se devuelve desde ${past ? "tu cuenta anterior" : "esta cuenta"}.</p>`;
 }
-// H10: lo que falta para verificar la identidad (número, frente y dorso). El número no se muestra: solo si está cargado.
-export const DNI_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
-function dniForm(st) {
-  const done = (ok) => (ok ? ' <span style="color:var(--ok)">✓ cargado</span>' : "");
-  return `<p class="note" style="text-align:left;margin:10px 0">Para activar tu perfil necesitamos tu número de DNI y las fotos del frente y del dorso. Solo los ve el equipo de TuTiempo. Guardamos las fotos hasta 30 días después de verificarte.</p>
-   <form id="fDni" novalidate><div class="f"><label for="dniN">Número de DNI${done(st.number)}</label><div class="pw"><input id="dniN" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Sin puntos, 7 u 8 números"><button class="btn btn-ghost btn-sm" type="submit">Guardar</button></div></div></form>
-   <div class="f"><label for="dniFront">Foto del frente${done(st.front)}</label><input id="dniFront" type="file" accept="${DNI_ACCEPT}"></div>
-   <div class="f"><label for="dniBack">Foto del dorso${done(st.back)}</label><input id="dniBack" type="file" accept="${DNI_ACCEPT}"></div>`;
+// Verificación: el DNI (o, si TuTiempo no lo pide, si el perfil ya está aprobado); lo que falta se carga en los pasos de arriba
+function verifRow(prov) {
+  const ok = approved(prov);
+  const [label, state] = prov.verified !== false ? ["DNI", "✓ Verificado"] : dniRequired() ? ["DNI", "En revisión"] : ["Perfil", ok ? "✓ Aprobado" : "En revisión"];
+  return `<dt>${label}</dt><dd style="color:${prov.verified !== false || ok ? "var(--ok)" : "var(--warn)"}">${state}</dd>`;
 }
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
 // En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
 export function vBPerfil(prov) {
   const mp = S.mp;
   const st = S.mpSt || {};
-  return `<div class="panel"><p class="lbl">Cobros</p>
+  return `${setupSteps(prov, "perfil")}<div class="panel"><p class="lbl">Cobros</p>
    ${
      mp === "ok"
        ? `<div class="paym" style="border-color:var(--ok);background:var(--ok-soft)"><span class="mp">MP</span><span>Mercado Pago conectado<br><small class="hint">${LIVE ? (st.account ? `Cuenta n° ${esc(st.account)} · ` : "") : "filo.barber.mp · "}Las señas se acreditan en tu cuenta al reservar.</small></span></div>
@@ -197,8 +196,7 @@ export function vBPerfil(prov) {
    <button class="btn btn-pri btn-block" type="submit">Guardar cambios</button>
   </form>
   ${vMensajes()}
-  <div class="panel"><p class="lbl">Verificación</p><dl class="kv"><dt>DNI</dt><dd style="color:${prov.verified === false ? "var(--warn)" : "var(--ok)"}">${prov.verified === false ? "En revisión" : "✓ Verificado"}</dd><dt>Email</dt><dd>${esc(LIVE ? (S.user ? S.user.email : "") : prov.id === 21 ? "sofia@tutiempo.demo" : "filo@tutiempo.demo")}</dd></dl>
-   ${LIVE && prov.verified === false ? dniForm(S.dniSt || {}) : ""}</div>
+  <div class="panel"><p class="lbl">Verificación</p><dl class="kv">${verifRow(prov)}<dt>Email</dt><dd>${esc(LIVE ? (S.user ? S.user.email : "") : prov.id === 21 ? "sofia@tutiempo.demo" : "filo@tutiempo.demo")}</dd></dl></div>
   ${delBox("pro")}
   <button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
 }

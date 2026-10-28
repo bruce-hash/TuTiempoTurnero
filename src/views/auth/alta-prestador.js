@@ -3,16 +3,16 @@ import { esc } from "../../lib/dom.js";
 import { CATS } from "../../lib/rubros.js";
 import { S } from "../../state.js";
 import { GLOGO, LOGO } from "../../ui/iconos.js";
-import { DNI_ACCEPT } from "../prestador/perfil.js";
+import { dniRequired } from "../../lib/verificacion.js";
 
-// alta de prestador: formulario con DNI y fotos; al terminar, pantalla de “cuenta creada”
+// alta de prestador: el formulario (sin DNI: se carga en el panel, Bloque D) y al terminar la pantalla de “cuenta creada”
 export function vRegPrest() {
   const reg = S.reg;
   if (reg.done) {
     return `<div class="narrow"><div class="panel" style="margin-top:24px;text-align:center">
    <div style="font-size:40px">🎉</div><h1 class="h1">¡Cuenta creada, ${esc(reg.nombre)}!</h1>
-   <p class="lead">${reg.confirm ? `Te mandamos un email a <b>${esc(reg.email)}</b>. Tocá el link para confirmar y después entrá con tu email y contraseña: tu perfil se crea solo. Para verificarte, cargá tu DNI y las fotos en Perfil → Verificación.` : `Estamos verificando tu DNI. Suele tardar menos de 24 horas y te avisamos por email a <b>${esc(reg.email)}</b>.`}</p>
-   <ol class="steps" style="margin:0 0 16px"><li class="done"><span class="dot">✓</span><div><b>Datos cargados</b></div></li><li class="now"><span class="dot">2</span><div><b>Verificación de DNI</b><span>En revisión</span></div></li><li><span class="dot">3</span><div><b>Conectar Mercado Pago</b><span>Desde tu perfil</span></div></li></ol>
+   <p class="lead">${reg.confirm ? `Te mandamos un email a <b>${esc(reg.email)}</b>. Tocá el link para confirmar y después entrá con tu email y contraseña: tu perfil se crea solo.` : "Tu cuenta está lista."} Al entrar te mostramos ${dniRequired() ? "dónde cargar tu DNI y conectar Mercado Pago" : "cómo conectar Mercado Pago"}.</p>
+   <ol class="steps" style="margin:0 0 16px"><li class="done"><span class="dot">✓</span><div><b>Datos cargados</b></div></li><li class="now"><span class="dot">2</span><div>${dniRequired() ? "<b>Verificación de DNI</b><span>La cargás desde tu panel</span>" : "<b>Aprobación de TuTiempo</b><span>Revisamos tu perfil</span>"}</div></li><li><span class="dot">3</span><div><b>Conectar Mercado Pago</b><span>Desde tu perfil</span></div></li></ol>
    ${reg.confirm ? '<button class="btn btn-pri btn-block" data-go="loginBarbero">Ir al ingreso</button>' : '<button class="btn btn-pri btn-block" data-act="regPanel">Entrar al panel (demo)</button>'}</div></div>`;
   }
   const errs = reg.errs || {};
@@ -33,9 +33,7 @@ export function vRegPrest() {
    <div class="f"><label for="pp">Contraseña *</label><input id="pp" type="password" value="${esc(reg.pass || "")}" autocomplete="off"><span class="hint">Mínimo 8 caracteres.</span>${errOf("pass")}</div>
    <div class="f"><label for="pa">Dirección donde atendés</label><input id="pa" value="${esc(reg.addr || "")}" autocomplete="off"></div>
    <div class="f"><label for="ptel">Celular * <span class="hint">(privado: solo lo ve TuTiempo)</span></label><input id="ptel" inputmode="tel" value="${esc(reg.tel || "")}" autocomplete="off">${errOf("tel")}</div>
-   <div class="f"><label for="pd">DNI *</label><input id="pd" inputmode="numeric" value="${esc(reg.dni || "")}" autocomplete="off"><span class="hint">Sin puntos. 7 u 8 dígitos.</span>${errOf("dni")}</div>
-   <div class="f"><label for="pf">Foto del frente del DNI *</label><input id="pf" type="file" accept="${DNI_ACCEPT}"><span class="hint">${reg.frente ? "✓ Frente cargado" : "Lo verificamos para que tus clientes sepan quién sos."}</span></div>
-   <div class="f"><label for="pf2">Foto del dorso del DNI *</label><input id="pf2" type="file" accept="${DNI_ACCEPT}"><span class="hint">${reg.dorso ? "✓ Dorso cargado" : "Solo lo ve el equipo de TuTiempo."}</span>${errOf("files")}</div>
+   ${dniRequired() ? '<p class="note" style="text-align:left;margin:0 0 12px">🪪 El DNI lo cargás después, desde tu panel: lo pedimos para que tus clientes sepan quién sos.</p>' : ""}
    <label class="chk" style="justify-content:flex-start"><input type="checkbox" id="ptc" ${reg.tc ? "checked" : ""}> Acepto los <button type="button" class="lnk" data-go="terminos">términos y condiciones</button></label>${errOf("tc")}
    <button class="btn btn-pri btn-block" type="submit">Crear cuenta de prestador</button>
    <p class="note" style="margin-top:12px">¿Ya tenés cuenta? <button type="button" class="lnk" data-go="loginBarbero">Ingresá</button></p>

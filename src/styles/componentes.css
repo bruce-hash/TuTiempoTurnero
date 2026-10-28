@@ -125,3 +125,8 @@ label.chk+.fe-msg{margin:-6px 0 10px}
   *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
   .card:hover,.segtile:hover,.btn:active,.gbtn:active,.svci:active,.payopt:active,.slot:active,.wd:active,.cchip:active,.acct-btn:active,.seg3 button:active{transform:none}
 }
+/* Bloque D: pasos para activar el perfil (Perfil y Agenda): cada texto y cada botón en su renglón */
+.setup .steps span{display:block}
+.setup .steps .btn,.setup .steps .lnk{margin-top:6px}
+.setup .steps .lnk{display:inline-block;font-size:13px}
+.setup .steps form,.setup .steps .f:last-child{margin-bottom:0}

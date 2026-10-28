@@ -136,7 +136,9 @@ registerSubmit("fBarb", (ev) => {
         login.err = "";
         login.fails = 0;
         S.role = "barbero";
-        S.btab = "agenda";
+        // primer ingreso (Bloque D): a Perfil, con los pasos para activar el perfil
+        S.btab = S.firstPanel ? "perfil" : "agenda";
+        S.firstPanel = false;
         toast("Bienvenido, " + pr(S.me).name);
         if (afterPanelLogin()) {
           return;

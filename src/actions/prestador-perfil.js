@@ -1,4 +1,3 @@
-import { readReg } from "./alta-prestador.js";
 import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
@@ -171,20 +170,7 @@ registerChange("msv", (ev) => {
   $("#mtel").value = tel;
   return;
 });
-// alta: foto del frente (pf) y del dorso (pf2) del DNI; se suben cuando la cuenta ya tiene sesión (H10)
-const regPhoto = (side) => (ev) => {
-  Object.assign(S.reg, readReg());
-  store.REGFILES[side] = ev.target.files[0] || null;
-  S.reg[side] = !!store.REGFILES[side];
-  if (S.reg.errs) {
-    delete S.reg.errs.files;
-  }
-  render();
-  return;
-};
-registerChange("pf", regPhoto("frente"));
-registerChange("pf2", regPhoto("dorso"));
-// Perfil → Verificación (H10): número de DNI y fotos, mientras el perfil no está verificado
+// Perfil, pasos para activar el perfil (H10): número de DNI y fotos, mientras el perfil no está verificado
 registerSubmit("fDni", (ev) => {
   const dni = $("#dniN").value.trim();
   if (!/^\d{7,8}$/.test(dni)) {

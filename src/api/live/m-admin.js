@@ -12,6 +12,7 @@ Object.assign(LM, {
       }),
     ),
   adminSetSiteUrl: (url) => saved(sb.rpc("admin_set_site_url", { p_url: url })),
+  adminSetRequireDni: (on) => saved(sb.rpc("admin_set_require_dni", { p_on: on })),
   adminSetProvider: (providerId, status, verified) =>
     saved(
       sb.rpc("admin_set_provider", {

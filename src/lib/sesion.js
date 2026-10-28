@@ -15,6 +15,13 @@ export function afterLogin() {
 }
 // después de ingresar: a la pantalla o dirección que estaba esperando (S.after) o al inicio
 export function goAfter() {
+  // primer ingreso de un prestador nuevo (Bloque D): a Perfil, con los pasos para activarlo
+  if (S.firstPanel && S.barberAuth) {
+    S.firstPanel = false;
+    S.after = null;
+    navigate("/panel/perfil");
+    return;
+  }
   const next = S.after || "home";
   S.after = null;
   if (String(next).startsWith("/")) {
