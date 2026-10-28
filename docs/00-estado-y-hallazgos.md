@@ -321,6 +321,19 @@ código y el mensaje: un error de la base nunca es "no es prestador", "no hay re
 `not_a_provider` de verdad también se loguea. `pruebas/supabase_emulation.sql` ahora es un proyecto nuevo (sin permisos
 por defecto); `test_mudanza` agrega `supabase_emulation_proyecto_viejo.sql`. Prueba: `test:funciones` (H32).
 
+### H33 · Media · Pantallas más anchas que la ventana y una pastilla vacía siempre visible (resuelto)
+Encontrados al armar la propuesta del Bloque D:
+- **Pastilla vacía:** debajo de la cabecera se veía siempre el aviso `#notif` vacío. `.notif{display:flex}` le ganaba al
+  atributo `hidden`. Ahora `[hidden]{display:none!important}` (base.css): nada con `hidden` se ve, venga de donde venga.
+- **"Sumate como prestador" ancha:** en el celular medía 647 px en una pantalla de 390 (2142 px en la compu) y se corría
+  de costado. Los checkbox ocultos de los rubros (`.catpick input`, `position:absolute`) tomaban el ancho completo de los
+  campos. Ahora son de 1 px y relativos a su rubro.
+- **Cabecera de barbería en el celular:** sin sesión, "SOY PRESTADOR" e "INGRESAR" (mayúsculas con espaciado) se pasaban
+  7 px del borde, y en los otros rubros "Soy prestador" ocupaba dos líneas. Ahora los botones de la cabecera no se parten
+  y, hasta 420 px, van con menos relleno y espaciado.
+Prueba: `npm run test:ancho` (`pruebas/ancho.mjs`, en el CI): visitante, cliente, las 9 pestañas del panel y las 4 del
+admin, en 390 y 1366 px, sin nada más ancho que la ventana ni con `hidden` a la vista.
+
 ## Mejoras futuras (no son hallazgos; después del lanzamiento)
 
 ### F01 · Vista previa de los links de prestadores (WhatsApp, Instagram)
