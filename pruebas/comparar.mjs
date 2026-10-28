@@ -105,7 +105,11 @@ async function normalizar(page) {
     document.querySelectorAll("#app #fSite").forEach((form) => form.remove());
     // los avisos flotantes (toast, notif) duran unos segundos: según lo rápido que vaya la máquina, el del paso anterior
     // todavía se ve o ya no. No son parte de la pantalla: se esconden en las dos versiones
-    document.querySelectorAll("#toast, #notif").forEach((el) => (el.hidden = true));
+    // (además display:none: en la versión de referencia el CSS de .notif le gana a hidden y la pastilla vacía se veía siempre)
+    document.querySelectorAll("#toast, #notif").forEach((el) => { el.hidden = true; el.style.display = "none"; });
+    // la cabecera cambia a propósito (arreglos visuales: en el celular, los botones sin sesión entran en una línea): se
+    // esconde en las dos versiones; el contenido (#app) se compara igual, texto y píxeles
+    document.querySelectorAll("header.top").forEach((el) => Object.assign(el.style, { visibility: "hidden", height: "96px", overflow: "hidden", boxSizing: "border-box" }));
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
