@@ -758,7 +758,11 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
   const dA = await subDev(cli, "celu"), dB = await subDev(cli, "viejo"), dC = await subDev(cli, "caido"), dD = await subDev(cli, "otra-clave");
   const dOwner = await subDev(owner, "prestador");
   await q("delete from push_outbox where subscription_id not in (select id from push_subscriptions where endpoint like $1)", [ps.origin + "%"]);
-  const bk = Number(await one("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Paula Push Gómez', 'Corte', 'app', 'hold', now() + interval '30 hours', now() + interval '31 hours', 12500) returning id", [pid, cli]));
+  // los turnos de esta parte van de :35 a :55 de una hora: los de book() ocupan de :00 a :30 (de 8 a 19 h, pasado mañana
+  // y el día siguiente), así no se pisan sea la hora que sea (con "ahora + 30/50 h" chocaban según la hora en que corriera la
+  // prueba: de 9 a 13 y de 18 a 20 UTC)
+  const sinPisar = (h: number) => `date_trunc('hour', now() + interval '${h} hours') + interval '35 minutes', date_trunc('hour', now() + interval '${h} hours') + interval '55 minutes'`;
+  const bk = Number(await one(`insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Paula Push Gómez', 'Corte', 'app', 'hold', ${sinPisar(30)}, 12500) returning id`, [pid, cli]));
   await q("update bookings set status = 'confirmed' where id = $1", [bk]);
   await q("select notify_booking($1, 'conf')", [bk]);
   const outbox = async () => (await q("select o.id, o.kind, o.status, o.attempts, o.last_status, s.label from push_outbox o left join push_subscriptions s on s.id = o.subscription_id where o.booking_id = $1 order by o.id", [bk]));
@@ -781,7 +785,8 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
   ok("push-send manda: 2 enviadas (celu y prestador), 1 vencida, 2 fallidas", rr.status === 200 && res.sent === 2 && res.gone === 1 && res.failed === 2, JSON.stringify(res));
   const rCelu = ps.recibidos.find((x) => x.device === "celu")!;
   ok("el servicio de push verificó la firma VAPID (RFC 8292: ES256 con la clave k, para su origen, por menos de 24 h)", rCelu.vapidOk, rCelu.vapidWhy);
-  ok("…cifrado aes128gcm, con TTL hasta el turno, urgencia alta y Topic del turno", rCelu.encoding === "aes128gcm" && rCelu.ttl > 29 * 3600 && rCelu.ttl <= 30 * 3600
+  const hastaTurno = Number(await one("select extract(epoch from starts_at - now())::int from bookings where id = $1", [bk]));
+  ok("…cifrado aes128gcm, con TTL hasta el turno, urgencia alta y Topic del turno", rCelu.encoding === "aes128gcm" && Math.abs(rCelu.ttl - hastaTurno) <= 120
      && rCelu.urgency === "high" && rCelu.topic === `turno-${bk}`, JSON.stringify({ ...rCelu, payload: undefined }));
   ok("el dispositivo descifra el mensaje (RFC 8291): título, texto, adónde lleva y la etiqueta", rCelu.payload.title === "Turno confirmado"
      && /^Prov Funciones · (dom|lun|mar|mié|jue|vie|sáb) \d\d\/\d\d, \d\d:\d\d$/.test(rCelu.payload.body) && rCelu.payload.url === `/turno/${bk}` && rCelu.payload.tag === `turno-${bk}`, JSON.stringify(rCelu.payload));
@@ -803,7 +808,7 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
      && (await outbox()).some((x: any) => x.label === "caido" && x.status === "sent"));
   // endpoint de un servicio desconocido (no debería estar en la tabla, pero si está, la función no lo llama)
   await q("insert into push_subscriptions (user_id, endpoint, p256dh, auth) values ($1, 'https://interno.evil.test/robar', $2, $3)", [cli, dA.p256dh, dA.auth]);
-  const bk2 = Number(await one("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Paula', 'Corte', 'app', 'confirmed', now() + interval '50 hours', now() + interval '51 hours', 12500) returning id", [pid, cli]));
+  const bk2 = Number(await one(`insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Paula', 'Corte', 'app', 'confirmed', ${sinPisar(50)}, 12500) returning id`, [pid, cli]));
   await q("select notify_booking($1, 'conf')", [bk2]);
   console.error = () => {};
   await pushRun();
