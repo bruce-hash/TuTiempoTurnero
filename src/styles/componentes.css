@@ -153,3 +153,15 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .pwa-gt{display:block;font-size:17px;margin-bottom:4px}
 .pwa-update{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;display:flex;gap:12px;align-items:center;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:14px;padding:10px 12px 10px 16px;box-shadow:0 12px 30px rgba(0,0,0,.18);max-width:calc(100vw - 32px)}
 @media (min-width:700px){.pwa-guide{place-items:center}}
+/* V7 (C48): el ingreso en una segunda capa, encima de la página (mismos formularios que /ingresar) */
+.authmodal{position:fixed;inset:0;z-index:85;display:grid;place-items:end center;padding:12px;overflow-y:auto}
+.am-bg{position:fixed;inset:0;background:rgba(0,0,0,.5)}
+.am-box{position:relative;width:100%;max-width:460px;max-height:calc(100dvh - 24px);overflow-y:auto;background:var(--bg);border-radius:18px;padding:44px 12px 12px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.am-box .narrow{max-width:none}
+.am-box .narrow > .panel,.am-box .narrow > form.panel{margin-top:10px !important}
+.am-x{position:absolute;top:8px;right:8px;width:36px;height:36px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:16px;cursor:pointer}
+.am-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.am-tabs button{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:10px;padding:9px 10px;font-weight:700;cursor:pointer}
+.am-tabs button[aria-selected="true"]{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+body.am-open{overflow:hidden}
+@media (min-width:700px){.authmodal{place-items:center}}

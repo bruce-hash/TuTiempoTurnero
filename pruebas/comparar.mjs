@@ -185,7 +185,8 @@ async function recorridoVivo(browser, url) {
   // prestadora: las 9 pestañas del panel
   page = await pagina(browser, { relojFijo: false });
   await page.goto(url);
-  await clic(page, "[data-go=loginBarbero]");
+  // V7 (C47, C48): en la versión nueva el acceso de prestadores es la segunda capa que abre el footer
+  await clic(page, "header [data-go=loginBarbero], footer [data-act=authOpen][data-k=prestador]");
   await page.fill("#be", "sofia@test.ar");
   await page.fill("#bp", "prestador123");
   await clic(page, "#fBarb button[type=submit]");
@@ -196,7 +197,7 @@ async function recorridoVivo(browser, url) {
   // admin: las 4 pestañas
   page = await pagina(browser, { relojFijo: false });
   await page.goto(url);
-  await clic(page, "[data-go=login]");
+  await clic(page, "header [data-go=login], header [data-act=authOpen]");
   await page.fill("#ai_e", "admin@test.ar");
   await page.fill("#ai_p", "admin12345");
   await clic(page, "#fLogin button[type=submit]");

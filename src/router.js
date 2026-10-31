@@ -57,6 +57,11 @@ async function onPopState() {
     ownBack = false;
     return;
   }
+  // V7: atrás/adelante cierra el ingreso en segunda capa
+  if (S.authModal) {
+    S.authModal = null;
+    S.after = null;
+  }
   applying = true;
   try {
     await applyUrl(location.href);
