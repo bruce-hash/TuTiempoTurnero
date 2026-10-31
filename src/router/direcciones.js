@@ -89,6 +89,12 @@ function describeClient(view) {
     }
     case "turnoOk":
       return { url: "/turno/" + S.turnoId, key: "turno:" + S.turnoId, title: `Tu turno · ${SITE}` };
+    case "pagoVuelta":
+      return {
+        url: withParams("/turno/" + S.turnoId, { pago: S.payToken, mp: S.payBack }),
+        key: "pago:" + S.turnoId,
+        title: `Tu pago · ${SITE}`,
+      };
     case "misturnos":
       return { url: "/mis-turnos", key: "mis-turnos", title: `Mis turnos · ${SITE}` };
     case "cuenta":

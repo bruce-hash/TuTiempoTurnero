@@ -48,6 +48,11 @@ export const demoApi = {
   async session() {
     return null;
   },
+  // Paso 1: en la demo no hay Mercado Pago (la reserva se confirma sin salir de la app)
+  async checkoutStatus() {
+    return null;
+  },
+  async checkoutPoke() {},
   // Bloque C: en la demo no hay notificaciones push
   async pushRegistered() {
     return false;

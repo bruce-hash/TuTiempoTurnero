@@ -51,6 +51,7 @@ const CONFIRM = true; // igual que Supabase con "Confirm email" activado
 let CAPTCHA = ""; // H30: clave del sitio de Turnstile ("" = sin CAPTCHA)
 const PWA = { sw: false, vapid: "" }; // Bloque C
 let DOWN = false; // Bloque C: /__down?on=1 simula el sitio caído (sin conexión): cierra toda conexión salvo /__down
+let LAST_CHECKOUT = null; // Paso 1: el último cobro abierto ({ token, booking }), para probar la vuelta sin sesión (/__checkout)
 const USED = new Set(); // tokens ya usados (Cloudflare acepta cada uno una sola vez)
 const CAPTCHA_PATHS = ["/signup", "/otp", "/recover", "/resend"];
 
@@ -91,14 +92,19 @@ async function auth(req, res, url) {
 async function functions(req, res, url) {
   const name = url.pathname.split("/").pop(); const claims = verify((req.headers.authorization || "").slice(7)); const j = JSON.parse((await body(req)).toString() || "{}");
   LOG.push({ fn: name, body: j });
+  // Paso 1: la pantalla de regreso pide consultar el pago (sin sesión); acá el pago ya quedó confirmado al crear el cobro
+  if (name === "mp-reconcile") return send(res, 200, { ok: true });
   if (!claims || !claims.sub) return send(res, 401, { error: "login_required" });
   if (name === "mp-create-preference") {
     const r = await db.query("select coalesce(sum(deposit + client_fee - paid_wallet),0)::int as amount, coalesce(sum(client_fee),0)::int as fee, min(provider_id) as pid from public.bookings where id = any($1::bigint[]) and client_id = $2 and status = 'hold'", [j.booking_ids, claims.sub]);
     // como la función real: solo cobra la cuenta activa del prestador
     if (!(await db.query("select public.provider_can_charge($1) as ok", [r.rows[0].pid])).rows[0].ok) return send(res, 409, { error: "provider_mp_not_connected" });
+    // como la función real (Paso 1): anota el cobro con su token de regreso, y la vuelta va a la pantalla del turno
+    const tok = (await db.query("select public.checkout_open($1::bigint[], (select id from public.mp_accounts where provider_id = $2 and status = 'active')) as t", [j.booking_ids, r.rows[0].pid])).rows[0].t;
+    LAST_CHECKOUT = { token: tok, booking: j.booking_ids[0] };
     // simula que Mercado Pago aprobó el pago y llamó al webhook (con la comisión que informa MP)
     await db.query("select public.confirm_payment($1::bigint[], $2, $3, p_provider => $4, p_fee_mp => $5)", [j.booking_ids, "mp-test-" + Date.now(), r.rows[0].amount, r.rows[0].pid, r.rows[0].fee]);
-    return send(res, 200, { init_point: `${req.headers.origin || "http://localhost:" + PORT}/?mp=success&b=${j.booking_ids[0]}` });
+    return send(res, 200, { init_point: `${req.headers.origin || "http://localhost:" + PORT}/turno/${j.booking_ids[0]}?pago=${tok}&mp=success` });
   }
   if (name === "mp-oauth") { await db.query("select public.mp_connect(id, 'mp-test-' || id, 'v1:aXY=:VEVTVC10b2tlbg==', null, 15552000) from public.providers where owner_id=$1 and status<>'deleted'", [claims.sub]); return send(res, 200, { url: `/?mp_connected=1` }) }
   send(res, 404, {});
@@ -179,6 +185,7 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   try {
     if (url.pathname === "/__log") return send(res, 200, LOG);
+    if (url.pathname === "/__checkout") return send(res, 200, LAST_CHECKOUT || {});
     if (url.pathname === "/__down") { DOWN = url.searchParams.get("on") === "1"; return send(res, 200, { down: DOWN }) }
     if (DOWN) return req.socket.destroy();
     if (url.pathname === "/__pwa") { PWA.sw = url.searchParams.get("sw") === "1"; PWA.vapid = url.searchParams.get("vapid") || ""; return send(res, 200, PWA) }

@@ -57,6 +57,49 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("aviso de confirmación en la app (sin WhatsApp)", conf.length === 1 && conf[0].body.includes("Sofía Benítez Studio"));
   ok("en la base: comisión cobrada aparte y guardada", (await q("select app_fee, client_fee from bookings where client_id = (select id from auth.users where email='ana@test.ar')"))[0].app_fee === 1200);
   ok("v30: el aviso dice seña + comisión", (await pg.locator(".booked .bk-must").innerText()).includes("$6.000 + $1.200 de comisión"));
+  ok("Paso 1: la vuelta de Mercado Pago llega a /turno/<id> (no al inicio)", /^\/turno\/\d+$/.test(new URL(pg.url()).pathname));
+  {
+    // Paso 1: pagó desde la app instalada y Mercado Pago volvió al navegador, que no tiene la sesión
+    const ck = await (await fetch(BASE + "/__checkout")).json();
+    const ctxP = await b.newContext({ viewport: { width: 400, height: 900 } }); const pp = await ctxP.newPage();
+    pp.on("pageerror", (e) => errs.push(e.message));
+    await pp.goto(`${BASE}/turno/${ck.booking}?pago=${ck.token}&mp=success`); await pp.waitForSelector(".pay-back", { timeout: 8000 }).catch(() => {}); await pp.waitForTimeout(600);
+    const ptxt = await pp.locator("#app").innerText().catch(() => "");
+    ok("Paso 1: sin sesión, la vuelta muestra el turno confirmado (servicio, prestador y hora) y ofrece ingresar",
+       /¡Listo! Tenés turno/.test(ptxt) && ptxt.includes("Esmaltado semipermanente") && ptxt.includes("Sofía Benítez Studio") && (await pp.locator("[data-act=payLogin]").count()) === 1
+       && !/Ana/.test(ptxt), ptxt.slice(0, 200));
+    ok("Paso 1: la dirección conserva el token (se puede recargar)", new URL(pp.url()).searchParams.get("pago") === ck.token);
+    await pp.reload(); await pp.waitForSelector(".pay-back", { timeout: 8000 }).catch(() => {}); await pp.waitForTimeout(400);
+    ok("Paso 1: …y recargando sigue ahí", /¡Listo! Tenés turno/.test(await pp.locator("#app").innerText()));
+    await pp.click("[data-act=payLogin]"); await pp.waitForSelector("#le", { timeout: 8000 }).catch(() => {}); await pp.waitForTimeout(300);
+    ok("Paso 1: “Ingresá para ver tu turno” lleva al ingreso y después vuelve al turno", new URL(pp.url()).pathname === "/ingresar" && new URL(pp.url()).searchParams.get("volver") === `/turno/${ck.booking}`);
+    await pp.click("[data-act=authMode][data-m=code]").catch(() => {}); await pp.waitForTimeout(200);
+    await pp.fill("#le", "ana@test.ar"); await pp.click("#fMail button[type=submit]"); await pp.waitForSelector("#lc"); await pp.fill("#lc", "123456"); await pp.click("#fCode button[type=submit]");
+    await pp.waitForURL(new RegExp(`/turno/${ck.booking}$`), { timeout: 8000 }).catch(() => {}); await pp.waitForTimeout(800);
+    ok("Paso 1: …ya con sesión, el detalle de su turno", new URL(pp.url()).pathname === `/turno/${ck.booking}` && /Esmaltado semipermanente/.test(await pp.locator("#app").innerText()));
+    const ctxQ = await b.newContext({ viewport: { width: 400, height: 900 } }); const pq = await ctxQ.newPage();
+    pq.on("pageerror", (e) => errs.push(e.message));
+    await pq.goto(`${BASE}/turno/${ck.booking}?pago=${"0".repeat(64)}&mp=success`); await pq.waitForSelector(".pay-back", { timeout: 8000 }).catch(() => {}); await pq.waitForTimeout(400);
+    ok("Paso 1: un token que no existe no muestra nada del turno", /No encontramos este pago/.test(await pq.locator("#app").innerText()) && !(await pq.locator("#app").innerText()).includes("Esmaltado"));
+    // un cobro todavía sin pago: "Estamos confirmando tu pago" y se actualiza sola cuando llega
+    const hb = (await q("select id, provider_id, service_id, starts_at, ends_at from bookings where client_id = (select id from auth.users where email='ana@test.ar') and status='confirmed' order by id limit 1"))[0];
+    const hid = (await q("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, hold_expires_at) values ($1, $2, (select id from auth.users where email='ana@test.ar'), 'Ana', 'Esmaltado semipermanente', 'app', 'hold', $3::timestamptz + interval '7 days', $4::timestamptz + interval '7 days', 12000, 6000, 1200, now() + interval '10 minutes') returning id",
+      [hb.provider_id, hb.service_id, hb.starts_at, hb.ends_at]))[0].id;
+    const htok = (await q("select checkout_open(array[$1]::bigint[], null) as t", [hid]))[0].t;
+    await pq.goto(`${BASE}/turno/${hid}?pago=${htok}&mp=success`); await pq.waitForSelector(".pay-back", { timeout: 8000 }).catch(() => {}); await pq.waitForTimeout(400);
+    ok("Paso 1: sin sesión y sin el pago todavía: “Estamos confirmando tu pago”", /Estamos confirmando tu pago/.test(await pq.locator("#app").innerText()));
+    await q("select confirm_payment(array[$1]::bigint[], $2, 7200, p_provider => $3, p_fee_mp => 1200)", [hid, "mp-test-tarde-" + hid, hb.provider_id]);
+    await pq.waitForFunction(() => /Tenés turno/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 12000 }).catch(() => {});
+    ok("Paso 1: …y se actualiza sola cuando el pago queda confirmado", /¡Listo! Tenés turno/.test(await pq.locator("#app").innerText()));
+    await ctxP.close(); await ctxQ.close();
+    // ese turno extra no sigue: las pruebas de más abajo cuentan los turnos de Ana
+    await db.query("delete from mp_checkouts where $1 = any(booking_ids)", [hid]);
+    await db.query("delete from client_messages where ref = $1::text", [hid]);
+    await db.query("delete from payment_bookings where booking_id = $1", [hid]);
+    await db.query("update bookings set payment_id = null where id = $1", [hid]);
+    await db.query("delete from payments where mp_payment_id = $1", ["mp-test-tarde-" + hid]);
+    await db.query("delete from bookings where id = $1", [hid]);
+  }
   const bk = await q("select status, deposit, paid_mp, cashback from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
   ok("en la base: confirmado, seña 50% y sin cashback", bk.length === 1 && bk[0].status === "confirmed" && bk[0].deposit === 6000 && bk[0].paid_mp === 6000 && bk[0].cashback === 0);
   const bx = await q("select price, addons, intake, buffer_min, extract(epoch from busy_until - ends_at)::int gap, extract(epoch from ends_at - starts_at)::int dur from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
@@ -384,6 +427,17 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("2b: Para revisar muestra la cuenta con error: prestador, cuenta, error y desde cuándo", /Cuenta de Mercado Pago con error · Sofía/.test(await txt())
      && (await txt()).includes("No se pudo renovar la llave (400) · desde ") && /Cuenta n° \S+ · cobra las reservas/.test(await txt()));
   await db.query("update mp_accounts set last_error = null where last_error = 'No se pudo renovar la llave (400)'");
+  // Paso 1: avisos de Mercado Pago rechazados (por ejemplo, la clave de la firma mal) y un pago recuperado sin aviso
+  await db.query("select mp_webhook_event('1999000111', p.id, null, 'bad_signature', 'la firma no coincide con MP_WEBHOOK_SECRET') from providers p where p.name like 'Sofía%'");
+  await db.query("select mp_webhook_event('1999000111', p.id, null, 'bad_signature', 'la firma no coincide con MP_WEBHOOK_SECRET') from providers p where p.name like 'Sofía%'");
+  await db.query("select mp_webhook_event('1999000111', p.id, null, 'recovered', 'pago aprobado sin aviso: lo encontró la consulta automática') from providers p where p.name like 'Sofía%'");
+  await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForFunction(() => /no están llegando bien/.test(document.body.innerText), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("Paso 1: Para revisar avisa que los avisos de Mercado Pago no llegan bien (rechazados y pagos sin aviso) y dónde mirar",
+     /Los avisos de Mercado Pago no están llegando bien/.test(await txt()) && /2 avisos rechazados en 7 días \(rechazado: la firma no es válida\)/.test(await txt())
+     && /1 pago registrado sin aviso/.test(await txt()) && /MP_WEBHOOK_SECRET/.test(await txt()));
+  ok("Paso 1: …y la lista de avisos dice el detalle y cuántas veces llegó", /la firma no coincide con MP_WEBHOOK_SECRET\) · [^·]+ · 2 veces/.test(await txt()) && /Pago recuperado · pago 1999000111/.test(await txt()));
+  await db.query("delete from mp_webhook_events where mp_payment_id = '1999000111'");
+  await pg.evaluate(() => { S.admRev = null; render() }); await wait(600);
   // v30: prestadores por rubro, notas privadas, eliminar
   await pg.click("[data-act=admT][data-t=prov]"); await wait(400);
   ok("v30: prestadores divididos por rubro", (await pg.locator(".admgrp").count()) >= 1 && (await pg.locator(".admgh").first().innerText()).length > 2);

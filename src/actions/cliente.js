@@ -5,6 +5,7 @@ import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { uname } from "../lib/turnero.js";
+import { navigate } from "../router.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { go, render } from "../ui/render.js";
@@ -125,7 +126,15 @@ registerClick("reloadList", (ev, el, act) => {
   render();
   return;
 });
+// Paso 1 (v4): desde la pantalla de regreso de Mercado Pago sin sesión: ingresar y volver al turno
+registerClick("payLogin", (ev, el, act) => {
+  navigate("/ingresar?volver=" + encodeURIComponent("/turno/" + S.turnoId));
+});
 registerClick("refreshMine", (ev, el, act) => {
+  // si volvió de Mercado Pago con el token, que también se consulte el pago (por si el aviso no llegó)
+  if (S.payToken) {
+    api.checkoutPoke(S.payToken);
+  }
   api
     .myBookings()
     .then(render)

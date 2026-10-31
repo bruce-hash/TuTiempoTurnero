@@ -70,6 +70,12 @@ export const fresh = () => ({
   reprog: null,
   turnoId: null,
   justBooked: false,
+  // Paso 1 (v4): vuelta de Mercado Pago (/turno/<id>?pago=<token>): el token, el estado (checkout_status) y "mp" de la vuelta
+  payToken: null,
+  payStatus: null,
+  payLoading: false,
+  payTries: 0,
+  payBack: null,
   // Bloque C: app instalable y notificaciones push (src/lib/pwa.js, src/lib/push.js)
   canInstall: false,
   updateReady: false,

@@ -79,7 +79,9 @@ Editor). **No** cargues `ejemplos.NO-USAR-EN-PRODUCCION.sql`.
 y webhook `https://<proyecto>.supabase.co/functions/v1/mp-webhook` (evento Pagos).
 
 **9. Clave del webhook:** copiá la clave secreta del webhook de Mercado Pago y cargala:
-`supabase secrets set MP_WEBHOOK_SECRET=<clave>` (las funciones la toman sin volver a hacer el deploy).
+`supabase secrets set MP_WEBHOOK_SECRET=<clave>` (las funciones la toman sin volver a hacer el deploy). Tiene que ser
+la clave de la configuración de webhooks del **modo productivo** si los pagos son reales (la del modo de pruebas firma
+solo los avisos de prueba). Si algo no anda, "Si los pagos no se registran" (más abajo).
 
 **10. Frontend:** `npm ci`, `npm run build`, completar `dist/config.js` (URL y clave `anon`, nunca la `service_role`) y
 subir el contenido de `dist/` (con `.htaccess`) a la raíz del sitio (sección 3, pasos 2 a 5).
@@ -387,6 +389,40 @@ si el turno se reservó más de 2 h antes; el de 24 h, si se reservó más de 24
 
 Si en algún celular no llega nada: Edge Functions → push-send → Logs (el código de cada envío y el servicio) y la tabla
 `push_outbox` (`last_status`, `last_error`). 410 o 404 quiere decir que ese dispositivo se dio de baja: se borra solo.
+
+#### Paso 1 (correcciones v4, después del Bloque C): ningún pago sin registrar y vuelta de Mercado Pago sin sesión (D28)
+1. **Migración:** `supabase db push` (o `TODO_EN_UNO.sql`): `20261031120000_avisos_mp.sql`. Crea `mp_checkouts`, amplía
+   `mp_webhook_events` y agrega la tarea `tt-mp-sync` (cada 2 minutos; usa los mismos `tt_project_url` y
+   `tt_cron_secret` de Vault). No toca datos.
+2. **Funciones:** `supabase functions deploy mp-reconcile mp-webhook mp-create-preference --no-verify-jwt`
+   (`mp-reconcile` es nueva; las otras dos cambian). No hay secretos nuevos.
+3. **Frontend:** `npm run build` y subir `dist/` (pantalla de regreso de Mercado Pago y "Para revisar").
+4. **Verificar:** `select jobname, schedule from cron.job where jobname = 'tt-mp-sync';` → `*/2 * * * *`. Reservá con
+   un pago de prueba: tenés que volver a la pantalla del turno (no al inicio). Si el aviso no llega, en 2 a 5 minutos el
+   turno igual queda confirmado y "Para revisar" lo cuenta como "pago registrado sin aviso".
+5. **Cobros abiertos antes de esta migración (por ejemplo, los del 30/10):** la consulta automática solo conoce los
+   cobros nuevos. Para sumar los viejos (turnos de la app con preferencia, sin pago, de los últimos 7 días), en el SQL
+   Editor: `select public.checkout_backfill(7);` (devuelve cuántos sumó). **Ojo, son pagos reales:** si Mercado Pago
+   tiene el pago aprobado, el turno se confirma si el horario sigue libre, o se pide la devolución si no; un turno cuya
+   hora ya pasó hoy se confirmaría igual (pregunta abierta, D29). En unos minutos, el resultado está en
+   `payments` y en "Para revisar".
+
+#### Si los pagos no se registran (diagnóstico del webhook)
+Desde el Paso 1 un pago aprobado se registra igual aunque el aviso falle (la app le pregunta a Mercado Pago cada 2
+minutos), pero con demora, y "Para revisar" muestra "Los avisos de Mercado Pago no están llegando bien". Para arreglar
+el aviso, mirá Supabase → Edge Functions → **mp-webhook → Invocations / Logs** a la hora del pago:
+
+| Lo que ves | Qué pasa | Qué hacer |
+| --- | --- | --- |
+| Ninguna invocación | Mercado Pago no está mandando el aviso a la función | Mercado Pago → Tus integraciones → la aplicación → Webhooks → **Modo productivo**: URL `https://<proyecto>.supabase.co/functions/v1/mp-webhook`, evento **Pagos**, guardar y "Simular notificación". Los cobros igual llevan su `notification_url`, pero conviene tener las dos. |
+| 401 sin logs de la función ("Invalid JWT") | La función se desplegó con la verificación del gateway | Volver a desplegar con `--no-verify-jwt` (o con el `supabase/config.toml` del repo). |
+| 401 y en "Para revisar": "la firma no es válida" | `MP_WEBHOOK_SECRET` no es la clave con la que firma Mercado Pago | Copiar la **clave secreta** de Webhooks del modo con el que se cobra (productivo para pagos reales) y `supabase secrets set MP_WEBHOOK_SECRET=…`. |
+| 401 y "llegó sin firma" (con "formato IPN") | La cuenta manda avisos IPN viejos, sin firma | Configurar Webhooks (fila 1); los IPN no se pueden verificar. |
+| 401 y "la firma está vencida" | El aviso tardó más de 10 minutos o el reloj está corrido | Nada: la consulta automática lo registra. Si se repite, avisame. |
+| 500 y "falta configurar la función" | Falta `MP_WEBHOOK_SECRET` | Cargarlo (paso 9). |
+| 500 con "permission denied" en los logs | La base no tiene los permisos de las funciones (H32) | Correr la migración `20261027190000_permisos_servidor.sql` (o `TODO_EN_UNO.sql`). |
+| 200 y "le faltan datos (sin ?provider)" | Llega el aviso del panel de Mercado Pago, sin los datos del cobro | Normal si también llega el de la preferencia; si es el único, avisame. |
+| 200 con "el pago no existe en ninguna cuenta" o "cobrado por otra cuenta" | El prestador cobró con una cuenta que no es la conectada | Ver "Para revisar" (D16). |
 
 ### 3. Hostinger (subdominio de prueba)
 1. hPanel → Dominios → Subdominios → crear `prueba.tutiempo.com.ar`. Activar SSL.

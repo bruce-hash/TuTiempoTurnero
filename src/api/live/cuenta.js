@@ -171,6 +171,15 @@ export const liveCuenta = {
   async pushRegistered(endpoint) {
     return !!(await call(sb.rpc("push_registered", { p_endpoint: endpoint })));
   },
+  // Paso 1 (v4): estado del pago y del turno para la pantalla de regreso de Mercado Pago, con el token de la vuelta (anda
+  // sin sesión: solo servicio, prestador, día y hora). null si el token no existe.
+  async checkoutStatus(token) {
+    return await call(sb.rpc("checkout_status", { p_token: token }));
+  },
+  // …y le pide a mp-reconcile que consulte ya a Mercado Pago (por si el aviso no llegó); a lo sumo cada 15 s por cobro
+  async checkoutPoke(token) {
+    await sb.functions.invoke("mp-reconcile", { body: { token } }).catch(() => {});
+  },
   // Bloque D (D26): "Exigir DNI para aprobar prestadores" (si no se puede leer, se exige, como hasta ahora)
   async requireDni() {
     const row = await call(sb.from("app_settings").select("require_dni").maybeSingle()).catch(() => null);
