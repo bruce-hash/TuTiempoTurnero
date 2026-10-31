@@ -74,7 +74,7 @@ const handlers: Record<string, (req: Request) => Promise<Response>> = {};
 let loading = "";
 const realServe = Deno.serve.bind(Deno);   // el de verdad, para los servidores falsos de la prueba
 (Deno as any).serve = (h: any) => { handlers[loading] = typeof h === "function" ? h : h.handler; return { finished: Promise.resolve(), shutdown: async () => {} }; };
-for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "dni-cleanup", "email-send", "push-send"]) {
+for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "mp-reconcile", "dni-cleanup", "email-send", "push-send"]) {
   loading = n;
   await import(`../../supabase/functions/${n}/index.ts`);
 }
@@ -152,6 +152,16 @@ const pref = mp.preferencias.at(-1)!;
 ok("mp-create-preference: cobra con la llave de la cuenta activa", r.status === 200 && pref?.llave === A.token, String(r.status));
 ok("mp-create-preference: el aviso dice prestador y cuenta", pref?.body.notification_url === `${BASE}/functions/v1/mp-webhook?provider=${pid}&account=${A.id}`, pref?.body.notification_url);
 ok("mp-create-preference: monto y comisión salen de la base", pref?.body.items[0].unit_price === 6000 && pref?.body.marketplace_fee === 1000);
+{
+  const back = new URL(pref?.body.back_urls?.success ?? "http://x/");
+  ok("Paso 1: la vuelta lleva a la pantalla del turno con el token de regreso (no al inicio)",
+     back.origin === SITE && back.pathname === `/turno/${b1[0]}` && /^[0-9a-f]{64}$/.test(back.searchParams.get("pago") ?? "") && back.searchParams.get("mp") === "success"
+     && pref?.body.back_urls.failure.includes(`pago=${back.searchParams.get("pago")}`), pref?.body.back_urls?.success);
+  ok("Paso 1: el cobro queda anotado (sha256 del token, los turnos en el orden del external_reference y la cuenta que cobra)",
+     Number(await one("select count(*) from mp_checkouts where token_hash = checkout_hash($1) and array_to_string(booking_ids, ',') = $2 and mp_account_id = $3 and closed_at is null",
+       [back.searchParams.get("pago"), pref?.body.external_reference, A.id])) === 1
+     && Number(await one("select count(*) from mp_checkouts where token_hash = $1", [back.searchParams.get("pago")])) === 0);
+}
 
 // ---------- 3. Webhook: pago aprobado ----------
 mp.pago({ id: "9001", collector: "1001", status: "approved", amount: 6000, fee: 1000, ref: b1.join(",") });
@@ -168,6 +178,45 @@ ok("mp-webhook: mismo aviso dos veces → 200 y nada nuevo", r.status === 200 &&
    && Number(await one("select count(*) from payments where mp_payment_id = '9001'")) === 1);
 r = await webhook(pid, A.id, "9001", { firma: false });
 ok("mp-webhook: firma inválida → 401", r.status === 401);
+// Paso 1 (v4): un aviso rechazado antes de procesar no es invisible
+const rech = async (id: string, reason: string) => (await q("select reason, detail, hits, provider_id from mp_webhook_events where mp_payment_id = $1 and reason = $2", [id, reason]))[0];
+let ev = await rech("9001", "bad_signature");
+ok("Paso 1: firma inválida → queda en mp_webhook_events con el motivo y el detalle (sin datos personales)",
+   ev && /no coincide con MP_WEBHOOK_SECRET/.test(ev.detail) && Number(ev.provider_id) === pid && ev.hits === 1, JSON.stringify(ev));
+await webhook(pid, A.id, "9001", { firma: false });
+ev = await rech("9001", "bad_signature");
+ok("Paso 1: el mismo aviso rechazado otra vez (reintento de Mercado Pago) suma hits, no otra fila",
+   ev?.hits === 2 && Number(await one("select count(*) from mp_webhook_events where mp_payment_id = '9001' and reason = 'bad_signature'")) === 1);
+r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&account=${A.id}&data.id=9101&type=payment`,
+  { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "payment", data: { id: "9101" } }) }));
+ev = await rech("9101", "no_signature");
+ok("Paso 1: aviso sin x-signature → 401 y queda como no_signature", r.status === 401 && ev && /sin x-signature/.test(ev.detail), JSON.stringify(ev));
+r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&id=9102&topic=payment`, { method: "POST", body: "{}" }));
+ev = await rech("9102", "no_signature");
+ok("Paso 1: aviso con el formato viejo (IPN, topic/id) sin firma → queda registrado como IPN", r.status === 401 && ev && /IPN/.test(ev.detail), JSON.stringify(ev));
+{
+  const ts = String(Date.now() - 20 * 60 * 1000), reqId = crypto.randomUUID();
+  const v1 = await hmacHex(WHSEC, `id:9103;request-id:${reqId};ts:${ts};`);
+  r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&account=${A.id}&data.id=9103&type=payment`,
+    { method: "POST", headers: { "x-signature": `ts=${ts},v1=${v1}`, "x-request-id": reqId }, body: JSON.stringify({ type: "payment", data: { id: "9103" } }) }));
+  ev = await rech("9103", "stale_signature");
+  ok("Paso 1: firma vieja (más de 10 minutos) → 401 y queda como stale_signature con los minutos", r.status === 401 && ev && /hace 20 min/.test(ev.detail), JSON.stringify(ev));
+}
+{
+  const ts = String(Date.now()), reqId = crypto.randomUUID();
+  const v1 = await hmacHex(WHSEC, `id:9104;request-id:${reqId};ts:${ts};`);
+  r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?data.id=9104&type=payment`,
+    { method: "POST", headers: { "x-signature": `ts=${ts},v1=${v1}`, "x-request-id": reqId }, body: JSON.stringify({ type: "payment", data: { id: "9104" } }) }));
+  ev = await rech("9104", "bad_request");
+  ok("Paso 1: aviso firmado pero sin ?provider (por ejemplo, el webhook del panel de Mercado Pago) → queda como bad_request", r.status === 200 && ev && /sin \?provider/.test(ev.detail), JSON.stringify(ev));
+}
+Deno.env.delete("MP_WEBHOOK_SECRET");
+r = await webhook(pid, A.id, "9105");
+Deno.env.set("MP_WEBHOOK_SECRET", WHSEC);
+ev = await rech("9105", "config_error");
+ok("Paso 1: sin MP_WEBHOOK_SECRET → 500 (Mercado Pago reintenta) y queda como config_error", r.status === 500 && ev && /MP_WEBHOOK_SECRET/.test(ev.detail), JSON.stringify(ev));
+r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&data.id=77&type=merchant_order`, { method: "POST", body: "{}" }));
+ok("Paso 1: un aviso que no es de un pago (merchant_order) sin firma no llena la tabla", r.status === 401 && Number(await one("select count(*) from mp_webhook_events where mp_payment_id = '77'")) === 0);
 
 // ---------- 4. b) Comisión que informa Mercado Pago ----------
 const b2 = await book();
@@ -816,6 +865,120 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
   ok("un endpoint de un servicio desconocido no se llama: falla sin reintentos", (await q("select o.status, o.last_status from push_outbox o join push_subscriptions s on s.id = o.subscription_id where s.endpoint = 'https://interno.evil.test/robar'"))[0]?.status === "failed");
   ok("sin el secreto PUSH_TEST_ORIGINS, el servicio falso tampoco sería aceptado (solo los conocidos)", !(await import("../../supabase/functions/_shared/webpush.ts")).knownEndpoint(dA.endpoint));
   await ps.cerrar();
+}
+
+// ---------- Paso 1 (v4): el pago se registra aunque el aviso no llegue (mp-reconcile) y la vuelta funciona sin sesión ----------
+{
+  // prestador propio (las partes anteriores desconectan y rompen llaves a propósito)
+  const owner2 = crypto.randomUUID(), cli2 = crypto.randomUUID();
+  await q("insert into auth.users (id, email, raw_user_meta_data) values ($1, 'prov2@fn.test', '{\"full_name\":\"Prov Dos\"}'), ($2, 'leo@fn.test', '{\"full_name\":\"Leo Fn\"}')", [owner2, cli2]);
+  const pid2 = Number(await one("select register_provider('Prov Consulta', 'Calle 2', array['b'], '2284 2', '30111999')", [], owner2));
+  await q("update providers set status = 'active' where id = $1", [pid2]);
+  await q("update provider_settings set online = true, notice_min = 0, deposit_pct = 50, pay_mode = 'deposit' where provider_id = $1", [pid2]);
+  await q("delete from provider_hours where provider_id = $1", [pid2]);
+  await q("insert into provider_hours select $1, g, 1, '08:00', '21:00' from generate_series(0, 6) g", [pid2]);
+  const sv2 = Number(await one("insert into services (provider_id, category_id, name, duration_min, price) values ($1, 'b', 'Barba', 30, 10000) returning id", [pid2]));
+  mp.codigo("c-P2", "1201");
+  await oauth(owner2, "c-P2");
+  const acc2 = await (async () => (await q("select id from mp_accounts where provider_id = $1 and status = 'active'", [pid2]))[0])();
+  let n2 = 0;
+  const book2 = async (): Promise<number[]> => {
+    const k = n2++;
+    const day = new Date(Date.now() + (3 + Math.floor(k / 12)) * 864e5).toISOString().slice(0, 10);
+    return (await one("select book_slot($1, $2)", [sv2, `${day}T${String(8 + (k % 12)).padStart(2, "0")}:00:00-03:00`], cli2)).booking_ids.map(Number);
+  };
+  const open = async (ids: number[]) => {
+    const rr = await preference(cli2, ids);
+    return new URL(mp.preferencias.at(-1)!.body.back_urls.success).searchParams.get("pago")!;
+  };
+  // checkout_status como lo llama la pantalla de regreso, sin sesión (rol anon)
+  const status = async (token: string) => {
+    await db.query("begin");
+    try { await db.query("set local role anon"); const rr = await db.query("select checkout_status($1) as s", [token]); await db.query("commit"); return rr.rows[0].s; }
+    catch (e) { await db.query("rollback"); throw e; }
+  };
+  const poke = async (token: string) => fn("mp-reconcile", new Request("https://fn.test/functions/v1/mp-reconcile", {
+    method: "POST", headers: { Origin: SITE, "Content-Type": "application/json" }, body: JSON.stringify({ token }) }));
+  const cron = async (key = CRON) => fn("mp-reconcile", new Request("https://fn.test/functions/v1/mp-reconcile", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
+
+  // 1) pagó, el aviso nunca llegó: la pantalla de regreso pide consultar y queda confirmado
+  const k1 = await book2();
+  const t1 = await open(k1);
+  let s1 = await status(t1);
+  ok("Paso 1: sin sesión, la vuelta ve el estado con el token: pago en curso, servicio, prestador, día y hora (nada del cliente)",
+     s1?.state === "waiting" && s1.service === "Barba" && s1.provider === "Prov Consulta" && /^\d{4}-\d\d-\d\d$/.test(s1.date) && /^\d\d:00$/.test(s1.time)
+     && !JSON.stringify(s1).includes("Leo") && !("amount" in s1), JSON.stringify(s1));
+  ok("Paso 1: un token que no existe no muestra nada", (await status("0".repeat(64))) === null && (await status("x")) === null);
+  mp.pago({ id: "9301", collector: "1201", status: "approved", amount: 6000, fee: 1000, ref: k1.join(",") });
+  r = await poke(t1);
+  s1 = await status(t1);
+  ok("Paso 1: el pago sin aviso se registra al consultar (la vuelta lo pide): turno confirmado", r.status === 200 && (await st(k1[0])) === "confirmed" && s1?.state === "confirmed",
+     `${r.status} ${JSON.stringify(await body(r))} ${JSON.stringify(s1)}`);
+  ok("Paso 1: queda el rastro 'recovered' (en Para revisar se ve que los avisos no llegan)", (await evento("9301", "recovered")) === 1);
+  ok("Paso 1: el cobro queda cerrado como pagado", (await one("select closed_reason from mp_checkouts where token_hash = checkout_hash($1)", [t1])) === "paid");
+  const nb = mp.busquedas.length;
+  await poke(t1);
+  ok("Paso 1: un cobro cerrado no se vuelve a consultar", mp.busquedas.length === nb);
+  r = await webhook(pid2, Number(acc2.id), "9301");
+  ok("Paso 1: si después llega el aviso, no se registra dos veces", r.status === 200 && (await body(r)).result?.status === "already_processed"
+     && Number(await one("select count(*) from payments where mp_payment_id = '9301'")) === 1);
+
+  // 2) la vuelta consulta a lo sumo cada 15 segundos
+  const k2 = await book2();
+  const t2 = await open(k2);
+  await poke(t2);
+  const nb2 = mp.busquedas.length;
+  await poke(t2);
+  ok("Paso 1: la pantalla de regreso consulta a lo sumo cada 15 segundos por cobro", mp.busquedas.length === nb2);
+  ok("Paso 1: mp-reconcile sin CRON_SECRET ni token → 403", (await cron("otra")).status === 403);
+
+  // 3) el cron: lo que toca consultar, y el aviso rechazado que adelanta la consulta
+  mp.pago({ id: "9302", collector: "1201", status: "approved", amount: 6000, fee: 1000, ref: k2.join(",") });
+  await webhook(pid2, Number(acc2.id), "9302", { firma: false });   // el aviso llega con la firma mal (como el 30/10)
+  ok("Paso 1: un aviso rechazado deja el cobro para la próxima corrida del cron",
+     (await one("select next_check_at <= now() from mp_checkouts where token_hash = checkout_hash($1)", [t2])) === true);
+  r = await cron();
+  ok("Paso 1: el cron registra el pago del aviso rechazado: confirmado, con rastro bad_signature y recovered",
+     r.status === 200 && (await st(k2[0])) === "confirmed" && (await evento("9302", "bad_signature")) === 1 && (await evento("9302", "recovered")) === 1,
+     `${r.status} ${JSON.stringify(await body(r))}`);
+
+  // 4) pago tardío: el hold venció y otro tomó el horario → se devuelve, nunca queda sin registrar
+  const k3 = await book2();
+  const t3 = await open(k3);
+  await q("update bookings set status = 'expired', hold_expires_at = null where id = any($1)", [k3]);
+  await q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) select provider_id, 'Otro', 'Barba', 'manual', 'confirmed', starts_at, ends_at, 10000 from bookings where id = $1", [k3[0]]);
+  ok("Paso 1: hold vencido sin pago → 'checking' (todavía se le pregunta a Mercado Pago)", (await status(t3))?.state === "checking");
+  mp.pago({ id: "9303", collector: "1201", status: "approved", amount: 6000, fee: 1000, ref: k3.join(",") });
+  await q("update mp_checkouts set next_check_at = now() where token_hash = checkout_hash($1)", [t3]);
+  await cron();
+  ok("Paso 1: pago tardío con el horario tomado → registrado y con la devolución pedida (slot_taken)",
+     (await one("select outcome from payments where mp_payment_id = '9303'")) === "refund"
+     && Number(await one("select count(*) from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = '9303' and r.reason = 'slot_taken'")) === 1
+     && (await status(t3))?.state === "refunded");
+
+  // 5) Mercado Pago no responde la búsqueda: queda abierto, con el error, para más tarde
+  const k4 = await book2();
+  const t4 = await open(k4);
+  mp.estado.busquedaRota = true;
+  await q("update mp_checkouts set next_check_at = now() where token_hash = checkout_hash($1)", [t4]);
+  const err0 = console.error; console.error = () => {};
+  await cron();
+  console.error = err0;
+  mp.estado.busquedaRota = false;
+  const c4 = (await q("select checks, last_error, closed_at, next_check_at > now() + interval '1 minute' as later from mp_checkouts where token_hash = checkout_hash($1)", [t4]))[0];
+  ok("Paso 1: si Mercado Pago falla, el cobro sigue abierto con el error y se reintenta más tarde", c4.checks === 1 && /respondió 500/.test(c4.last_error) && c4.closed_at === null && c4.later, JSON.stringify(c4));
+  ok("Paso 1: sin pago en Mercado Pago, el cobro sigue esperando (no se cierra solo antes de los 3 días)",
+     (await one("select closed_at is null from mp_checkouts where token_hash = checkout_hash($1)", [t2])) === false   // el 2 sí se pagó
+     && (await status(t4))?.state === "waiting");
+
+  // 6) Para revisar: el resumen de avisos rechazados y recuperados
+  const admin = crypto.randomUUID();
+  await q("insert into auth.users (id, email) values ($1, 'admin2@fn.test')", [admin]);
+  await q("insert into app_admins (user_id) values ($1) on conflict do nothing", [admin]);
+  const rev = await one("select admin_review()", [], admin).catch((e: Error) => ({ error: e.message }));
+  ok("Paso 1: Para revisar resume los avisos rechazados (cuántos, el último motivo) y los pagos sin aviso",
+     rev?.webhook_alert?.rejected >= 3 && rev.webhook_alert.recovered >= 3 && typeof rev.webhook_alert.rejected_reason === "string"
+     && rev.webhook_events.some((e: any) => e.reason === "bad_signature" && e.detail && e.hits >= 1), JSON.stringify(rev?.webhook_alert ?? rev));
 }
 
 const cfg = fileURLToPath(new URL("./deno.json", import.meta.url));

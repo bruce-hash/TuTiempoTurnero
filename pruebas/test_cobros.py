@@ -129,6 +129,85 @@ ok("conectar crea la cuenta activa y marca mp_connected", q("select status from 
 ok("con cuenta: la ficha dice que puede cobrar y el listado ofrece horario",
    one("select get_provider(%s)", (pid,), role="anon")["can_charge"] is True and one("select next_free_slot(%s)", (pid,), role="anon") is not None)
 
+# ---------- Paso 1 (v4): cobros abiertos (token de regreso, consulta sin aviso) y avisos rechazados ----------
+hk = book(sv, at(25, 9), cli)[0][0]["booking_ids"]
+ok("Paso 1: la app no abre cobros ni los consulta (solo la Edge Function)",
+   all(err(q(sql, (hk, acc1) if "open" in sql else None, uid=cli)) for sql in
+       ("select checkout_open(%s::bigint[], %s)", "select * from checkouts_due(10)", "select checkout_backfill(7)")))
+tok = svc_role("select checkout_open(%s::bigint[], %s)", (hk, acc1))
+ok("Paso 1: checkout_open devuelve un token de 64 hex y guarda solo su sha256", len(tok) == 64 and all(ch in "0123456789abcdef" for ch in tok)
+   and one("select count(*) from mp_checkouts where token_hash = encode(sha256(convert_to(%s, 'UTF8')), 'hex')", (tok,)) == 1
+   and one("select count(*) from mp_checkouts where token_hash = %s", (tok,)) == 0)
+ok("Paso 1: nadie lee mp_checkouts directo (ni anon, ni el cliente, ni el admin)",
+   all(err(q("select * from mp_checkouts", **kw)) for kw in ({"role": "anon"}, {"uid": cli}, {"uid": adm})))
+stt = one("select checkout_status(%s)", (tok,), role="anon")
+ok("Paso 1: checkout_status sin sesión: 'waiting', con servicio, prestador, día y hora del prestador (nada del cliente ni montos)",
+   stt["state"] == "waiting" and stt["service"] == "Corte" and stt["provider"] == "Prov Cobros" and stt["time"] == "09:00"
+   and stt["date"] == at(25, 9).date().isoformat() and "Ana" not in json.dumps(stt) and "amount" not in stt)
+ok("Paso 1: un token inválido o ajeno no muestra nada", one("select checkout_status('x')", role="anon") is None
+   and one("select checkout_status(%s)", ("a" * 64,), role="anon") is None)
+ok("Paso 1: checkout_open rechaza turnos que no están en hold o de otro cliente/prestador",
+   err(q("select checkout_open(array[999999]::bigint[], %s)", (acc1,), role="service_role"), "bad_checkout"))
+ok("Paso 1: recién abierto no toca consultarlo (el aviso llega en segundos): se consulta a los 2 minutos",
+   svc_role("select count(*) from checkouts_due(10)") == 0)
+q("update mp_checkouts set next_check_at = now() where token_hash = checkout_hash(%s)", (tok,))
+due = q("select id, external_reference from checkouts_due(10)", role="service_role")
+ok("Paso 1: checkouts_due devuelve lo que toca, con el external_reference en el orden original", len(due) == 1 and due[0][1] == ",".join(map(str, hk)))
+ok("Paso 1: …y lo reserva 2 minutos (dos corridas a la vez no consultan el mismo cobro)", svc_role("select count(*) from checkouts_due(10)") == 0)
+ck = due[0][0]
+svc_role("select checkout_checked(%s, false, 'Mercado Pago respondió 500')", (ck,))
+ok("Paso 1: sin pago, la próxima consulta queda más adelante (2, 3, 5, 10, 15, 30 min, después cada hora) con el error",
+   one("select checks = 1 and last_error like '%%500%%' and next_check_at > now() + interval '1 minute' and closed_at is null from mp_checkouts where id = %s", (ck,)))
+ok("Paso 1: la pantalla de regreso puede pedir consultar ya, a lo sumo cada 15 segundos",
+   svc_role("select checkout_poke(%s)", (tok,)) is None)   # se consultó recién
+q("update mp_checkouts set last_check_at = now() - interval '1 minute' where id = %s", (ck,))
+ok("Paso 1: …pasados 15 segundos, sí", svc_role("select checkout_poke(%s)", (tok,)) == ck)
+ok("Paso 1: la app no puede pedir la consulta ni tocar el cron directo", err(q("select checkout_poke(%s)", (tok,), role="anon")) and err(q("select checkout_hint(%s)", (pid,), uid=cli)))
+pay(hk, "PAGO-P1", 6000, 1000, pid, acc1)
+ok("Paso 1: con el pago registrado, el estado pasa a 'confirmed'", one("select checkout_status(%s)", (tok,), role="anon")["state"] == "confirmed")
+svc_role("select count(*) from checkouts_due(10)")
+ok("Paso 1: …y el cobro se cierra solo como pagado", one("select closed_reason from mp_checkouts where id = %s", (ck,)) == "paid")
+q("update mp_checkouts set created_at = now() - interval '4 days', closed_at = null, closed_reason = null where id = %s", (ck,))
+q("update bookings set payment_id = null, status = 'expired' where id = any(%s)", (hk,))
+svc_role("select count(*) from checkouts_due(10)")
+ok("Paso 1: a los 3 días sin pago se deja de consultar (gave_up) y el estado dice que no se pagó",
+   one("select closed_reason from mp_checkouts where id = %s", (ck,)) == "gave_up" and one("select checkout_status(%s)", (tok,), role="anon")["state"] == "not_paid")
+q("update mp_checkouts set closed_at = now() - interval '31 days' where id = %s", (ck,))
+svc_role("select count(*) from checkouts_due(10)")
+ok("Paso 1: los cobros cerrados hace más de 30 días se borran", one("select count(*) from mp_checkouts where id = %s", (ck,)) == 0)
+# backfill: cobros abiertos antes de la migración (con preferencia, sin pago)
+hb = book(sv, at(26, 9), cli)[0][0]["booking_ids"]
+q("update bookings set mp_preference_id = 'pref-viejo', status = 'expired' where id = any(%s)", (hb,))
+n_bf = one("select checkout_backfill(7)")
+ok("Paso 1: checkout_backfill suma los cobros viejos sin pago a la consulta (para ya), una sola vez",
+   n_bf >= 1 and one("select count(*) from mp_checkouts where booking_ids = %s::bigint[] and closed_at is null and next_check_at <= now()", (hb,)) == 1
+   and one("select checkout_backfill(7)") == 0)
+ok("Paso 1: la app no puede correr el backfill", err(q("select checkout_backfill(7)", uid=adm)) and err(q("select checkout_backfill(7)", role="anon")))
+q("update mp_checkouts set next_check_at = now() + interval '1 hour' where booking_ids = %s::bigint[]", (hb,))
+svc_role("select checkout_hint(%s)", (pid,))
+ok("Paso 1: un aviso rechazado del prestador adelanta la consulta de sus cobros abiertos",
+   one("select next_check_at <= now() from mp_checkouts where booking_ids = %s::bigint[]", (hb,)) is True)
+q("update bookings set status = 'cancelled_client' where id = any(%s)", (hb,))
+svc_role("select count(*) from checkouts_due(10)")   # se cierra: sus turnos ya no esperan pago
+# avisos rechazados: uno por motivo y pago en 24 h (suma hits), el id saneado, tope por hora
+svc_role("select mp_webhook_event('P1-FIRMA', %s, %s, 'bad_signature', 'la firma no coincide')", (pid, acc1))
+svc_role("select mp_webhook_event('P1-FIRMA', %s, %s, 'bad_signature', 'la firma no coincide')", (pid, acc1))
+ok("Paso 1: un aviso rechazado que se repite suma hits (una fila)", q("select hits, detail from mp_webhook_events where mp_payment_id = 'P1-FIRMA'") == [(2, "la firma no coincide")])
+svc_role("select mp_webhook_event('<script>alert(1)</script>', null, null, 'no_signature', %s)", ("<b>x</b>" + "y" * 300,))
+row = q("select mp_payment_id, detail from mp_webhook_events where reason = 'no_signature' order by id desc limit 1")[0]
+ok("Paso 1: el id del pago y el detalle se guardan saneados (sin < >, cortos)", row[0] == "scriptalert1script" and "<" not in row[1] and len(row[1]) <= 160)
+ok("Paso 1: un motivo inventado no entra", err(q("select mp_webhook_event('X', null, null, 'cualquiera')", role="service_role")))
+ok("Paso 1: la app no registra avisos", err(q("select mp_webhook_event('X', null, null, 'bad_signature')", uid=cli)))
+q("insert into mp_webhook_events (mp_payment_id, reason, last_at) select 'FLOOD-' || g, 'bad_signature', now() from generate_series(1, 500) g")
+svc_role("select mp_webhook_event('P1-TOPE', null, null, 'bad_signature')")
+ok("Paso 1: con 500 avisos en la última hora no se registran más (un ataque no llena la tabla)", one("select count(*) from mp_webhook_events where mp_payment_id = 'P1-TOPE'") == 0)
+q("delete from mp_webhook_events where mp_payment_id like 'FLOOD-%%'")
+rv = one("select admin_review()", uid=adm)
+ok("Paso 1: Para revisar trae el detalle y las veces de cada aviso, y el resumen de rechazados",
+   any(e["mp_payment_id"] == "P1-FIRMA" and e["hits"] == 2 and e["detail"] for e in rv["webhook_events"])
+   and rv["webhook_alert"]["rejected"] >= 3 and rv["webhook_alert"]["rejected_reason"] in ("bad_signature", "no_signature"))
+ok("Paso 1: el cron de la consulta no llama a nada si no hay cobros que consultar (ni sin Vault)", svc_role("select run_mp_reconcile(true)") is None)
+
 # ---------- Confirmación normal, idempotencia (mismo aviso dos veces), comisión de Mercado Pago ----------
 r = book(sv, at(2, 9), cli)[0][0]
 b0 = r["booking_ids"][0]

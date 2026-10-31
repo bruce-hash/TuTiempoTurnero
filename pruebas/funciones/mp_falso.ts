@@ -4,6 +4,8 @@
 //  GET  /v1/payments/:id             el pago, solo con la llave de la cuenta que lo cobró (si no, 404)
 //  POST /v1/payments/:id/refunds     devolución (idempotente por X-Idempotency-Key); se le pueden programar fallas
 //  POST /checkout/preferences        crea el cobro y lo anota
+//  GET  /v1/payments/search          los pagos de esa cuenta con ese external_reference (mp-reconcile); `busquedaRota`
+//                                    hace que responda 500
 // Cada pago trae datos de tarjeta, del comprador y del documento, para verificar que no se guardan.
 // `informa`: el collector_id que devuelve la consulta (por defecto, la cuenta que lo cobró): sirve para probar un
 // cobrador equivocado.
@@ -19,6 +21,8 @@ export function mpFalso() {
   const pagos = new Map<string, Pago>();
   const devoluciones: { pago: string; monto: number; llave: string; clave: string; id: string }[] = [];
   const preferencias: { llave: string; body: any }[] = [];
+  const busquedas: string[] = [];                     // external_reference de cada búsqueda (mp-reconcile)
+  const estado = { busquedaRota: false };
   const fallas: { status: number; message: string }[] = [];   // próximas devoluciones que fallan
   let refrescoRoto = false;
   let demoraRefresco = 0;
@@ -52,6 +56,15 @@ export function mpFalso() {
       if (!cuentas.has(llave(req))) return json({ message: "unauthorized" }, 401);
       preferencias.push({ llave: llave(req), body });
       return json({ id: `pref-${++n}`, init_point: "https://mp.test/checkout" });
+    }
+    if (url.pathname === "/v1/payments/search" && req.method === "GET") {
+      busquedas.push(url.searchParams.get("external_reference") ?? "");
+      if (estado.busquedaRota) return json({ message: "internal_error" }, 500);
+      if (!cuentas.has(llave(req))) return json({ message: "unauthorized" }, 401);
+      const ref = url.searchParams.get("external_reference");
+      const results = [...pagos.values()].filter((p) => p.collector === cuentas.get(llave(req)) && p.ref === ref)
+        .map((p) => ({ id: Number(p.id) || p.id, status: p.status, external_reference: p.ref, transaction_amount: p.amount }));
+      return json({ paging: { total: results.length }, results });
     }
     let m = url.pathname.match(/^\/v1\/payments\/([^/]+)$/);
     if (m && req.method === "GET") {
@@ -87,7 +100,7 @@ export function mpFalso() {
 
   return {
     url: `http://localhost:${(server.addr as Deno.NetAddr).port}`,
-    cuentas, pagos, devoluciones, preferencias, fallas, refrescos_pedidos,
+    cuentas, pagos, devoluciones, preferencias, fallas, refrescos_pedidos, busquedas, estado,
     codigo(code: string, user: string) { codigos.set(code, user); },
     pago(p: Pago) { pagos.set(p.id, p); },
     romperRefresco(v: boolean) { refrescoRoto = v; },
