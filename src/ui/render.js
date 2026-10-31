@@ -20,6 +20,7 @@ import { storyTick, vStory } from "../views/cliente/historias.js";
 import { myUpcoming, vHome } from "../views/cliente/home.js";
 import { vMisTurnos } from "../views/cliente/mis-turnos.js";
 import { vPerfil } from "../views/cliente/perfil.js";
+import { vPagoVuelta } from "../views/cliente/pago.js";
 import { vTurnoOk } from "../views/cliente/turno.js";
 import { vNotFound } from "../views/legal/no-encontrado.js";
 import { vTerminos } from "../views/legal/terminos.js";
@@ -204,6 +205,9 @@ function renderMain() {
         break;
       case "turnoOk":
         html = vTurnoOk();
+        break;
+      case "pagoVuelta":
+        html = vPagoVuelta();
         break;
       default:
         html = vHome();

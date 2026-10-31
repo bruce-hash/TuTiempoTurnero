@@ -169,13 +169,18 @@ async function boot() {
         start = "/panel/perfil";
       }
     }
-    // vuelta de Mercado Pago: ?b=<turno>&mp=success (la dirección de vuelta la arma la Edge Function: no cambia)
+    // vuelta de Mercado Pago de los cobros abiertos antes del Paso 1: ?b=<turno>&mp=success (los nuevos vuelven a
+    // /turno/<id>?pago=<token>, que anda sin sesión). Sin sesión, al ingreso y después al turno (antes, al inicio).
     const params = new URLSearchParams(location.search);
     if (params.get("b") && /^\d+$/.test(params.get("b"))) {
       S.turnoId = +params.get("b");
       S.justBooked = params.get("mp") === "success";
-      S.view = "turnoOk";
-      start = null;
+      if (S.user) {
+        S.view = "turnoOk";
+        start = null;
+      } else {
+        start = "/turno/" + S.turnoId;
+      }
     }
     await startRouter(start);
     return;

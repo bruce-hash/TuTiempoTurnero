@@ -226,16 +226,30 @@ export async function applyUrl(href) {
       S.cat = cat || "todos";
       return parts.length === 1 ? showClient("home") : showNotFound(path);
     }
-    case "turno":
+    case "turno": {
       if (parts.length !== 2 || !/^\d{1,12}$/.test(parts[1])) {
         return showNotFound(path);
       }
+      // Paso 1 (v4): vuelta de Mercado Pago con el token del cobro. Sin sesión (por ejemplo, pagó desde la app instalada
+      // y volvió al navegador): el estado del pago y del turno, y la opción de ingresar. Con sesión: el turno.
+      const token = /^[0-9a-f]{64}$/.test(params.get("pago") || "") ? params.get("pago") : null;
+      if (token && token !== S.payToken) {
+        S.payStatus = null;
+        S.payTries = 0;
+      }
+      S.payToken = token;
+      S.payBack = token ? params.get("mp") : null;
+      if (token && !S.user) {
+        S.turnoId = +parts[1];
+        return showClient("pagoVuelta");
+      }
       if (needUser(path)) {
         S.turnoId = +parts[1];
-        S.justBooked = false;
+        S.justBooked = !!token && S.payBack === "success";
         showClient("turnoOk");
       }
       return;
+    }
     case "mis-turnos":
     case "cuenta":
       if (parts.length !== 1) {

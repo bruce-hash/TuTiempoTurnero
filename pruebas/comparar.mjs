@@ -278,7 +278,7 @@ const browser = await chromium.launch({ args: ["--disable-gpu", "--force-color-p
 // En vivo (si hay Postgres y PostgREST)
 if (process.env.PGHOST || process.env.POSTGREST) {
   const entornos = [
-    await levantar({ web: VIEJO, puerto: 8791, puertoRest: 3021, base: "tt_cmp_viejo" }),
+    await levantar({ web: VIEJO, puerto: 8791, puertoRest: 3021, base: "tt_cmp_viejo", vueltaVieja: true }),
     await levantar({ web: path.join(ROOT, "dist"), puerto: 8792, puertoRest: 3022, base: "tt_cmp_nuevo" }),
   ];
   for (const e of entornos) {

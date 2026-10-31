@@ -12,6 +12,37 @@ import { installCard, pushCard } from "../../ui/avisos.js";
 import { render } from "../../ui/render.js";
 import { vHome } from "./home.js";
 
+// Paso 1 (v4): turno pagando (hold) al volver de Mercado Pago: se actualiza solo cada 4 segundos, unos 3 minutos, y
+// con el token de la vuelta le pide a mp-reconcile que consulte el pago (por si el aviso de Mercado Pago no llega)
+function waitPaid(id) {
+  if (waitPaid.id === id && waitPaid.timer) {
+    return;
+  }
+  waitPaid.id = id;
+  waitPaid.n = 0;
+  if (S.payToken) {
+    api.checkoutPoke(S.payToken);
+  }
+  const tick = () => {
+    const booking = store.BOOK.find((item) => item.id === id);
+    if (S.view !== "turnoOk" || S.turnoId !== id || !booking || booking.status !== "hold" || ++waitPaid.n > 45) {
+      waitPaid.timer = null;
+      return;
+    }
+    if (S.payToken && waitPaid.n % 4 === 0) {
+      api.checkoutPoke(S.payToken);
+    }
+    api
+      .myBookings()
+      .then(() => render())
+      .catch(() => {})
+      .finally(() => {
+        waitPaid.timer = setTimeout(tick, 4000);
+      });
+  };
+  waitPaid.timer = setTimeout(tick, 4000);
+}
+
 // detalle de un turno del cliente (también la pantalla de “¡Listo!” después de reservar). En vivo, si todavía
 // no está cargado, lo pide y muestra un esqueleto; según el estado: pago en curso, vencido, cancelado, hecho o confirmado.
 export function vTurnoOk() {
@@ -31,8 +62,9 @@ export function vTurnoOk() {
     return vHome();
   }
   if (booking.status === "hold") {
+    waitPaid(booking.id);
     return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px">⏳</div><h1 class="h1">Estamos confirmando tu pago</h1>
-    <p class="lead">Mercado Pago nos avisa en segundos. Tu horario queda reservado mientras tanto.</p><button class="btn btn-pri btn-block" data-act="refreshMine">Actualizar</button></div></div>`;
+    <p class="lead">Mercado Pago nos avisa en segundos. Tu horario queda reservado mientras tanto: esta pantalla se actualiza sola.</p><button class="btn btn-pri btn-block" data-act="refreshMine">Actualizar</button></div></div>`;
   }
   if (booking.status === "expired" && booking.refund) {
     // lo canceló el sistema (el pago llegó tarde y el horario ya no estaba, o no alcanzó): se devuelve lo cobrado

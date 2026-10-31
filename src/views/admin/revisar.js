@@ -56,7 +56,15 @@ const EVENT_WHY = {
   payment_not_found: "el pago no existe en ninguna cuenta del prestador",
   wrong_collector: "cobrado por otra cuenta",
   bad_currency: "moneda distinta de pesos",
+  // Paso 1 (v4): rechazados antes de procesar (casi siempre, Mercado Pago o la función mal configurados)
+  bad_signature: "rechazado: la firma no es válida",
+  stale_signature: "rechazado: la firma está vencida",
+  no_signature: "rechazado: llegó sin firma",
+  bad_request: "rechazado: le faltan datos",
+  config_error: "rechazado: falta configurar la función",
+  recovered: "pago sin aviso: lo encontró la consulta automática",
 };
+const REJECTED = ["bad_signature", "stale_signature", "no_signature", "bad_request", "config_error"];
 const paymentWhy = (reason) =>
   PAYMENT_WHY[reason] || (/^unregistered_/.test(reason) ? "aviso de un pago que no está registrado" : /^error/.test(reason) ? "error al procesarlo: " + reason.slice(7) : reason);
 // formulario de "Devolver" (D20): monto (por defecto lo que falta devolver) y nota obligatoria; la devolución la hace
@@ -95,6 +103,7 @@ export function admReview() {
   const payments = data.payments || [];
   const events = data.webhook_events || [];
   const accounts = data.accounts || [];
+  const alert = data.webhook_alert || {};
   if (!refunds.length && !payments.length && !events.length && !accounts.length) {
     return "";
   }
@@ -111,8 +120,18 @@ export function admReview() {
   const accountLi = (account) => `<li><div><b>Cuenta de Mercado Pago con error · ${esc(account.provider_name || "Prestador")}</b>
      <span>Cuenta n° ${esc(account.mp_user_id || "?")} · ${account.status === "active" ? "cobra las reservas" : `solo devoluciones (${account.refunds_pending} pendiente${account.refunds_pending === 1 ? "" : "s"})`}</span>
      <span class="hint">❌ ${esc(account.last_error)} · desde ${esc(dmyIso(account.error_at))}. Si sigue, el prestador tiene que volver a conectarla (Perfil → Cobros).</span></div></li>`;
-  const eventLi = (event) => `<li><div><span>Aviso descartado · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)} · ${esc(dmyIso(event.created_at))}</span></div></li>`;
-  return `<div class="panel admalert"><p class="lbl">Para revisar · cobros <span class="cnt">${refunds.length + payments.length + accounts.length}</span></p>
-   <ul class="adml">${accounts.map(accountLi).join("")}${refunds.map(refundLi).join("")}${payments.map(paymentLi).join("")}</ul>
-   ${events.length ? `<details><summary class="hint">Avisos de Mercado Pago descartados (últimos 30 días): ${events.length}</summary><ul class="adml">${events.map(eventLi).join("")}</ul></details>` : ""}</div>`;
+  const eventLi = (event) =>
+    `<li><div><span>${event.reason === "recovered" ? "Pago recuperado" : "Aviso descartado"} · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)}${event.detail ? " (" + esc(event.detail) + ")" : ""} · ${esc(dmyIso(event.last_at || event.created_at))}${+event.hits > 1 ? ` · ${+event.hits} veces` : ""}</span></div></li>`;
+  // Paso 1 (v4): Mercado Pago manda avisos que la app rechaza, o hubo pagos que se registraron sin aviso: arriba de todo,
+  // porque mientras siga así los pagos se confirman con demora (los encuentra la consulta automática)
+  const webhookLi =
+    +alert.rejected || +alert.recovered
+      ? `<li><div><b>⚠ Los avisos de Mercado Pago no están llegando bien</b>
+     <span>${+alert.rejected ? `${+alert.rejected} aviso${+alert.rejected === 1 ? "" : "s"} rechazado${+alert.rejected === 1 ? "" : "s"} en 7 días${alert.rejected_reason ? " (" + esc(EVENT_WHY[alert.rejected_reason] || alert.rejected_reason) + ")" : ""}${alert.rejected_last ? ", el último el " + esc(dmyIso(alert.rejected_last)) : ""}. ` : ""}${+alert.recovered ? `${+alert.recovered} pago${+alert.recovered === 1 ? "" : "s"} registrado${+alert.recovered === 1 ? "" : "s"} sin aviso por la consulta automática.` : ""}</span>
+     <span class="hint">Los pagos igual se registran (la app le pregunta a Mercado Pago cada 2 minutos), pero con demora. Revisá el webhook y MP_WEBHOOK_SECRET: docs/02 → "Si los pagos no se registran".</span></div></li>`
+      : "";
+  const nAlert = webhookLi ? 1 : 0;
+  return `<div class="panel admalert"><p class="lbl">Para revisar · cobros <span class="cnt">${refunds.length + payments.length + accounts.length + nAlert}</span></p>
+   <ul class="adml">${webhookLi}${accounts.map(accountLi).join("")}${refunds.map(refundLi).join("")}${payments.map(paymentLi).join("")}</ul>
+   ${events.length ? `<details${webhookLi || REJECTED.includes((events[0] || {}).reason) ? " open" : ""}><summary class="hint">Avisos de Mercado Pago descartados o recuperados (últimos 30 días): ${events.length}</summary><ul class="adml">${events.map(eventLi).join("")}</ul></details>` : ""}</div>`;
 }

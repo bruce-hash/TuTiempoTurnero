@@ -37,6 +37,11 @@ Deno.serve(async (req) => {
 
     const site = env("SITE_URL");
     const expires = ok.map((b) => b.hold_expires_at).sort()[0];
+    // Paso 1 (v4): el cobro queda anotado con un token de regreso. La vuelta lleva a la pantalla del turno con ese token:
+    // muestra el estado del pago aunque el navegador no tenga la sesión (por ejemplo, desde la app instalada) y, si el
+    // aviso de Mercado Pago no llega, mp-reconcile le pregunta a Mercado Pago por este cobro.
+    const back = must("anotar el cobro", await db.rpc("checkout_open", { p_booking_ids: ids, p_account: acc.id })) as string;
+    const ret = (st: string) => `${site}/turno/${ids[0]}?pago=${back}&mp=${st}`;
     const pref = {
       items: [{ id: String(ids[0]), title: `Seña + comisión · ${ok[0].service_name ?? "Turno"} · ${prov?.name ?? ""}`.slice(0, 250), quantity: 1, unit_price: amount, currency_id: "ARS" }],
       external_reference: ids.join(","),
@@ -45,11 +50,7 @@ Deno.serve(async (req) => {
       payment_methods: { excluded_payment_types: [{ id: "ticket" }, { id: "atm" }] },   // sin efectivo en Rapipago/Pago Fácil
       // el aviso dice qué cuenta cobró: así se consulta (y se devuelve) con su llave aunque el prestador reconecte otra
       notification_url: `${env("SUPABASE_URL")}/functions/v1/mp-webhook?provider=${pid}&account=${acc.id}`,
-      back_urls: {
-        success: `${site}/?mp=success&b=${ids[0]}`,
-        pending: `${site}/?mp=pending&b=${ids[0]}`,
-        failure: `${site}/?mp=failure&b=${ids[0]}`,
-      },
+      back_urls: { success: ret("success"), pending: ret("pending"), failure: ret("failure") },
       auto_return: "approved",
       expires: true,
       expiration_date_to: expires,

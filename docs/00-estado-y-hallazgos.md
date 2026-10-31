@@ -66,6 +66,7 @@ el id ni la fecha de la devolución hecha. Registrar cada intento y resultado, y
 `mp-webhook` exige la firma `x-signature` con `MP_WEBHOOK_SECRET`. Confirmar con un pago de prueba que Mercado Pago
 firma con la clave de la aplicación de TuTiempo los avisos de pagos cobrados con la llave del prestador
 (`notification_url` de la preferencia). Si no, ningún turno se confirmaría.
+**30/10:** pasó con pagos reales (H35). Desde el Paso 1 ya no depende solo del aviso: ver H35.
 
 ### H07 · Media · Recordatorios solo dentro de la app (resuelto en el Bloque 3)
 `send_scheduled_notices` crea avisos en `client_messages`: quien no abre la app no se entera del recordatorio de
@@ -376,3 +377,20 @@ cada prestador y se puede editar y apagar), pero nada la manda: ni dentro de la 
 Bloque 3 (D25). Para hacerlo: decidir cuándo "ya le toca" a un cliente (por ejemplo, la frecuencia de sus últimos turnos
 con ese prestador o un intervalo por servicio), armarlo en `send_scheduled_notices` con su `ref` (una vez por ciclo) y
 sumarlo a los tipos de `email_outbox`.
+
+### H35 · Crítica · Pagos reales del 30/10 que no se registraron (mitigado en el Paso 1; causa a confirmar)
+Con una cuenta real conectada, la plata llegó a Mercado Pago pero `payments` no tiene esos pagos,
+`mp_webhook_events` quedó vacía y los turnos 29 a 32 quedaron `expired` sin pago. El aviso nunca se procesó y no dejó
+rastro: `mp-webhook` rechazaba con 401 (firma) sin registrar nada, y no había ninguna otra forma de enterarse del pago.
+Causas posibles, de más a menos probable (se ven en las invocaciones de `mp-webhook`; tabla en docs/02 → "Si los pagos
+no se registran"): `MP_WEBHOOK_SECRET` de otra configuración (modo de pruebas) o los avisos de pagos cobrados con la
+llave del prestador firmados de otra forma (H06); webhook del modo productivo sin configurar (sin invocaciones);
+avisos IPN sin firma; la función desplegada con verificación del gateway (401 sin logs); permisos de la base sin la
+migración de H32 (500).
+**Paso 1 (D28):** (1) todo aviso rechazado antes de procesar queda en `mp_webhook_events` (motivo, detalle, veces) y
+"Para revisar" lo avisa arriba; (2) cada cobro queda en `mp_checkouts` y `mp-reconcile` le pregunta a Mercado Pago por
+el pago (cron cada 2 minutos y la pantalla de regreso), así un pago aprobado se registra aunque el aviso nunca llegue;
+(3) la vuelta de Mercado Pago va a `/turno/<id>?pago=<token>`, que muestra el estado sin sesión (app instalada → otro
+navegador). Los cobros del 30/10 se recuperan con `checkout_backfill` (docs/02, Paso 1, paso 5). Falta: confirmar la
+causa con las invocaciones de `mp-webhook` y arreglar la configuración, y decidir D29 (pago tardío de un turno que ya pasó).
+
