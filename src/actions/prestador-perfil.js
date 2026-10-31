@@ -112,6 +112,7 @@ registerClick("responder", (ev, el, act) => {
   render();
 });
 registerClick("mpConnect", (ev, el, act) => {
+  S.mpBack = null;
   if (LIVE) {
     api.m.mpConnect().catch((err) => toast(errMsg(err)));
     return;

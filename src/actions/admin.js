@@ -20,6 +20,10 @@ registerClick("admV", (ev, el, act) => {
 });
 registerClick("admT", (ev, el, act) => {
   S.admT = el.dataset.t;
+  // "Ver quiénes" (activos sin Mercado Pago) abre Prestadores con ese filtro
+  if (el.dataset.f) {
+    S.admF = el.dataset.f;
+  }
   S.admOpen = null;
   S.admDel = null;
   S.admM = null;

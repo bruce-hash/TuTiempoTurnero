@@ -177,6 +177,18 @@ async function boot() {
       S.view = "turnoOk";
       start = null;
     }
+    // vuelta de conectar Mercado Pago (mp-oauth): ?mp_connected=1, o 0 con el motivo en mp_error. Al Perfil del
+    // panel, donde está Cobros, con el resultado a la vista (antes volvía al inicio sin decir nada)
+    const mpBack = params.get("mp_connected");
+    if (mpBack === "1" || mpBack === "0") {
+      S.mpBack = mpBack === "1" ? "ok" : params.get("mp_error") || "error";
+      if (S.barberAuth) {
+        start = "/panel/perfil";
+      }
+      if (S.mpBack === "ok") {
+        toast("¡Listo! Mercado Pago conectado.");
+      }
+    }
     await startRouter(start);
     return;
   } else {

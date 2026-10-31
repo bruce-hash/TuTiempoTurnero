@@ -11,6 +11,10 @@ export function admRes(data) {
   const st = data.st;
   const pct = +st.commission_pct;
   const pending = data.pv.filter((prov) => prov.status === "pending");
+  // activos sin Mercado Pago: el aviso dice quiénes (hasta 3) y lleva a la lista filtrada
+  const noMp = data.pv.filter((prov) => prov.status === "active" && !prov.mp);
+  const nNoMp = Math.max(+st.mp_missing || 0, noMp.length);
+  const noMpNames = noMp.slice(0, 3).map((prov) => `<b>${esc(prov.name)}</b>`).join(", ") + (nNoMp > 3 ? ` y ${nNoMp - 3} más` : "");
   // variación contra el mes pasado
   const delta = (now, prev) => {
     now = +now || 0;
@@ -65,8 +69,8 @@ export function admRes(data) {
     pending.length
       ? `🪪 <b>${pending.length}</b> prestador${pending.length > 1 ? "es esperan" : " espera"} ${dniRequired() ? "la verificación del DNI" : "aprobación"}. <button class="lnk" data-act="admT" data-t="prov">Revisar</button>`
       : "",
-    +st.mp_missing
-      ? `💳 <b>${st.mp_missing}</b> prestador${+st.mp_missing > 1 ? "es activos no conectaron" : " activo no conectó"} Mercado Pago: no pueden cobrar señas.`
+    nNoMp
+      ? `💳 <b>${nNoMp}</b> prestador${nNoMp > 1 ? "es activos no conectaron" : " activo no conectó"} Mercado Pago: no ${nNoMp > 1 ? "pueden" : "puede"} cobrar señas${noMp.length ? ` (${noMpNames})` : ""}. <button class="lnk" data-act="admT" data-t="prov" data-f="nomp">Ver quiénes</button>`
       : "",
     +st.providers_suspended
       ? `⛔ <b>${st.providers_suspended}</b> suspendido${+st.providers_suspended > 1 ? "s" : ""}.`

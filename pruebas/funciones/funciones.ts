@@ -143,7 +143,22 @@ ok("mp-oauth: cuenta 1001 activa con su llave, cifrada", A?.status === "active" 
    && !A.access_token.includes("tok-1001"));
 ok("mp-oauth: provider_private.mp_connected", (await one("select mp_connected from provider_private where provider_id = $1", [pid])) === true);
 r = await fn("mp-oauth", new Request(`https://fn.test/functions/v1/mp-oauth?code=c-A&state=otro`));
-ok("mp-oauth: un state inválido no conecta nada", r.headers.get("location") === `${SITE}/?mp_connected=0`);
+ok("mp-oauth: un state inválido no conecta nada", r.headers.get("location") === `${SITE}/?mp_connected=0&mp_error=error`);
+// el prestador no autoriza en Mercado Pago: vuelve con el state pero sin code (error=access_denied)
+{
+  const pr = await fn("mp-oauth", new Request("https://fn.test/functions/v1/mp-oauth", {
+    method: "POST", headers: { Authorization: `Bearer ${await jwt({ sub: owner, role: "authenticated" })}`, Origin: SITE } }));
+  const state = new URL((await body(pr)).url).searchParams.get("state");
+  r = await fn("mp-oauth", new Request(`https://fn.test/functions/v1/mp-oauth?error=access_denied&state=${state}`));
+  ok("mp-oauth: si no autoriza en Mercado Pago, vuelve con mp_error=cancelado", r.headers.get("location") === `${SITE}/?mp_connected=0&mp_error=cancelado`, String(r.headers.get("location")));
+  // con un state de hace más de 15 minutos
+  const pr2 = await fn("mp-oauth", new Request("https://fn.test/functions/v1/mp-oauth", {
+    method: "POST", headers: { Authorization: `Bearer ${await jwt({ sub: owner, role: "authenticated" })}`, Origin: SITE } }));
+  const state2 = new URL((await body(pr2)).url).searchParams.get("state");
+  await q("update mp_oauth_states set created_at = now() - interval '16 minutes' where state = $1", [state2]);
+  r = await fn("mp-oauth", new Request(`https://fn.test/functions/v1/mp-oauth?code=c-A&state=${state2}`));
+  ok("mp-oauth: si pasaron más de 15 minutos, vuelve con mp_error=vencido", r.headers.get("location") === `${SITE}/?mp_connected=0&mp_error=vencido`, String(r.headers.get("location")));
+}
 
 // ---------- 2. Crear el cobro con la cuenta activa ----------
 const b1 = await book();
@@ -387,13 +402,13 @@ ok("2a) mp-refunds tampoco acepta la service_role: solo CRON_SECRET", r.status =
 // ---------- 15. Bloque 2a: H12 y llaves cifradas ----------
 mp.codigo("c-OWN", OWNER_MP);
 r = await oauth(owner, "c-OWN");
-ok("H12) la cuenta de Mercado Pago de TuTiempo no se puede conectar como prestador", r.headers.get("location") === `${SITE}/?mp_connected=0`
+ok("H12) la cuenta de Mercado Pago de TuTiempo no se puede conectar como prestador (y la app le dice por qué)", r.headers.get("location") === `${SITE}/?mp_connected=0&mp_error=cuenta_tutiempo`
    && Number(await one("select count(*) from mp_accounts where mp_user_id = $1", [OWNER_MP])) === 0);
 Deno.env.delete("MP_OWNER_USER_ID");
 mp.codigo("c-SIN", "1003");
 r = await oauth(owner, "c-SIN");
 Deno.env.set("MP_OWNER_USER_ID", OWNER_MP);
-ok("H12) sin MP_OWNER_USER_ID configurado no se conecta ninguna cuenta", r.headers.get("location") === `${SITE}/?mp_connected=0`
+ok("H12) sin MP_OWNER_USER_ID configurado no se conecta ninguna cuenta", r.headers.get("location") === `${SITE}/?mp_connected=0&mp_error=error`
    && Number(await one("select count(*) from mp_accounts where mp_user_id = '1003'")) === 0);
 ok("H13) nada en la base empieza sin 'v1:'", Number(await one("select count(*) from mp_accounts where (access_token is not null and access_token !~ '^v1:') or (refresh_token is not null and refresh_token !~ '^v1:')")) === 0
    && Number(await one("select count(*) from mp_accounts where access_token is not null")) > 0);

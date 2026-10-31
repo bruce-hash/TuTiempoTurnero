@@ -85,6 +85,8 @@ export const fresh = () => ({
   walk: [],
   walkOpen: false,
   mp: "none",
+  // vuelta de Mercado Pago: "ok" o el motivo por el que no se conectó (mp_error de mp-oauth)
+  mpBack: null,
   following: false,
   earnToday: 0,
   jobsToday: 0,

@@ -459,9 +459,17 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   // "Volver al panel" cierra la sesión del prestador: se vuelve a ingresar y la app vuelve a Perfil (?volver=)
   await pg.goto(BASE + "/panel/perfil"); await pg.waitForSelector("#fBarb", { timeout: 8000 }).catch(() => {}); await wait(400);
   await pg.fill("#be", "sofia@test.ar"); await pg.fill("#bp", "prestador123"); await pg.click("#fBarb button[type=submit]"); await pg.waitForSelector("[data-act=mpConnect]", { timeout: 8000 }).catch(() => {}); await wait(400);
+  // vuelta de Mercado Pago sin conectar (mp-oauth → ?mp_connected=0&mp_error=…): al Perfil, con el motivo a la vista
+  await pg.goto(BASE + "/?mp_connected=0&mp_error=cuenta_tutiempo"); await pg.waitForSelector(".mp-back", { timeout: 8000 }).catch(() => {}); await wait(400);
+  ok("MP: si no se conectó, vuelve al Perfil del panel y dice por qué (la cuenta es la de TuTiempo)", new URL(pg.url()).pathname === "/panel/perfil" && !pg.url().includes("mp_connected")
+     && /esa cuenta de Mercado Pago es la de TuTiempo/.test(await txt()) && /Mercado Pago sin conectar/.test(await txt()));
+  await pg.goto(BASE + "/?mp_connected=0&mp_error=cualquiera"); await pg.waitForSelector(".mp-back", { timeout: 8000 }).catch(() => {}); await wait(400);
+  ok("MP: un motivo desconocido muestra el aviso general (no el texto de la dirección)", /No pudimos conectar tu cuenta de Mercado Pago/.test(await txt()) && !/cualquiera/.test(await txt()));
   await Promise.all([pg.waitForURL(/mp_connected=1/, { timeout: 8000 }).catch(() => {}), pg.click("[data-act=mpConnect]")]); await wait(1500);
   const accRe = (await q("select id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   ok("H23: reconectar la misma cuenta vuelve a cobrar con la misma fila", accRe && accRe.id === accBefore.id);
+  ok("MP: al conectar vuelve al Perfil con Mercado Pago conectado y sin el aviso de error", new URL(pg.url()).pathname === "/panel/perfil"
+     && /Mercado Pago conectado/.test(await txt()) && (await pg.locator(".mp-back").count()) === 0);
 
   // H21: en vivo no se descarta a nadie por cómo se llama (antes "Bruno F." quedaba afuera por parecer relleno de la demo)
   await db.query("insert into provider_clients (provider_id, name) values ($1, 'Bruno F.')", [sofi]);
