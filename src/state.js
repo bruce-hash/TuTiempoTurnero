@@ -76,6 +76,8 @@ export const fresh = () => ({
   payLoading: false,
   payTries: 0,
   payBack: null,
+  // C52 (V8): el total a pagar que mostró la confirmación del turno
+  payShown: null,
   // Bloque C: app instalable y notificaciones push (src/lib/pwa.js, src/lib/push.js)
   canInstall: false,
   updateReady: false,

@@ -70,6 +70,8 @@ export function vCheckoutTurno() {
      const cashOk = conf.cash !== false && !mustTotal;
      const method = S.payM === "reward" && canRedeem ? "reward" : cashOk && S.payM === "cash" ? "cash" : "mp";
      const payNowTotal = method === "reward" ? 0 : depositTotal + feeTotal;
+     // C52: lo que el cliente ve que va a pagar; antes de cobrar se compara con los precios recién pedidos
+     S.payShown = payNowTotal;
      const rest = priceTotal - depositTotal;
      if (method === "reward") {
        return [`<div class="panel"><p class="lbl">¿Cómo pagás?</p><div class="paypick" role="radiogroup">

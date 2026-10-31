@@ -140,4 +140,14 @@ export const liveAdmin = {
       redirect: true,
     };
   },
+  // C54 (V8): volver a pagar un turno que sigue reservado (hold) después de que el pago no se completó en Mercado Pago.
+  // El monto lo vuelve a calcular la Edge Function desde la base; si el hold ya venció, avisa (hold_expired).
+  async payHold(ids) {
+    const pref = await sb.functions.invoke("mp-create-preference", { body: { booking_ids: ids } });
+    if (pref.error || !pref.data || !pref.data.init_point) {
+      const why = await pref.error?.context?.json?.().catch(() => null);
+      throw new Error(why && why.error === "hold_expired" ? "El horario ya se liberó. Elegí otro." : "No pudimos abrir Mercado Pago. Probá de nuevo.");
+    }
+    safeRedirect(pref.data.init_point);
+  },
 };

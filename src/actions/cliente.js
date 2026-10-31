@@ -126,6 +126,23 @@ registerClick("reloadList", (ev, el, act) => {
   render();
   return;
 });
+// C54 (V8): volver a pagar el turno (y los de su serie) que siguen reservados después de un pago que no se completó
+registerClick("payRetry", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === S.turnoId);
+  if (!booking) {
+    return;
+  }
+  const ids = store.BOOK.filter((item) => item.status === "hold" && (item.id === booking.id || (booking.series && item.series === booking.series)))
+    .sort((one, other) => (one.id === booking.id ? -1 : other.id === booking.id ? 1 : one.id - other.id))
+    .map((item) => item.id)
+    .slice(0, 4);
+  el.disabled = true;
+  api.payHold(ids).catch((err) => {
+    el.disabled = false;
+    toast(errMsg(err));
+    api.myBookings().then(render).catch(() => {});
+  });
+});
 // Paso 1 (v4): desde la pantalla de regreso de Mercado Pago sin sesión: ingresar y volver al turno
 registerClick("payLogin", (ev, el, act) => {
   navigate("/ingresar?volver=" + encodeURIComponent("/turno/" + S.turnoId));
