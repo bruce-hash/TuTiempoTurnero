@@ -38,6 +38,7 @@ const REFUND_WHY = {
   slot_taken: "el horario ya estaba ocupado cuando llegó el pago",
   booking_unavailable: "el turno ya no estaba disponible cuando llegó el pago",
   amount_short: "el pago no alcanzaba",
+  booking_past: "el pago llegó después de la hora del turno (D29)",
   unknown_booking: "pago sin turno de ese prestador",
 };
 const PAYMENT_WHY = {

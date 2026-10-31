@@ -74,9 +74,32 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("vuelve al pago ya logueado", (await txt()).includes("Confirmá tu turno"));
   ok("checkout: seña obligatoria y el resto en efectivo o Mercado Pago, sin preguntas ni saldo", (await pg.locator("[data-paym=mp]").count()) === 1 && (await pg.locator("[data-paym=cash]").count()) === 1 && !(await pg.locator(".intake").count()) && !(await txt()).includes("Saldo") && (await txt()).includes("$6.000"));
   ok("v30: la comisión va aparte de la seña (10% = $1.200) y se paga $7.200", (await pg.locator(".feerow").innerText()).includes("10%") && (await pg.locator(".feerow").innerText()).includes("$1.200") && (await pg.locator("#fTurno .tot").innerText()).includes("$7.200") && (await pg.locator("#fTurno button[type=submit]").innerText()).includes("$7.200"));
+  // C52 (V8): el prestador cambia el precio mientras la clienta está en la confirmación
+  const holdsAntes = (await q("select count(*)::int c from bookings where status = 'hold'"))[0].c;
+  await db.query("update services set price = 14000 where name = 'Esmaltado semipermanente'");
+  await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /El precio cambió/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("C52: si el precio cambió, no cobra: muestra el nuevo total (y el de antes) y pide confirmar de nuevo",
+     /El precio cambió mientras mirabas: ahora pagás \$8\.400 \(antes \$7\.200\)/.test(await pg.locator("#terr").innerText()) && (await pg.locator("#fTurno .tot").innerText()).includes("$8.400")
+     && (await q("select count(*)::int c from bookings where status = 'hold'"))[0].c === holdsAntes && new URL(pg.url()).pathname.endsWith("/reservar"));
+  await db.query("update services set price = 12000 where name = 'Esmaltado semipermanente'");
+  await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /antes \$8\.400/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("C52: …y si vuelve al precio de antes, lo avisa igual", (await pg.locator("#fTurno .tot").innerText()).includes("$7.200"));
   await Promise.all([pg.waitForURL(/mp=success/).catch(() => {}), pg.click("#fTurno button[type=submit]")]);
   await pg.waitForSelector(".booked", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("vuelve de Mercado Pago con el turno confirmado", await pg.isVisible(".booked"));
+  {
+    // C52: en el perfil, al volver a la pestaña, los precios se actualizan solos
+    const pv = await ctx.newPage(); pv.on("pageerror", (e) => errs.push(e.message));
+    const sid = (await q("select id from providers where name like 'Sofía%'"))[0].id;
+    await pv.goto(BASE + "/p/" + sid); await pv.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pv.waitForTimeout(500);
+    const antes = (await pv.locator("#app").innerText()).includes("$12.000");
+    await db.query("update services set price = 13500 where name = 'Esmaltado semipermanente'");
+    await pv.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await pv.waitForFunction(() => document.querySelector("#app")?.innerText.includes("$13.500"), null, { timeout: 8000 }).catch(() => {});
+    ok("C52: el perfil abierto muestra el precio nuevo al volver a la pestaña (sin recargar)", antes && (await pv.locator("#app").innerText()).includes("$13.500"));
+    await db.query("update services set price = 12000 where name = 'Esmaltado semipermanente'");
+    await pv.close();
+  }
   ok("el aviso principal dice qué servicio pagaste, sin la tarjeta repetida", (await pg.locator(".booked").innerText()).includes("Esmaltado semipermanente") && (await pg.locator(".turnocard").count()) === 0);
   ok("“No voy a poder ir” es un botón como los demás", (await pg.locator(".tacts [data-act=cancelAsk]").count()) === 1);
   const conf = await q("select m.body, m.kind from client_messages m join auth.users u on u.id=m.user_id where u.email='ana@test.ar' and m.kind='conf'");
@@ -124,6 +147,31 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
     await db.query("delete from payment_bookings where booking_id = $1", [hid]);
     await db.query("update bookings set payment_id = null where id = $1", [hid]);
     await db.query("delete from payments where mp_payment_id = $1", ["mp-test-tarde-" + hid]);
+    await db.query("delete from bookings where id = $1", [hid]);
+  }
+  {
+    // C54 (V8): volvió de Mercado Pago sin pagar (mp=failure): "El pago no se completó" y "Volver a intentar"
+    const hb = (await q("select provider_id, service_id, starts_at, ends_at from bookings where client_id = (select id from auth.users where email='ana@test.ar') and status='confirmed' order by id limit 1"))[0];
+    const hid = (await q("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, hold_expires_at) values ($1, $2, (select id from auth.users where email='ana@test.ar'), 'Ana', 'Esmaltado semipermanente', 'app', 'hold', $3::timestamptz + interval '8 days', $4::timestamptz + interval '8 days', 12000, 6000, 1200, now() + interval '10 minutes') returning id",
+      [hb.provider_id, hb.service_id, hb.starts_at, hb.ends_at]))[0].id;
+    const htok = (await q("select checkout_open(array[$1]::bigint[], null) as t", [hid]))[0].t;
+    await pg.goto(`${BASE}/turno/${hid}?pago=${htok}&mp=failure`); await pg.waitForSelector("[data-act=payRetry]", { timeout: 8000 }).catch(() => {}); await wait(400);
+    ok("C54: con sesión y el pago sin completar: “El pago no se completó”, con “Volver a intentar” (no “Estamos confirmando”)",
+       /El pago no se completó/.test(await txt()) && !/Estamos confirmando/.test(await txt()) && (await pg.locator("[data-act=payRetry]").count()) === 1);
+    const prefsAntes = (await (await fetch(BASE + "/__log")).json()).filter((x) => x.fn === "mp-create-preference").length;
+    await Promise.all([pg.waitForURL(/mp=success/, { timeout: 8000 }).catch(() => {}), pg.click("[data-act=payRetry]")]);
+    await pg.waitForSelector(".booked", { timeout: 8000 }).catch(() => {}); await wait(600);
+    const log = (await (await fetch(BASE + "/__log")).json()).filter((x) => x.fn === "mp-create-preference");
+    ok("C54: “Volver a intentar” vuelve a abrir Mercado Pago para el mismo turno y queda confirmado",
+       log.length === prefsAntes + 1 && JSON.stringify(log.at(-1).body.booking_ids) === JSON.stringify([Number(hid)])
+       && (await q("select status from bookings where id = $1", [hid]))[0].status === "confirmed");
+    // ese turno extra no sigue: las pruebas de más abajo cuentan los turnos de Ana
+    await db.query("delete from mp_checkouts where $1 = any(booking_ids)", [hid]);
+    await db.query("delete from client_messages where ref = $1::text", [hid]);
+    await db.query("delete from payment_bookings where booking_id = $1", [hid]);
+    const pids = (await q("select payment_id from bookings where id = $1", [hid])).map((r) => r.payment_id);
+    await db.query("update bookings set payment_id = null where id = $1", [hid]);
+    await db.query("delete from payments where id = any($1::bigint[])", [pids.filter(Boolean)]);
     await db.query("delete from bookings where id = $1", [hid]);
   }
   const bk = await q("select status, deposit, paid_mp, cashback from bookings where client_id = (select id from auth.users where email='ana@test.ar')");

@@ -208,6 +208,24 @@ ok("Paso 1: Para revisar trae el detalle y las veces de cada aviso, y el resumen
    and rv["webhook_alert"]["rejected"] >= 3 and rv["webhook_alert"]["rejected_reason"] in ("bad_signature", "no_signature"))
 ok("Paso 1: el cron de la consulta no llama a nada si no hay cobros que consultar (ni sin Vault)", svc_role("select run_mp_reconcile(true)") is None)
 
+# ---------- D29: el pago llega cuando la hora del turno ya pasó → se devuelve, aunque el horario esté libre ----------
+pastb = one("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, hold_expires_at) "
+            "values (%s, %s, %s, 'Ana Cobros', 'Corte', 'app', 'expired', now() - interval '2 hours', now() - interval '90 minutes', 10000, 5000, 1000, null) returning id", (pid, sv, cli))
+rp = pay([pastb], "PAGO-D29", 6000, 1000, pid, acc1)
+ok("D29: pago de un turno que ya empezó → registrado como devolución, el turno no se confirma",
+   rp["confirmed"] == 0 and rp["refunded"] == 1 and one("select status from bookings where id = %s", (pastb,)) == "expired"
+   and one("select payment_id is not null from bookings where id = %s", (pastb,)) is True)
+ok("D29: …con la devolución pedida por todo lo cobrado y el motivo booking_past",
+   q("select r.amount, r.reason, r.status from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = 'PAGO-D29'") == [(6000, "booking_past", "pending")])
+ok("D29: …el cliente recibe el aviso con el motivo y el prestador, el de pago devuelto",
+   one("select count(*) from client_messages where ref = %s and kind = 'cancel' and body like %s", (str(pastb), "%después de la hora del turno%")) == 1
+   and one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_refunded' and body like %s", (pid, "%después de la hora del turno%")) == 1)
+futb = one("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, hold_expires_at) "
+           "values (%s, %s, %s, 'Ana Cobros', 'Corte', 'app', 'expired', %s, %s + interval '30 minutes', 10000, 5000, 1000, null) returning id", (pid, sv, cli, at(27, 10), at(27, 10)))
+rf = pay([futb], "PAGO-D29-FUT", 6000, 1000, pid, acc1)
+ok("D29: un pago tardío de un turno que todavía no empezó y con el horario libre se sigue confirmando",
+   rf["confirmed"] == 1 and one("select status from bookings where id = %s", (futb,)) == "confirmed")
+
 # ---------- Confirmación normal, idempotencia (mismo aviso dos veces), comisión de Mercado Pago ----------
 r = book(sv, at(2, 9), cli)[0][0]
 b0 = r["booking_ids"][0]
