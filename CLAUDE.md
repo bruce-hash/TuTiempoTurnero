@@ -41,6 +41,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     `src/lib/push.js` (permiso y suscripción de este dispositivo; el permiso se pide solo con un toque), `src/ui/avisos.js`
     (tarjetas, Mi perfil, guía de iPhone) y `src/pwa/sw.js` (plantilla del service worker: el build la escribe en `/sw.js`
     con la versión y los archivos; NUNCA guarda nada de otro origen ni `config.js`).
+  - V8 (C52): `src/lib/precios.js` vuelve a pedir los precios del prestador en el perfil y la confirmación (al volver a la
+    pestaña, cada minuto y antes de cobrar): el cliente nunca ve un precio y paga otro.
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en

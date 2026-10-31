@@ -33,6 +33,7 @@ import { exponerParaPruebas } from "./ganchos-prueba.js";
 import { api } from "./api/index.js";
 import { CONFIG_OK, LIVE, sb } from "./config.js";
 import { errMsg } from "./lib/errores.js";
+import { startPriceRefresh } from "./lib/precios.js";
 import { refreshPush } from "./lib/push.js";
 import { startPwa } from "./lib/pwa.js";
 import { S } from "./state.js";
@@ -146,6 +147,8 @@ async function boot() {
       .then(() => render())
       .catch(() => {});
     api.commission().catch(() => {});
+    // C52 (V8): precios al día al volver a la pestaña y cada minuto (perfil y confirmación del turno)
+    startPriceRefresh();
     api.requireDni().catch(() => {});
     // dirección con la que arranca el enrutador: la actual, salvo que el arranque ya decida la pantalla
     let start = location.href;

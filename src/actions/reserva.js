@@ -1,10 +1,11 @@
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
-import { feeFor, mustPayTotal, payNow } from "../lib/dinero.js";
+import { feeFor, money, mustPayTotal, payNow } from "../lib/dinero.js";
 import { $, esc } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { TODAY, addDays, dkey, toMin } from "../lib/fechas.js";
+import { refreshPrices } from "../lib/precios.js";
 import { pr } from "../lib/prestadores.js";
 import { selAdds, selDur, selPrice } from "../lib/servicios.js";
 import { cfg, freed, happyAt, priceAt, seriesDates, skey, slotsFor, uname } from "../lib/turnero.js";
@@ -24,6 +25,22 @@ async function liveBook(form) {
     btn.textContent = "Procesando…";
   }
   try {
+    // C52 (V8): precios recién pedidos antes de cobrar; si el total cambió desde que se mostró, se muestra el nuevo y
+    // el cliente confirma de nuevo (la base siempre cobra el precio vigente: así nunca ve uno y paga otro)
+    const shown = S.payShown;
+    if (await refreshPrices()) {
+      render();
+      if (S.view === "checkoutT" && S.payShown !== shown) {
+        const box = $("#terr");
+        const msg = `El precio cambió mientras mirabas: ahora pagás ${money(S.payShown)}${shown != null ? ` (antes ${money(shown)})` : ""}. Revisalo y tocá Pagar de nuevo.`;
+        if (box) {
+          box.textContent = msg;
+        } else {
+          toast(msg);
+        }
+        return;
+      }
+    }
     const res = await api.book({
       pid: S.pid,
       svcIdx: S.svc,
@@ -140,6 +157,10 @@ registerClick("reservarT", (ev, el, act) => {
   S.rep = 0;
   if (S.user) {
     go("checkoutT");
+    // C52: al entrar a la confirmación, los precios del momento
+    refreshPrices()
+      .then((changed) => changed && S.view === "checkoutT" && render())
+      .catch(() => {});
   } else {
     S.after = "checkoutT";
     go("login");
