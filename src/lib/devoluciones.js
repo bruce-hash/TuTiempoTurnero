@@ -7,6 +7,7 @@ const WHY = {
   slot_taken: "el horario ya no estaba libre cuando se acreditó tu pago",
   booking_unavailable: "el turno ya no estaba disponible cuando se acreditó tu pago",
   amount_short: "el pago no alcanzó para el turno",
+  booking_past: "tu pago se acreditó después de la hora del turno",
 };
 export function refundText(booking) {
   const refund = booking.refund;

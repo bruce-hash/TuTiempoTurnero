@@ -392,5 +392,7 @@ migración de H32 (500).
 el pago (cron cada 2 minutos y la pantalla de regreso), así un pago aprobado se registra aunque el aviso nunca llegue;
 (3) la vuelta de Mercado Pago va a `/turno/<id>?pago=<token>`, que muestra el estado sin sesión (app instalada → otro
 navegador). Los cobros del 30/10 se recuperan con `checkout_backfill` (docs/02, Paso 1, paso 5). Falta: confirmar la
-causa con las invocaciones de `mp-webhook` y arreglar la configuración, y decidir D29 (pago tardío de un turno que ya pasó).
+causa con las invocaciones de `mp-webhook` y arreglar la configuración. D29 decidida (31/10): el pago de un turno que
+ya pasó se devuelve (`booking_past`). Los pagos del 30/10 los devolvió Bruno a mano desde Mercado Pago; la consulta los
+encuentra como devueltos, deja el rastro y cierra el cobro sin registrar nada.
 

@@ -956,6 +956,28 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
      && Number(await one("select count(*) from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = '9303' and r.reason = 'slot_taken'")) === 1
      && (await status(t3))?.state === "refunded");
 
+  // 4b) D29: la consulta encuentra el pago cuando la hora del turno ya pasó → se devuelve, aunque el horario esté libre
+  const k5 = await book2();
+  const t5 = await open(k5);
+  await q("update bookings set status = 'expired', hold_expires_at = null, starts_at = now() - interval '3 hours', ends_at = now() - interval '150 minutes' where id = any($1)", [k5]);
+  mp.pago({ id: "9305", collector: "1201", status: "approved", amount: 6000, fee: 1000, ref: k5.join(",") });
+  await q("update mp_checkouts set next_check_at = now() where token_hash = checkout_hash($1)", [t5]);
+  await cron();
+  ok("D29: pago recuperado de un turno que ya pasó → se devuelve (booking_past) y no se confirma",
+     (await st(k5[0])) === "expired" && (await one("select outcome from payments where mp_payment_id = '9305'")) === "refund"
+     && Number(await one("select count(*) from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = '9305' and r.reason = 'booking_past'")) === 1
+     && (await status(t5))?.state === "refunded");
+
+  // 4c) el pago ya se devolvió a mano desde Mercado Pago antes de que la app lo registrara (como los del 30/10)
+  const k6 = await book2();
+  const t6 = await open(k6);
+  mp.pago({ id: "9306", collector: "1201", status: "refunded", amount: 6000, fee: 1000, ref: k6.join(","), refunded: 6000 });
+  await q("update mp_checkouts set next_check_at = now() where token_hash = checkout_hash($1)", [t6]);
+  await cron();
+  ok("Paso 1: un pago ya devuelto en Mercado Pago no se registra, deja el rastro y el cobro se cierra (no se sigue preguntando)",
+     Number(await one("select count(*) from payments where mp_payment_id = '9306'")) === 0 && (await evento("9306", "recovered")) === 1
+     && (await one("select closed_reason from mp_checkouts where token_hash = checkout_hash($1)", [t6])) === "paid");
+
   // 5) Mercado Pago no responde la búsqueda: queda abierto, con el error, para más tarde
   const k4 = await book2();
   const t4 = await open(k4);

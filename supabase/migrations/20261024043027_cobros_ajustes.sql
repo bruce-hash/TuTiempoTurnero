@@ -111,8 +111,10 @@ $$;
 alter table public.refunds add column if not exists created_by uuid references auth.users(id) on delete set null;
 alter table public.refunds add column if not exists note text check (char_length(note) <= 500);
 alter table public.refunds drop constraint if exists refunds_reason_check;
+-- (incluye 'booking_past', de D29 / 20261031160000_pago_tarde.sql: así esta migración se puede volver a correr sobre una
+-- base que ya tiene devoluciones con ese motivo)
 alter table public.refunds add constraint refunds_reason_check
-  check (reason in ('provider_cancelled','slot_taken','booking_unavailable','amount_short','unknown_booking','admin'));
+  check (reason in ('provider_cancelled','slot_taken','booking_unavailable','amount_short','unknown_booking','admin','booking_past'));
 
 -- Crea una devolución de un pago (todo o una parte, de un turno o del pago entero). La ejecuta mp-refunds con la llave
 -- de la cuenta que cobró; refunds_cap impide devolver más de lo cobrado. Si el pago estaba en revisión, queda resuelto
