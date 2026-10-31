@@ -16,7 +16,7 @@
 const http = require("http"), fs = require("fs"), os = require("os"), path = require("path"), crypto = require("crypto");
 const { Client } = require("pg");
 const { resolver } = require("./fallback.cjs");
-const [WEB, PORT, SECRET, PGCONN, PGRST] = process.argv.slice(2);
+const [WEB, PORT, SECRET, PGCONN, PGRST, MODO] = process.argv.slice(2);
 const db = new Client({ connectionString: PGCONN }); db.connect();
 // archivos del bucket dni (los demás buckets no se guardan); se borran al cerrar
 const STORE = fs.mkdtempSync(path.join(os.tmpdir(), "tt-storage-"));
@@ -104,7 +104,9 @@ async function functions(req, res, url) {
     LAST_CHECKOUT = { token: tok, booking: j.booking_ids[0] };
     // simula que Mercado Pago aprobó el pago y llamó al webhook (con la comisión que informa MP)
     await db.query("select public.confirm_payment($1::bigint[], $2, $3, p_provider => $4, p_fee_mp => $5)", [j.booking_ids, "mp-test-" + Date.now(), r.rows[0].amount, r.rows[0].pid, r.rows[0].fee]);
-    return send(res, 200, { init_point: `${req.headers.origin || "http://localhost:" + PORT}/turno/${j.booking_ids[0]}?pago=${tok}&mp=success` });
+    const site = req.headers.origin || "http://localhost:" + PORT;
+    // la versión de referencia de test:comparar no conoce la vuelta del Paso 1: a ella, la de antes
+    return send(res, 200, { init_point: MODO === "vuelta-vieja" ? `${site}/?mp=success&b=${j.booking_ids[0]}` : `${site}/turno/${j.booking_ids[0]}?pago=${tok}&mp=success` });
   }
   if (name === "mp-oauth") { await db.query("select public.mp_connect(id, 'mp-test-' || id, 'v1:aXY=:VEVTVC10b2tlbg==', null, 15552000) from public.providers where owner_id=$1 and status<>'deleted'", [claims.sub]); return send(res, 200, { url: `/?mp_connected=1` }) }
   send(res, 404, {});

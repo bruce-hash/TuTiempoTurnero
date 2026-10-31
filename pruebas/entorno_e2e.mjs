@@ -23,7 +23,9 @@ async function listo(url, intentos = 100) {
 }
 
 // Levanta base + PostgREST + e2e_server. Devuelve { url, pg, cerrar() }.
-export async function levantar({ web, puerto = 8787, puertoRest = 3011, base = "tt_e2e" } = {}) {
+// vueltaVieja: el Mercado Pago simulado vuelve a /?mp=success&b=<turno>, como antes del Paso 1 (para la versión de
+// referencia de test:comparar, que no conoce /turno/<id>?pago=<token>)
+export async function levantar({ web, puerto = 8787, puertoRest = 3011, base = "tt_e2e", vueltaVieja = false } = {}) {
   const env = process.env;
   const admin = { host: env.PGHOST || "localhost", port: +(env.PGPORT || 5432), user: env.PGUSER || "postgres", password: env.PGPASSWORD };
   const c0 = new pg.Client({ ...admin, database: "postgres" });
@@ -56,7 +58,7 @@ export async function levantar({ web, puerto = 8787, puertoRest = 3011, base = "
   const pgUrl = `postgres://${encodeURIComponent(admin.user)}${admin.password ? ":" + encodeURIComponent(admin.password) : ""}@${host}:${admin.port}/${base}`;
   lanzar(env.POSTGREST || "postgrest", [conf]);
   await listo(`http://localhost:${puertoRest}/`);
-  lanzar(process.execPath, ["pruebas/e2e_server.js", web, String(puerto), SECRET, pgUrl, `http://localhost:${puertoRest}`]);
+  lanzar(process.execPath, ["pruebas/e2e_server.js", web, String(puerto), SECRET, pgUrl, `http://localhost:${puertoRest}`, vueltaVieja ? "vuelta-vieja" : ""]);
   await listo(`http://localhost:${puerto}/index.html`);
   return {
     url: `http://localhost:${puerto}`,
