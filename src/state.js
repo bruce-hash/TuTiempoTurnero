@@ -20,6 +20,8 @@ export const fresh = () => ({
   user: null,
   prev: "home",
   barberAuth: false,
+  // V7: ingreso en una segunda capa encima de la página ("cliente" o "prestador"; null, cerrado)
+  authModal: null,
   login: {
     mode: "in",
     email: "",

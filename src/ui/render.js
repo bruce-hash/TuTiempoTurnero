@@ -1,4 +1,5 @@
 import { mountCaptchas } from "../lib/captcha.js";
+import { authModal } from "./ingreso.js";
 import { pwaAfterRender } from "../lib/pwa.js";
 import { $ } from "../lib/dom.js";
 import { ME, pr } from "../lib/prestadores.js";
@@ -77,7 +78,8 @@ function nav() {
           ["↪", "Cerrar sesión", 'data-act="logout"'],
         ],
       })
-    : '<button class="btn btn-ghost" data-go="loginBarbero">Soy prestador</button><button class="btn btn-pri" data-go="login">Ingresar</button>';
+    : // V7 (C47): un solo botón; adentro se elige cliente o prestador
+      '<button class="btn btn-pri" data-act="authOpen" data-k="cliente">Ingresar</button>';
 }
 // rubro que tiñe la página (data-seg del body): el del prestador que se está viendo, o "n" (neutro)
 function segNow() {
@@ -141,6 +143,15 @@ function renderInner() {
   if (app) {
     app.insertAdjacentHTML("beforeend", installGuide() + updateBar());
   }
+  // V7: el ingreso en una segunda capa (se cierra solo al ingresar)
+  if (S.authModal && (S.user || S.barberAuth)) {
+    S.authModal = null;
+  }
+  const modal = authModal();
+  if (app && modal) {
+    app.insertAdjacentHTML("beforeend", modal);
+  }
+  document.body.classList.toggle("am-open", !!modal);
   pwaAfterRender();
   // H30: el CAPTCHA de los formularios de ingreso (si hay clave de Turnstile)
   mountCaptchas();
@@ -217,6 +228,11 @@ function renderMain() {
 }
 // navegación entre pantallas del cliente (id = prestador, para "perfil")
 export function go(view, id) {
+  // V7: ir a otra página cierra el ingreso en segunda capa (y olvida a dónde volvía)
+  if (S.authModal) {
+    S.authModal = null;
+    S.after = null;
+  }
   if (S.role === "barbero" && S.preview) {
     S.preview = false;
     render();

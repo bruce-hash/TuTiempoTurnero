@@ -112,6 +112,9 @@ async function normalizar(page) {
     // la cabecera cambia a propósito (arreglos visuales: en el celular, los botones sin sesión entran en una línea): se
     // esconde en las dos versiones; el contenido (#app) se compara igual, texto y píxeles
     document.querySelectorAll("header.top").forEach((el) => Object.assign(el.style, { visibility: "hidden", height: "96px", overflow: "hidden", boxSizing: "border-box" }));
+    // V7 (C50, C51, cambio a propósito): el footer suma el teléfono y las redes y saca "Prototipo"; se esconde igual que la
+    // cabecera (su contenido lo prueba pruebas/e2e.js)
+    document.querySelectorAll("footer").forEach((el) => Object.assign(el.style, { visibility: "hidden", height: "360px", overflow: "hidden", boxSizing: "border-box" }));
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
@@ -185,7 +188,8 @@ async function recorridoVivo(browser, url) {
   // prestadora: las 9 pestañas del panel
   page = await pagina(browser, { relojFijo: false });
   await page.goto(url);
-  await clic(page, "[data-go=loginBarbero]");
+  // V7 (C47, C48): en la versión nueva el acceso de prestadores es la segunda capa que abre el footer
+  await clic(page, "header [data-go=loginBarbero], footer [data-act=authOpen][data-k=prestador]");
   await page.fill("#be", "sofia@test.ar");
   await page.fill("#bp", "prestador123");
   await clic(page, "#fBarb button[type=submit]");
@@ -196,7 +200,7 @@ async function recorridoVivo(browser, url) {
   // admin: las 4 pestañas
   page = await pagina(browser, { relojFijo: false });
   await page.goto(url);
-  await clic(page, "[data-go=login]");
+  await clic(page, "header [data-go=login], header [data-act=authOpen]");
   await page.fill("#ai_e", "admin@test.ar");
   await page.fill("#ai_p", "admin12345");
   await clic(page, "#fLogin button[type=submit]");

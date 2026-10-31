@@ -48,8 +48,8 @@ export function vLogin() {
    <div class="authrow"><button class="lnk" data-act="authMode" data-m="up">Cambiar email</button><button class="lnk" data-act="authMode" data-m="in">Ya la activé · Ingresar</button></div></div></div>`;
   }
   const tabs = `<div class="authtabs" role="tablist"><button type="button" role="tab" class="${mode === "up" ? "" : "on"}" aria-selected="${mode !== "up"}" data-act="authMode" data-m="in">Ingresar</button><button type="button" role="tab" class="${mode === "up" ? "on" : ""}" aria-selected="${mode === "up"}" data-act="authMode" data-m="up">Crear cuenta</button></div>`;
-  const provLinks =
-    '<p class="note" style="margin-top:14px">¿Ofrecés servicios? <button type="button" class="lnk" data-go="loginBarbero">Entrá a tu panel</button> · <button type="button" class="lnk" data-go="prestador">Sumate</button></p>';
+  // dentro de la segunda capa (V7), "Entrá a tu panel" cambia de lado sin salir de la página
+  const provLinks = `<p class="note" style="margin-top:14px">¿Ofrecés servicios? <button type="button" class="lnk" ${S.authModal ? 'data-act="authSide" data-k="prestador"' : 'data-go="loginBarbero"'}>Entrá a tu panel</button> · <button type="button" class="lnk" data-go="prestador">Sumate</button></p>`;
   const google = `<button type="button" class="gbtn" data-act="google">${GLOGO} ${mode === "up" ? "Crear cuenta con Google" : "Continuar con Google"}</button><div class="or">o con tu email</div>`;
   if (mode === "code") {
     return `<div class="narrow"><div class="panel" style="margin-top:24px">

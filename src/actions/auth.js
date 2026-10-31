@@ -9,6 +9,7 @@ import { RESEND_WAIT_MS, afterLogin, authErr, goAfter, rememberEmail, resendLeft
 import { EMAIL, PWRULE, pwOk, pwScore } from "../lib/validar.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
+import { AUTH_PAGES } from "../ui/ingreso.js";
 import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
@@ -44,7 +45,7 @@ registerClick("authMode", (ev, el, act) => {
     err: "",
     fails: S.login.fails || 0,
   };
-  if (S.view !== "login" && S.view !== "register") {
+  if (S.view !== "login" && S.view !== "register" && !S.authModal) {
     S.keepLogin = true;
     go("login");
     return;
@@ -53,6 +54,49 @@ registerClick("authMode", (ev, el, act) => {
   const field = $("#ai_e,#au_n,#af_e,#le");
   if (field && !field.value) {
     field.focus();
+  }
+});
+// V7 (C47–C49): abrir el ingreso en una segunda capa, desde la cabecera o el footer. Después de ingresar queda la misma
+// página (S.after). En las páginas de ingreso no se abre otra capa encima.
+const authFocus = () => {
+  const field = document.querySelector(".am-box input:not([type=checkbox])");
+  if (field) {
+    field.focus();
+  }
+};
+registerClick("authOpen", (ev, el, act) => {
+  const side = el.dataset.k === "prestador" ? "prestador" : "cliente";
+  // ya ingresó (por ejemplo, "Iniciar sesión" del footer con la sesión abierta): a su cuenta
+  if (S.user) {
+    go("cuenta");
+    return;
+  }
+  if (AUTH_PAGES.includes(S.view)) {
+    go(side === "prestador" ? "loginBarbero" : "login");
+    return;
+  }
+  S.authModal = side;
+  S.after = location.pathname + location.search;
+  S.login = { mode: "in", email: S.login.email || "", err: "", fails: S.login.fails || 0 };
+  S.blogin = Object.assign(S.blogin, { step: "form", err: "" });
+  render();
+  authFocus();
+});
+registerClick("authSide", (ev, el, act) => {
+  S.authModal = el.dataset.k === "prestador" ? "prestador" : "cliente";
+  render();
+  authFocus();
+});
+registerClick("authClose", (ev, el, act) => {
+  S.authModal = null;
+  S.after = null;
+  render();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && S.authModal && document.querySelector(".authmodal")) {
+    S.authModal = null;
+    S.after = null;
+    render();
   }
 });
 registerClick("pwShow", (ev, el, act) => {
