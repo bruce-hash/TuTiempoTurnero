@@ -81,8 +81,10 @@ async function check(db: Db, ck: Due): Promise<boolean> {
       if (!one.ok) { lastError = `Mercado Pago respondió ${one.status} al pedir el pago`; continue; }
       const pay = await one.json();
       if (pay.status !== "approved") {
-        // devuelto o cancelado antes de que la app lo registrara: queda el rastro para revisarlo
+        // devuelto o cancelado antes de que la app lo registrara (por ejemplo, devuelto a mano desde Mercado Pago): no
+        // hay nada que registrar; queda el rastro para revisarlo y el cobro se cierra (no se sigue preguntando)
         await discard(db, payId, ck.provider_id, acc.id, "recovered", `pago sin aviso, ya ${pay.status} en Mercado Pago (no se registró)`);
+        any = true;
         continue;
       }
       const res = await processPayment(db, pay, ck.provider_id, acc, payId);

@@ -403,9 +403,16 @@ Si en algún celular no llega nada: Edge Functions → push-send → Logs (el c�
 5. **Cobros abiertos antes de esta migración (por ejemplo, los del 30/10):** la consulta automática solo conoce los
    cobros nuevos. Para sumar los viejos (turnos de la app con preferencia, sin pago, de los últimos 7 días), en el SQL
    Editor: `select public.checkout_backfill(7);` (devuelve cuántos sumó). **Ojo, son pagos reales:** si Mercado Pago
-   tiene el pago aprobado, el turno se confirma si el horario sigue libre, o se pide la devolución si no; un turno cuya
-   hora ya pasó hoy se confirmaría igual (pregunta abierta, D29). En unos minutos, el resultado está en
-   `payments` y en "Para revisar".
+   tiene el pago aprobado, el turno se confirma si el horario sigue libre y el turno todavía no empezó; si no, se pide la
+   devolución (D29, migración `20261031160000_pago_tarde.sql`). Un pago que ya devolviste a mano desde Mercado Pago no se
+   registra: queda como "Pago recuperado · ya refunded" en "Para revisar" y el cobro se cierra. En unos minutos, el
+   resultado está en `payments` y en "Para revisar".
+
+#### D29 (después del Paso 1): pago de un turno que ya pasó → se devuelve
+1. **Migración:** `20261031160000_pago_tarde.sql` (`supabase db push` o `TODO_EN_UNO.sql`).
+2. **Función:** `supabase functions deploy mp-reconcile --no-verify-jwt` (un pago ya devuelto en Mercado Pago cierra el
+   cobro en lugar de seguir preguntando).
+3. **Frontend:** `npm run build` y subir `dist/` (el texto del motivo en Mis turnos y en "Para revisar").
 
 #### Si los pagos no se registran (diagnóstico del webhook)
 Desde el Paso 1 un pago aprobado se registra igual aunque el aviso falle (la app le pregunta a Mercado Pago cada 2
