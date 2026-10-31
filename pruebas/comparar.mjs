@@ -112,6 +112,9 @@ async function normalizar(page) {
     // la cabecera cambia a propósito (arreglos visuales: en el celular, los botones sin sesión entran en una línea): se
     // esconde en las dos versiones; el contenido (#app) se compara igual, texto y píxeles
     document.querySelectorAll("header.top").forEach((el) => Object.assign(el.style, { visibility: "hidden", height: "96px", overflow: "hidden", boxSizing: "border-box" }));
+    // V7 (C50, C51, cambio a propósito): el footer suma el teléfono y las redes y saca "Prototipo"; se esconde igual que la
+    // cabecera (su contenido lo prueba pruebas/e2e.js)
+    document.querySelectorAll("footer").forEach((el) => Object.assign(el.style, { visibility: "hidden", height: "360px", overflow: "hidden", boxSizing: "border-box" }));
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
