@@ -224,8 +224,8 @@ registerSubmit("fHorarios", (ev) => {
     return;
   }
   conf.days = days;
-  conf.buffer = +(($("#hbuf") || {}).value || 0);
-  conf.step = +$("#hst").value;
+  // C39: sin descanso entre turnos; D31: el paso ya no se usa para la reserva online (queda el que tenía)
+  conf.buffer = 0;
   conf.ahead = 31;
   conf.notice = +$("#hno").value;
   const pay = $("#hpay").value;

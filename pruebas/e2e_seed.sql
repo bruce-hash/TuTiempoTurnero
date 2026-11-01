@@ -18,7 +18,7 @@ begin
 end $$;
 update public.providers set status='active', dni_verified=true;
 update public.provider_settings set online=true, notice_min=0;
-update public.provider_settings set buffer_min=10 where provider_id=(select id from public.providers where name like 'Sofía%');
+-- C39 (V3): sin descanso entre turnos (antes Sofía tenía 10 min)
 update public.services set repeat_days=21, prep_note='Venir sin esmalte' where name='Esmaltado semipermanente';
 insert into public.service_addons (service_id, name, price, duration_min) select id, 'Nail art', 2000, 15 from public.services where name='Esmaltado semipermanente';
 -- cuenta de Mercado Pago activa (Bloque 1: mp_accounts; mp_connected lo actualiza la base)

@@ -428,6 +428,14 @@ Si en algún celular no llega nada: Edge Functions → push-send → Logs (el c�
    Si `mp_cost` (lo que informó Mercado Pago) y `mp_cost_expected` difieren en todos los pagos por el IVA (por ejemplo,
    uno es el otro dividido 1,21), avisame y ajusto la comparación (los montos no se tocan).
 
+#### V3 (D31): horarios según la duración del servicio, sin descanso entre turnos
+1. **Migración:** `20261101180000_turnos_duracion.sql` (`supabase db push` o `TODO_EN_UNO.sql`). Pone el descanso de
+   todos los prestadores en 0 (y lo saca de los turnos que vienen) y cambia el recordatorio de 24 h de fábrica.
+2. **Funciones:** ninguna.
+3. **Frontend:** `npm run build` y subir `dist/`. Sin cambios en `config.js` ni en `.htaccess`.
+4. **Para probar:** un prestador que atiende de 9 a 13 con un turno tomado de 10:30 a 11:00 tiene que ofrecer, para un
+   servicio de 45 min, 9:00, 9:45, 11:00 y 11:45 (docs/06, "C23").
+
 #### Si los pagos no se registran (diagnóstico del webhook)
 Desde el Paso 1 un pago aprobado se registra igual aunque el aviso falle (la app le pregunta a Mercado Pago cada 2
 minutos), pero con demora, y "Para revisar" muestra "Los avisos de Mercado Pago no están llegando bien". Para arreglar

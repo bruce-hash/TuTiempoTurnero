@@ -51,29 +51,7 @@ export function vBHorarios() {
     <span class="ferr" id="herr-hh">${errs.hh || ""}</span>
     <button type="button" class="btn btn-ghost btn-block" style="margin-top:10px" data-act="hhSuggest">✨ Usar mis horarios más flojos</button></div>
    <div class="panel"><p class="lbl">Reglas de reserva</p>
-    <div class="f"><label for="hbuf">Descanso entre turnos</label>${select(
-      "hbuf",
-      [
-        [0, "Sin descanso"],
-        [5, "5 min"],
-        [10, "10 min"],
-        [15, "15 min"],
-        [20, "20 min"],
-        [30, "30 min"],
-      ],
-      conf.buffer || 0,
-    )}<span class="hint">Tiempo para limpiar o preparar entre un cliente y el siguiente. No se puede reservar.</span></div>
-    <div class="f"><label for="hst">Cada cuánto empieza un turno</label>${select(
-      "hst",
-      [
-        [15, "Cada 15 min"],
-        [20, "Cada 20 min"],
-        [30, "Cada 30 min"],
-        [45, "Cada 45 min"],
-        [60, "Cada 1 hora"],
-      ],
-      conf.step,
-    )}</div>
+    <p class="hint" style="text-align:left;margin:0 0 12px">⏱ Los horarios de cada servicio empiezan cuando abrís y se suceden según lo que dura el servicio (un corte de 45 min: 9:00, 9:45, 10:30…). Si hay un turno tomado, siguen desde que termina, sin dejar huecos. Sin descanso entre turnos.</p>
     <p class="hint" style="text-align:left;margin:-4px 0 12px">📅 Tus clientes pueden reservar desde hoy hasta 31 días adelante.</p>
     <div class="f"><label for="hno">Aviso mínimo</label>${select(
       "hno",

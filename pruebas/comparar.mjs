@@ -130,6 +130,17 @@ async function normalizar(page) {
     document.querySelectorAll("#app #fTurno p.note").forEach((el) => { if (/Si cancela el profesional/.test(el.textContent)) el.textContent = "SI NO VAS O SI CANCELA EL PROFESIONAL"; });
     document.querySelectorAll("#app #hpay, #app #hterm").forEach((el) => el.closest(".f")?.remove());
     if (document.querySelector("#app [data-act=admM]")) document.querySelectorAll("#app .kpis, #app table").forEach((el) => el.remove());
+    // V3 (D31, C39 y C21, cambios a propósito): los horarios se suceden según la duración del servicio y sin descanso, así
+    // que cambian los horarios ofrecidos, cuántos libres hay por día y el próximo turno de cada tarjeta; Horarios ya no tiene
+    // "Descanso entre turnos" ni "Cada cuánto empieza un turno" (suma la regla explicada) y la Agenda ya no tiene "Cargar
+    // servicio sin turno". Se neutraliza en las dos versiones; la regla la prueban test_db.py y e2e.js.
+    fijo("#app .nextt", "PRÓXIMO TURNO");
+    fijo("#app .nextbar", "PRÓXIMO TURNO");
+    document.querySelectorAll("#app .wd").forEach((el) => { el.classList.remove("low", "full"); el.querySelectorAll(".av-bar, small, em").forEach((x) => x.remove()); });
+    fijo("#app .pk-body", "HORARIOS DEL DÍA");
+    document.querySelectorAll("#app #hbuf, #app #hst").forEach((el) => el.closest(".f")?.remove());
+    document.querySelectorAll("#fHorarios p.hint").forEach((el) => { if (/Tus clientes pueden reservar|se suceden según lo que dura/.test(el.textContent)) el.remove(); });
+    document.querySelectorAll("#app [data-act=walkFromAgenda]").forEach((el) => el.remove());
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
