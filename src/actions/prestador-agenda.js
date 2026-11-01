@@ -145,12 +145,6 @@ registerClick("turnosOn", (ev, el, act) => {
   toast(conf.on ? "Turnos online activados" : "Turnos online pausados");
   render();
 });
-registerClick("walkFromAgenda", (ev, el, act) => {
-  S.btab = "caja";
-  S.walkOpen = true;
-  S.walkMedio = "Efectivo";
-  render();
-});
 registerClick("blockOpen", (ev, el, act) => {
   S.blockOpen = true;
   S.manOpen = false;

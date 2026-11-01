@@ -2,7 +2,6 @@ import { LIVE } from "../config.js";
 import { esc } from "./dom.js";
 import { NOW, TODAY, addDays, dayLabel, dkey, fromMin, toMin } from "./fechas.js";
 import { pr } from "./prestadores.js";
-import { RUBRO } from "./rubros.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { notif } from "../ui/toast.js";
@@ -82,9 +81,6 @@ store.SID = 1;
 export const cfg = (pid) =>
   (store.CFGS[pid] ||= (() => {
     const conf = defCfg();
-    if (!LIVE && pr(pid)) {
-      conf.buffer = (RUBRO[pr(pid).cats[0]] || RUBRO.b).buffer;
-    }
     if (+pid != 7 && +pid != 21) {
       conf.happy.on = false;
     }
@@ -172,27 +168,37 @@ export function slotsFor(pid, date, dur, ignoreId, anyDate) {
   const now = NOW();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const taken = busy(pid, date).filter((booking) => booking.id !== ignoreId);
+  // D31 (V3): los horarios empiezan en la apertura y se suceden cada "duración del servicio". Si un turno ya tomado (o
+  // un bloqueo) corta la secuencia, vuelve a arrancar donde termina ese turno. La misma cuenta que slot_starts en la base.
+  // Los turnos tomados se muestran como ocupados, a su hora. C39: sin descanso entre turnos.
   const list = [];
+  const shown = new Set();
+  const endOf = (booking) => toMin(booking.time) + booking.dur + (booking.busy ? 0 : booking.buf || 0);
   for (const [from, to] of shifts) {
-    for (let start = from; start + dur <= to; start += conf.step) {
-      if (date === TODAY() && start <= nowMin + conf.notice) {
+    let start = from;
+    while (start + dur <= to) {
+      const clash = taken.filter((booking) => overlaps(start, start + dur, toMin(booking.time), endOf(booking)));
+      if (clash.length) {
+        clash.forEach((booking) => {
+          if (!shown.has(booking.time) && toMin(booking.time) >= from && toMin(booking.time) < to) {
+            shown.add(booking.time);
+            list.push({ time: booking.time, free: false, disc: happyAt(pid, date, toMin(booking.time)) });
+          }
+        });
+        start = Math.max(start + 1, ...clash.map(endOf));
         continue;
       }
-      const clash = taken.some((booking) =>
-        overlaps(
-          start,
-          start + dur + (conf.buffer || 0),
-          toMin(booking.time),
-          toMin(booking.time) + booking.dur + (booking.busy ? 0 : (booking.buf ?? (conf.buffer || 0))),
-        ),
-      );
-      list.push({
-        time: fromMin(start),
-        free: !clash,
-        disc: happyAt(pid, date, start),
-      });
+      if (!(date === TODAY() && start <= nowMin + conf.notice)) {
+        list.push({
+          time: fromMin(start),
+          free: true,
+          disc: happyAt(pid, date, start),
+        });
+      }
+      start += dur;
     }
   }
+  list.sort((a, b) => toMin(a.time) - toMin(b.time));
   return {
     closed: false,
     list: list,

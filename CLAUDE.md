@@ -41,6 +41,11 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     `src/lib/push.js` (permiso y suscripción de este dispositivo; el permiso se pide solo con un toque), `src/ui/avisos.js`
     (tarjetas, Mi perfil, guía de iPhone) y `src/pwa/sw.js` (plantilla del service worker: el build la escribe en `/sw.js`
     con la versión y los archivos; NUNCA guarda nada de otro origen ni `config.js`).
+  - V1 (D30): `src/lib/cobro.js` (`chargeFor`) arma seña + comisión de TuTiempo (% de la seña) + costo de Mercado Pago
+    del plazo del prestador con la misma cuenta entera que `charge_parts` en la base; la app solo la muestra.
+  - V3 (D31): los horarios de un servicio se suceden cada "duración del servicio" desde la apertura y siguen donde termina
+    un turno que corta la secuencia: `slotsFor` en `src/lib/turnero.js` y `slot_starts` en la base hacen la misma cuenta.
+    Sin descanso entre turnos (C39).
   - V8 (C52): `src/lib/precios.js` vuelve a pedir los precios del prestador en el perfil y la confirmación (al volver a la
     pestaña, cada minuto y antes de cobrar): el cliente nunca ve un precio y paga otro.
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`

@@ -35,10 +35,10 @@ Paso 2: solo organizada, sin programar. Cada bloque se programa recién con el O
 | C18 | Prestador | Después de agendar un turno o cargar un servicio sin turno, volver a la Agenda | V2 | Pendiente | |
 | C19 | Prestador | El ingreso del prestador igual al del usuario | V7 | Parcial | Hecho en V7: misma capa y mismo lugar que el del cliente (pestaña "Soy prestador"), con contraseña y Google. Falta el código por email para el prestador: espera la decisión de C13 (cómo se identifica el prestador). |
 | C20 | Prestador | Después de crear la cuenta (también con Google), completar los pasos de verificación | V2 | Pendiente | Ya existe desde el Bloque D (pasos de Perfil y D26); falta el alta con Google. ¿El alta con Google pide igual nombre del local, rubro y teléfono antes de entrar? |
-| C21 | Agenda | Sacar "Cargar servicio sin turno" de la Agenda | V3 | Pendiente | Queda en Finanzas → Caja del día (C34). |
+| C21 | Agenda | Sacar "Cargar servicio sin turno" de la Agenda | V3 | Hecho (V3) | "Cargar servicio sin turno" salió de la Agenda; queda en Finanzas → Caja del día. |
 | C22 | Agenda | Los turnos eliminados desaparecen de la Agenda, todo en tiempo real | V3 | Decisión | Hay dos caminos: Realtime de Supabase (cada cambio llega solo; hay que habilitarlo por tabla, con RLS) o volver a pedir la agenda cada 30 s y al volver a la pestaña (más simple). Recomiendo el segundo. Además hay que ver por qué el turno borrado sigue: ¿lo borró el mismo prestador? |
-| C23 | Agenda | Los horarios se calculan según la duración del servicio, no en bloques fijos | V3 | Propuesta (D31) | Hoy los turnos empiezan cada 10/15/20/30/45/60 min (paso del prestador) y solo se ofrecen los que entran enteros. Opciones: (a) empezar cada "duración del servicio" desde la apertura (corte de 45 min: 9:00, 9:45, 10:30…); (b) empezar a la hora que termina el turno anterior, pegados (sin huecos). ¿Cuál? ¿Qué pasa con dos servicios de duración distinta el mismo día? **Propuesta con ejemplos:** sección "C23 · Turnos según la duración del servicio", más abajo. |
-| C24 | Recordatorios | Quitar "¿Venís? Confirmá acá" del recordatorio automático | V3 | Pendiente | Se cambia el texto de fábrica del recordatorio de 24 h. Los prestadores que ya lo editaron conservan el suyo; a los que tienen el de fábrica se les actualiza. |
+| C23 | Agenda | Los horarios se calculan según la duración del servicio, no en bloques fijos | V3 | Hecho (V3, D31) | Para todos los prestadores: los horarios se suceden cada "duración del servicio" desde la apertura y, si un turno corta la secuencia, siguen desde que termina. La misma cuenta en la base (`slot_starts`) y en la app. "Cada cuánto empieza un turno" salió de Horarios. |
+| C24 | Recordatorios | Quitar "¿Venís? Confirmá acá" del recordatorio automático | V3 | Hecho (V3) | El de fábrica ahora dice "{nombre}, te recordamos tu turno mañana a las {hora} en {barberia}. Te esperamos en {direccion}." Los que lo editaron conservan el suyo. |
 | C25 | Finanzas | Botones de editar y borrar en cada movimiento; "Cargar diferencia" con transferencia y/o efectivo | V4 | Pendiente | Hoy los medios son Efectivo y Mercado Pago: se suma "Transferencia". |
 | C26 | Trabajos | Borrar fotos de trabajos y ponerles nombre | V5 | Pendiente | |
 | C27 | Reseñas | El cliente deja la reseña y el prestador la responde desde Trabajos | V5 | Verificar | Las reseñas y las respuestas ya existen; falta que la respuesta esté en Trabajos. ¿Algo de esto no les funcionó? |
@@ -53,7 +53,7 @@ Paso 2: solo organizada, sin programar. Cada bloque se programa recién con el O
 | C36 | Productos | Precio de compra y de venta; al vender, se carga solo en servicios y productos | V4 | Pendiente | ¿"Servicios y productos" es la Caja del día? La ganancia por producto (venta menos compra) iría al balance. |
 | C37 | Horarios | Guardado automático en toda la sección (sin botón Guardar) | V3 | Pendiente | Con un aviso chico de "Guardado". |
 | C38 | Horarios | Mostrar el "Happy hour" en los horarios del propio prestador | V3 | Pendiente | |
-| C39 | Horarios | Reglas de reserva: quitar el descanso entre turnos | V3 | Decisión | ¿Se saca la opción y todos pasan a "Sin descanso", o se deja para los que ya lo usan? (Hoy cada prestador elige de 0 a 60 min.) |
+| C39 | Horarios | Reglas de reserva: quitar el descanso entre turnos | V3 | Hecho (V3, D31) | Se sacó del todo: todos los prestadores pasan a "sin descanso" y los turnos que vienen lo pierden (los pasados no cambian). |
 | C40 | Horarios | QR del prestador descargable en PDF | V3 | Pendiente | Propongo una hoja lista para imprimir ("Guardar como PDF" del navegador), sin librerías nuevas. |
 | C41 | Admin | Resaltar en negrita a quien no está conectado a Mercado Pago, con un enlace | V6 | WIP + propuesta | La rama frenada ya lo muestra con nombres en negrita y "Ver quiénes". "Conectarlos" lo puede hacer solo el prestador (es su cuenta): propongo un botón "Avisarle", que le manda un aviso (app, push, email) con el link a Cobros. **Propuesta (31/10):** botón "Avisarle", que le manda al prestador el link para conectar Mercado Pago. |
 | C42 | Admin | "No conectados de MP" en Prestadores, con un botón para vincularlos | V6 | WIP + propuesta | El filtro "Sin Mercado Pago" ya está en la rama frenada. El botón: igual que C41 ("Avisarle"). **Propuesta (31/10):** el mismo botón "Avisarle". |
@@ -94,13 +94,13 @@ plata → **V1**, apenas esté D30 → **V3** → **V4** → **V2** → **V5** �
 - **C01 · dominio propio**: D11 (migrar o no los usuarios del Laravel) y D12 (cuándo reemplazar tutiempo.com.ar), las dos abiertas.
 - **C07–C09, C12, C45 · comisión de Mercado Pago al cliente**: **D30 tomada (31/10) y programada en V1**, reemplaza D02 (la
   comisión de TuTiempo es un % de la seña). Queda por decidir las devoluciones si Mercado Pago no reintegra su comisión.
-- **C23 · turnos según la duración del servicio**: hace falta definir la regla (D31).
+- **C23 · turnos según la duración del servicio**: D31 tomada (1/11) y programada en V3.
 - **C28 · sacar el pedido de reseña**: choca con D25, donde la reseña es uno de los avisos automáticos por email, en la app y por push (D27).
 - **C29 · eliminar la tarjeta de sellos**: choca con D04 (fidelidad con sellos), D05 y D22. Propuesta: ocultarla con una
   opción del admin, sin borrar datos; definir qué pasa con los sellos y premios pendientes.
 - **C03 contra C13**: si el prestador no tiene pantalla principal, el logo no puede llevarlo "al inicio general".
 - **C13 y C14 · roles**: no hay decisión sobre si una misma cuenta puede ser cliente y prestador.
-- **C39 · descanso entre turnos**: no está en docs/01, pero cambia turnos que ya están configurados.
+- **C39 · descanso entre turnos**: decidido con D31 (se saca del todo), programado en V3.
 - **C06 · aviso de seguidor nuevo**: un aviso nuevo para el prestador. Entra en D27 (contenido mínimo), pero hay que elegir los canales.
 - **D29 · tomada (31/10)**: un pago que llega cuando la hora del turno ya pasó se devuelve (`booking_past`).
 
@@ -134,10 +134,8 @@ servicio. Así no quedan huecos más chicos que el servicio entre un turno y otr
 - **Turnos que se repiten (D15):** usan la misma regla en cada fecha.
 - **Happy hour:** sigue por franja horaria.
 
-**Para decidir:**
-- ¿La regla vale para todos los prestadores o es una opción ("Horarios según la duración del servicio") y el resto
-  sigue con el paso de hoy?
-- ¿El descanso entre turnos (C39) se saca del todo?
+**Decidido (1/11, D31):** la regla vale para todos los prestadores (no es una opción) y el descanso entre turnos (C39)
+se saca del todo. Programado en V3.
 
 ## D30 · Comisión de TuTiempo y de Mercado Pago (bloque V1): propuesta
 

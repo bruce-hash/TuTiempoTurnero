@@ -99,7 +99,7 @@ begin
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
-      values (pid, true, 60, 10, false, 20, '{1,2,3,4}', '09:00', '12:00');
+      values (pid, true, 60, 0, false, 20, '{1,2,3,4}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
     insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
     insert into public.provider_categories (provider_id, category_id) values (pid, 'p') on conflict do nothing;
@@ -116,7 +116,7 @@ begin
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
-      values (pid, true, 60, 10, false, 20, '{1,2,3,4}', '09:00', '12:00');
+      values (pid, true, 60, 0, false, 20, '{1,2,3,4}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
     insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
     insert into public.provider_categories (provider_id, category_id) values (pid, 'p') on conflict do nothing;
@@ -133,7 +133,7 @@ begin
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, '2284 000456');
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
-      values (pid, true, 60, 10, true, 15, '{2,3}', '09:00', '12:00');
+      values (pid, true, 60, 0, true, 15, '{2,3}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
     insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
     insert into public.provider_categories (provider_id, category_id) values (pid, 'l') on conflict do nothing;
@@ -162,7 +162,7 @@ begin
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
-      values (pid, true, 60, 15, false, 20, '{1,2,3,4}', '09:00', '12:00');
+      values (pid, true, 60, 0, false, 20, '{1,2,3,4}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
     insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
     insert into public.provider_categories (provider_id, category_id) values (pid, 'm') on conflict do nothing;
@@ -186,7 +186,7 @@ begin
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
-      values (pid, true, 60, 15, false, 20, '{1,2,3,4}', '09:00', '12:00');
+      values (pid, true, 60, 0, false, 20, '{1,2,3,4}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
     insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
     insert into public.provider_categories (provider_id, category_id) values (pid, 'm') on conflict do nothing;
@@ -205,7 +205,7 @@ begin
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
-      values (pid, true, 60, 10, false, 20, '{1,2,3,4}', '09:00', '12:00');
+      values (pid, true, 60, 0, false, 20, '{1,2,3,4}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
     insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
     insert into public.provider_categories (provider_id, category_id) values (pid, 'l') on conflict do nothing;
@@ -224,7 +224,7 @@ begin
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
-      values (pid, true, 60, 10, false, 20, '{1,2,3,4}', '09:00', '12:00');
+      values (pid, true, 60, 0, false, 20, '{1,2,3,4}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
     insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
     insert into public.provider_categories (provider_id, category_id) values (pid, 'u') on conflict do nothing;
@@ -245,7 +245,7 @@ begin
   if pid is not null then
     insert into public.provider_private (provider_id, phone) values (pid, null);
     insert into public.provider_settings (provider_id, online, notice_min, buffer_min, happy_on, happy_pct, happy_days, happy_from, happy_to)
-      values (pid, true, 60, 5, false, 20, '{1,2,3,4}', '09:00', '12:00');
+      values (pid, true, 60, 0, false, 20, '{1,2,3,4}', '09:00', '12:00');
     for d in 1 .. 5 loop insert into public.provider_hours values (pid, d, 1, '09:00', '12:00'), (pid, d, 2, '15:00', '21:00'); end loop;
     insert into public.provider_hours values (pid, 6, 1, '09:00', '13:00');
     insert into public.provider_categories (provider_id, category_id) values (pid, 'd') on conflict do nothing;

@@ -168,7 +168,8 @@ export function vBAgendaT() {
    <p class="note">Tocá un turno para ver el detalle. En los huecos libres, “Ofrecer” avisa a tus ${store.COMM.followers} seguidores.</p></div>
   ${selected ? detailCard(selected) : ""}
   ${S.manOpen ? vManualForm(day) : S.blockOpen ? vBlockForm(day) : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-pri" data-act="manOpen">+ Agendar turno</button><button class="btn btn-ghost" data-act="blockOpen">⛔ Bloquear horario</button></div>'}
-  <button class="btn btn-ghost btn-block" data-act="walkFromAgenda">+ Cargar servicio sin turno</button>`;
+`;
+  // C21 (V3): "Cargar servicio sin turno" salió de la Agenda: queda en Finanzas → Caja del día
 }
 // detalle de lo elegido en la agenda: cliente, historial, ficha, montos y acciones
 function detailCard(item) {

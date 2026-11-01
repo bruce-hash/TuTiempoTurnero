@@ -109,9 +109,12 @@ ok("reserva crea hold: seña 50% + comisión 20% de la seña aparte ($6.000 + $1
 ok("en la base: seña completa del prestador y comisión aparte", q("select deposit, client_fee from bookings where id=%s", (r[0][0]["booking_ids"][0],))[0] == (6000, 1200))
 b1 = r[0][0]["booking_ids"][0]
 r2 = q("select book_slot(%s, %s)", (svc_u, start), uid=cli2)
-ok("otro cliente no puede tomar el mismo horario", err(r2, "slot_taken"))
+# D31: un horario que se pisa con otro turno ya no está en la secuencia del día (slot_not_available); si se lo ganan
+# entre la consulta y el insert, la base lo frena igual (slot_taken)
+taken = lambda x: err(x, "slot_taken") or err(x, "slot_not_available")
+ok("otro cliente no puede tomar el mismo horario", taken(r2))
 r3 = q("select book_slot(%s, %s)", (svc_l, start - dt.timedelta(minutes=30)), uid=cli2)
-ok("superposición parcial con otro servicio también bloqueada", err(r3, "slot_taken"))
+ok("superposición parcial con otro servicio también bloqueada", taken(r3))
 ok("horario fuera de jornada rechazado", err(q("select book_slot(%s, %s)", (svc_u, dt.datetime.combine(d1, dt.time(13, 0), tz)), uid=cli2), "slot_not_available"))
 ok("horario desalineado rechazado", err(q("select book_slot(%s, %s)", (svc_u, dt.datetime.combine(d1, dt.time(15, 10), tz)), uid=cli2), "slot_not_available"))
 ok("el cliente ve su turno", q("select count(*) from bookings where id=%s", (b1,), uid=cli1)[0][0] == 1)
@@ -237,7 +240,8 @@ ok("no puede seguir en nombre de otro", err(q("insert into follows (user_id, pro
 # ---- funciones por rubro: adicionales, preguntas previas, descanso ----
 pid3 = q("select register_provider('Uñas Test','Hornos 1', array['u'], '2284 777', '31222333')", uid=mkuser("nails@test.ar","Nails"))
 nails_owner = q("select owner_id from providers where id=%s", (pid3[0][0],))[0][0]; pid3 = pid3[0][0]
-q("update providers set status='active' where id=%s", (pid3,)); conectar_mp(pid3); q("update provider_settings set online=true, notice_min=0, buffer_min=15 where provider_id=%s", (pid3,))
+q("update providers set status='active' where id=%s", (pid3,)); conectar_mp(pid3); q("update provider_settings set online=true, notice_min=0 where provider_id=%s", (pid3,))
+ok("C39: el descanso entre turnos ya no se puede poner", err(q("update provider_settings set buffer_min=15 where provider_id=%s", (pid3,)), "provider_settings_sin_descanso"))
 sv = q("insert into services (provider_id, category_id, name, duration_min, price, repeat_days, prep_note) values (%s,'u','Semipermanente',60,12000,21,'Venir sin esmalte') returning id", (pid3,), uid=nails_owner)
 ok("servicio con retoque e indicaciones", not err(sv)); sv = sv[0][0]
 ad = q("insert into service_addons (service_id, name, price, duration_min) values (%s,'Retiro de semi',2000,15) returning id, provider_id", (sv,), uid=nails_owner)
@@ -254,14 +258,12 @@ ok("reserva con adicional", not err(r)); bid3 = r[0][0]["booking_ids"][0]
 row = q("select price, extract(epoch from ends_at-starts_at)/60, intake, addons, buffer_min from bookings where id=%s", (bid3,))[0]
 ok("precio y duración del adicional los calcula la base", row[0] == 14000 and int(row[1]) == 75)
 ok("preguntas previas saneadas (sin claves raras ni textos largos)", set(row[2].keys()) == {"forma", "nota_larga"} and len(row[2]["nota_larga"]) == 200)
-ok("adicional guardado con su precio", row[3][0]["price"] == 2000 and row[4] == 15)
+ok("adicional guardado con su precio (C39: sin descanso)", row[3][0]["price"] == 2000 and row[4] == 0)
 ok("turno base de 60 min a las 15", not err(q("select book_slot(%s, %s, 0, 0, 'mp')", (sv, dt.datetime.combine(d3, dt.time(15, 0), tz)), uid=c3)))
 r = q("select book_slot(%s, %s)", (sv, dt.datetime.combine(d3, dt.time(16, 0), tz)), uid=cli2)
-ok("el descanso de 15 min bloquea el turno pegado", err(r, "slot_taken"))
-r = q("select book_slot(%s, %s)", (sv, dt.datetime.combine(d3, dt.time(16, 30), tz)), uid=cli2)
-ok("después del descanso sí se puede", not err(r))
+ok("C39: sin descanso, el turno pegado sí se puede (16:00)", not err(r))
 bz = q("select * from provider_busy(%s,%s,%s)", (pid3, d3, d3), role="anon")
-ok("ocupados públicos incluyen el descanso", any(int((b[1]-b[0]).total_seconds()//60) == 90 for b in bz))
+ok("C39: los ocupados públicos ya no suman descanso", bz and all(int((b[1]-b[0]).total_seconds()//60) in (60, 75) for b in bz))
 ok("mis turnos trae indicaciones y retoque", (lambda m: m and m[-1]["prep_note"] == "Venir sin esmalte" and m[-1]["repeat_days"] == 21)(q("select my_bookings()", uid=c3)[0][0]))
 # horario libre garantizado: el primer día hábil después de d3 (d3 ya tiene turnos de esta prestadora) a las 19:00,
 # hora que ninguna otra prueba usa con ella. Antes era next_weekday(3) a las 15:00, que de jueves a sábado cae en d3 (H09).
@@ -581,7 +583,7 @@ ok("mis turnos lo muestra cancelado por el profesional", any(x["id"] == b29 and 
 bz29 = q("select * from provider_busy(%s,%s,%s)", (pid3, d29, d29), role="anon")
 ok("ese día figura bloqueado para los clientes (Cerrado)", len(bz29) == 1 and bz29[0][2] is True)
 ok("el motivo se guarda limpio", q("select service_name from bookings where provider_id=%s and source='block' and service_name like '🏖️%%' limit 1", (pid3,))[0][0] == "🏖️ Vacaciones b")
-ok("nadie puede reservar ese día", err(q("select book_slot(%s, %s)", (sv, dt.datetime.combine(d29, dt.time(15, 0), tz)), uid=cli2), "slot_taken"))
+ok("nadie puede reservar ese día", taken(q("select book_slot(%s, %s)", (sv, dt.datetime.combine(d29, dt.time(15, 0), tz)), uid=cli2)))
 ok("bloquear otra vez no duplica", q("select block_days(%s, %s, 'x')", (d29, d29), uid=nails_owner)[0][0]["blocked"] == 0)
 # cierres de caja
 ok("el prestador cierra la caja del día", not err(q("insert into cash_closings (provider_id, kind, period, income, cash, mp, counted) values (%s,'day',(now() at time zone 'America/Argentina/Buenos_Aires')::date,50000,30000,20000,30500)", (pid3,), uid=nails_owner)))
@@ -748,10 +750,10 @@ ok("H24: …y no cambia la guardada", q("select site_url from app_settings")[0][
 ok("H24: la tabla tampoco acepta una dirección inválida (escrita sin la función)", err(q("update app_settings set site_url = 'https://tutiempo.com.ar/'")))
 ok("H24: el admin la guarda (en minúsculas y sin espacios)", q("select admin_set_site_url(' https://Prueba.TuTiempo.com.ar ')", uid=adm)[0][0] == "https://prueba.tutiempo.com.ar")
 bl = q("select id from bookings where provider_id = %s and source = 'app' and client_id is not null order by id limit 1", (pid,))[0][0]
-q("delete from client_messages where kind = 'r24' and ref = %s", (str(bl),))
-q("select notify_booking(%s, 'r24')", (bl,))
+q("delete from client_messages where kind = 'r2' and ref = %s", (str(bl),))
+q("select notify_booking(%s, 'r2')", (bl,))   # C24: el de 24 h ya no lleva link; el de 2 h sí
 sl = q("select slug from providers where id = %s", (pid,))[0][0]
-ok("H24: el link del aviso usa la dirección del sitio", f"https://prueba.tutiempo.com.ar/{sl}" in q("select body from client_messages where kind = 'r24' and ref = %s", (str(bl),))[0][0])
+ok("H24: el link del aviso usa la dirección del sitio", f"https://prueba.tutiempo.com.ar/{sl}" in q("select body from client_messages where kind = 'r2' and ref = %s", (str(bl),))[0][0])
 ok("H24: un slug reservado lleva a /p/<id>", q("select provider_link(%s, 'panel')", (pid,))[0][0] == f"https://prueba.tutiempo.com.ar/p/{pid}")
 ok("H24: provider_link es interna", err(q("select provider_link(1, 'x')", role="anon")))
 q("select admin_set_site_url('https://tutiempo.com.ar')", uid=adm)
@@ -777,6 +779,38 @@ REALES = ["Hidro", "Kevin Ortiz", "la fama", "Niko_barberr", "Mary Garcia", "Car
           "Antártida Argentina 4762", "Rivadavia 2684", "Islas Malvinas 3974", "Colon 3794", "Belgrano 2683"]
 ok("el seed no tiene nombres, direcciones ni teléfonos de negocios reales", not [r for r in REALES if r.lower() in SEED.lower()])
 ok("…ni teléfonos que puedan existir (después de 2284 va un 0)", all(t.startswith("0") for t in re.findall(r"'2284 ?(\d+)'", SEED)))
+
+# ---------- V3 · D31 (C23): los horarios se suceden cada "duración del servicio" desde la apertura ----------
+own31 = mkuser("duracion@test.ar", "Duración")
+p31 = q("select register_provider('Duración Test','Calle 31', array['b'], '2284 3131', null)", uid=own31)[0][0]
+q("update providers set status='active' where id=%s", (p31,)); conectar_mp(p31)
+q("update provider_settings set online=true, notice_min=0, step_min=30 where provider_id=%s", (p31,))
+q("delete from provider_hours where provider_id=%s", (p31,))
+q("insert into provider_hours select %s, g, 1, '09:00', '13:00' from generate_series(0, 6) g", (p31,))
+s45 = q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Corte 45',45,10000) returning id", (p31,), uid=own31)[0][0]
+s30 = q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Barba 30',30,6000) returning id", (p31,), uid=own31)[0][0]
+d31 = next_weekday(6); c31 = mkuser("cli31@test.ar", "Cliente 31")
+q("insert into bookings (provider_id, service_id, client_name, source, status, starts_at, ends_at, price) values (%s,%s,'Tomado','manual','confirmed',%s,%s,0)",
+  (p31, s30, dt.datetime.combine(d31, dt.time(10, 30), tz), dt.datetime.combine(d31, dt.time(11, 0), tz)))
+hhmm = lambda dur: [t.strftime("%H:%M") for (t,) in q("select s from slot_starts(%s, %s, %s) s order by s", (p31, d31, dur))]
+ok("D31: 9 a 13 con un turno de 10:30 a 11:00 → servicio de 45 min: 9:00, 9:45 · 11:00, 11:45 (como el ejemplo de docs/06)", hhmm(45) == ["09:00", "09:45", "11:00", "11:45"])
+ok("D31: …servicio de 30 min: 9:00, 9:30, 10:00 · 11:00, 11:30, 12:00, 12:30", hhmm(30) == ["09:00", "09:30", "10:00", "11:00", "11:30", "12:00", "12:30"])
+q("update provider_settings set step_min=60 where provider_id=%s", (p31,))
+ok("D31: el paso de antes ya no cambia los horarios de la reserva online", hhmm(45) == ["09:00", "09:45", "11:00", "11:45"])
+r31 = q("select book_slot(%s, %s)", (s45, dt.datetime.combine(d31, dt.time(9, 30), tz)), uid=c31)
+ok("D31: un horario fuera de la secuencia se rechaza (45 min a las 9:30)", err(r31, "slot_not_available"))
+r31 = q("select book_slot(%s, %s)", (s45, dt.datetime.combine(d31, dt.time(9, 45), tz)), uid=c31)
+ok("D31: uno de la secuencia se reserva (45 min a las 9:45)", not err(r31) and r31[0][0]["status"] == "pending_payment")
+ok("D31: con servicios mezclados se calcula contra todos los turnos del día: el de 30 min queda 9:00 · 11:00, 11:30, 12:00, 12:30",
+   hhmm(30) == ["09:00", "11:00", "11:30", "12:00", "12:30"])
+ok("D31: el turno que se reprograma no cuenta contra sí mismo", "09:45" in [t.strftime("%H:%M") for (t,) in q("select s from slot_starts(%s, %s, 45, %s) s", (p31, d31, r31[0][0]["booking_ids"][0]))])
+ok("D31: la app no puede llamar slot_starts directo (solo las funciones del servidor)", err(q("select * from slot_starts(%s, %s, 45)", (p31, d31), role="anon")))
+nf = q("select next_free_slot(%s, 45)", (p31,), role="anon")[0][0]
+ok("D31: el próximo horario del listado sale de la misma secuencia", nf is not None and (nf.astimezone(tz).hour, nf.astimezone(tz).minute) in [(9, 0), (9, 45), (10, 30), (11, 15), (12, 0), (11, 0), (11, 45)])
+ok("C39: ningún prestador tiene descanso entre turnos", q("select count(*) from provider_settings where buffer_min <> 0")[0][0] == 0)
+ok("C24: el recordatorio de 24 h de fábrica ya no dice '¿Venís? Confirmá acá'",
+   q("select body from message_templates where provider_id=%s and key='r24'", (p31,))[0][0] == "{nombre}, te recordamos tu turno mañana a las {hora} en {barberia}. Te esperamos en {direccion}."
+   and q("select count(*) from message_templates where key='r24' and body like '%%Confirmá acá%%'")[0][0] == 0)
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

@@ -112,6 +112,13 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
     await pv.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await pv.waitForFunction(() => document.querySelector("#app")?.innerText.includes("$13.500"), null, { timeout: 8000 }).catch(() => {});
     ok("C52: el perfil abierto muestra el precio nuevo al volver a la pestaña (sin recargar)", antes && (await pv.locator("#app").innerText()).includes("$13.500"));
+    // D31 (V3): la app muestra los mismos horarios que la base acepta (slot_starts), contando el turno de Ana
+    const d31 = (await q("select to_char(starts_at at time zone 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD') d from bookings where client_id = (select id from auth.users where email='ana@test.ar') order by id desc limit 1"))[0].d;
+    const hoy31 = (await q("select to_char(now() at time zone 'America/Argentina/Buenos_Aires' + interval '61 minutes', 'YYYY-MM-DD HH24:MI') h"))[0].h;
+    const desde31 = d31 === hoy31.slice(0, 10) ? hoy31.slice(11) : "00:00";
+    const srv31 = (await q("select to_char(s, 'HH24:MI') t from slot_starts($1, $2::date, 60) s order by s", [sid, d31])).map((r) => r.t).filter((t) => t >= desde31);
+    const cli31 = (await pv.evaluate(([pid, d]) => slotsFor(pid, d, 60, null, true).list.filter((x) => x.free).map((x) => x.time), [sid, d31])).filter((t) => t >= desde31);
+    ok("D31: la app y la base calculan los mismos horarios (servicio de 60 min, el día del turno de Ana)", srv31.length > 0 && JSON.stringify(srv31) === JSON.stringify(cli31), JSON.stringify([srv31, cli31]));
     await db.query("update services set price = 12000 where name = 'Esmaltado semipermanente'");
     await pv.close();
   }
@@ -192,7 +199,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const bk = await q("select status, deposit, paid_mp, cashback from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
   ok("en la base: confirmado, seña 50% y sin cashback", bk.length === 1 && bk[0].status === "confirmed" && bk[0].deposit === 6000 && bk[0].paid_mp === 6000 && bk[0].cashback === 0);
   const bx = await q("select price, addons, intake, buffer_min, extract(epoch from busy_until - ends_at)::int gap, extract(epoch from ends_at - starts_at)::int dur from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
-  ok("en la base: precio del servicio y descanso de 10 min", bx[0].price === 12000 && bx[0].addons.length === 0 && bx[0].buffer_min === 10 && bx[0].gap === 600 && bx[0].dur === 60 * 60);
+  ok("en la base: precio del servicio y sin descanso (C39)", bx[0].price === 12000 && bx[0].addons.length === 0 && bx[0].buffer_min === 0 && bx[0].gap === 0 && bx[0].dur === 60 * 60);
   ok("sin saldo TuTiempo", (await q("select balance from wallets w join auth.users u on u.id=w.user_id where u.email='ana@test.ar'"))[0].balance === 0);
   // Bloque D: menú de cuenta con teclado y con el mouse
   await pg.focus("nav .acct-btn"); await pg.keyboard.press("Enter"); await wait(150);
@@ -308,8 +315,12 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("nuevo rubro y servicio en la base", (await q("select count(*)::int c from provider_categories pc join providers p on p.id=pc.provider_id where p.name like 'Sofía%' and pc.category_id='m'"))[0].c === 1
     && (await q("select count(*)::int c from services where name='Masaje relajante'"))[0].c === 1);
   // horarios
-  await pg.click("[data-btab=horarios]"); await pg.selectOption("#hst", "20"); await pg.click("#fHorarios button[type=submit]"); await wait(800);
-  ok("horarios guardados", (await q("select step_min from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].step_min === 20);
+  await pg.click("[data-btab=horarios]"); await wait(300);
+  ok("C39/D31: Horarios sin 'Descanso entre turnos' ni 'Cada cuánto empieza un turno', con la regla explicada",
+     (await pg.locator("#hbuf, #hst").count()) === 0 && /se suceden según lo que dura el servicio/.test(await pg.locator("#fHorarios").innerText()));
+  await pg.selectOption("#hno", "120"); await pg.click("#fHorarios button[type=submit]"); await wait(800);
+  ok("horarios guardados", (await q("select notice_min, buffer_min from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].notice_min === 120);
+  await db.query("update provider_settings set notice_min = 0 where provider_id = (select id from providers where name like 'Sofía%')");
   // bloquear una semana (vacaciones)
   const wk0 = await pg.evaluate(() => dkey(addDays(20)));
   await pg.fill("#dbf", wk0); await pg.click("[data-act=dbQuick][data-d='6']"); await wait(200); await pg.click("#fDayBlock button[type=submit]"); await wait(1500);
