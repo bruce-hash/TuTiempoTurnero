@@ -397,9 +397,9 @@ ya pasó se devuelve (`booking_past`). Los pagos del 30/10 los devolvió Bruno a
 encuentra como devueltos, deja el rastro y cierra el cobro sin registrar nada.
 
 
-### H36 · Baja · Finanzas del prestador descuenta una comisión que no le cobra (pendiente, V4)
+### H36 · Baja · Finanzas del prestador descuenta una comisión que no le cobra (resuelto en V4)
 `provider_finance` (Finanzas → ingresos "por la app") calcula `precio × (1 − comisión)` para los turnos de la app. Desde la
 versión 30 la comisión la paga el cliente aparte de la seña, y desde V1 (D30) es un % de la seña: el prestador recibe el
 precio completo (seña por Mercado Pago + resto en el local). El número que ve es un poco menor que lo que cobró. Arreglo
-propuesto (con V4, Finanzas): `precio − greatest(app_fee − client_fee, 0)` (solo los turnos viejos, de antes de la versión
-30, tenían la comisión adentro de la seña). No toca cobros ni devoluciones.
+aplicado en V4 (`20261102120000_finanzas_v4.sql`): `precio − greatest(app_fee − client_fee, 0)` (solo los turnos viejos,
+de antes de la versión 30, tenían la comisión adentro de la seña). No toca cobros ni devoluciones. Lo prueba test_db.py.

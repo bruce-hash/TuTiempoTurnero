@@ -14,6 +14,25 @@ registerClick("stk", (ev, el, act) => {
   api.m.setStock(prod);
   render();
 });
+// C35 (V4): eliminar un producto, con aviso antes; las ventas y compras ya cargadas no se tocan
+registerClick("prodDel", (ev, el, act) => {
+  S.prodDel = +el.dataset.i;
+  S.buyI = null;
+  render();
+});
+registerClick("prodDelNo", (ev, el, act) => {
+  S.prodDel = null;
+  render();
+});
+registerClick("prodDelYes", (ev, el, act) => {
+  const prod = store.PRODS.splice(+el.dataset.i, 1)[0];
+  S.prodDel = null;
+  if (prod) {
+    api.m.delProduct(prod);
+    toast("Eliminaste " + prod.n + ". Las ventas que ya cargaste quedan.");
+  }
+  render();
+});
 registerClick("buyOpen", (ev, el, act) => {
   S.buyI = +el.dataset.i;
   S.prodOpen = false;
@@ -115,7 +134,7 @@ registerSubmit("fProd", (ev) => {
     api.m.addProduct(prod);
   }
   S.prodOpen = false;
-  toast(`Agregaste ${name}. Ya lo podés vender desde la caja.`);
+  toast(`Agregaste ${name}. Ya lo podés vender desde Finanzas → Caja del día.`);
   render();
   return;
 });

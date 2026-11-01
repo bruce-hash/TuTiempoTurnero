@@ -71,7 +71,8 @@ function estatico(dir, reescribir) {
 }
 
 // ---------- Recorridos ----------
-const PESTANAS = ["agenda", "caja", "finanzas", "clientes", "productos", "horarios", "stats", "comunidad", "perfil"];
+// V4 (C34): la pestaña Caja salió (ahora es la Caja del día de Finanzas): no se compara
+const PESTANAS = ["agenda", "finanzas", "clientes", "productos", "horarios", "stats", "comunidad", "perfil"];
 const ADMIN = ["res", "prov", "bal", "com"];
 
 async function pagina(browser, { relojFijo }) {
@@ -147,6 +148,22 @@ async function normalizar(page) {
     document.querySelectorAll("#app #fHorarios button[type=submit], #app #hSaved, #app .hhchip, #app .tl-hh, #app [data-act=qrPrint]").forEach((el) => el.remove());
     document.querySelectorAll("#app [data-act=copiarLink]").forEach((el) => { el.style.marginTop = ""; });
     document.querySelectorAll("#app .tl-top .hint").forEach((el) => { el.textContent = el.textContent.replace(/ · ⚡ Happy hour .*$/, ""); });
+    // V4 (C25, C32, C33, C35, cambios a propósito): la Caja del día suma Transferencia, editar y borrar cada movimiento
+    // y el botón para cargar sin turno; el mes suma su resumen; los meses van con mayúscula y el balance del año en
+    // verde o rojo; Productos suma Eliminar. Se neutraliza en las dos versiones; lo nuevo lo prueban e2e.js y test_db.py.
+    document.querySelectorAll("#app .msum, #app [data-act=movEdit], #app [data-act=movDel], #app [data-act=walkOpen], #app button[data-btab=caja], #app [data-act=prodDel]").forEach((el) => el.remove());
+    document.querySelectorAll("#app .kpi").forEach((el) => { if (/Transferencia/.test(el.textContent)) el.remove(); });
+    // la barra de pestañas del panel pierde "Caja" y se corre: transparente en las dos versiones (sigue tocable)
+    document.querySelectorAll("#app .btabw").forEach((el) => { el.style.opacity = "0"; });
+    document.querySelectorAll("#app .ftbl b.pos, #app .ftbl b.neg").forEach((el) => el.removeAttribute("class"));
+    document.querySelectorAll("#app .pl-acts").forEach((el) => el.replaceWith(...el.childNodes));
+    {
+      const meses = /\b(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre|Ene|Feb|Mar|Abr|May|Jun|Jul|Ago|Sep|Oct|Nov|Dic)\b/g;
+      const walker = document.createTreeWalker(document.getElementById("app"), NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        n.textContent = n.textContent.replace(meses, (m) => m.toLowerCase()).replace("desde Finanzas → Caja del día", "desde la pestaña Caja").replace("o cargás algo acá", "o cargás algo en Caja");
+      }
+    }
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {

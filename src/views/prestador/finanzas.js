@@ -3,8 +3,10 @@ import { liveApi } from "../../api/live/index.js";
 import { LIVE } from "../../config.js";
 import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
-import { MESES, NOW, TODAY, dayLabel, longLabel, nowHM, pad } from "../../lib/fechas.js";
-import { ME } from "../../lib/prestadores.js";
+import { MESES, NOW, TODAY, capW, dayLabel, longLabel, nowHM, pad } from "../../lib/fechas.js";
+import { MEDIOS, medioFromDb, medioIcon } from "../../lib/medios.js";
+import { ME, pr } from "../../lib/prestadores.js";
+import { walkEditForm, walkForm } from "./caja.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
@@ -14,7 +16,10 @@ store.FIN = [];
 store.GASTOS = [];
 store.GID = 1;
 store.CLOSINGS = {};
+store.MBRK = {};
 export const ymk = (date) => date.slice(0, 7);
+// C32 (V4): los meses con mayúscula en Finanzas
+const mes = (index) => capW(MESES[index]);
 // comisión que el cliente pagó en un turno de la app (no es del prestador)
 export const feeOf = (booking) => booking.feeIn || 0;
 export const YEARS = () => {
@@ -32,6 +37,8 @@ export function dayLines(day) {
   store.BOOK.filter((booking) => booking.pid == ME() && booking.date === day && booking.status === "done" && booking.type !== "block")
     .sort((one, other) => one.time.localeCompare(other.time))
     .forEach((booking) => {
+      // C25: cómo se cobró el resto en el local, si el prestador lo anotó (si no, lo que eligió el cliente)
+      const rest = medioFromDb(booking.restMethod);
       if (booking.src === "app") {
         const deposit = (booking.paid || 0) - feeOf(booking);
         if (deposit > 0) {
@@ -41,16 +48,19 @@ export function dayLines(day) {
             s: booking.svc,
             m: deposit,
             medio: "Mercado Pago",
+            b: booking.id,
           });
         }
-        const rest = Math.max(0, (booking.price || 0) - (booking.paid || 0));
-        if (rest > 0) {
+        const left = Math.max(0, (booking.price || 0) - (booking.paid || 0));
+        if (left > 0) {
           lines.push({
             h: booking.time,
             t: "Resto · " + booking.cliente,
             s: booking.svc,
-            m: rest,
-            medio: booking.pay === "cash" ? "Efectivo" : "Mercado Pago",
+            m: left,
+            medio: rest || (booking.pay === "cash" ? "Efectivo" : "Mercado Pago"),
+            b: booking.id,
+            rest: true,
           });
         }
       } else {
@@ -59,18 +69,21 @@ export function dayLines(day) {
           t: booking.cliente || "Cliente",
           s: booking.svc,
           m: booking.price || 0,
-          medio: "Efectivo",
+          medio: rest || "Efectivo",
+          b: booking.id,
+          rest: true,
         });
       }
     });
   if (day === TODAY()) {
-    S.walk.forEach((walk) =>
+    S.walk.forEach((walk, index) =>
       lines.push({
         h: walk.hora,
         t: walk.kind === "prod" ? walk.svc : walk.cliente || "Sin turno",
         s: walk.kind === "prod" ? "Venta de producto" : walk.svc,
         m: walk.precio + (walk.propina || 0),
         medio: walk.medio,
+        w: index,
       }),
     );
   }
@@ -156,29 +169,95 @@ export function monthTotals(year, month) {
   }
   return demoMonthTotals(year, month, expenses.length ? expTotal : null);
 }
+// C33 (V4): el mes separado por origen (ingresos) y por tipo (gastos). El mes en curso se calcula acá; en vivo, los
+// anteriores los trae la base (provider_month_breakdown, una vez por año); en la demo, solo los totales.
+export function monthBreakdown(year, month) {
+  const ym = year + "-" + pad(month + 1);
+  const nowYm = ymk(TODAY());
+  const expenses = store.GASTOS.filter((exp) => exp.d.slice(0, 7) === ym);
+  const fromGastos = expenses.length
+    ? { fixed: expenses.filter((exp) => exp.cat !== "Productos").reduce((sum, exp) => sum + exp.m, 0), buys: expenses.filter((exp) => exp.cat === "Productos").reduce((sum, exp) => sum + exp.m, 0) }
+    : null;
+  if (ym === nowYm) {
+    const days = [...store.FIN.filter((day) => ymk(day.date) === ym && day.date < TODAY()), todayFin()];
+    const sum = (key) => days.reduce((acc, day) => acc + (day[key] || 0), 0);
+    return { app: sum("app"), man: sum("man"), walk: sum("walk"), prod: sum("prod"), fixed: fromGastos ? fromGastos.fixed : 0, buys: fromGastos ? fromGastos.buys : 0 };
+  }
+  if (!LIVE) {
+    return null;
+  }
+  if (!store.MBRK[year]) {
+    store.MBRK[year] = "loading";
+    liveApi
+      .monthBreakdown(year)
+      .then(render)
+      .catch(() => {
+        store.MBRK[year] = null;
+      });
+  }
+  const row = Array.isArray(store.MBRK[year]) ? store.MBRK[year][month] : null;
+  return row ? Object.assign({}, row, fromGastos || {}) : null;
+}
+function monthSummary(year, month, totals) {
+  const br = monthBreakdown(year, month);
+  const ing = br ? [["Turnos por TuTiempo", br.app], ["Turnos agendados", br.man], ["Sin turno", br.walk], ["Productos", br.prod]] : [["Ingresos", totals.ing]];
+  const gas = br ? [["Gastos fijos", br.fixed], ["Compras de productos", br.buys]] : [["Gastos", totals.gas]];
+  const max = Math.max(1, ...ing.map((row) => row[1]), ...gas.map((row) => row[1]));
+  const bar = (label, value, kind) =>
+    `<div class="mrow"><span>${esc(label)}</span><i class="mbar ${kind}" style="width:${Math.round((value / max) * 100)}%"></i><b>${money(value)}</b></div>`;
+  const balance = totals.ing - totals.gas;
+  return `<div class="panel msum"><p class="lbl">Resumen de ${mes(month)}</p>
+   <p class="mhead">Ingresos · ${money(totals.ing)}</p>${ing.map(([label, value]) => bar(label, value, "in")).join("")}
+   <p class="mhead">Gastos · ${money(totals.gas)}</p>${gas.map(([label, value]) => bar(label, value, "out")).join("")}
+   <p class="mbal ${balance >= 0 ? "pos" : "neg"}">Balance: ${money(balance)}</p></div>`;
+}
 // pestaña Finanzas: caja del día, mes o año
 export function vBFinanzas() {
   const period = ["dia", "mes", "anio"].includes(S.fp) ? S.fp : "dia";
   return `<div class="seg3" role="group" aria-label="Período"><button data-fp="dia" aria-pressed="${period === "dia"}">Caja del día</button><button data-fp="mes" aria-pressed="${period === "mes"}">Mes</button><button data-fp="anio" aria-pressed="${period === "anio"}">Año</button></div>${period === "mes" ? vFinMes() : period === "anio" ? vFinAnio() : vCajaDia()}`;
 }
+// C34 (V4): la Caja del día, con lo que se carga en el local (antes era la pestaña Caja). C25: cada movimiento se edita
+// y se borra (los de un turno: el medio con que se cobró el resto; la seña entra siempre por Mercado Pago).
+function movLine(line) {
+  const key = line.w != null ? "w" + line.w : line.rest ? "b" + line.b : null;
+  const editing = key && S.movEd === key;
+  const deleting = key && S.movDel === key;
+  const actions =
+    line.w != null
+      ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Editar">✎</button><button class="xbtn" data-act="movDel" data-k="${key}" aria-label="Borrar">✕</button>`
+      : line.rest
+        ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Cambiar el medio de pago">✎</button>`
+        : "";
+  const head = `<li class="${editing || deleting ? "on" : ""}"><span class="ag-t">${esc(line.h || "")}</span><div><b>${medioIcon(line.medio)} ${esc(line.t)}</b><span>${esc(line.s || "")} · ${esc(line.medio)}</span></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(line.m)}</b>${actions}</span></li>`;
+  if (deleting) {
+    return `${head}<li class="movask"><div><b>¿Borrar ${esc(line.t)} de las ${esc(line.h)}?</b><span>${S.walk[line.w] && S.walk[line.w].kind === "prod" ? "La unidad vuelve al stock." : "Sale de la caja y de tus finanzas."}</span></div><span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="movDelNo">No</button><button class="btn btn-pri btn-sm" data-act="movDelYes" data-k="${key}">Sí, borrar</button></span></li>`;
+  }
+  if (editing && line.w != null) {
+    return `${head}<li class="movform">${walkEditForm(S.walk[line.w])}</li>`;
+  }
+  if (editing) {
+    return `${head}<li class="movask"><div><b>¿Cómo te pagó el resto?</b><span>Un turno atendido queda en la caja; acá cambiás con qué te pagó el resto.</span></div><span class="medios">${MEDIOS.map((medio) => `<button class="btn btn-sm ${line.medio === medio ? "btn-pri" : "btn-ghost"}" data-act="restMedio" data-id="${line.b}" data-m="${medio}" aria-pressed="${line.medio === medio}">${medio}</button>`).join("")}<button class="btn btn-ghost btn-sm" data-act="movEdClose">Listo</button></span></li>`;
+  }
+  return head;
+}
 function vCajaDia() {
   const today = TODAY();
   const lines = dayLines(today);
   const total = lines.reduce((sum, line) => sum + line.m, 0);
-  const cash = lines.filter((line) => line.medio === "Efectivo").reduce((sum, line) => sum + line.m, 0);
-  const mp = total - cash;
+  const byMedio = (medio) => lines.filter((line) => line.medio === medio).reduce((sum, line) => sum + line.m, 0);
+  const cash = byMedio("Efectivo");
   const closing = store.CLOSINGS["day|" + today];
   const diff = closing && closing.counted != null ? closing.counted - closing.cash : null;
   const open = store.FIN.filter(
     (day) => ymk(day.date) === ymk(today) && day.date < today && finTot(day) > 0 && !store.CLOSINGS["day|" + day.date],
   );
-  return `<div class="kpis"><div class="kpi big"><span>${esc(longLabel(today))}</span><b>${money(total)}</b><small>Lo que entró hoy (las señas te llegan completas)</small></div><div class="kpi"><span>💵 Efectivo</span><b>${money(cash)}</b></div><div class="kpi"><span>📱 Mercado Pago</span><b>${money(mp)}</b></div></div>
-  <div class="panel"><p class="lbl">Movimientos de hoy · ${lines.length}</p>${lines.length ? `<ul class="ag">${lines.map((line) => `<li><span class="ag-t">${esc(line.h || "")}</span><div><b>${line.medio === "Efectivo" ? "💵" : "📱"} ${esc(line.t)}</b><span>${esc(line.s || "")} · ${esc(line.medio)}</span></div><b class="price" style="font-size:15px">${money(line.m)}</b></li>`).join("")}</ul>` : '<p class="note">Todavía no entró nada hoy. Se suma solo cuando marcás “Asistió” en la agenda o cargás algo en Caja.</p>'}
-   <button class="btn btn-ghost btn-block" style="margin-top:10px" data-btab="caja">+ Cargar servicio sin turno o venta</button></div>
+  return `<div class="kpis"><div class="kpi big"><span>${esc(longLabel(today))}</span><b>${money(total)}</b><small>Lo que entró hoy (las señas te llegan completas)</small></div>${MEDIOS.map((medio) => `<div class="kpi"><span>${medioIcon(medio)} ${medio}</span><b>${money(byMedio(medio))}</b></div>`).join("")}</div>
+  <div class="panel"><p class="lbl">Movimientos de hoy · ${lines.length}</p>${lines.length ? `<ul class="ag movs">${lines.map(movLine).join("")}</ul>` : '<p class="note">Todavía no entró nada hoy. Se suma solo cuando marcás “Asistió” en la agenda o cargás algo acá.</p>'}
+   ${walkForm(pr(ME()))}</div>
   ${
     closing
-      ? `<div class="panel cclosed"><b>✓ Caja de hoy cerrada a las ${esc(closing.at || "")}</b><p class="note" style="text-align:left;margin:4px 0 0">Total ${money(closing.income)} · efectivo ${money(closing.cash)} · Mercado Pago ${money(closing.mp)}${diff != null ? ` · contaste ${money(closing.counted)} en efectivo: ${diff === 0 ? "justo ✓" : diff > 0 ? "te sobran " + money(diff) : "te faltan " + money(-diff)}` : ""}</p>
-     ${closing.income !== total ? `<p class="alert">Después del cierre entraron ${money(total - closing.income)} más. Volvé a cerrarla para que quede exacta.</p>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="reopenDay">Volver a cerrar la caja</button></div>`
+      ? `<div class="panel cclosed"><b>✓ Caja de hoy cerrada a las ${esc(closing.at || "")}</b><p class="note" style="text-align:left;margin:4px 0 0">Total ${money(closing.income)} · efectivo ${money(closing.cash)} · transferencias y Mercado Pago ${money(closing.mp)}${diff != null ? ` · contaste ${money(closing.counted)} en efectivo: ${diff === 0 ? "justo ✓" : diff > 0 ? "te sobran " + money(diff) : "te faltan " + money(-diff)}` : ""}</p>
+     ${closing.income !== total ? `<p class="alert">Después del cierre cambió la caja (${money(total - closing.income)}). Volvé a cerrarla para que quede exacta.</p>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="reopenDay">Volver a cerrar la caja</button></div>`
       : `<form class="panel" id="fCloseDay" novalidate><p class="lbl">Cerrar la caja de hoy</p>
      <div class="f"><label for="cdCount">Efectivo que contaste en la caja (opcional)</label><input id="cdCount" inputmode="numeric" placeholder="${money(cash)}" autocomplete="off"><span class="hint">Si lo cargás, te decimos si te sobra o te falta plata.</span></div>
      <div class="err" id="cderr"></div><button class="btn btn-pri btn-block" type="submit">Cerrar la caja · ${money(total)}</button></form>`
@@ -211,11 +290,12 @@ function vFinMes() {
   const closedDays = days.filter((day) => store.CLOSINGS["day|" + day.date]).length;
   const activeDays = days.filter((day) => finTot(day) > 0).length;
   const closing = store.CLOSINGS["month|" + ym];
-  return `<div class="wnav"><button class="pk-nav" data-fm="-1" aria-label="Mes anterior">‹</button><div><b style="text-transform:capitalize">${MESES[month - 1]} ${year}</b><span>${ym === current ? "Mes en curso" : closing ? "✓ Mes cerrado" : "Mes terminado"}</span></div><button class="pk-nav" data-fm="1" ${ym >= current ? "disabled" : ""} aria-label="Mes siguiente">›</button></div>
-  <div class="kpis"><div class="kpi big"><span>Balance de ${MESES[month - 1]}</span><b style="color:${balance >= 0 ? "var(--ok)" : "var(--bad)"}">${money(balance)}</b><small>Ingresos − gastos${ym === current ? " (hasta hoy)" : ""}</small></div><div class="kpi"><span>Ingresos</span><b>${money(totals.ing)}</b></div><div class="kpi"><span>Gastos</span><b>${money(totals.gas)}</b></div></div>
+  return `<div class="wnav"><button class="pk-nav" data-fm="-1" aria-label="Mes anterior">‹</button><div><b style="text-transform:capitalize">${mes(month - 1)} ${year}</b><span>${ym === current ? "Mes en curso" : closing ? "✓ Mes cerrado" : "Mes terminado"}</span></div><button class="pk-nav" data-fm="1" ${ym >= current ? "disabled" : ""} aria-label="Mes siguiente">›</button></div>
+  <div class="kpis"><div class="kpi big"><span>Balance de ${mes(month - 1)}</span><b style="color:${balance >= 0 ? "var(--ok)" : "var(--bad)"}">${money(balance)}</b><small>Ingresos − gastos${ym === current ? " (hasta hoy)" : ""}</small></div><div class="kpi"><span>Ingresos</span><b>${money(totals.ing)}</b></div><div class="kpi"><span>Gastos</span><b>${money(totals.gas)}</b></div></div>
+  ${monthSummary(year, month - 1, totals)}
   <div class="panel"><p class="lbl">Gastos del mes</p>
    <p class="note" style="text-align:left;margin:-2px 0 10px">Cargá acá los gastos fijos del mes una sola vez (alquiler, luz, internet…). Las compras de productos se cargan solas desde Productos → “Compré más”.</p>
-   ${fixed.length ? `<ul class="ag">${fixed.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c)}</b></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(exp.m)}</b>${closing ? "" : `<button class="xbtn" data-act="gDel" data-id="${exp.id}" aria-label="Borrar gasto">✕</button>`}</span></li>`).join("")}</ul>` : `<p class="note" style="text-align:left">Todavía no cargaste gastos este mes.</p>${prevFixed.length && !closing ? `<button class="btn btn-ghost btn-block" data-act="copyPrevG">📋 Copiar los ${prevFixed.length} gastos de ${MESES[prev.getMonth()]} (${money(prevFixed.reduce((sum, exp) => sum + exp.m, 0))})</button>` : ""}`}
+   ${fixed.length ? `<ul class="ag">${fixed.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c)}</b></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(exp.m)}</b>${closing ? "" : `<button class="xbtn" data-act="gDel" data-id="${exp.id}" aria-label="Borrar gasto">✕</button>`}</span></li>`).join("")}</ul>` : `<p class="note" style="text-align:left">Todavía no cargaste gastos este mes.</p>${prevFixed.length && !closing ? `<button class="btn btn-ghost btn-block" data-act="copyPrevG">📋 Copiar los ${prevFixed.length} gastos de ${mes(prev.getMonth())} (${money(prevFixed.reduce((sum, exp) => sum + exp.m, 0))})</button>` : ""}`}
    ${prodBuys.length ? `<p class="lbl" style="margin:12px 0 6px">🧴 Compras de productos</p><ul class="ag">${prodBuys.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c.replace(/^Compra: /, ""))}</b><span>Desde Productos</span></div><b class="price" style="font-size:15px">${money(exp.m)}</b></li>`).join("")}</ul>` : ""}
    ${
      closing
@@ -236,7 +316,7 @@ function vFinMes() {
     <p class="note" style="margin-top:6px">Cajas cerradas: ${closedDays} de ${activeDays} días con ingresos.${closedDays < activeDays ? ' <button class="lnk" data-fp="dia">Cerrar las que faltan</button>' : ""}</p></div>`
       : ""
   }
-  ${closing ? `<div class="panel cclosed"><b>✓ ${MESES[month - 1]} cerrado</b><p class="note" style="text-align:left;margin:4px 0 0">Ingresos ${money(closing.income)} · gastos ${money(closing.expenses)} · balance ${money(closing.income - closing.expenses)}</p>${closing.income !== totals.ing || closing.expenses !== totals.gas ? `<p class="alert">Entraron ingresos después del cierre. Actualizá el cierre para que quede exacto.</p><button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="closeMonth" data-m="${ym}">Actualizar el cierre</button>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="unlockMonth" data-m="${ym}">🔓 Desbloquear para editar</button></div>` : `<button class="btn btn-pri btn-block" data-act="closeMonth" data-m="${ym}">Cerrar ${MESES[month - 1]} · balance ${money(balance)}</button>`}`;
+  ${closing ? `<div class="panel cclosed"><b>✓ ${mes(month - 1)} cerrado</b><p class="note" style="text-align:left;margin:4px 0 0">Ingresos ${money(closing.income)} · gastos ${money(closing.expenses)} · balance ${money(closing.income - closing.expenses)}</p>${closing.income !== totals.ing || closing.expenses !== totals.gas ? `<p class="alert">Entraron ingresos después del cierre. Actualizá el cierre para que quede exacto.</p><button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="closeMonth" data-m="${ym}">Actualizar el cierre</button>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="unlockMonth" data-m="${ym}">🔓 Desbloquear para editar</button></div>` : `<button class="btn btn-pri btn-block" data-act="closeMonth" data-m="${ym}">Cerrar ${mes(month - 1)} · balance ${money(balance)}</button>`}`;
 }
 // balance del año, mes por mes
 function vFinAnio() {
@@ -268,9 +348,9 @@ function vFinAnio() {
   <div class="kpis"><div class="kpi big"><span>Balance ${year}${year === nowYear ? " (hasta hoy)" : ""}</span><b style="color:${ing - gas >= 0 ? "var(--ok)" : "var(--bad)"}">${money(ing - gas)}</b><small>Ingresos − gastos</small></div><div class="kpi"><span>Ingresos</span><b>${money(ing)}</b></div><div class="kpi"><span>Gastos</span><b>${money(gas)}</b></div></div>
   ${
     known.length
-      ? `<div class="panel"><p class="lbl">Ingresos por mes</p><div class="bars ybars">${months.map((tot, month) => `<div class="bar-c ${year === nowYear && month === NOW().getMonth() ? "today" : ""}" title="${MESES[month]}: ${tot ? money(tot.ing) : "sin datos"}"><i style="height:${tot ? Math.round((tot.ing / maxIng) * 100) : 0}%"></i><span>${MESES[month].slice(0, 3)}</span></div>`).join("")}</div>
-   ${best ? `<p class="note" style="margin-top:6px">Mejor mes: ${MESES[best.i]} con ${money(best.x.ing)}</p>` : ""}</div>
-  <div class="panel"><p class="lbl">Mes por mes</p><div class="tblwrap"><table class="ftbl"><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Balance</th><th></th></tr></thead><tbody>${months.map((tot, month) => (tot ? `<tr><td><button class="lnk" data-act="goMonth" data-m="${year}-${pad(month + 1)}">${MESES[month].charAt(0).toUpperCase() + MESES[month].slice(1)}</button>${tot.partial ? " *" : ""}</td><td>${money(tot.ing)}</td><td>${money(tot.gas)}</td><td><b>${money(tot.ing - tot.gas)}</b></td><td>${store.CLOSINGS["month|" + year + "-" + pad(month + 1)] ? "✓" : ""}</td></tr>` : "")).join("")}</tbody></table></div>
+      ? `<div class="panel"><p class="lbl">Ingresos por mes</p><div class="bars ybars">${months.map((tot, month) => `<div class="bar-c ${year === nowYear && month === NOW().getMonth() ? "today" : ""}" title="${mes(month)}: ${tot ? money(tot.ing) : "sin datos"}"><i style="height:${tot ? Math.round((tot.ing / maxIng) * 100) : 0}%"></i><span>${mes(month).slice(0, 3)}</span></div>`).join("")}</div>
+   ${best ? `<p class="note" style="margin-top:6px">Mejor mes: ${mes(best.i)} con ${money(best.x.ing)}</p>` : ""}</div>
+  <div class="panel"><p class="lbl">Mes por mes</p><div class="tblwrap"><table class="ftbl"><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Balance</th><th></th></tr></thead><tbody>${months.map((tot, month) => (tot ? `<tr><td><button class="lnk" data-act="goMonth" data-m="${year}-${pad(month + 1)}">${mes(month)}</button>${tot.partial ? " *" : ""}</td><td>${money(tot.ing)}</td><td>${money(tot.gas)}</td><td><b class="${tot.ing - tot.gas >= 0 ? "pos" : "neg"}">${money(tot.ing - tot.gas)}</b></td><td>${store.CLOSINGS["month|" + year + "-" + pad(month + 1)] ? "✓" : ""}</td></tr>` : "")).join("")}</tbody></table></div>
    <p class="note" style="text-align:left;margin-top:6px">${year === nowYear ? "* Mes en curso, hasta hoy. " : ""}✓ = mes cerrado. Tocá un mes para ver el detalle.</p></div>`
       : `<div class="panel" style="text-align:center"><p class="note" style="margin:0">${year > nowYear ? `${year} todavía no empezó: acá vas a ver el balance de cada mes.` : "Sin datos de este año."}</p></div>`
   }`;

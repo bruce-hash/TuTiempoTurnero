@@ -9,7 +9,6 @@ import { store } from "../../store.js";
 import { pushCard } from "../../ui/avisos.js";
 import { render } from "../../ui/render.js";
 import { vBAgendaT } from "./agenda.js";
-import { vCaja } from "./caja.js";
 import { vBClientes } from "./clientes.js";
 import { comm, vBComunidad } from "./comunidad.js";
 import { vBStats } from "./estadisticas.js";
@@ -60,7 +59,6 @@ export function useProvider(pid) {
 }
 export const BTABS = [
   ["agenda", "Agenda"],
-  ["caja", "Caja"],
   ["finanzas", "Finanzas"],
   ["clientes", "Clientes"],
   ["productos", "Productos"],
@@ -75,8 +73,16 @@ export function selectBtab(tab) {
   render();
 }
 export function setBtab(tab) {
+  // C34 (V4): la Caja ahora es "Caja del día" en Finanzas (las direcciones y botones viejos llevan ahí)
+  if (tab === "caja") {
+    tab = "finanzas";
+    S.fp = "dia";
+  }
   S.btab = tab;
   S.delAsk = null;
+  S.movEd = null;
+  S.movDel = null;
+  S.prodDel = null;
   S.cli = null;
   S.buyI = null;
   S.prodOpen = false;
@@ -114,7 +120,6 @@ export function vBarbero() {
   const tabBar = `<div class="btabw"><button class="tabarr" data-act="tabPrev" aria-label="Sección anterior" ${tabIndex === 0 ? "disabled" : ""}>‹</button><div class="btabs" role="tablist">${tabs.map(([id, label]) => `<button role="tab" data-btab="${id}" aria-selected="${S.btab === id}">${label}${id === "agenda" && S.newT ? ' <i class="dotn"></i>' : ""}</button>`).join("")}</div><button class="tabarr" data-act="tabNext" aria-label="Sección siguiente" ${tabIndex >= tabs.length - 1 ? "disabled" : ""}>›</button></div>`;
   const body = (
     {
-      caja: () => vCaja(prov),
       agenda: () => setupSteps(prov, "agenda") + pushCard("prestador") + vBAgendaT(),
       clientes: () => vBClientes(),
       finanzas: () => vBFinanzas(),

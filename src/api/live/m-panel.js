@@ -1,5 +1,6 @@
 import { LM } from "./index.js";
 import { cfgToDb } from "../mapeo.js";
+import { medioToDb } from "../../lib/medios.js";
 import { saved } from "../saved.js";
 import { sb } from "../../config.js";
 import { TODAY, fromMin, localToIso, toMin } from "../../lib/fechas.js";
@@ -93,7 +94,7 @@ Object.assign(LM, {
           description: walk.svc,
           amount: walk.precio,
           tip: walk.propina || 0,
-          method: walk.medio === "Mercado Pago" ? "mp" : "cash",
+          method: medioToDb(walk.medio),
           client_name: walk.cliente || null,
           product_id: walk.pid || null,
         })
@@ -103,6 +104,26 @@ Object.assign(LM, {
       walk.id = row.id;
     }),
   delWalk: (walk) => (walk.id ? saved(sb.from("walkins").delete().eq("id", walk.id)) : Promise.resolve()),
+  // C25 (V4): editar algo cargado sin turno
+  updWalk: (walk) =>
+    walk.id
+      ? saved(
+          sb
+            .from("walkins")
+            .update({
+              at: localToIso(TODAY(), walk.hora),
+              description: walk.svc,
+              amount: walk.precio,
+              method: medioToDb(walk.medio),
+              client_name: walk.cliente || null,
+            })
+            .eq("id", walk.id),
+        )
+      : Promise.resolve(),
+  // …y cómo se cobró el resto de un turno
+  setRestMethod: (booking, medio) => saved(sb.rpc("set_rest_method", { p_booking: booking.id, p_method: medioToDb(medio) })),
+  // C35 (V4): borrar un producto (las ventas y compras ya cargadas quedan, sin producto)
+  delProduct: (prod) => (prod.id ? saved(sb.from("products").delete().eq("id", prod.id)) : Promise.resolve()),
   setStock: (prod) =>
     saved(
       sb

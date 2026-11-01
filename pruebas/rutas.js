@@ -227,13 +227,18 @@ const SOFIA = "sofia-benitez-studio";
   page = await nueva();
   await go(page, "/prestadores/ingresar");
   await loginPanel(page);
-  for (const [word, tab] of [["agenda", "agenda"], ["caja", "caja"], ["finanzas", "finanzas"], ["clientes", "clientes"], ["productos", "productos"], ["horarios", "horarios"], ["estadisticas", "stats"], ["trabajos", "comunidad"], ["perfil", "perfil"]]) {
+  for (const [word, tab] of [["agenda", "agenda"], ["finanzas", "finanzas"], ["clientes", "clientes"], ["productos", "productos"], ["horarios", "horarios"], ["estadisticas", "stats"], ["trabajos", "comunidad"], ["perfil", "perfil"]]) {
     await page.goto(BASE + "/panel/" + word);
     await page.reload();
     await wait(page, 1000);
     s = await st(page);
     ok(`recarga en /panel/${word}: misma pestaña`, s.role === "barbero" && s.btab === tab && here(page) === "/panel/" + word, here(page));
   }
+  // C34 (V4): la Caja ahora es la Caja del día de Finanzas
+  await page.goto(BASE + "/panel/caja");
+  await wait(page, 1000);
+  s = await st(page);
+  ok("/panel/caja (dirección vieja) → Finanzas, en la Caja del día", s.btab === "finanzas" && (await page.evaluate(() => S.fp)) === "dia" && here(page) === "/panel/finanzas", here(page));
   await page.goto(BASE + "/panel/clientes");
   await wait(page, 1000);
   const name = await page.locator("[data-cli]").first().getAttribute("data-cli");
