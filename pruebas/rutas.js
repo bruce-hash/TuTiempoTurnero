@@ -58,11 +58,10 @@ const SOFIA = "sofia-benitez-studio";
     await page.click("#fLogin button[type=submit]");
     await wait(page, 1200);
   }
+  // ingreso y registro: el mismo formulario para todos
   async function loginPanel(page) {
-    await page.fill("#be", "sofia@test.ar");
-    await page.fill("#bp", "prestador123");
-    await page.click("#fBarb button[type=submit]");
-    await wait(page, 1500);
+    await login(page, "sofia@test.ar", "prestador123");
+    await wait(page, 300);
   }
 
   // ---------- 1. Cada ruta abierta directo (sin sesión) ----------
@@ -93,14 +92,24 @@ const SOFIA = "sofia-benitez-studio";
   for (const [route, view, title] of [
     ["/ingresar", "login", "Ingresar · TuTiempo"],
     ["/crear-cuenta", "register", "Crear cuenta · TuTiempo"],
-    ["/sumate", "prestador", "Sumate como prestador · TuTiempo"],
+    ["/registrar-negocio", "negocio", "Registrá tu negocio · TuTiempo"],
     ["/terminos", "terminos", "Términos y condiciones · TuTiempo"],
-    ["/prestadores/ingresar", "loginBarbero", "Acceso prestadores · TuTiempo"],
     ["/nueva-contrasena", "newpass", "Contraseña nueva · TuTiempo"],
   ]) {
     s = await go(page, route);
     ok(`${route} → su pantalla y su título`, s.view === view && here(page) === route && (await page.title()) === title, `${s.view} ${here(page)} ${await page.title()}`);
   }
+  // direcciones viejas: el alta de antes y el acceso de prestadores
+  s = await go(page, "/sumate");
+  ok("/sumate (el alta de antes) → /registrar-negocio", s.view === "negocio" && here(page) === "/registrar-negocio", here(page));
+  s = await go(page, "/prestadores/ingresar");
+  ok("/prestadores/ingresar (link viejo) → el mismo ingreso de todos", s.view === "login" && here(page) === "/ingresar", here(page));
+  for (const step of ["1", "5", "listo"]) {
+    s = await go(page, "/registrar-negocio/" + step);
+    ok(`/registrar-negocio/${step} sin sesión → el paso 0 (la cuenta)`, s.view === "negocio" && here(page) === "/registrar-negocio", here(page));
+  }
+  s = await go(page, "/registrar-negocio/9");
+  ok("/registrar-negocio/9 → no encontrado", s.view === "notfound");
 
   // ---------- 2. Rutas con sesión, sin sesión: al ingreso y de vuelta ----------
   for (const [route, view] of [["/mis-turnos", "misturnos"], ["/cuenta", "cuenta"]]) {
@@ -118,7 +127,7 @@ const SOFIA = "sofia-benitez-studio";
   s = await go(page, "/turno/999999");
   ok("/turno/<id> sin sesión → ingreso con ?volver=", s.view === "login" && here(page) === "/ingresar?volver=%2Fturno%2F999999");
   s = await go(page, "/panel/agenda");
-  ok("/panel/agenda sin sesión → acceso prestadores con ?volver=", s.view === "loginBarbero" && here(page) === "/prestadores/ingresar?volver=%2Fpanel%2Fagenda", here(page));
+  ok("/panel/agenda sin sesión → el ingreso de todos con ?volver=", s.view === "login" && here(page) === "/ingresar?volver=%2Fpanel%2Fagenda", here(page));
   await loginPanel(page);
   s = await st(page);
   ok("panel: después de ingresar vuelve a /panel/agenda", s.role === "barbero" && s.btab === "agenda" && here(page) === "/panel/agenda", here(page));
@@ -310,7 +319,7 @@ const SOFIA = "sofia-benitez-studio";
   await q("alter table providers disable trigger providers_slug_not_reserved");
   await q("update providers set slug = 'blog' where id = $1", [maxId]);
   await q("alter table providers enable trigger providers_slug_not_reserved");
-  const screens = { ingresar: "login", "crear-cuenta": "register", "nueva-contrasena": "newpass", sumate: "prestador", terminos: "terminos", buscar: "home", "mis-turnos": "login", cuenta: "login", panel: "loginBarbero", admin: "login" };
+  const screens = { ingresar: "login", "crear-cuenta": "register", "nueva-contrasena": "newpass", sumate: "negocio", "registrar-negocio": "negocio", terminos: "terminos", buscar: "home", "mis-turnos": "login", cuenta: "login", panel: "login", admin: "login" };
   const wrong = [];
   const folders = ["assets", "fonts", "vendor"]; // carpetas reales del sitio: Apache responde 403, nunca la app
   for (const word of RESERVED) {

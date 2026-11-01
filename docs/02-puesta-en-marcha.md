@@ -105,6 +105,14 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### Ingreso y registro (D32)
+- Migración nueva: `20261102090000_alta_por_pasos.sql` (pasos del alta, `setup_step`, `my_setup` y la palabra reservada
+  `registrar-negocio`). Los prestadores que ya existen quedan con el alta completa: no ven nada nuevo.
+- Sin Edge Functions nuevas ni cambios en `config.js`, `.htaccess`, plantillas de email ni Redirect URLs (la acción
+  pendiente viaja en los datos de la cuenta, no en el link).
+- En Supabase → Auth tiene que seguir permitido crear cuentas ("Allow new users to sign up"): el código por email ya no
+  las crea, pero Crear cuenta y Google sí.
+
 ## Etapa A · Entorno de prueba
 
 ### 1. Supabase (proyecto de prueba)
@@ -472,9 +480,15 @@ el aviso, mirá Supabase → Edge Functions → **mp-webhook → Invocations / L
       verificar que en Supabase → Auth → URL Configuration → Redirect URLs esté la raíz del subdominio
       (`https://prueba.tutiempo.com.ar/`).
 - [ ] Crear cuenta, activar por email, ingresar, recuperar contraseña, entrar con Google.
-- [ ] Alta de prestador (sin DNI), confirmar el email: la app abre Panel → Perfil con los 3 pasos. Cargar el número de
-      DNI y las fotos del frente y del dorso, aprobarlo desde el panel admin (sin el número o sin una foto no deja: H10),
-      conectar Mercado Pago (vendedor de prueba).
+- [ ] Registrá tu negocio (D32): desde el footer, crear la cuenta y abrir el link del email **en otro navegador o en el
+      celular**: tiene que seguir en el paso 1. Completar los 5 pasos (salir en el 3 y volver: la Agenda dice "Te falta
+      poco" y "Seguir con el alta" vuelve al 3). En el 5, el número de DNI y las fotos; aprobarlo desde el panel admin
+      (sin el número o sin una foto no deja: H10) y conectar Mercado Pago (vendedor de prueba): la tarjeta de la Agenda
+      desaparece.
+- [ ] Ingreso (D32): tocar "Reservar" sin sesión, crear la cuenta desde la ventana y abrir el link del email en el
+      celular: tiene que llegar directo a "Confirmá tu turno" con ese horario. "Entrar con un código" con un email sin
+      cuenta: el mismo mensaje y no se crea ninguna cuenta (Auth → Users). Un prestador que ingresa desde cualquier página
+      entra a su Agenda.
 - [ ] Un recordatorio o aviso de cancelación trae el link del subdominio de prueba (Comisión → Dirección del sitio, H24).
 - [ ] Reservar y pagar con el comprador de prueba: el turno se confirma solo (verifica H06: firma del webhook).
 - [ ] La seña llega al vendedor de prueba y el 4% a la cuenta de TuTiempo.

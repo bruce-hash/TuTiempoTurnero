@@ -403,3 +403,15 @@ versión 30 la comisión la paga el cliente aparte de la seña, y desde V1 (D30)
 precio completo (seña por Mercado Pago + resto en el local). El número que ve es un poco menor que lo que cobró. Arreglo
 propuesto (con V4, Finanzas): `precio − greatest(app_fee − client_fee, 0)` (solo los turnos viejos, de antes de la versión
 30, tenían la comisión adentro de la seña). No toca cobros ni devoluciones.
+
+### H37 · Media · Guardar Perfil borraba el celular privado del negocio (resuelto con el ingreso)
+El panel nunca leía el celular del negocio (`provider_private.phone`) y "Guardar" en Perfil mandaba ese campo vacío: cada
+vez que un prestador guardaba sus datos, el celular quedaba en blanco (lo ven TuTiempo y el cliente con un turno pago).
+Arreglo: el panel lo carga con el resto de los datos privados y el guardado solo lo toca si se cargó. Lo prueba el e2e
+(paso 1 de Registrá tu negocio, que usa el mismo guardado).
+
+### H38 · Media · "Entrar con un código" creaba una cuenta sin aceptar los términos (resuelto con el ingreso, D32)
+Supabase, por defecto, crea la cuenta si el email no existe al pedir un código. Así quedaban cuentas sin nombre y sin haber
+aceptado los términos. Ahora el código es solo para cuentas que ya existen (`shouldCreateUser: false`) y la pantalla dice
+lo mismo exista o no ("Si X tiene cuenta, le llega un código"), sin mostrar el error de Supabase: nadie puede averiguar qué
+emails tienen cuenta. Lo prueba el e2e (un email sin cuenta no crea nada y ve el mismo mensaje).

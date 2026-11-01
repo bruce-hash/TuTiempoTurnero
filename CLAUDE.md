@@ -48,6 +48,14 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Sin descanso entre turnos (C39).
   - V8 (C52): `src/lib/precios.js` vuelve a pedir los precios del prestador en el perfil y la confirmación (al volver a la
     pestaña, cada minuto y antes de cobrar): el cliente nunca ve un precio y paga otro.
+  - Ingreso y registro (D32): una sola ventana para todos (`src/ui/ingreso.js`, contenido en `src/views/auth/login.js`
+    `authBody()`, lo mismo en `/ingresar`, `/crear-cuenta` y `/registrar-negocio`). La acción que pidió ingresar
+    (`S.pending`, `src/lib/pendiente.js`: reservar, seguir, lista, negocio; solo ids, vence a las 2 h) se muestra como
+    ticket (`src/ui/ticket.js`) y sigue sola después de ingresar (`src/actions/pendiente.js`, `goAfter` en
+    `src/lib/sesion.js`); viaja en sessionStorage (Google) y en la cuenta nueva (`tt_pending`, para el link del email).
+    El prestador va siempre a su Agenda. Registrá tu negocio: `src/views/auth/negocio.js` + `src/actions/negocio.js`
+    (5 pasos, `setup_step`/`my_setup` en la base, `src/lib/alta.js` dice qué falta). El código por email es solo para
+    cuentas que existen (`shouldCreateUser: false`).
   - V3b (C22): `src/lib/agenda-al-dia.js` vuelve a pedir los turnos de la Agenda cada 30 s y al volver a la pestaña (sin
     Realtime) y solo dibuja si cambió algo; no toca la pantalla con un guardado pendiente, un formulario abierto o alguien escribiendo.
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`

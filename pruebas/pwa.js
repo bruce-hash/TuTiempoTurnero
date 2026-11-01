@@ -207,8 +207,8 @@ const PUSH_STUB = `(() => {
 
   // ---------- prestador: la tarjeta en la Agenda y la opción de reservas ----------
   page = await nueva();
-  await open(page, "/prestadores/ingresar");
-  await page.fill("#be", "sofia@test.ar"); await page.fill("#bp", "prestador123"); await page.click("#fBarb button[type=submit]");
+  await open(page, "/ingresar");
+  await page.fill("#ai_e", "sofia@test.ar"); await page.fill("#ai_p", "prestador123"); await page.click("#fLogin button[type=submit]");
   await page.waitForSelector(".bhead", { timeout: 8000 }); await page.waitForTimeout(600);
   ok("panel: «Enterate al toque de cada reserva» arriba de la Agenda, sin pedir permiso todavía", await page.isVisible(".pwa-card [data-act=pushOn]") && (await page.evaluate(() => window.__perm)) === 0);
   await page.click(".pwa-card [data-act=pushLater]"); await page.waitForTimeout(300);
