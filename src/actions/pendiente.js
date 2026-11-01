@@ -1,0 +1,51 @@
+import { api } from "../api/index.js";
+import { LIVE } from "../config.js";
+import { bizStartPath } from "../lib/alta.js";
+import { clearPending } from "../lib/pendiente.js";
+import { pr } from "../lib/prestadores.js";
+import { refreshPrices } from "../lib/precios.js";
+import { navigate, profilePath } from "../router.js";
+import { S } from "../state.js";
+import { render } from "../ui/render.js";
+import { setFollow } from "./navegacion.js";
+import { joinWaitlist } from "./reserva.js";
+
+// Ingreso y registro: después de ingresar (o de tocar el link del email), sigue sola la acción que pidió ingresar.
+//   reservar → la confirmación del turno con ese horario (si ya lo tomó otro, la ficha en ese día para elegir otro;
+//              no se cobra nada); seguir → queda siguiendo; lista → queda anotado; negocio → el primer paso que falta.
+export async function resumePending() {
+  const pending = S.pending;
+  clearPending();
+  if (!pending) {
+    return;
+  }
+  if (pending.a === "negocio") {
+    await navigate(bizStartPath());
+    return;
+  }
+  let prov = pr(pending.pid);
+  if (LIVE && (!prov || !prov.full)) {
+    prov = (await api.loadProvider(pending.pid).catch(() => null)) || prov;
+  }
+  if (!prov) {
+    await navigate("/");
+    return;
+  }
+  const base = profilePath(prov, pending.pid);
+  if (pending.a === "reservar") {
+    await navigate(base + "/reservar?" + new URLSearchParams({ servicio: pending.svc, dia: pending.day, hora: pending.time }));
+    // C52: los precios del momento en la confirmación
+    refreshPrices()
+      .then((changed) => changed && S.view === "checkoutT" && render())
+      .catch(() => {});
+    return;
+  }
+  await navigate(base);
+  if (pending.a === "seguir") {
+    setFollow(pending.pid, true);
+  } else if (pending.a === "lista") {
+    S.day = pending.day;
+    joinWaitlist(pending.pid, pending.day);
+  }
+  render();
+}

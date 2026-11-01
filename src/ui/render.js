@@ -11,8 +11,7 @@ import { installGuide, installMenuItem, updateBar } from "./avisos.js";
 import { accountMenu } from "./menu-cuenta.js";
 import { syncUrl } from "../router.js";
 import { vAdmin } from "../views/admin/admin.js";
-import { vLoginBarbero } from "../views/auth/acceso-prestadores.js";
-import { vRegPrest } from "../views/auth/alta-prestador.js";
+import { vNegocio } from "../views/auth/negocio.js";
 import { vNewPass } from "../views/auth/contrasena-nueva.js";
 import { vLogin } from "../views/auth/login.js";
 import { vCheckoutTurno } from "../views/cliente/checkout.js";
@@ -54,9 +53,11 @@ function nav() {
       who: prov,
       email,
       items: [
-        ["🏪", "Panel de prestador", 'data-act="toPanel"'],
-        ["👁", "Ver mi perfil como cliente", 'data-act="preview"'],
-        ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"'], ["📅", "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
+        // C13/C14: una cuenta = una persona; el prestador también reserva como cliente (Mis turnos sale del panel)
+        ["📅", "Mi agenda", 'data-act="toPanel"'],
+        ["👁", "Ver mi perfil público", 'data-act="preview"'],
+        ["🛒", "Reservar como cliente", 'data-act="asClient" data-to="home"'],
+        ...(S.user ? [["🧾", "Mis turnos (como cliente)", 'data-act="asClient" data-to="misturnos"', count], ["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"']] : []),
         ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
         ...installItem(),
         ["↪", "Cerrar sesión", 'data-act="salirBarbero"'],
@@ -72,14 +73,15 @@ function nav() {
         items: [
           ["👤", "Mi perfil", 'data-go="cuenta"'],
           ["📅", "Mis turnos", 'data-go="misturnos"', count],
-          ...(S.barberAuth ? [["🏪", "Panel de prestador", 'data-act="toPanel"']] : []),
+          ...(S.barberAuth ? [["📅", "Mi agenda", 'data-act="toPanel"']] : []),
           ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
           ...installItem(),
+          ...(S.barberAuth ? [] : [["🏪", "Registrá tu negocio", 'data-act="bizStart"']]),
           ["↪", "Cerrar sesión", 'data-act="logout"'],
         ],
       })
-    : // V7 (C47): un solo botón; adentro se elige cliente o prestador
-      '<button class="btn btn-pri" data-act="authOpen" data-k="cliente">Ingresar</button>';
+    : // un solo botón: clientes y prestadores entran por la misma ventana
+      '<button class="btn btn-pri" data-act="authOpen">Ingresar</button>';
 }
 // rubro que tiñe la página (data-seg del body): el del prestador que se está viendo, o "n" (neutro)
 function segNow() {
@@ -128,6 +130,8 @@ export function render() {
   }
 }
 function renderInner() {
+  // la ventana de ingreso se anima solo al abrirse (no en cada dibujo mientras está abierta)
+  const modalWasOpen = !!document.querySelector(".authmodal");
   renderMain();
   const tab = document.querySelector(".btabs [aria-selected=true]");
   if (tab && tab.parentElement) {
@@ -143,13 +147,13 @@ function renderInner() {
   if (app) {
     app.insertAdjacentHTML("beforeend", installGuide() + updateBar());
   }
-  // V7: el ingreso en una segunda capa (se cierra solo al ingresar)
-  if (S.authModal && (S.user || S.barberAuth)) {
+  // la ventana de ingreso (se cierra sola al ingresar)
+  if (S.authModal && S.user) {
     S.authModal = null;
   }
   const modal = authModal();
   if (app && modal) {
-    app.insertAdjacentHTML("beforeend", modal);
+    app.insertAdjacentHTML("beforeend", modalWasOpen ? modal : modal.replace('class="authmodal"', 'class="authmodal am-anim"'));
   }
   document.body.classList.toggle("am-open", !!modal);
   pwaAfterRender();
@@ -193,11 +197,8 @@ function renderMain() {
       case "newpass":
         html = vNewPass();
         break;
-      case "prestador":
-        html = vRegPrest();
-        break;
-      case "loginBarbero":
-        html = vLoginBarbero();
+      case "negocio":
+        html = vNegocio();
         break;
       case "cuenta":
         html = S.user ? vCuenta() : vLogin(false);
@@ -224,6 +225,10 @@ function renderMain() {
         html = vHome();
     }
   }
+  // C13/C14: el prestador reservando como cliente, con la vuelta a su agenda a mano
+  if (S.role === "cliente" && S.barberAuth && S.user && S.view !== "negocio") {
+    html = '<div class="asclient" role="status"><span>Estás reservando como cliente</span><button class="btn btn-ghost btn-sm" data-act="toPanel">Volver a mi agenda</button></div>' + html;
+  }
   $("#app").innerHTML = html;
 }
 // navegación entre pantallas del cliente (id = prestador, para "perfil")
@@ -243,12 +248,6 @@ export function go(view, id) {
     S.after = "misturnos";
     view = "login";
   }
-  if (view === "loginBarbero" && S.barberAuth) {
-    S.role = "barbero";
-    render();
-    window.scrollTo(0, 0);
-    return;
-  }
   S.role = "cliente";
   if (view !== S.view) {
     S.prev = S.view;
@@ -261,16 +260,6 @@ export function go(view, id) {
     };
   }
   S.keepLogin = false;
-  if (view === "loginBarbero") {
-    Object.assign(S.blogin, {
-      step: "form",
-      err: "",
-      show: false,
-    });
-  }
-  if (view === "prestador" && S.reg.done) {
-    S.reg = {};
-  }
   if ((view === "login" || view === "register") && S.user) {
     S.view = "cuenta";
     render();

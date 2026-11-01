@@ -16,7 +16,8 @@ import { render } from "../ui/render.js";
 registerSubmit("fSignup", (ev) => {
   const name = $("#au_n").value.trim().replace(/\s+/g, " ");
   const email = $("#au_e").value.trim().toLowerCase();
-  const tel = $("#au_t").value.trim();
+  // "Registrá tu negocio" (paso 0) no pide el celular personal: el del negocio va en el paso 1
+  const tel = $("#au_t") ? $("#au_t").value.trim() : "";
   const pass = $("#au_p").value;
   Object.assign(S.login, {
     nombre: name,
@@ -60,6 +61,8 @@ registerSubmit("fSignup", (ev) => {
             data: {
               full_name: name,
               phone: tel || null,
+              // la acción pendiente (solo ids): si el link del email se abre en otro navegador, se retoma igual
+              ...(S.pending ? { tt_pending: S.pending } : {}),
             },
             emailRedirectTo: location.origin + "/",
             captchaToken: token,
@@ -67,13 +70,14 @@ registerSubmit("fSignup", (ev) => {
         }),
       )
       .then(async (res) => {
-        if (res.error) {
+        // un email que ya tiene cuenta ve lo mismo ("Revisá tu email"): desde afuera no se puede saber si existía
+        if (res.error && !/already registered|already been registered|user_already_exists/i.test(res.error.message || res.error.code || "")) {
           if (btn) {
             btn.disabled = false;
           }
           return authErr(errMsg(res.error));
         }
-        if (res.data && res.data.session) {
+        if (!res.error && res.data && res.data.session) {
           await api.session();
           afterLogin();
           return;

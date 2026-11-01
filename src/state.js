@@ -20,22 +20,20 @@ export const fresh = () => ({
   user: null,
   prev: "home",
   barberAuth: false,
-  // V7: ingreso en una segunda capa encima de la página ("cliente" o "prestador"; null, cerrado)
+  // la ventana de ingreso (true: abierta) y si S.after es solo la página donde estaba (el prestador va a su Agenda)
   authModal: null,
+  afterSoft: false,
   login: {
     mode: "in",
     email: "",
     err: "",
   },
-  blogin: {
-    step: "form",
-    email: "",
-    pass: "",
-    err: "",
-    fails: 0,
-    show: false,
-  },
-  reg: {},
+  // Ingreso y registro: la acción que pidió ingresar (lib/pendiente.js) y los pasos del alta guardados por prestador
+  pending: null,
+  setupBy: {},
+  // Registrá tu negocio: el paso que se ve (0 = la cuenta; 1 a 5; "listo")
+  bizStep: 0,
+  biz: {},
   svc: 0,
   // celular de ejemplo de la demo (en vivo lo reemplaza el del perfil)
   form: {

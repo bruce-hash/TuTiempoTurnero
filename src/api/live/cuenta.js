@@ -10,6 +10,7 @@ import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { avatarUrl } from "../../ui/fotos.js";
 import { toast } from "../../ui/toast.js";
+import { cleanPending } from "../../lib/pendiente.js";
 
 export const liveCuenta = {
   // Sesión de Supabase → S.user. Si es prestador, carga su panel; después, sus turnos, avisos, sellos y si es admin.
@@ -36,9 +37,18 @@ export const liveCuenta = {
     };
     S.form.tel = (profile && profile.phone) || "";
     let pid = await call(sb.rpc("my_provider"));
-    // Alta de prestador pendiente (los datos del negocio viajaron en los metadatos de la cuenta al registrarse): se crea
-    // el perfil en el primer ingreso y se borran los metadatos. El DNI no viaja ahí (H10): lo carga en Perfil.
-    const reg = user.user_metadata && user.user_metadata.provider_reg;
+    // Ingreso y registro: la acción pendiente que viajó en la cuenta nueva (el link del email se pudo abrir en otro
+    // navegador o en otro celular). Se usa una vez y se borra.
+    const meta = user.user_metadata || {};
+    if (meta.tt_pending) {
+      if (!S.pending) {
+        S.pending = cleanPending(meta.tt_pending);
+      }
+      sb.auth.updateUser({ data: { tt_pending: null } }).catch(() => {});
+    }
+    // Alta de antes del rediseño (los datos del negocio viajaban en los metadatos de la cuenta y el perfil se creaba al
+    // confirmar el email): se sigue respetando para las cuentas que quedaron a medio camino. Queda en el paso 2.
+    const reg = meta.provider_reg;
     if (!pid && reg) {
       try {
         pid = await call(
@@ -52,13 +62,12 @@ export const liveCuenta = {
             p_city: CITY,
           }),
         );
+        await call(sb.rpc("setup_step", { p_step: 1 })).catch(() => null);
         await sb.auth.updateUser({
           data: {
             provider_reg: null,
           },
         });
-        // primer ingreso (Bloque D): al entrar, a Perfil, donde están los pasos para activar el perfil
-        S.firstPanel = true;
       } catch (err) {
         toast(errMsg(err));
       }
@@ -67,9 +76,19 @@ export const liveCuenta = {
       S.me = pid;
       S.barberAuth = true;
       await liveApi.loadMine();
+      await liveApi.mySetup();
     }
     await Promise.all([liveApi.myBookings(), liveApi.myMessages(), liveApi.myStamps(), liveApi.adminCheck()]);
     return S.user;
+  },
+  // Registrá tu negocio: qué pasos guardó y qué le falta para recibir reservas (lib/alta.js)
+  async mySetup() {
+    if (!S.me) {
+      return null;
+    }
+    const setup = await call(sb.rpc("my_setup")).catch(() => null);
+    S.setupBy = Object.assign({}, S.setupBy, setup ? { [S.me]: setup } : {});
+    return setup;
   },
   async myBookings() {
     if (!S.user) {
