@@ -16,16 +16,18 @@ Deno.serve(async (req) => {
 
     const db = admin();
     const rows = must("leer las reservas", await db.from("bookings")
-      .select("id, provider_id, client_id, status, deposit, client_fee, paid_wallet, price, service_name, hold_expires_at")
+      .select("id, provider_id, client_id, status, deposit, client_fee, mp_fee, paid_wallet, price, service_name, hold_expires_at")
       .in("id", ids));
     const ok = (rows ?? []).filter((b) => b.client_id === user.id && b.status === "hold" && new Date(b.hold_expires_at) > new Date());
     if (ok.length !== ids.length) return json({ error: "hold_expired" }, 409, h);
     const pid = ok[0].provider_id;
     if (ok.some((b) => b.provider_id !== pid)) return json({ error: "bad_request" }, 400, h);
 
-    // Todo sale de la base: seña de cada turno + comisión de cada turno (calculada por book_slot con la comisión vigente).
+    // Todo sale de la base (book_slot): seña de cada turno + comisión de TuTiempo + lo que se suma por Mercado Pago (D30).
+    // marketplace_fee es solo la comisión de TuTiempo: lo de Mercado Pago lo descuenta Mercado Pago del lado del prestador.
     const fee = ok.reduce((a, b) => a + (b.client_fee ?? 0), 0);
-    const amount = ok.reduce((a, b) => a + b.deposit - b.paid_wallet, 0) + fee;
+    const mpFee = ok.reduce((a, b) => a + (b.mp_fee ?? 0), 0);
+    const amount = ok.reduce((a, b) => a + b.deposit - b.paid_wallet, 0) + fee + mpFee;
     if (amount <= 0) return json({ error: "nothing_to_pay" }, 409, h);
 
     // Se cobra con la llave de la cuenta ACTIVA del prestador: la seña entra directo a su cuenta de Mercado Pago.

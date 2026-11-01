@@ -12,6 +12,7 @@
 export type Pago = {
   id: string; collector: string; status: string; amount: number; fee: number | null; ref: string;
   refunded?: number; detail?: string; currency?: string; informa?: string;
+  mpfee?: number;   // D30: la comisión de Mercado Pago que informa (fee_details, mercadopago_fee); 300 si no se dice
 };
 
 export function mpFalso() {
@@ -73,8 +74,8 @@ export function mpFalso() {
       return json({
         id: Number(p.id) || p.id, status: p.status, status_detail: p.detail ?? "accredited", collector_id: Number(p.informa ?? p.collector) || (p.informa ?? p.collector),
         currency_id: p.currency ?? "ARS", transaction_amount: p.amount, transaction_amount_refunded: p.refunded ?? 0, external_reference: p.ref,
-        fee_details: p.fee == null ? [{ type: "mercadopago_fee", amount: 300, fee_payer: "collector" }]
-                                   : [{ type: "mercadopago_fee", amount: 300, fee_payer: "collector" }, { type: "application_fee", amount: p.fee, fee_payer: "collector" }],
+        fee_details: p.fee == null ? [{ type: "mercadopago_fee", amount: p.mpfee ?? 300, fee_payer: "collector" }]
+                                   : [{ type: "mercadopago_fee", amount: p.mpfee ?? 300, fee_payer: "collector" }, { type: "application_fee", amount: p.fee, fee_payer: "collector" }],
         card: { first_six_digits: "450995", last_four_digits: "3704", cardholder: { name: "ANA LOPEZ", identification: { number: "30111222" } } },
         payer: { email: "ana@test.ar", identification: { type: "DNI", number: "30111222" }, first_name: "Ana" },
         additional_info: { ip_address: "200.45.1.2", payer: { first_name: "Ana", phone: { number: "2284 555666" } } },
