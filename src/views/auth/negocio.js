@@ -1,11 +1,11 @@
 import { esc } from "../../lib/dom.js";
-import { STEPS, setupTodo, stepDone } from "../../lib/alta.js";
+import { STEPS, dniDone, setupTodo, stepDone } from "../../lib/alta.js";
 import { MP_TERMS } from "../../lib/cobro.js";
 import { DOW } from "../../lib/fechas.js";
 import { ME, avatar, pr } from "../../lib/prestadores.js";
 import { CATS, catName } from "../../lib/rubros.js";
 import { cfg } from "../../lib/turnero.js";
-import { dniMissing, dniRequired } from "../../lib/verificacion.js";
+import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { dniForm } from "../prestador/verificacion.js";
 import { vLogin } from "./login.js";
@@ -139,7 +139,9 @@ function step4() {
 }
 function step5() {
   const body = dniRequired()
-    ? `${dniForm(S.dniSt || {})}${dniMissing(S.dniSt).length ? "" : '<div class="am-ok">Ya tenemos tu DNI: lo revisa el equipo de TuTiempo.</div>'}`
+    ? dniDone()
+      ? '<div class="am-ok">Ya tenemos tu DNI: lo revisa el equipo de TuTiempo.</div>'
+      : dniForm(S.dniSt || {})
     : '<div class="am-ok"><b>Aprobación de TuTiempo</b><br>El equipo de TuTiempo revisa tu perfil antes de que aparezca en el listado. No tenés que cargar nada más.</div>';
   return shell(5, body, {
     title: "Verificación",

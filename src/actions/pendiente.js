@@ -24,8 +24,9 @@ export async function resumePending() {
     return;
   }
   let prov = pr(pending.pid);
-  if (LIVE && (!prov || !prov.full)) {
-    prov = (await api.loadProvider(pending.pid).catch(() => null)) || prov;
+  // para reservar, los horarios libres de este momento (mientras ingresaba, el horario lo pudo tomar otro)
+  if (LIVE && (!prov || !prov.full || pending.a === "reservar")) {
+    prov = (await api.loadProvider(pending.pid, true).catch(() => null)) || prov;
   }
   if (!prov) {
     await navigate("/");

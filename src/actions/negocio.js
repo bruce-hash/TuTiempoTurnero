@@ -2,7 +2,7 @@ import { openAuth } from "./auth.js";
 import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
-import { bizStartPath, nextStep } from "../lib/alta.js";
+import { bizStartPath, dniDone, nextStep } from "../lib/alta.js";
 import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { shrinkImage } from "../lib/imagenes.js";
@@ -369,7 +369,7 @@ registerClick("bizNext", async (ev, el, act) => {
 
 // ---------- Paso 5 · Verificación ----------
 registerClick("bizFinish", async (ev, el, act) => {
-  if (dniRequired()) {
+  if (dniRequired() && !dniDone()) {
     const missing = dniMissing(S.dniSt);
     if (missing.length) {
       return fail({}, `Para enviarlo falta ${missing.join(", ").replace(/, ([^,]*)$/, " y $1")}. Si no lo tenés a mano, podés seguir después: queda guardado.`);

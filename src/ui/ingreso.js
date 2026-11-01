@@ -24,14 +24,23 @@ export function authModal() {
 
 // ---------- foco y teclado ----------
 let opener = null;
-// recuerda el botón que abrió la ventana (para devolverle el foco al cerrar)
+// recuerda el botón que abrió la ventana (para devolverle el foco al cerrar). Como la pantalla se vuelve a dibujar, se
+// guarda también cómo encontrarlo: la zona (cabecera, footer, la página), su acción y su texto.
 export function rememberOpener(el) {
-  opener = el && el.closest ? el.closest("button, a, [tabindex]") : null;
+  const btn = el && el.closest ? el.closest("button, a, [tabindex]") : null;
+  const zone = btn && btn.closest("#nav, footer, #app");
+  opener = btn ? { el: btn, zone: zone ? (zone.id ? "#" + zone.id : zone.tagName.toLowerCase()) : "body", act: btn.getAttribute("data-act"), text: btn.textContent.trim() } : null;
 }
 export function returnFocus() {
-  const el = opener;
+  const from = opener;
   opener = null;
-  if (el && document.contains(el)) {
+  if (!from) {
+    return;
+  }
+  const el = document.contains(from.el)
+    ? from.el
+    : [...document.querySelectorAll(`${from.zone} [data-act="${from.act}"]`)].find((item) => item.textContent.trim() === from.text);
+  if (el) {
     el.focus();
   }
 }

@@ -20,6 +20,12 @@ export function bizStartPath() {
   return n ? "/registrar-negocio/" + n : "/panel/agenda";
 }
 export const mpConnected = () => S.mp === "ok";
+// el DNI ya está (verificado, o con número y las dos fotos): en esta sesión (my_dni_status) o según la base (my_setup)
+export function dniDone(pid = ME()) {
+  const prov = pr(pid);
+  const setup = setupOf(pid);
+  return (!!prov && prov.verified !== false) || (!!setup && !!setup.dni_ok) || dniMissing(S.dniSt).length === 0;
+}
 // lo que falta para recibir reservas, en orden: [texto, hecho, acción]
 export function setupTodo(pid = ME()) {
   const prov = pr(pid);
@@ -35,7 +41,7 @@ export function setupTodo(pid = ME()) {
   // aprobado: con datos del alta, el estado del perfil (my_setup); si no, como hasta ahora (verificacion.js)
   const ok = setup && setup.status ? setup.status === "active" : approved(prov);
   if (dniRequired()) {
-    items.push(["Verificación de DNI", ok || (setup && setup.dni_ok != null ? !!setup.dni_ok : dniMissing(S.dniSt).length === 0), "dni"]);
+    items.push(["Verificación de DNI", ok || dniDone(pid), "dni"]);
   }
   items.push([ok ? "Aprobación de TuTiempo" : "Aprobación de TuTiempo (en revisión)", ok, "ok"]);
   return items;
