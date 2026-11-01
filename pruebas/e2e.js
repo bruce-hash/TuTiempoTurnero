@@ -465,6 +465,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   // D30: guarda Comisión y espera a que el panel se vuelva a dibujar con lo guardado (si no, el render tardío pisa lo que se
   // escribe después: en el CI pasa)
   const saveCom = async () => {
+    await wait(500);   // la app ignora un segundo envío del mismo formulario en menos de 450 ms (doble toque)
     await pg.evaluate(() => document.getElementById("fCom").setAttribute("data-viejo", "1"));
     await pg.click("#fCom button[type=submit]");
     await pg.waitForFunction(() => { const f = document.getElementById("fCom"); return f && !f.hasAttribute("data-viejo"); }, null, { timeout: 10000 }).catch(() => {});
@@ -476,7 +477,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("admin/D30: comisiones guardadas en la base (7% de la seña; 7,61 / 5,31 / 4,10 / 1,80)", [fs30.deposit_commission_pct, fs30.mp_pct_instant, fs30.mp_pct_d10, fs30.mp_pct_d18, fs30.mp_pct_d35].map(Number).join() === "7,7.61,5.31,4.1,1.8");
   ok("admin/D30: el ejemplo (corte $20.000, seña 50%, al instante) da $10.000 + $700 + $882 = $11.582", (await pg.locator(".comex .tot").innerText()).includes("$11.582")
      && (await pg.locator(".comex").innerText()).includes("$700") && (await pg.locator(".comex").innerText()).includes("$882"));
-  await pg.fill("#admMp-d10", "16"); await pg.click("#fCom button[type=submit]"); await wait(400);
+  await pg.fill("#admMp-d10", "16"); await pg.click("#fCom button[type=submit]"); await wait(700);   // la app ignora un segundo envío en menos de 450 ms (doble toque)
   ok("admin/D30: Mercado Pago fuera de rango no se guarda", (await pg.locator("#comerr").innerText()).includes("entre 0 y 15") && Number((await q("select mp_pct_d10 from app_settings"))[0].mp_pct_d10) === 5.31);
   await pg.fill("#admCom", "8,5"); await pg.fill("#admMp-d10", "5,31"); await saveCom();
   ok("admin: comisión libre con decimales (8,5% de la seña)", await until("select deposit_commission_pct from app_settings", [], (r) => Number(r[0].deposit_commission_pct) === 8.5, 8000));
