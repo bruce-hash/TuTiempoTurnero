@@ -166,3 +166,10 @@ footer .legal{grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px
 .dbdone{margin-bottom:12px}
 .yearsel{flex-wrap:wrap}
 
+/* V1 (D30): tabla de % de Mercado Pago por plazo (admin → Comisión) */
+.mptab{width:100%;border-collapse:collapse;margin:4px 0 0}
+.mptab th,.mptab td{padding:6px 4px;text-align:left;font-size:14px;vertical-align:middle}
+.mptab th{font-size:12px;color:var(--muted);font-weight:700}
+.mptab .comrow{flex-wrap:nowrap;gap:6px}
+.mptab .comrow input{width:76px;font-size:16px;font-weight:700;padding:8px 6px}
+.mptab .pctl{font-size:15px}

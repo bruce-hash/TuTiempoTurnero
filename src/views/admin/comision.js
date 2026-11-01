@@ -18,7 +18,7 @@ export function admCom(data) {
     <p class="note" style="text-align:left;margin:8px 0 10px">Entre 0 y 30, con decimales si querés (por ejemplo 7 u 8,5). Es un % de la <b>seña</b> y la paga el cliente aparte: el prestador recibe su seña completa.</p>
     <p class="lbl" style="margin-top:14px">Comisión de Mercado Pago por plazo de acreditación</p>
     <table class="mptab"><thead><tr><th>Plazo</th><th>% que se suma</th><th>Referencia (con IVA)</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="note" style="text-align:left;margin:8px 0 10px">De 0 a 15. Cada prestador elige su plazo en su perfil (el mismo que en su cuenta de Mercado Pago). Con 0, al cliente no se le suma nada y el costo de Mercado Pago lo absorbe el prestador, como hasta ahora. Las referencias cambian según la provincia y Mercado Pago las actualiza.</p>
+    <p class="note" style="text-align:left;margin:8px 0 10px">De 0 a 15. Cada prestador elige su plazo en Horarios (el mismo que en su cuenta de Mercado Pago). Con 0, al cliente no se le suma nada y el costo de Mercado Pago lo absorbe el prestador, como hasta ahora. Las referencias cambian según la provincia y Mercado Pago las actualiza.</p>
     <div class="panel comex"><p class="lbl" style="margin:0 0 6px">Ejemplo: corte de ${money(2e4)}, seña del 50%, acreditación al instante</p><div class="sum">
       <div><span>Seña para el prestador</span><span>${money(ex.deposit)}</span></div>
       <div><span>Comisión TuTiempo (${pctTxt(pct)}% de la seña)</span><span>${money(ex.fee)}</span></div>

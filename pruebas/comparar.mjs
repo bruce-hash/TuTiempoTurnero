@@ -115,6 +115,21 @@ async function normalizar(page) {
     // V7 (C50, C51, cambio a propósito): el footer suma el teléfono y las redes y saca "Prototipo"; se esconde igual que la
     // cabecera (su contenido lo prueba pruebas/e2e.js)
     document.querySelectorAll("footer").forEach((el) => Object.assign(el.style, { visibility: "hidden", height: "360px", overflow: "hidden", boxSizing: "border-box" }));
+    // V1 (D30, cambio a propósito): la comisión de TuTiempo pasa a ser un % de la seña y se suma el costo de Mercado Pago:
+    // cambian los montos y los textos de la comisión (barra de reserva, política del turnero, confirmación, turno pagado),
+    // Horarios suma el plazo de acreditación, la pestaña Comisión es otra y las comisiones de la demo cambian (Resumen y
+    // Balance). Esas piezas se neutralizan en las dos versiones; el resto se compara igual. Lo nuevo lo prueba e2e.js.
+    const fijo = (sel, t) => document.querySelectorAll(sel).forEach((el) => { el.textContent = t; });
+    document.querySelectorAll("#app .pk-pol, #app #fCom, #app .admhero, #app .wkm").forEach((el) => el.remove());
+    fijo("#app .bookbar .bb-info span", "SERVICIO · PRECIO · SEÑA");
+    fijo("#app #fTurno .paym b", "SEÑA CON MERCADO PAGO");
+    fijo("#app #fTurno button[type=submit]", "PAGAR");
+    fijo("#app .booked .bk-must", "LO QUE PAGASTE");
+    fijo("#app .admday small", "COMISIÓN");
+    document.querySelectorAll("#app #fTurno .feerow").forEach((el) => el.closest(".panel")?.remove());
+    document.querySelectorAll("#app #fTurno p.note").forEach((el) => { if (/Si cancela el profesional/.test(el.textContent)) el.textContent = "SI NO VAS O SI CANCELA EL PROFESIONAL"; });
+    document.querySelectorAll("#app #hpay, #app #hterm").forEach((el) => el.closest(".f")?.remove());
+    if (document.querySelector("#app [data-act=admM]")) document.querySelectorAll("#app .kpis, #app table").forEach((el) => el.remove());
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
