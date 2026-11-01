@@ -474,16 +474,18 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
      && (await Promise.all(["instant", "d10", "d18", "d35"].map((t) => pg.inputValue("#admMp-" + t)))).every((v) => v === "0"));
   ok("admin: comisión sin botones fijos", (await pg.locator("[data-act=admComQuick]").count()) === 0);
   await pg.fill("#admCom", "7"); await pg.fill("#admMp-instant", "7,61"); await pg.fill("#admMp-d10", "5,31"); await pg.fill("#admMp-d18", "4,10"); await pg.fill("#admMp-d35", "1,80");
-  await pg.click("#fCom button[type=submit]"); await wait(1000);
+  await pg.click("#fCom button[type=submit]");
+  await until("select mp_pct_d35 from app_settings", [], (r) => Number(r[0].mp_pct_d35) === 1.8, 8000); await wait(300);
   const fs30 = (await q("select deposit_commission_pct, mp_pct_instant, mp_pct_d10, mp_pct_d18, mp_pct_d35 from app_settings"))[0];
   ok("admin/D30: comisiones guardadas en la base (7% de la seña; 7,61 / 5,31 / 4,10 / 1,80)", [fs30.deposit_commission_pct, fs30.mp_pct_instant, fs30.mp_pct_d10, fs30.mp_pct_d18, fs30.mp_pct_d35].map(Number).join() === "7,7.61,5.31,4.1,1.8");
   ok("admin/D30: el ejemplo (corte $20.000, seña 50%, al instante) da $10.000 + $700 + $882 = $11.582", (await pg.locator(".comex .tot").innerText()).includes("$11.582")
      && (await pg.locator(".comex").innerText()).includes("$700") && (await pg.locator(".comex").innerText()).includes("$882"));
   await pg.fill("#admMp-d10", "16"); await pg.click("#fCom button[type=submit]"); await wait(400);
   ok("admin/D30: Mercado Pago fuera de rango no se guarda", (await pg.locator("#comerr").innerText()).includes("entre 0 y 15") && Number((await q("select mp_pct_d10 from app_settings"))[0].mp_pct_d10) === 5.31);
-  await pg.fill("#admCom", "8,5"); await pg.fill("#admMp-d10", "5,31"); await pg.click("#fCom button[type=submit]"); await wait(1000);
-  ok("admin: comisión libre con decimales (8,5% de la seña)", Number((await q("select deposit_commission_pct from app_settings"))[0].deposit_commission_pct) === 8.5);
-  await pg.fill("#admCom", "20"); for (const t of ["instant", "d10", "d18", "d35"]) await pg.fill("#admMp-" + t, "0"); await pg.click("#fCom button[type=submit]"); await wait(800);
+  await pg.fill("#admCom", "8,5"); await pg.fill("#admMp-d10", "5,31"); await pg.click("#fCom button[type=submit]");
+  ok("admin: comisión libre con decimales (8,5% de la seña)", await until("select deposit_commission_pct from app_settings", [], (r) => Number(r[0].deposit_commission_pct) === 8.5, 8000));
+  await pg.fill("#admCom", "20"); for (const t of ["instant", "d10", "d18", "d35"]) await pg.fill("#admMp-" + t, "0"); await pg.click("#fCom button[type=submit]");
+  await until("select deposit_commission_pct, mp_pct_instant from app_settings", [], (r) => Number(r[0].deposit_commission_pct) === 20 && Number(r[0].mp_pct_instant) === 0, 8000); await wait(300);
   probing = true; const forb = await pg.evaluate(async () => { const r = await sb.from("app_settings").update({ deposit_commission_pct: 1, mp_pct_d10: 9 }).eq("id", true).select(); return (r.data || []).length }); probing = false;
   ok("nadie cambia las comisiones por fuera de la función", forb === 0 && Number((await q("select deposit_commission_pct from app_settings"))[0].deposit_commission_pct) === 20);
   // H24: la dirección del sitio para los links de los avisos
