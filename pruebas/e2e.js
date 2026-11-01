@@ -318,9 +318,51 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.click("[data-btab=horarios]"); await wait(300);
   ok("C39/D31: Horarios sin 'Descanso entre turnos' ni 'Cada cuánto empieza un turno', con la regla explicada",
      (await pg.locator("#hbuf, #hst").count()) === 0 && /se suceden según lo que dura el servicio/.test(await pg.locator("#fHorarios").innerText()));
-  await pg.selectOption("#hno", "120"); await pg.click("#fHorarios button[type=submit]"); await wait(800);
-  ok("horarios guardados", (await q("select notice_min, buffer_min from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].notice_min === 120);
+  // C37 (V3b): sin botón Guardar; cada cambio se guarda solo
+  await pg.selectOption("#hno", "120"); await wait(1400);
+  ok("C37: Horarios se guarda solo al cambiar, sin botón Guardar", (await pg.locator("#fHorarios button[type=submit]").count()) === 0
+     && (await q("select notice_min, buffer_min from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].notice_min === 120
+     && (await pg.locator("#hSaved").innerText()).includes("Guardado"));
   await db.query("update provider_settings set notice_min = 0 where provider_id = (select id from providers where name like 'Sofía%')");
+  // un día abierto dentro de 3 a 4 semanas (lejos de los turnos de la prueba) para el happy hour y la agenda
+  const hhSel = "select happy_on, happy_pct, happy_days, happy_from::text f, happy_to::text t from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'";
+  const hhBefore = (await q(hhSel))[0];
+  const hDay = await pg.evaluate(() => {
+    for (let off = 22; off < 31; off++) {
+      const d = dkey(addDays(off)); const dow = new Date(d + "T12:00:00").getDay(); const dc = cfg(S.me).days[dow];
+      if (dc.on && dc.m.on) return { d, dow, from: dc.m.from };
+    }
+    return null;
+  });
+  const hFrom = hDay.from; const hTo = String(+hFrom.slice(0, 2) + 2).padStart(2, "0") + hFrom.slice(2);
+  // con error (termina antes de empezar): lo marca y no guarda
+  await pg.check("#hhon"); await pg.fill("#hhf", hTo); await pg.fill("#hht", hFrom); await pg.dispatchEvent("#hht", "change"); await wait(1400);
+  ok("C37: si algo no cierra lo marca al lado y no guarda", (await pg.locator("#herr-hh").innerText()).includes("terminar después de empezar")
+     && (await pg.locator("#hSaved").innerText()).includes("No se guardó") && (await q(hhSel))[0].f === hhBefore.f);
+  await pg.fill("#hhf", hFrom); await pg.fill("#hht", hTo);
+  for (const dow of [0, 1, 2, 3, 4, 5, 6]) { if ((dow === hDay.dow) !== (await pg.isChecked("#hhd" + dow))) await pg.click(`label:has(#hhd${dow})`); }
+  await pg.dispatchEvent("#hht", "change"); await wait(1400);
+  const hhNow = (await q(hhSel))[0];
+  ok("C37: corregido, se guarda solo", hhNow.happy_on === true && hhNow.f.startsWith(hFrom) && hhNow.t.startsWith(hTo) && JSON.stringify(hhNow.happy_days) === JSON.stringify([hDay.dow]));
+  ok("C38: el día con happy hour lo muestra en Horarios", (await pg.locator(".hhchip").count()) === 1 && (await pg.locator(".hhchip").innerText()).includes(`${hFrom}–${hTo}`));
+  // C38: y en la Agenda de ese día, como una franja
+  await pg.click("[data-btab=agenda]"); await wait(300);
+  await pg.evaluate((d) => { S.aday = d; render(); }, hDay.d); await wait(300);
+  ok("C38: la Agenda marca la franja del happy hour", (await pg.locator(".tl .tl-hh").count()) === 1 && (await pg.locator(".tl-top").innerText()).includes(`Happy hour ${hFrom}–${hTo}`));
+  // C22 (V3b): la Agenda se pone al día sola (cada 30 s y al volver a la pestaña) con lo que cambió en la base
+  const seen = () => pg.locator(".tl").innerText().then((t) => t.includes("Llegó Solo"));
+  const showUp = () => pg.evaluate(() => document.dispatchEvent(new Event("visibilitychange"))).then(() => wait(1500));
+  const newBk = (await q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at) select p.id, 'Llegó Solo', 'Corte', 'manual', 'confirmed', ($1::date + $2::time) at time zone 'America/Argentina/Buenos_Aires', ($1::date + $2::time + interval '30 minutes') at time zone 'America/Argentina/Buenos_Aires' from providers p where p.name like 'Sofía%' returning id", [hDay.d, hFrom]))[0].id;
+  ok("C22: un turno nuevo no aparece sin que la Agenda se actualice", !(await seen()));
+  await pg.click("[data-act=manOpen]"); await wait(200); await showUp();
+  ok("C22: con el formulario de turno manual abierto no se toca la pantalla", !(await seen()) && (await pg.locator("[data-act=manClose], #fMan").count()) > 0);
+  await pg.evaluate(() => { S.manOpen = false; render(); }); await showUp();
+  ok("C22: al volver a la pestaña aparece el turno nuevo", await seen());
+  await q("delete from bookings where id = $1", [newBk]);
+  await showUp();
+  ok("C22: y desaparece el que se borró", !(await seen()));
+  await db.query("update provider_settings ps set happy_on=$1, happy_pct=$2, happy_days=$3, happy_from=$4, happy_to=$5 from providers p where p.id=ps.provider_id and p.name like 'Sofía%'", [hhBefore.happy_on, hhBefore.happy_pct, hhBefore.happy_days, hhBefore.f, hhBefore.t]);
+  await pg.evaluate(async () => { await api.loadMine(); S.btab = "horarios"; render(); }); await wait(300);
   // bloquear una semana (vacaciones)
   const wk0 = await pg.evaluate(() => dkey(addDays(20)));
   await pg.fill("#dbf", wk0); await pg.click("[data-act=dbQuick][data-d='6']"); await wait(200); await pg.click("#fDayBlock button[type=submit]"); await wait(1500);

@@ -18,6 +18,8 @@ function leer(p){
 }
 const html=RELOJ+leer(process.argv[2]);
 const dom=new JSDOM('<!doctype html><body>'+html+'</body>',{runScripts:'dangerously',pretendToBeVisual:true,url:'https://demo.tutiempo.com.ar/'});
+// C40: jsdom no imprime; la hoja del QR la prueba rutas.js en Chromium
+dom.window.print=()=>{};
 const w=dom.window;w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.open=()=>null;w.HTMLElement.prototype.focus=function(){};const d=w.document;const errs=[];
 w.addEventListener('error',e=>errs.push(e.message));w.console.error=(...a)=>errs.push(a.map(x=>x&&x.stack||String(x)).join(' '));
 w.HTMLAnchorElement.prototype.click=function(){};

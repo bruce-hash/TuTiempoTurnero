@@ -19,11 +19,20 @@ export function vBComunidad(prov) {
    <p class="note" style="margin-top:6px">Les llega una notificación con link para reservar.</p></div>
   <div class="panel"><p class="lbl">Reseñas de clientes</p>${reviewsHtml(true)}</div>
   <div class="panel" style="text-align:center"><p class="lbl">Sumá seguidores</p><div class="qr" aria-hidden="true">${qr(profileUrl(prov))}</div><p style="margin:8px 0 2px;font-weight:700">${esc(profileLinkText(prov))}</p><p class="note">Imprimí el QR para el espejo y poné el link en tu bio de Instagram.</p>
-   <button class="btn btn-ghost btn-block" data-act="copiarLink">Copiar link</button></div>`;
+   <button class="btn btn-pri btn-block" data-act="qrPrint">🖨 Imprimir o guardar el QR en PDF</button>
+   <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="copiarLink">Copiar link</button></div>`;
+}
+// C40 (V3b): hoja lista para imprimir (o "Guardar como PDF" desde la impresión del navegador), sin librerías nuevas:
+// nombre del negocio, el QR grande y el link. Va fuera de #app y la regla @media print deja solo esta hoja.
+export function qrSheet(prov, logo) {
+  return `<section class="qrsheet" aria-hidden="true"><div class="qs-logo">${logo}</div>
+   <h1>${esc(prov.name)}</h1><p class="qs-lead">Reservá tu turno online</p>
+   <div class="qs-qr">${qr(profileUrl(prov), 340)}</div>
+   <p class="qs-how">Escaneá el código con la cámara del celular</p><p class="qs-link">${esc(profileLinkText(prov))}</p></section>`;
 }
 // QR con la dirección del perfil (Bloque B), con qrcode-generator 2.0.4 (MIT, ver docs/licencias.md): corrección de
 // errores media y 4 módulos de margen blanco, como pide el estándar para que lo lean todas las cámaras
-function qr(url) {
+function qr(url, px = 132) {
   const code = qrcode(0, "M");
   code.addData(url);
   code.make();
@@ -36,5 +45,5 @@ function qr(url) {
       }
     }
   }
-  return `<svg viewBox="-4 -4 ${size + 8} ${size + 8}" width="132" height="132" shape-rendering="crispEdges" style="background:#fff"><path fill="#0f172a" d="${dark}"/></svg>`;
+  return `<svg viewBox="-4 -4 ${size + 8} ${size + 8}" width="${px}" height="${px}" shape-rendering="crispEdges" style="background:#fff"><path fill="#0f172a" d="${dark}"/></svg>`;
 }

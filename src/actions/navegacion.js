@@ -8,7 +8,8 @@ import { go, render } from "../ui/render.js";
 import { profileUrl } from "../router.js";
 import { toggleAccountMenu } from "../ui/menu-cuenta.js";
 import { toast } from "../ui/toast.js";
-import { comm } from "../views/prestador/comunidad.js";
+import { comm, qrSheet } from "../views/prestador/comunidad.js";
+import { LOGO } from "../ui/iconos.js";
 
 // “Volver al inicio” desde la pantalla de error
 registerClick("recover", (ev, el, act) => {
@@ -116,6 +117,19 @@ registerClick("copiarLink", (ev, el, act) => {
   } catch (err) {
     toast(url);
   }
+});
+// C40 (V3b): la hoja del QR se agrega al final de la página, se imprime (ahí está "Guardar como PDF") y se saca
+registerClick("qrPrint", (ev, el, act) => {
+  document.querySelectorAll(".qrsheet").forEach((sheet) => sheet.remove());
+  document.body.insertAdjacentHTML("beforeend", qrSheet(pr(ME()), LOGO));
+  document.body.classList.add("printing-qr");
+  const done = () => {
+    document.body.classList.remove("printing-qr");
+    document.querySelectorAll(".qrsheet").forEach((sheet) => sheet.remove());
+    window.removeEventListener("afterprint", done);
+  };
+  window.addEventListener("afterprint", done);
+  window.print();
 });
 registerClick("verPublico", (ev, el, act) => {
   S.preview = true;

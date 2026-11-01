@@ -9,7 +9,70 @@ import { store } from "../../store.js";
 import { feeOf } from "../../views/prestador/finanzas.js";
 import { MSG_DEF } from "../../views/prestador/mensajes.js";
 
+// C22 (V3b): la consulta de los turnos del panel y cómo se pasan a la agenda. Los usan la carga completa (loadMine) y la
+// que vuelve a pedir solo los turnos cada 30 segundos y al volver a la pestaña (refreshAgenda).
+const bookingsQuery = (pid, from, to) =>
+  sb
+    .from("bookings")
+    .select(
+      "id,service_id,client_id,client_name,client_phone,service_name,source,status,starts_at,ends_at,price,discount_pct,paid_mp,paid_wallet,app_fee,client_fee,paid_mp_fee,series_id,addons,buffer_min,pay_method",
+    )
+    .eq("provider_id", pid)
+    .gte("starts_at", localToIso(from, "00:00"))
+    .lt("starts_at", localToIso(to, "23:59"))
+    .in("status", ["confirmed", "done", "no_show", "hold"])
+    .order("starts_at")
+    .limit(5e3);
+const statusMap = {
+  confirmed: "confirmed",
+  done: "done",
+  no_show: "noshow",
+  hold: "confirmed",
+};
+const bookingFromDb = (pid) => (row) =>
+  Object.assign(
+    {
+      id: row.id,
+      pid: pid,
+      dur: minsBetween(row.starts_at, row.ends_at),
+      svc: row.service_name || "",
+      price: row.price,
+      paid: row.paid_mp + row.paid_wallet,
+      // comisión que salió de la seña (turnos anteriores a la versión 30, cuando no se cobraba aparte)
+      feeIn: Math.max(0, (row.app_fee || 0) - (row.client_fee || 0)),
+      fee: row.client_fee || 0,
+      mpFee: row.paid_mp_fee || 0,
+      disc: row.discount_pct,
+      cliente: row.client_name || "",
+      tel: row.client_phone || "",
+      src: row.source === "app" ? "app" : "manual",
+      type: row.source === "block" ? "block" : "local",
+      // un turno en espera de pago se muestra como confirmado: el horario ya está tomado
+      status: statusMap[row.status],
+      pay: row.pay_method || "mp",
+      series: row.series_id,
+      hold: row.status === "hold",
+      buf: row.buffer_min || 0,
+      addons: (row.addons || []).map((addon) => [addon.name, addon.price, addon.min]),
+      intake: row.intake || {},
+      cat: ((pr(pid).svcs || []).find((svc) => svc[4] === row.service_id) || [])[3],
+    },
+    isoToLocal(row.starts_at),
+  );
+
 export const livePanel = {
+  // C22 (V3b): vuelve a pedir solo los turnos del panel (60 días atrás, 120 adelante). true si cambió algo.
+  async refreshAgenda() {
+    const pid = S.me;
+    if (!pid) {
+      return false;
+    }
+    const rows = await call(bookingsQuery(pid, dkey(addDays(-60)), dkey(addDays(120))));
+    const sig = () => JSON.stringify(store.BOOK.filter((booking) => booking.pid == pid && !booking.mine));
+    const before = sig();
+    store.BOOK = store.BOOK.filter((booking) => booking.pid != pid || booking.mine).concat((rows || []).map(bookingFromDb(pid)));
+    return sig() !== before;
+  },
   // Todo el panel del prestador logueado en una tanda: turnos de 60 días atrás a 120 adelante, clientes, productos,
   // gastos, ventas sin turno de hoy, plantillas de avisos, finanzas de 30 días, ocupación, sellos y cierres de caja.
   async loadMine() {
@@ -18,19 +81,7 @@ export const livePanel = {
     const from = dkey(addDays(-60));
     const to = dkey(addDays(120));
     const [bookings, clients, products, expenses, walkins, templates, finance, priv, occupancy, cards, closings, mpSt, notices] = await Promise.all([
-      call(
-        sb
-          .from("bookings")
-          .select(
-            "id,service_id,client_id,client_name,client_phone,service_name,source,status,starts_at,ends_at,price,discount_pct,paid_mp,paid_wallet,app_fee,client_fee,paid_mp_fee,series_id,addons,buffer_min,pay_method",
-          )
-          .eq("provider_id", pid)
-          .gte("starts_at", localToIso(from, "00:00"))
-          .lt("starts_at", localToIso(to, "23:59"))
-          .in("status", ["confirmed", "done", "no_show", "hold"])
-          .order("starts_at")
-          .limit(5e3),
-      ),
+      call(bookingsQuery(pid, from, to)),
       call(sb.from("provider_clients").select("*").eq("provider_id", pid).limit(5e3)),
       call(sb.from("products").select("*").eq("provider_id", pid).order("name")),
       call(
@@ -82,45 +133,7 @@ export const livePanel = {
     // Bloque D (D26): si TuTiempo exige el DNI para aprobar y, si no lo exige, si el perfil ya está aprobado (los pasos)
     await liveApi.requireDni();
     S.provStatus = pr(pid).verified === false && !dniRequired() ? await call(sb.rpc("my_provider_status")).catch(() => null) : null;
-    const statusMap = {
-      confirmed: "confirmed",
-      done: "done",
-      no_show: "noshow",
-      hold: "confirmed",
-    };
-    store.BOOK = store.BOOK.filter((booking) => booking.pid != pid || booking.mine).concat(
-      (bookings || []).map((row) =>
-        Object.assign(
-          {
-            id: row.id,
-            pid: pid,
-            dur: minsBetween(row.starts_at, row.ends_at),
-            svc: row.service_name || "",
-            price: row.price,
-            paid: row.paid_mp + row.paid_wallet,
-            // comisión que salió de la seña (turnos anteriores a la versión 30, cuando no se cobraba aparte)
-            feeIn: Math.max(0, (row.app_fee || 0) - (row.client_fee || 0)),
-            fee: row.client_fee || 0,
-            mpFee: row.paid_mp_fee || 0,
-            disc: row.discount_pct,
-            cliente: row.client_name || "",
-            tel: row.client_phone || "",
-            src: row.source === "app" ? "app" : "manual",
-            type: row.source === "block" ? "block" : "local",
-            // un turno en espera de pago se muestra como confirmado: el horario ya está tomado
-            status: statusMap[row.status],
-            pay: row.pay_method || "mp",
-            series: row.series_id,
-            hold: row.status === "hold",
-            buf: row.buffer_min || 0,
-            addons: (row.addons || []).map((addon) => [addon.name, addon.price, addon.min]),
-            intake: row.intake || {},
-            cat: ((pr(pid).svcs || []).find((svc) => svc[4] === row.service_id) || [])[3],
-          },
-          isoToLocal(row.starts_at),
-        ),
-      ),
-    );
+    store.BOOK = store.BOOK.filter((booking) => booking.pid != pid || booking.mine).concat((bookings || []).map(bookingFromDb(pid)));
     store.CLIENTS = {};
     (clients || []).forEach((row) => {
       store.CLIENTS[row.name] = {

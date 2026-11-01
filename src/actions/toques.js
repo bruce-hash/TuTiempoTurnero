@@ -13,6 +13,7 @@ import { toast } from "../ui/toast.js";
 import { SMAX } from "../views/prestador/estadisticas.js";
 import { ymk } from "../views/prestador/finanzas.js";
 import { PRESETS } from "../views/prestador/horarios.js";
+import { scheduleHorarios } from "./prestador-horarios.js";
 import { selectBtab } from "../views/prestador/panel.js";
 
 // un solo listener de toques: primero los atributos de navegación y selección (data-go, data-svc, data-day,
@@ -150,6 +151,7 @@ document.addEventListener("click", (ev) => {
   if (hhpEl) {
     $("#hhp").value = hhpEl.dataset.hhp;
     document.querySelectorAll("[data-hhp]").forEach((btn) => btn.setAttribute("aria-pressed", btn === hhpEl));
+    scheduleHorarios();
     return;
   }
   const svEl = ev.target.closest("[data-sv]");

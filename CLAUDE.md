@@ -48,6 +48,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Sin descanso entre turnos (C39).
   - V8 (C52): `src/lib/precios.js` vuelve a pedir los precios del prestador en el perfil y la confirmación (al volver a la
     pestaña, cada minuto y antes de cobrar): el cliente nunca ve un precio y paga otro.
+  - V3b (C22): `src/lib/agenda-al-dia.js` vuelve a pedir los turnos de la Agenda cada 30 s y al volver a la pestaña (sin
+    Realtime) y solo dibuja si cambió algo; no toca la pantalla con un guardado pendiente, un formulario abierto o alguien escribiendo.
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en

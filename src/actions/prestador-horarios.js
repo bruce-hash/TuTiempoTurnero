@@ -49,7 +49,7 @@ registerClick("dbDel", (ev, el, act) => {
   render();
   return;
 });
-// completa el happy hour con los días y horas de las franjas más tranquilas (falta tocar Guardar)
+// completa el happy hour con los días y horas de las franjas más tranquilas (se guarda solo, C37)
 registerClick("hhSuggest", (ev, el, act) => {
   const wins = lowWindows();
   if (!wins.length) {
@@ -65,7 +65,8 @@ registerClick("hhSuggest", (ev, el, act) => {
   });
   $("#hhf").value = pad(fromH) + ":00";
   $("#hht").value = pad(toH) + ":00";
-  toast("Cargamos tus horarios más flojos. Tocá Guardar para aplicarlo.");
+  toast("Cargamos tus horarios más flojos.");
+  scheduleHorarios();
 });
 registerClick("copyMon", (ev, el, act) => {
   const mon = [
@@ -94,7 +95,8 @@ registerClick("copyMon", (ev, el, act) => {
       });
     }
   });
-  toast("Copiado a los días abiertos. Tocá Guardar horarios.");
+  toast("Copiado a los días abiertos.");
+  scheduleHorarios();
 });
 // bloquear días: valida (hasta 92 días, no en el pasado) y, si hay turnos esos días, pide confirmar antes
 registerSubmit("fDayBlock", (ev) => {
@@ -160,6 +162,46 @@ registerSubmit("fDayBlock", (ev) => {
 });
 // guardar horarios: valida cada día y el happy hour; con errores los marca y no guarda nada
 registerSubmit("fHorarios", (ev) => {
+  clearTimeout(autoTimer);
+  autoTimer = null;
+  saveHorarios(false);
+});
+// C37 (V3b): Horarios se guarda solo, sin botón. Cada cambio espera un momento (por si sigue tocando) y guarda; si
+// algo no cierra, marca el error al lado del campo y no guarda hasta que se corrija.
+let autoTimer = null;
+export function scheduleHorarios() {
+  clearTimeout(autoTimer);
+  const status = $("#hSaved");
+  if (status) {
+    status.textContent = "Guardando…";
+  }
+  autoTimer = setTimeout(() => {
+    autoTimer = null;
+    saveHorarios(true);
+  }, 700);
+}
+// un toque fuera del formulario (otra pestaña del panel, el menú) con un guardado esperando: se guarda antes de que la
+// pantalla cambie y el formulario desaparezca (fase de captura: corre antes que el listener de toques)
+document.addEventListener(
+  "click",
+  (ev) => {
+    if (autoTimer && !(ev.target.closest && ev.target.closest("#fHorarios"))) {
+      clearTimeout(autoTimer);
+      autoTimer = null;
+      saveHorarios(true);
+    }
+  },
+  true,
+);
+document.addEventListener("change", (ev) => {
+  if (ev.target.closest && ev.target.closest("#fHorarios")) {
+    scheduleHorarios();
+  }
+});
+function saveHorarios(auto) {
+  if (!$("#fHorarios")) {
+    return;
+  }
   const conf = cfg(ME());
   const errs = {};
   const days = {};
@@ -220,7 +262,11 @@ registerSubmit("fHorarios", (ev) => {
         block: "center",
       });
     }
-    toast("Revisá lo marcado en rojo. Tus cambios siguen ahí.");
+    if (auto) {
+      $("#hSaved").textContent = "No se guardó: revisá lo marcado en rojo.";
+    } else {
+      toast("Revisá lo marcado en rojo. Tus cambios siguen ahí.");
+    }
     return;
   }
   conf.days = days;
@@ -247,7 +293,14 @@ registerSubmit("fHorarios", (ev) => {
   };
   S.hErr = null;
   api.m.saveSettings(conf);
-  toast("Horarios guardados. Ya se ven en tu perfil.");
+  // el foco queda donde estaba (el render vuelve a dibujar el formulario)
+  const focused = document.activeElement && document.activeElement.id;
+  S.hSavedAt = Date.now();
   render();
-  return;
-});
+  if (focused && document.getElementById(focused)) {
+    document.getElementById(focused).focus();
+  }
+  if (!auto) {
+    toast("Horarios guardados. Ya se ven en tu perfil.");
+  }
+}

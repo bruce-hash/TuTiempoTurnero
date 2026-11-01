@@ -141,6 +141,12 @@ async function normalizar(page) {
     document.querySelectorAll("#app #hbuf, #app #hst").forEach((el) => el.closest(".f")?.remove());
     document.querySelectorAll("#fHorarios p.hint").forEach((el) => { if (/Tus clientes pueden reservar|se suceden según lo que dura/.test(el.textContent)) el.remove(); });
     document.querySelectorAll("#app [data-act=walkFromAgenda]").forEach((el) => el.remove());
+    // V3b (C37, C38, C40, cambios a propósito): Horarios se guarda solo (sale el botón Guardar, entra la línea de estado),
+    // el happy hour se ve en sus días (Horarios) y como franja en la Agenda, y "Sumá seguidores" suma "Imprimir o guardar
+    // el QR en PDF". Se neutraliza en las dos versiones; lo nuevo lo prueban e2e.js y rutas.js.
+    document.querySelectorAll("#app #fHorarios button[type=submit], #app #hSaved, #app .hhchip, #app .tl-hh, #app [data-act=qrPrint]").forEach((el) => el.remove());
+    document.querySelectorAll("#app [data-act=copiarLink]").forEach((el) => { el.style.marginTop = ""; });
+    document.querySelectorAll("#app .tl-top .hint").forEach((el) => { el.textContent = el.textContent.replace(/ · ⚡ Happy hour .*$/, ""); });
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
