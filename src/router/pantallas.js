@@ -13,6 +13,7 @@ import { P, store } from "../store.js";
 import { svcByKey } from "../ui/sellos.js";
 import { toast } from "../ui/toast.js";
 import { setBtab } from "../views/prestador/panel.js";
+import { nextStep } from "../lib/alta.js";
 import { ADMIN_TABS, PANEL_TABS, PROFILE_TABS, keyOf } from "./direcciones.js";
 
 const safePath = (value) => (typeof value === "string" && /^\/(?!\/)/.test(value) && !/[\\\s]/.test(value) ? value : null);
@@ -42,8 +43,43 @@ function showNotFound(path) {
 }
 function showLogin(back, mode = "in") {
   S.after = back;
-  S.login = { mode, email: "", err: "" };
+  S.afterSoft = false;
+  S.pending = null;
+  S.login = { mode, email: "", err: "", fails: S.login.fails || 0, locked: S.login.locked };
   showClient(mode === "up" ? "register" : "login");
+}
+// Registrá tu negocio: /registrar-negocio (paso 0, la cuenta) y /registrar-negocio/1 … /5 y /listo
+function openBiz(parts, path) {
+  const word = parts[1];
+  if (parts.length > 2 || (word != null && !/^[1-5]$/.test(word) && word !== "listo")) {
+    return showNotFound(path);
+  }
+  // sin sesión: el paso 0 (crear la cuenta o ingresar); al ingresar sigue con el primer paso que falte
+  if (!S.user && !S.barberAuth) {
+    S.pending = { a: "negocio", at: Date.now() };
+    if (!S.keepLogin) {
+      S.login = { mode: "up", email: "", err: "", fails: S.login.fails || 0 };
+    }
+    S.keepLogin = false;
+    S.bizStep = 0;
+    return showClient("negocio");
+  }
+  // con sesión y todavía sin negocio: el paso 1 (crea el negocio)
+  if (!S.barberAuth) {
+    S.bizStep = 1;
+    return showClient("negocio");
+  }
+  if (word == null) {
+    const next = nextStep();
+    if (!next) {
+      return applyUrl("/panel/agenda");
+    }
+    S.bizStep = next;
+  } else {
+    S.bizStep = word === "listo" ? "listo" : +word;
+  }
+  S.biz = {};
+  showClient("negocio");
 }
 // pantallas que piden sesión de cliente: sin sesión, al ingreso (y después vuelve a `path`)
 function needUser(path) {
@@ -127,12 +163,11 @@ async function openCheckout(pid, params, path) {
 function openPanel(parts, params, path) {
   if (!S.barberAuth) {
     if (S.user && LIVE) {
-      toast("Esa cuenta todavía no tiene perfil de prestador. Podés sumarte desde “Sumate”.");
+      toast("Esa cuenta todavía no tiene un negocio. Podés registrarlo desde “Registrá tu negocio”.");
       return showClient("home");
     }
-    S.after = path;
-    Object.assign(S.blogin, { step: "form", err: "", show: false });
-    return showClient("loginBarbero");
+    // un solo ingreso para todos: después vuelve a esta dirección del panel
+    return showLogin(path);
   }
   const word = parts[1] || "agenda";
   if (parts.length > 2) {
@@ -267,7 +302,7 @@ export async function applyUrl(href) {
       }
       if (S.user) {
         // ya ingresó (por ejemplo, recargó el ingreso): directo adonde iba, o a su perfil
-        return back ? applyUrl(back) : showClient("cuenta");
+        return back ? applyUrl(back) : S.barberAuth ? applyUrl("/panel/agenda") : showClient("cuenta");
       }
       return showLogin(back, first === "crear-cuenta" ? "up" : "in");
     }
@@ -280,19 +315,21 @@ export async function applyUrl(href) {
       if (parts[1] !== "ingresar" || parts.length !== 2) {
         return showNotFound(path);
       }
+      // links viejos de "Acceso prestadores": el mismo ingreso que todos
       const back = safePath(params.get("volver"));
       if (S.barberAuth) {
         return applyUrl(back && back.startsWith("/panel") ? back : "/panel/agenda");
       }
-      S.after = back;
-      Object.assign(S.blogin, { step: "form", err: "", show: false });
-      return showClient("loginBarbero");
-    }
-    case "sumate":
-      if (S.reg.done) {
-        S.reg = {};
+      if (S.user) {
+        return showClient("home");
       }
-      return single("prestador");
+      return showLogin(back && back.startsWith("/panel") ? back : null);
+    }
+    // el alta de antes ("Sumate"): a Registrá tu negocio
+    case "sumate":
+      return parts.length === 1 ? applyUrl("/registrar-negocio") : showNotFound(path);
+    case "registrar-negocio":
+      return openBiz(parts, path);
     case "terminos":
       return single("terminos");
     case "panel":

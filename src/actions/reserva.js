@@ -1,3 +1,4 @@
+import { openAuth } from "./auth.js";
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
@@ -162,23 +163,27 @@ registerClick("reservarT", (ev, el, act) => {
       .then((changed) => changed && S.view === "checkoutT" && render())
       .catch(() => {});
   } else {
-    S.after = "checkoutT";
-    go("login");
+    // sin sesión: la ventana de ingreso con el ticket del horario elegido; al ingresar sigue directo al pago
+    const svc = (pr(S.pid).svcs || [])[S.svc];
+    openAuth(el, { pending: { a: "reservar", pid: S.pid, svc: String(skey(svc)), day: S.slot.date, time: S.slot.time } });
   }
 });
-registerClick("waitlist", (ev, el, act) => {
-  if (!S.user) {
-    S.after = "perfil";
-    go("login");
-    return;
-  }
+// anotarse para que le avisen si se libera un turno ese día (también lo usa la acción pendiente al ingresar)
+export function joinWaitlist(pid, day) {
   store.WAIT.push({
-    pid: S.pid,
-    date: S.day,
+    pid,
+    date: day,
     user: S.user.email,
   });
-  api.m.waitlist(S.pid, S.day);
+  api.m.waitlist(pid, day);
   toast("Listo. Si se libera un turno ese día, te avisamos con una notificación.");
+}
+registerClick("waitlist", (ev, el, act) => {
+  if (!S.user) {
+    openAuth(el, { pending: { a: "lista", pid: S.pid, day: S.day } });
+    return;
+  }
+  joinWaitlist(S.pid, S.day);
   render();
 });
 registerClick("cancelAsk", (ev, el, act) => {

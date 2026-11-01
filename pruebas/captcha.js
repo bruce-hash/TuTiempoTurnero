@@ -55,10 +55,10 @@ const FAKE = (pass) => `(() => {
 
   // ---------- sin clave: nada de Cloudflare ----------
   let page = await nueva();
-  for (const route of ["/ingresar", "/crear-cuenta", "/prestadores/ingresar", "/sumate"]) await open(page, route);
+  for (const route of ["/ingresar", "/crear-cuenta", "/registrar-negocio"]) await open(page, route);
   ok("sin clave: la app no carga el script de Cloudflare ni arma recuadros", cloudflare === 0 && (await page.locator(".cf-box").count()) === 0);
-  await open(page, "/prestadores/ingresar");
-  await page.fill("#be", "sofia@test.ar"); await page.fill("#bp", "prestador123"); await page.click("#fBarb button[type=submit]");
+  await open(page, "/ingresar");
+  await page.fill("#ai_e", "sofia@test.ar"); await page.fill("#ai_p", "prestador123"); await page.click("#fLogin button[type=submit]");
   await page.waitForSelector(".bhead", { timeout: 8000 }).catch(() => {});
   ok("sin clave: el ingreso funciona como siempre (sin token)", (await page.locator(".bhead").count()) === 1 && (await log()).length === 0);
   await page.context().close();
@@ -110,24 +110,19 @@ const FAKE = (pass) => `(() => {
   ok("recuperar contraseña: con token", (await last("/recover") || {}).valid === true);
   await page.context().close();
 
-  // prestadores: ingreso, recuperar contraseña y alta
+  // prestadores: el mismo ingreso de todos, y el paso 0 de Registrá tu negocio
   page = await nueva();
-  await open(page, "/prestadores/ingresar");
-  await page.fill("#be", "sofia@test.ar"); await page.fill("#bp", "prestador123"); await page.click("#fBarb button[type=submit]");
+  await open(page, "/ingresar");
+  await page.fill("#ai_e", "sofia@test.ar"); await page.fill("#ai_p", "prestador123"); await page.click("#fLogin button[type=submit]");
   await page.waitForSelector(".bhead", { timeout: 8000 }).catch(() => {});
-  ok("ingreso de prestadores: con token", (await page.locator(".bhead").count()) === 1 && (await last("/token")).valid);
+  ok("ingreso de una prestadora: con token, a su Agenda", (await page.locator(".bhead").count()) === 1 && (await last("/token")).valid);
   await page.evaluate(() => sb.auth.signOut()); await page.context().close();
   page = await nueva();
-  await open(page, "/prestadores/ingresar");
-  await page.evaluate(() => { S.blogin.step = "recover"; render(); }); await page.waitForTimeout(400);
-  const recovers = (await log()).filter((x) => x.captcha === "/recover").length;
-  await page.fill("#re", "sofia@test.ar"); await page.click("#fRecover button[type=submit]"); await page.waitForTimeout(1000);
-  ok("recuperar contraseña de prestador: con token", (await log()).filter((x) => x.captcha === "/recover").length === recovers + 1 && (await last("/recover")).valid);
-  await open(page, "/sumate");
-  await page.fill("#pn", "Captcha Uñas"); await page.fill("#pe", "alta.captcha@test.ar"); await page.fill("#pp", "Alta2026xx"); await page.fill("#ptel", "2284 555000");
-  await page.evaluate(() => { document.querySelector("#rr-u").checked = true; document.querySelector("#ptc").checked = true; });
-  await page.click("#fPrest button[type=submit]"); await page.waitForTimeout(1200);
-  ok("alta de prestador: con token", (await last("/signup") || {}).valid === true && /Cuenta creada/.test(await text(page)));
+  await open(page, "/registrar-negocio");
+  await page.waitForFunction(() => (window.__tt || []).some((w) => w.action === "fsignup"), null, { timeout: 5000 }).catch(() => {});
+  await page.fill("#au_n", "Captcha Uñas"); await page.fill("#au_e", "alta.captcha@test.ar"); await page.fill("#au_p", "Alta2026xx");
+  await page.check("#au_ok", { force: true }); await page.click("#fSignup button[type=submit]"); await page.waitForTimeout(1200);
+  ok("Registrá tu negocio (paso 0): con token, llega a Revisá tu email", (await last("/signup") || {}).valid === true && /Revisá tu email/.test(await text(page)));
   await page.context().close();
 
   // el servidor (como Supabase) rechaza sin token: la prueba no es de mentira

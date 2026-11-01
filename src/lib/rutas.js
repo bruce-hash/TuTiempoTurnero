@@ -25,6 +25,7 @@ export const RESERVED_SLUGS = [
   "panel",
   "prestadores",
   "privacidad",
+  "registrar-negocio",
   "registro",
   "reservar",
   "rubro",

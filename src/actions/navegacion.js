@@ -1,3 +1,4 @@
+import { openAuth } from "./auth.js";
 import { registerClick } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
@@ -31,7 +32,7 @@ registerClick("acctMenu", (ev, el, act) => {
 registerClick("asClient", (ev, el, act) => {
   S.role = "cliente";
   S.preview = false;
-  go(el.dataset.to === "misturnos" ? "misturnos" : "cuenta");
+  go(el.dataset.to === "misturnos" ? "misturnos" : el.dataset.to === "home" ? "home" : "cuenta");
   window.scrollTo(0, 0);
 });
 registerClick("salirAdmin", (ev, el, act) => {
@@ -81,22 +82,17 @@ registerClick("salirBarbero", (ev, el, act) => {
     }
   }
   S.barberAuth = false;
-  S.blogin.fails = 0;
-  S.blogin.locked = false;
   S.role = "cliente";
   S.view = "home";
   toast("Cerraste sesión del panel");
   render();
   window.scrollTo(0, 0);
 });
-registerClick("seguir", (ev, el, act) => {
-  const pid = S.pid || ME();
-  if (!S.user && S.role !== "barbero") {
-    S.after = "perfil";
-    go("login");
+// seguir / dejar de seguir a un prestador (también lo usa la acción pendiente al ingresar)
+export function setFollow(pid, on) {
+  if (on === isFol(pid)) {
     return;
   }
-  const on = !isFol(pid);
   if (LIVE) {
     FOLLOW[pid] = on;
   } else {
@@ -105,6 +101,15 @@ registerClick("seguir", (ev, el, act) => {
   comm(pid).followers += on ? 1 : -1;
   api.m.follow(pid, on);
   toast(on ? "Ahora seguís a " + pr(pid).name + ". Te avisamos cuando tenga lugar." : "Dejaste de seguirlo");
+}
+registerClick("seguir", (ev, el, act) => {
+  const pid = S.pid || ME();
+  // sin sesión: la ventana de ingreso con el ticket "Seguir a…" (al ingresar queda hecho)
+  if (!S.user && S.role !== "barbero") {
+    openAuth(el, { pending: { a: "seguir", pid } });
+    return;
+  }
+  setFollow(pid, !isFol(pid));
   render();
 });
 registerClick("copiarLink", (ev, el, act) => {

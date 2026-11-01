@@ -7,7 +7,7 @@ import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
 // Achica la foto a maxSide px de lado mayor y la vuelve JPEG: pesa poco y no lleva la ubicación del celular.
-async function shrinkImage(file, maxSide = 640) {
+export async function shrinkImage(file, maxSide = 640) {
   if (!file || !/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)) {
     throw new Error("Elegí una foto JPG, PNG o WEBP.");
   }

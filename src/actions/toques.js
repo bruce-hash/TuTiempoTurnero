@@ -14,7 +14,7 @@ import { SMAX } from "../views/prestador/estadisticas.js";
 import { ymk } from "../views/prestador/finanzas.js";
 import { PRESETS } from "../views/prestador/horarios.js";
 import { scheduleHorarios } from "./prestador-horarios.js";
-import { selectBtab } from "../views/prestador/panel.js";
+import { selectBtab, setBtab } from "../views/prestador/panel.js";
 
 // un solo listener de toques: primero los atributos de navegación y selección (data-go, data-svc, data-day,
 // data-slot…), que cambian el estado y vuelven a dibujar; al final, data-act busca la acción en el registro
@@ -32,6 +32,15 @@ document.addEventListener("click", (ev) => {
   const goEl = ev.target.closest("[data-go]");
   if (goEl) {
     ev.preventDefault();
+    // el prestador entra siempre a su Agenda: el logo lo lleva ahí (para ver TuTiempo como cliente, "Reservar como cliente")
+    if (goEl.id === "logoLink" && S.barberAuth && S.role !== "admin") {
+      S.role = "barbero";
+      S.preview = false;
+      setBtab("agenda");
+      render();
+      window.scrollTo(0, 0);
+      return;
+    }
     if (goEl.dataset.go === "perfil") {
       S.pctx = goEl.dataset.ctx || null;
       S.svc = 0;

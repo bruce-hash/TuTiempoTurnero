@@ -164,6 +164,10 @@ async function normalizar(page) {
         n.textContent = n.textContent.replace(meses, (m) => m.toLowerCase()).replace("desde Finanzas → Caja del día", "desde la pestaña Caja").replace("o cargás algo acá", "o cargás algo en Caja");
       }
     }
+    // Ingreso y registro (cambio a propósito): el inicio suma la puerta "Registrá tu negocio" y la Agenda, en lugar de
+    // "Activá tu perfil", muestra "Te falta poco" (los prestadores de la comparación ya están dados de alta: no aparece).
+    // Se neutraliza en las dos versiones; lo nuevo lo prueban e2e.js y rutas.js.
+    document.querySelectorAll("#app .bizcta, #app .asclient, #app .panel.setup, #app .panel.todo").forEach((el) => el.remove());
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
@@ -237,11 +241,18 @@ async function recorridoVivo(browser, url) {
   // prestadora: las 9 pestañas del panel
   page = await pagina(browser, { relojFijo: false });
   await page.goto(url);
-  // V7 (C47, C48): en la versión nueva el acceso de prestadores es la segunda capa que abre el footer
-  await clic(page, "header [data-go=loginBarbero], footer [data-act=authOpen][data-k=prestador]");
-  await page.fill("#be", "sofia@test.ar");
-  await page.fill("#bp", "prestador123");
-  await clic(page, "#fBarb button[type=submit]");
+  // en la versión de referencia, el acceso de prestadores (#fBarb); en la nueva, el mismo ingreso que todos (va a la Agenda)
+  if (await page.locator("header [data-go=loginBarbero]").count()) {
+    await clic(page, "header [data-go=loginBarbero]");
+    await page.fill("#be", "sofia@test.ar");
+    await page.fill("#bp", "prestador123");
+    await clic(page, "#fBarb button[type=submit]");
+  } else {
+    await clic(page, "footer [data-act=authOpen]");
+    await page.fill("#ai_e", "sofia@test.ar");
+    await page.fill("#ai_p", "prestador123");
+    await clic(page, "#fLogin button[type=submit]");
+  }
   await page.waitForSelector(".bhead");
   for (const t of PESTANAS) { await clic(page, `[data-btab=${t}]`); await page.waitForTimeout(300); await foto(page, pasos, `panel · ${t}`); }
   errores.push(...page.errores);
@@ -341,6 +352,9 @@ if (process.env.PGHOST || process.env.POSTGREST) {
     await c.query("update public.providers set shuffle_key = id");
     await c.query("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ('admin@test.ar', 'admin12345', '{\"full_name\":\"Admin\"}')");
     await c.query("insert into public.app_admins (user_id) select id from auth.users where email = 'admin@test.ar'");
+    // ingreso y registro: el código por email ya no crea cuentas; la clienta existe en las dos bases (en la de
+    // referencia el código la creaba)
+    await c.query("insert into auth.users (email, raw_user_meta_data) values ('ana@test.ar', '{\"full_name\":\"ana\"}')");
     await c.end();
   }
   const [viejo, nuevo] = await Promise.all(entornos.map((e) => recorridoVivo(browser, e.url)));

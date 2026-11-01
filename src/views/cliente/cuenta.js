@@ -54,7 +54,7 @@ export function vCuenta() {
    <div class="panel"><p class="lbl">Seguridad</p><dl class="kv"><dt>Email</dt><dd>${esc(user.email)}</dd></dl>
     <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="changePass">🔒 Cambiar contraseña</button></div>
    ${S.isAdmin ? '<button class="btn btn-ghost btn-block" data-act="toAdmin">🛠️ Panel de TuTiempo (admin)</button>' : ""}
-   ${S.barberAuth ? '<button class="btn btn-pri btn-block" data-act="toPanel">Ir a mi panel de prestador</button>' : '<p class="note">¿Ofrecés servicios? <button class="lnk" data-go="prestador">Sumate como prestador</button></p>'}
+   ${S.barberAuth ? '<button class="btn btn-pri btn-block" data-act="toPanel">Ir a mi panel de prestador</button>' : '<p class="note">¿Tenés un negocio? <button class="lnk" data-act="bizStart">Registralo en TuTiempo</button></p>'}
    <button class="btn btn-ghost btn-block" data-act="logout">Cerrar sesión</button>
    ${delBox("cli", upcoming)}
   </div>`;

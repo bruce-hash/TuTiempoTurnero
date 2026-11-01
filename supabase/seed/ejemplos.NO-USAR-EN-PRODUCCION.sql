@@ -282,4 +282,6 @@ begin
     insert into public.reviews (provider_id, author, stars, body) values (pid, 'Martín G.', 5, 'Impecable el fade y súper puntual.');
     insert into public.reviews (provider_id, author, stars, body) values (pid, 'Leandro S.', 4, 'Muy buen corte, el lugar es cómodo.');
   end if;
+  -- Ingreso y registro: los de ejemplo ya están dados de alta (los 5 pasos hechos)
+  update public.provider_settings set setup_done = '{1,2,3,4,5}';
 end $$;

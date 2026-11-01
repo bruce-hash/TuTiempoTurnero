@@ -7,10 +7,9 @@ import "./styles/componentes.css";
 import "./styles/rubros.css";
 import "./styles/marketplace.css";
 import "./styles/compu.css";
-import "./actions/acceso-prestadores.js";
 import "./actions/admin-balance.js";
 import "./actions/admin.js";
-import "./actions/alta-prestador.js";
+import "./actions/negocio.js";
 import "./actions/auth.js";
 import "./actions/avisos.js";
 import "./actions/cambios.js";
@@ -36,6 +35,8 @@ import { errMsg } from "./lib/errores.js";
 import { startPriceRefresh } from "./lib/precios.js";
 import { startAgendaRefresh } from "./lib/agenda-al-dia.js";
 import { refreshPush } from "./lib/push.js";
+import { unstashPending } from "./lib/pendiente.js";
+import { resumePending } from "./actions/pendiente.js";
 import { startPwa } from "./lib/pwa.js";
 import { S } from "./state.js";
 import { P, store } from "./store.js";
@@ -169,10 +170,15 @@ async function boot() {
       if (after && S.user && typeof after.path === "string" && /^\/(?!\/)/.test(after.path)) {
         start = after.path;
       }
-      // primer ingreso de un prestador nuevo (al tocar el link del email): a Perfil, con los pasos para activarlo
-      if (S.firstPanel && S.barberAuth) {
-        S.firstPanel = false;
-        start = "/panel/perfil";
+      // la acción pendiente que quedó en esta pestaña antes de ir a Google
+      const stashed = unstashPending();
+      if (S.user && stashed && !S.pending) {
+        S.pending = stashed;
+      }
+      // el prestador entra siempre a su Agenda (también al abrir la app instalada, que arranca en "/")
+      const startUrl = new URL(start, location.origin);
+      if (S.barberAuth && !S.pending && ((startUrl.pathname === "/" && !startUrl.search) || (after && after.soft))) {
+        start = location.origin + "/panel/agenda";
       }
     }
     // vuelta de Mercado Pago de los cobros abiertos antes del Paso 1: ?b=<turno>&mp=success (los nuevos vuelven a
@@ -189,6 +195,10 @@ async function boot() {
       }
     }
     await startRouter(start);
+    // ingreso y registro: la acción que pidió ingresar (link del email de la cuenta nueva o vuelta de Google) sigue sola
+    if (S.user && S.pending) {
+      await resumePending();
+    }
     return;
   } else {
     const bar = document.createElement("div");

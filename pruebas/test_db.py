@@ -845,6 +845,26 @@ ok("C35: borrar un producto no borra sus ventas ni sus compras (quedan sin produ
     and not err(q("delete from products where id=%s", (pr_,), uid=own4))
     and q("select count(*), count(product_id) from walkins where provider_id=%s and description='Gel'", (p4,))[0] == (1, 0))(
      q("insert into products (provider_id, name, price, stock) values (%s,'Gel',1500,3) returning id", (p4,), uid=own4)[0][0]))
+# ---------- Ingreso y registro: alta del negocio en 5 pasos ----------
+own_s = mkuser("pasos@test.ar", "Pasos")
+p_s = q("select register_provider('Registrar Negocio', 'Calle 1', array['b'], '2284 444', null)", uid=own_s)[0][0]
+ok("alta por pasos: un negocio nuevo arranca sin pasos guardados", q("select setup_done from provider_settings where provider_id=%s", (p_s,))[0][0] == [])
+ok("alta por pasos: 'registrar-negocio' es reservada (el slug lleva sufijo)", q("select slug from providers where id=%s", (p_s,))[0][0] == "registrar-negocio-1")
+ok("alta por pasos: el dueño marca el paso 1", q("select setup_step(1)", uid=own_s)[0][0] == [1])
+q("select setup_step(3)", uid=own_s)
+ok("alta por pasos: marcar dos veces el mismo paso no lo repite (y quedan en orden)", q("select setup_step(1)", uid=own_s)[0][0] == [1, 3])
+ok("alta por pasos: un paso que no existe se rechaza", err(q("select setup_step(6)", uid=own_s), "bad_step"))
+ok("alta por pasos: una cuenta sin negocio no puede marcar pasos", err(q("select setup_step(1)", uid=mkuser("sinnegocio@test.ar", "Sin")), "not_provider"))
+ok("alta por pasos: sin sesión no se puede marcar ni consultar", err(q("select setup_step(1)", role="anon")) and err(q("select my_setup()", role="anon")))
+ms = q("select my_setup()", uid=own_s)[0][0]
+ok("alta por pasos: my_setup dice pasos, servicios, Mercado Pago, DNI y estado",
+   ms["steps"] == [1, 3] and ms["services"] == 0 and ms["mp"] is False and ms["dni_required"] is True and ms["dni_ok"] is False and ms["status"] == "pending")
+q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Corte',30,9000)", (p_s,), uid=own_s)
+conectar_mp(p_s)
+ms = q("select my_setup()", uid=own_s)[0][0]
+ok("alta por pasos: con un servicio y Mercado Pago conectado, my_setup lo refleja", ms["services"] == 1 and ms["mp"] is True)
+ok("alta por pasos: un cliente sin negocio recibe null", q("select my_setup()", uid=mkuser("cli.setup@test.ar", "Cli"))[0][0] is None)
+ok("alta por pasos: nadie puede guardar un paso fuera de 1 a 5 (constraint)", err(q("update provider_settings set setup_done='{7}' where provider_id=%s", (p_s,))))
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

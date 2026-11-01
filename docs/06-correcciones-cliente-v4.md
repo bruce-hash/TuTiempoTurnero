@@ -27,14 +27,14 @@ Paso 2: solo organizada, sin programar. Cada bloque se programa recién con el O
 | C10 | Pagos | Volver a la misma página después de pagar | Paso 1 | Hecho (Paso 1) | La vuelta va a la pantalla del turno (`/turno/<id>`), también sin sesión. |
 | C11 | Pagos | Revisar el dinero a liquidar de Mercado Pago | V1 | Verificar | ¿En qué pantalla? ¿Es "cuándo se acredita cada seña" en Finanzas del prestador? Mercado Pago informa la fecha de liberación de cada pago (`money_release_date`); el saldo de la cuenta no lo vemos. |
 | C12 | Pagos | Liquidar la seña al prestador apenas se paga (liquidación instantánea) | V1 | Hecho en parte (V1) | El prestador elige su plazo (al instante, 10, 18 o 35 días) en Horarios, junto a la seña, con el aviso de que tiene que ser el mismo que en su cuenta de Mercado Pago. Liquidar "al instante" lo decide cada prestador en Mercado Pago; la app no puede elegirlo por él. |
-| C13 | Prestador | Sin pantalla principal para el prestador: entra directo a su panel | V2 | Propuesta | ¿Una misma persona puede ser cliente y prestador con la misma cuenta? Si sí, ¿cómo pasa a "modo cliente"? **Propuesta (31/10):** una misma cuenta puede ser cliente y prestador; el prestador entra a su panel y desde el menú de cuenta pasa al lado cliente ("Reservar como cliente"). |
-| C14 | Prestador | Sacar la solapa "Mis turnos" al prestador | V2 | Propuesta | Igual que C13: si el prestador también reserva como cliente, pierde dónde ver sus turnos. **Propuesta (31/10):** igual que C13: "Mis turnos" sale del menú del panel y queda en el lado cliente. |
+| C13 | Prestador | Sin pantalla principal para el prestador: entra directo a su panel | Ingreso | Hecho (D32) | Una cuenta = una persona: la misma cuenta es cliente y prestador. El prestador entra siempre a su Agenda (al ingresar, al tocar el logo y al abrir la app instalada) y desde el menú de cuenta pasa a "Reservar como cliente", con una barra para volver a su agenda. |
+| C14 | Prestador | Sacar la solapa "Mis turnos" al prestador | Ingreso | Hecho (D32) | "Mis turnos (como cliente)" queda en el menú de cuenta del prestador, del lado cliente. |
 | C15 | Prestador | "Mi perfil" pasa a "Ajustes": nombre y celular, notificaciones, profesionales que seguís, seguridad, ir al panel, cerrar sesión y eliminar la cuenta | V2 | Pendiente | Entra el control de notificaciones push y emails de hoy (D25, D27). |
 | C16 | Prestador | Mover la ubicación del perfil a la sección del prestador | V2 | Verificar | ¿"Ubicación" es la dirección del local, o dónde está el acceso al perfil en el menú? |
 | C17 | Prestador | Orden del menú: Agenda, Horarios, Finanzas, Productos, Estadísticas, Clientes, Trabajos y Perfil, con scroll; Caja pasa a Finanzas | V2 | Pendiente | ¿Qué significa que "Ver mi perfil" se desplace hacia la izquierda? ¿Que el botón quede al principio del menú? |
 | C18 | Prestador | Después de agendar un turno o cargar un servicio sin turno, volver a la Agenda | V2 | Pendiente | |
-| C19 | Prestador | El ingreso del prestador igual al del usuario | V7 | Parcial | Hecho en V7: misma capa y mismo lugar que el del cliente (pestaña "Soy prestador"), con contraseña y Google. Falta el código por email para el prestador: espera la decisión de C13 (cómo se identifica el prestador). |
-| C20 | Prestador | Después de crear la cuenta (también con Google), completar los pasos de verificación | V2 | Pendiente | Ya existe desde el Bloque D (pasos de Perfil y D26); falta el alta con Google. ¿El alta con Google pide igual nombre del local, rubro y teléfono antes de entrar? |
+| C19 | Prestador | El ingreso del prestador igual al del usuario | Ingreso | Hecho (D32) | Un solo ingreso para todos (sin "Soy cliente / Soy prestador"): email y contraseña, Google o código por email. La app lleva a cada uno a su lugar. El acceso aparte de prestadores salió; `/prestadores/ingresar` abre el mismo ingreso. |
+| C20 | Prestador | Después de crear la cuenta (también con Google), completar los pasos de verificación | Ingreso | Hecho (D32) | "Registrá tu negocio": la cuenta (con email o Google) y después 5 pasos que se guardan uno por uno (Tu negocio, Servicios, Horarios, Seña y cobro, Verificación). La Agenda muestra lo que falta hasta que el perfil está aprobado y con Mercado Pago. |
 | C21 | Agenda | Sacar "Cargar servicio sin turno" de la Agenda | V3 | Hecho (V3) | "Cargar servicio sin turno" salió de la Agenda; queda en Finanzas → Caja del día. |
 | C22 | Agenda | Los turnos eliminados desaparecen de la Agenda, todo en tiempo real | V3 | Hecho (V3b) | Sin Realtime: la Agenda vuelve a pedir los turnos cada 30 s y al volver a la pestaña, y se dibuja de nuevo solo si cambió algo. No toca la pantalla mientras se guarda algo, con el formulario de turno manual o de bloqueo abierto, o con alguien escribiendo. Un turno que borra el mismo prestador ya desaparecía al instante; los que cancela el cliente o cambian desde otro dispositivo ahora aparecen o se van solos. |
 | C23 | Agenda | Los horarios se calculan según la duración del servicio, no en bloques fijos | V3 | Hecho (V3, D31) | Para todos los prestadores: los horarios se suceden cada "duración del servicio" desde la apertura y, si un turno corta la secuencia, siguen desde que termina. La misma cuenta en la base (`slot_starts`) y en la app. "Cada cuánto empieza un turno" salió de Horarios. |
@@ -77,7 +77,7 @@ Paso 2: solo organizada, sin programar. Cada bloque se programa recién con el O
 | --- | --- | --- | --- |
 | Paso 1 | Pagos que no se registraban | C05, C10, C53, C55 | (en el PR) |
 | V1 | Comisión de Mercado Pago y acreditación | C07, C08, C09, C11, C12, C45 | D30 (cómo se calcula y si es configurable), C11 |
-| V2 | Panel del prestador y roles | C13, C14, C15, C16, C17, C18, C20 | C13/C14 (cuenta cliente y prestador), C16, C17 |
+| V2 | Panel del prestador y roles | C13, C14, C15, C16, C17, C18, C20 | C13, C14 y C20 hechos con el ingreso (D32); faltan C16, C17 |
 | V3 | Agenda, recordatorios y horarios | C21, C22, C23, C24, C37, C38, C39, C40 | Hecho: V3 (C21, C23, C24, C39) y V3b (C22, C37, C38, C40) |
 | V4 | Finanzas y productos | C25, C30, C31, C32, C33, C34, C35, C36 | Hecho: C32–C35 y C25 (sin «Cargar diferencia»); esperan C30, C31, C36 |
 | V5 | Trabajos, reseñas y sellos | C26, C27, C28, C29 | C28 (D25), C29 (D04) |
@@ -99,7 +99,7 @@ plata → **V1**, apenas esté D30 → **V3** → **V4** → **V2** → **V5** �
 - **C29 · eliminar la tarjeta de sellos**: choca con D04 (fidelidad con sellos), D05 y D22. Propuesta: ocultarla con una
   opción del admin, sin borrar datos; definir qué pasa con los sellos y premios pendientes.
 - **C03 contra C13**: si el prestador no tiene pantalla principal, el logo no puede llevarlo "al inicio general".
-- **C13 y C14 · roles**: no hay decisión sobre si una misma cuenta puede ser cliente y prestador.
+- **C13 y C14 · roles**: decidido con D32 (1/11): una cuenta = una persona, cliente y prestador a la vez.
 - **C39 · descanso entre turnos**: decidido con D31 (se saca del todo), programado en V3.
 - **C06 · aviso de seguidor nuevo**: un aviso nuevo para el prestador. Entra en D27 (contenido mínimo), pero hay que elegir los canales.
 - **D29 · tomada (31/10)**: un pago que llega cuando la hora del turno ya pasó se devuelve (`booking_past`).

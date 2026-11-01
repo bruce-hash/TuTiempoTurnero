@@ -4,6 +4,7 @@ import { go, render } from "../ui/render.js";
 import { refreshPush } from "./push.js";
 import { afterPathFor, navigate } from "../router.js";
 import { toast } from "../ui/toast.js";
+import { resumePending } from "../actions/pendiente.js";
 
 export function afterLogin() {
   // Bloque C: ¿este dispositivo ya recibe las notificaciones de esta cuenta?
@@ -18,13 +19,24 @@ export function afterLogin() {
   toast("Hola, " + S.user.name.split(" ")[0] + ". Ya ingresaste.");
   goAfter();
 }
-// después de ingresar: a la pantalla o dirección que estaba esperando (S.after) o al inicio
+// después de ingresar (ingreso y registro, aprobado el 1/11):
+//   1. si el ingreso lo pidió una acción (S.pending), sigue esa acción (reservar → pago; seguir; avisarme; negocio)
+//   2. si se pidió una dirección protegida (Mis turnos, un turno, una pestaña del panel), a esa dirección
+//   3. el prestador, a su Agenda (aunque haya abierto el ingreso desde otra página)
+//   4. el resto se queda en la página donde estaba (o al inicio)
 export function goAfter() {
-  // primer ingreso de un prestador nuevo (Bloque D): a Perfil, con los pasos para activarlo
-  if (S.firstPanel && S.barberAuth) {
-    S.firstPanel = false;
+  S.authModal = null;
+  if (S.pending) {
     S.after = null;
-    navigate("/panel/perfil");
+    S.afterSoft = false;
+    resumePending();
+    return;
+  }
+  const soft = S.afterSoft;
+  S.afterSoft = false;
+  if (S.barberAuth && (!S.after || soft)) {
+    S.after = null;
+    navigate("/panel/agenda");
     return;
   }
   const next = S.after || "home";
@@ -36,9 +48,10 @@ export function goAfter() {
   }
 }
 // Recuerda a qué dirección volver después de ingresar con Google (la página se recarga al volver).
-export function saveAfter(view) {
+// soft: la página donde estaba (si resulta ser un prestador, va a su Agenda)
+export function saveAfter(view, soft) {
   try {
-    sessionStorage.setItem("tt_after", JSON.stringify({ path: afterPathFor(view) }));
+    sessionStorage.setItem("tt_after", JSON.stringify({ path: afterPathFor(view), soft: !!soft }));
   } catch (err) {}
 }
 // Bloque D: errores al lado de cada campo, todos a la vez. errs: { idDelCampo: mensaje }. Marca el campo (borde rojo,

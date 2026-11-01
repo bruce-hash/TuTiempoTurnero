@@ -111,7 +111,7 @@ export const livePanel = {
         }),
       ),
       call(
-        sb.from("provider_private").select("mp_connected,monthly_goal").eq("provider_id", pid).maybeSingle(),
+        sb.from("provider_private").select("mp_connected,monthly_goal,phone").eq("provider_id", pid).maybeSingle(),
       ),
       call(
         sb.rpc("provider_occupancy", {
@@ -223,6 +223,11 @@ export const livePanel = {
     // reseñas y trabajos de su perfil (los cargó loadProvider)
     store.COMM = store.COMMBY[pid];
     S.goal = (priv && priv.monthly_goal) || S.goal;
+    // celular del negocio (privado: lo ve TuTiempo y el cliente con un turno pago). Antes no se cargaba y guardar Perfil
+    // lo borraba.
+    if (pr(pid) && priv) {
+      pr(pid).tel = priv.phone || "";
+    }
     S.jobsToday = store.BOOK.filter((booking) => booking.pid == pid && booking.date === TODAY() && booking.status === "done").length;
     S.earnToday = store.BOOK.filter((booking) => booking.pid == pid && booking.date === TODAY() && booking.status === "done").reduce(
       (sum, booking) => sum + (booking.price - (booking.src === "app" ? feeOf(booking) : 0)),
