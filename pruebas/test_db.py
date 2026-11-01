@@ -5,10 +5,10 @@ import psycopg
 DSN = sys.argv[1] if len(sys.argv) > 1 else "host=/tmp port=54329 dbname=tt user=postgres"
 conn = psycopg.connect(DSN, autocommit=True)
 F = 0
-def ok(name, cond):
+def ok(name, cond, extra=""):
     global F
     if not cond: F += 1
-    print(("OK   " if cond else "FAIL ") + name)
+    print(("OK   " if cond else "FAIL ") + name + ("" if cond or not extra else "  → " + extra))
 
 def q(sql, args=None, uid=None, role=None):
     """Ejecuta como anon / authenticated(uid) / service_role / postgres. Devuelve filas o la excepción."""
@@ -811,6 +811,40 @@ ok("C39: ningún prestador tiene descanso entre turnos", q("select count(*) from
 ok("C24: el recordatorio de 24 h de fábrica ya no dice '¿Venís? Confirmá acá'",
    q("select body from message_templates where provider_id=%s and key='r24'", (p31,))[0][0] == "{nombre}, te recordamos tu turno mañana a las {hora} en {barberia}. Te esperamos en {direccion}."
    and q("select count(*) from message_templates where key='r24' and body like '%%Confirmá acá%%'")[0][0] == 0)
+
+# ---------- V4 · Finanzas: Transferencia, cómo se cobró el resto, H36 y el resumen del mes ----------
+own4 = mkuser("fin4@test.ar", "Fin")
+p4 = q("select register_provider('Finanzas V4', 'Calle 4', array['b'], '2284 4444', null)", uid=own4)[0][0]
+hoy4 = q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date")[0][0]
+t4 = lambda h: dt.datetime.combine(hoy4, dt.time(h, 0), tz)
+# un turno de la app de ahora (la comisión aparte de la seña) y uno de antes de la versión 30 (la comisión adentro)
+b_new = q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, paid_mp, app_fee, client_fee) values (%s,'Nueva','Corte','app','done',%s,%s,10000,5000,5000,700,700) returning id", (p4, t4(9), t4(10)))[0][0]
+b_old = q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, paid_mp, app_fee, client_fee) values (%s,'Vieja','Corte','app','done',%s,%s,10000,5000,5000,1000,0) returning id", (p4, t4(10), t4(11)))[0][0]
+b_man = q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,'Agendada','Barba','manual','done',%s,%s,5000) returning id", (p4, t4(11), t4(12)))[0][0]
+b_conf = q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,'Futura','Barba','manual','confirmed',%s,%s,5000) returning id", (p4, t4(13), t4(14)))[0][0]
+ok("C25: lo cobrado sin turno acepta Transferencia", not err(q("insert into walkins (provider_id, kind, description, amount, method) values (%s,'service','Corte sin turno',3000,'transfer')", (p4,), uid=own4)))
+ok("C25: un medio que no existe se rechaza", err(q("insert into walkins (provider_id, kind, description, amount, method) values (%s,'service','x',1,'cheque')", (p4,), uid=own4)))
+q("insert into walkins (provider_id, kind, description, amount, method) values (%s,'product','Cera',2000,'cash')", (p4,), uid=own4)
+ok("C25: el prestador anota que el resto de un turno lo cobró por transferencia", q("select set_rest_method(%s, 'transfer')", (b_new,), uid=own4)[0][0] == "transfer"
+   and q("select rest_method, pay_method from bookings where id=%s", (b_new,))[0] == ("transfer", "mp"))
+ok("C25: …sin tocar lo que eligió el cliente (pay_method) ni la plata", q("select price, paid_mp, app_fee from bookings where id=%s", (b_new,))[0] == (10000, 5000, 700))
+ok("C25: un turno que todavía no pasó por la caja no se puede anotar", err(q("select set_rest_method(%s, 'cash')", (b_conf,), uid=own4), "not_done"))
+ok("C25: otro prestador no puede anotar un turno ajeno", err(q("select set_rest_method(%s, 'cash')", (b_man,), uid=prov), "forbidden"))
+ok("C25: un medio que no existe en el resto se rechaza", err(q("select set_rest_method(%s, 'cheque')", (b_man,), uid=own4), "bad_method"))
+ok("C25: sin sesión no se puede llamar", err(q("select set_rest_method(%s, 'cash')", (b_man,), role="anon")))
+fin4 = q("select app, man, walk, prod from provider_finance(%s, %s) where day = %s", (hoy4, hoy4, hoy4), uid=own4)[0]
+ok("H36: Finanzas suma el precio completo del turno nuevo y solo descuenta la comisión que salió de la seña en el viejo", fin4 == (10000 + 9000, 5000, 3000, 2000), str(fin4))
+q("insert into expenses (provider_id, concept, amount, category, spent_on) values (%s,'Alquiler',150000,'Alquiler',%s),(%s,'Compra: Cera',4000,'Productos',%s)", (p4, hoy4, p4, hoy4), uid=own4)
+mb = {r[0]: r[1:] for r in q("select * from provider_month_breakdown(%s)", (hoy4.year,), uid=own4)}
+ok("C33: el resumen del mes separa ingresos por origen y gastos fijos y de productos", mb[hoy4.month] == (19000, 5000, 3000, 2000, 150000, 4000), str(mb[hoy4.month]))
+tot = {r[0]: r[1:] for r in q("select * from provider_month_totals(%s)", (hoy4.year,), uid=own4)}
+ok("C33: …y suma lo mismo que el total del mes de siempre", tot[hoy4.month] == (19000 + 5000 + 3000 + 2000, 154000), str(tot[hoy4.month]))
+ok("C33: otro no ve el resumen ajeno", all(r[1:] == (0, 0, 0, 0, 0, 0) for r in q("select * from provider_month_breakdown(%s)", (hoy4.year,), uid=cli1)))
+ok("C35: borrar un producto no borra sus ventas ni sus compras (quedan sin producto)",
+   (lambda pr_: not err(q("insert into walkins (provider_id, kind, description, amount, method, product_id) values (%s,'product','Gel',1500,'cash',%s)", (p4, pr_), uid=own4))
+    and not err(q("delete from products where id=%s", (pr_,), uid=own4))
+    and q("select count(*), count(product_id) from walkins where provider_id=%s and description='Gel'", (p4,))[0] == (1, 0))(
+     q("insert into products (provider_id, name, price, stock) values (%s,'Gel',1500,3) returning id", (p4,), uid=own4)[0][0]))
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
