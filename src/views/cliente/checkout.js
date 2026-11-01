@@ -1,4 +1,5 @@
-import { feeFor, money, mustPayTotal, payNow, pctTxt } from "../../lib/dinero.js";
+import { chargeAt, money, mpPctOf, mustPayTotal, payNow, pctTxt } from "../../lib/dinero.js";
+import { termName } from "../../lib/cobro.js";
 import { esc } from "../../lib/dom.js";
 import { dayLabel, toMin } from "../../lib/fechas.js";
 import { pr } from "../../lib/prestadores.js";
@@ -57,19 +58,23 @@ export function vCheckoutTurno() {
       ok: free,
       price: seriesPrice,
       now: payNow(prov.id, seriesPrice, user),
-      fee: feeFor(seriesPrice),
     };
   });
   const seriesOk = series.filter((item) => item.ok);
   const depositTotal = deposit + seriesOk.reduce((sum, item) => sum + item.now, 0);
   const priceTotal = price + seriesOk.reduce((sum, item) => sum + item.price, 0);
   const count = 1 + seriesOk.length;
-  const feeTotal = feeFor(price) + seriesOk.reduce((sum, item) => sum + item.fee, 0);
+  // D30: por cada turno, comisión de TuTiempo (% de su seña) y costo de Mercado Pago del plazo del prestador (la base hace
+  // la misma cuenta al reservar)
+  const charges = [deposit].concat(seriesOk.map((item) => item.now)).map((amount) => chargeAt(prov.id, amount));
+  const feeTotal = charges.reduce((sum, item) => sum + item.fee, 0);
+  const mpTotal = charges.reduce((sum, item) => sum + item.mp, 0);
+  const mpPct = mpPctOf(prov.id);
   // forma de pago (principal) y resumen con el botón de pagar (lateral, en la compu fijo al bajar)
   const [payMain, paySide] = (() => {
      const cashOk = conf.cash !== false && !mustTotal;
      const method = S.payM === "reward" && canRedeem ? "reward" : cashOk && S.payM === "cash" ? "cash" : "mp";
-     const payNowTotal = method === "reward" ? 0 : depositTotal + feeTotal;
+     const payNowTotal = method === "reward" ? 0 : depositTotal + feeTotal + mpTotal;
      // C52: lo que el cliente ve que va a pagar; antes de cobrar se compara con los precios recién pedidos
      S.payShown = payNowTotal;
      const rest = priceTotal - depositTotal;
@@ -83,7 +88,7 @@ export function vCheckoutTurno() {
      <div class="err" id="terr"></div><button class="btn btn-pri btn-block" type="submit">Canjear premio y reservar</button>`];
      } else {
        return [`<div class="panel"><p class="lbl">Seña para reservar</p>
-      <div class="paym"><span class="mp">MP</span><span><b>${rest > 0 ? `Seña de ${money(depositTotal)}` : money(depositTotal)}${feeTotal ? ` + comisión ${money(feeTotal)}` : ""} con Mercado Pago</b><small class="hint">${rest > 0 ? "Es obligatoria: con la seña pagada tu turno queda confirmado." : "Este profesional cobra el total al reservar."}</small></span></div>
+      <div class="paym"><span class="mp">MP</span><span><b>${rest > 0 ? `Seña de ${money(depositTotal)}` : money(depositTotal)}${feeTotal + mpTotal ? ` + ${money(feeTotal + mpTotal)} de ${mpTotal ? "comisiones" : "comisión"}` : ""} con Mercado Pago</b><small class="hint">${rest > 0 ? "Es obligatoria: con la seña pagada tu turno queda confirmado." : "Este profesional cobra el total al reservar."}</small></span></div>
       ${canRedeem ? `<div class="paypick" style="margin-top:10px"><button type="button" role="radio" class="payopt" data-paym="reward" aria-checked="false"><span class="mp reward">🎁</span><span><b>Usar mi premio</b><small class="hint">Tu tarjeta de ${esc(svc[0])} está llena: este turno gratis, sin seña.</small></span></button></div>` : ""}
       ${mustTotal ? '<p class="alert" style="margin-top:10px">Este profesional pide pagar el total por faltas anteriores sin aviso.</p>' : ""}</div>
     ${
@@ -109,11 +114,12 @@ export function vCheckoutTurno() {
            })()})`
          : ""
      }</span><span>${money(depositTotal)}</span></div>
-     <div class="feerow"><span>Comisión TuTiempo (${pctTxt()}% del precio)</span><span>${money(feeTotal)}</span></div>
+     <div class="feerow"><span>Comisión TuTiempo (${pctTxt()}% de la seña)</span><span>${money(feeTotal)}</span></div>
+     ${mpTotal ? `<div class="feerow"><span>Costo de Mercado Pago (acreditación ${!conf.term || conf.term === "instant" ? "al instante" : "en " + termName(conf.term)}, ${pctTxt(mpPct)}% del total)</span><span>${money(mpTotal)}</span></div>` : ""}
      <div class="tot"><span>Pagás ahora</span><span>${money(payNowTotal)}</span></div>
      ${rest > 0 ? `<div class="feeline"><span>Después, en el local${count > 1 ? ` (los ${count} turnos)` : ""} · ${method === "cash" ? "efectivo" : "Mercado Pago"}</span><span>${money(rest)}</span></div>` : ""}</div>
-     <p class="note" style="text-align:left;margin:6px 0 0">${rest > 0 ? `La seña es para ${esc(prov.name)} y se descuenta del precio. ` : ""}La comisión de TuTiempo se paga aparte, al reservar${count > 1 ? `: una por cada uno de los ${count} turnos` : ""}.</p></div>
-    <p class="note" style="text-align:left;margin:0">Si no vas, no se devuelve lo pagado. Si cancela el profesional, te devolvemos todo (seña y comisión).</p>
+     <p class="note" style="text-align:left;margin:6px 0 0">${rest > 0 ? `La seña es para ${esc(prov.name)} y se descuenta del precio. ` : ""}${mpTotal ? "Se suma la comisión de TuTiempo y el costo de Mercado Pago por la acreditación" : "La comisión de TuTiempo se paga aparte"}, al reservar${count > 1 ? `: por cada uno de los ${count} turnos` : ""}.</p></div>
+    <p class="note" style="text-align:left;margin:0">Si no vas, no se devuelve lo pagado. Si cancela el profesional, te devolvemos todo lo que pagaste.</p>
     <div class="err" id="terr"></div>
     <button class="btn btn-pri btn-block" type="submit">Pagar ${money(payNowTotal)} y reservar${count > 1 ? ` ${count} turnos` : ""}</button>`];
      }

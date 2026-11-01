@@ -235,6 +235,8 @@ registerSubmit("fHorarios", (ev) => {
     conf.pay = "sena";
     conf.pct = +pay.replace("sena", "");
   }
+  // D30: plazo de acreditación de Mercado Pago
+  conf.term = ($("#hterm") || {}).value || conf.term || "instant";
   conf.strict = false;
   conf.happy = {
     on: $("#hhon").checked,

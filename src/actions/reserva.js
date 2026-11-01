@@ -1,7 +1,7 @@
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
-import { feeFor, money, mustPayTotal, payNow } from "../lib/dinero.js";
+import { chargeAt, money, mustPayTotal, payNow } from "../lib/dinero.js";
 import { $, esc } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { TODAY, addDays, dkey, toMin } from "../lib/fechas.js";
@@ -296,7 +296,10 @@ registerSubmit("fTurno", (ev) => {
         late: 0,
         series: series,
       };
-      booking.fee = paid > 0 ? feeFor(booking.price) : 0;
+      // D30: comisión de TuTiempo sobre la seña y costo de Mercado Pago del plazo (demo; en vivo los calcula la base)
+      const charge = chargeAt(prov.id, paid);
+      booking.fee = paid > 0 ? charge.fee : 0;
+      booking.mpFee = paid > 0 ? charge.mp : 0;
       store.BOOK.push(booking);
       return booking;
     };

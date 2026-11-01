@@ -1,4 +1,5 @@
 import { liveApi } from "./index.js";
+import { feesFromDb } from "../mapeo.js";
 import { call } from "../saved.js";
 import { sb } from "../../config.js";
 import { safeRedirect } from "../../lib/dom.js";
@@ -23,7 +24,7 @@ export const liveAdmin = {
           p_status: null,
         }),
       ),
-      call(sb.from("app_settings").select("site_url,require_dni").maybeSingle()).catch(() => null),
+      call(sb.from("app_settings").select("site_url,require_dni,deposit_commission_pct,mp_pct_instant,mp_pct_d10,mp_pct_d18,mp_pct_d35").maybeSingle()).catch(() => null),
     ]);
     // Bloque D (D26): "Exigir DNI para aprobar prestadores" (si no se puede leer, se exige, como hasta ahora)
     S.requireDni = !settings || settings.require_dni !== false;
@@ -59,7 +60,9 @@ export const liveAdmin = {
         }),
       })),
     };
-    store.COMISION = isFinite(parseFloat(stats.commission_pct)) ? parseFloat(stats.commission_pct) / 100 : 0.1;
+    if (settings) {
+      store.FEES = feesFromDb(settings);
+    }
     return S.adm;
   },
   // "Para revisar · cobros" (Bloque 1): devoluciones que fallan o se reintentan y pagos en revisión

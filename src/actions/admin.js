@@ -1,6 +1,7 @@
 import { registerClick, registerInput, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
+import { MP_TERMS } from "../lib/cobro.js";
 import { PESOS_ERR, parsePesos, pctTxt } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, nowHM } from "../lib/fechas.js";
@@ -103,7 +104,7 @@ registerClick("admDelYes", (ev, el, act) => {
     ) {
       booking.status = "cancelled";
       booking.byProv = true;
-      booking.refund = (booking.paid || 0) + (booking.fee || 0);
+      booking.refund = (booking.paid || 0) + (booking.fee || 0) + (booking.mpFee || 0);
       if (booking.mine) {
         pushCancel(booking);
       }
@@ -231,30 +232,40 @@ registerInput("admQ", (ev) => {
   });
   return;
 });
-// comisión de la plataforma: de 0 a 30 %, con hasta dos decimales
+// D30: comisión de TuTiempo (% de la seña, de 0 a 30) y % de Mercado Pago por plazo (de 0 a 15), con hasta dos decimales
 registerSubmit("fCom", (ev) => {
-  const text = String($("#admCom").value).trim().replace("%", "").replace(",", ".");
-  const value = /^\d{1,2}(\.\d{1,2})?$/.test(text) ? parseFloat(text) : NaN;
+  const read = (id, max) => {
+    const text = String(($("#" + id) || {}).value || "").trim().replace("%", "").replace(",", ".");
+    const value = /^\d{1,2}(\.\d{1,2})?$/.test(text) ? parseFloat(text) : NaN;
+    return isFinite(value) && value >= 0 && value <= max ? Math.round(value * 100) / 100 : null;
+  };
   const showErr = (msg) => {
     $("#comerr").textContent = msg;
   };
-  if (!isFinite(value) || value < 0 || value > 30) {
-    return showErr("Escribí un porcentaje entre 0 y 30 (por ejemplo 10 u 8,5).");
+  const pct = read("admCom", 30);
+  if (pct == null) {
+    return showErr("La comisión de TuTiempo va entre 0 y 30 (por ejemplo 7 u 8,5).");
   }
-  const pct = Math.round(value * 100) / 100;
+  const mp = {};
+  for (const [term, name] of MP_TERMS) {
+    mp[term] = read("admMp-" + term, 15);
+    if (mp[term] == null) {
+      return showErr(`Mercado Pago, ${name.toLowerCase()}: un porcentaje entre 0 y 15 (por ejemplo 7,61).`);
+    }
+  }
   if (LIVE) {
     api.m
-      .adminSetCommission(pct)
+      .adminSetFees(pct, mp)
       .then(() => api.adminLoad())
       .then(() => {
-        toast(`Comisión guardada: ${pctTxt(pct)}%.`);
+        toast(`Comisiones guardadas: TuTiempo ${pctTxt(pct)}% de la seña. Se aplican a las reservas nuevas.`);
         render();
       })
       .catch(() => {});
     return;
   }
-  store.COMISION = pct / 100;
-  toast(`Comisión guardada: ${pctTxt(pct)}%. Se aplica a las reservas nuevas.`);
+  store.FEES = { commission: pct, mp: mp };
+  toast(`Comisiones guardadas: TuTiempo ${pctTxt(pct)}% de la seña. Se aplican a las reservas nuevas.`);
   render();
   return;
 });

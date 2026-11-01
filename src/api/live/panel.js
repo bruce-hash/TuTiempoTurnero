@@ -22,7 +22,7 @@ export const livePanel = {
         sb
           .from("bookings")
           .select(
-            "id,service_id,client_id,client_name,client_phone,service_name,source,status,starts_at,ends_at,price,discount_pct,paid_mp,paid_wallet,app_fee,client_fee,series_id,addons,buffer_min,pay_method",
+            "id,service_id,client_id,client_name,client_phone,service_name,source,status,starts_at,ends_at,price,discount_pct,paid_mp,paid_wallet,app_fee,client_fee,paid_mp_fee,series_id,addons,buffer_min,pay_method",
           )
           .eq("provider_id", pid)
           .gte("starts_at", localToIso(from, "00:00"))
@@ -101,6 +101,7 @@ export const livePanel = {
             // comisión que salió de la seña (turnos anteriores a la versión 30, cuando no se cobraba aparte)
             feeIn: Math.max(0, (row.app_fee || 0) - (row.client_fee || 0)),
             fee: row.client_fee || 0,
+            mpFee: row.paid_mp_fee || 0,
             disc: row.discount_pct,
             cliente: row.client_name || "",
             tel: row.client_phone || "",

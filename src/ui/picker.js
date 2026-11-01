@@ -1,4 +1,4 @@
-import { pctTxt } from "../lib/dinero.js";
+import { mpPctOf, pctTxt } from "../lib/dinero.js";
 import { esc } from "../lib/dom.js";
 import { DOW, MESES, TODAY, addDays, dayLabel, dkey, longLabel, toMin } from "../lib/fechas.js";
 import { isFol } from "../lib/prestadores.js";
@@ -125,6 +125,6 @@ export function vPicker(prov) {
        ${firstFree ? `<button class="btn btn-ghost btn-block" style="margin-top:8px" data-quick="${firstFree.date}|${firstFree.time}">Ver el primer turno libre: ${esc(dayLabel(firstFree.date))} ${firstFree.time}</button>` : ""}</div>`
     }
    </div>
-   <p class="note pk-pol">⏱ ${dur} min · ${rewardOnly(prov) ? "Solo podés canjear tu premio: este turno no lleva seña ni comisión" : conf.pay === "total" ? "Pagás el total al reservar" : "Seña del " + conf.pct + "% al reservar"} + comisión TuTiempo (${pctTxt()}%) con Mercado Pago${conf.cash !== false && conf.pay !== "total" ? " · el resto en efectivo o Mercado Pago" : ""}</p>
+   <p class="note pk-pol">⏱ ${dur} min · ${rewardOnly(prov) ? "Solo podés canjear tu premio: este turno no lleva seña ni comisión" : conf.pay === "total" ? "Pagás el total al reservar" : "Seña del " + conf.pct + "% al reservar"} + comisión TuTiempo (${pctTxt()}% de la seña)${mpPctOf(prov.id) ? " + costo de Mercado Pago" : ""} con Mercado Pago${conf.cash !== false && conf.pay !== "total" ? " · el resto en efectivo o Mercado Pago" : ""}</p>
   </section>`;
 }

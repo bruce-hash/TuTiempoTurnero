@@ -146,7 +146,7 @@ async function boot() {
     refreshPush()
       .then(() => render())
       .catch(() => {});
-    api.commission().catch(() => {});
+    api.fees().catch(() => {});
     // C52 (V8): precios al día al volver a la pestaña y cada minuto (perfil y confirmación del turno)
     startPriceRefresh();
     api.requireDni().catch(() => {});

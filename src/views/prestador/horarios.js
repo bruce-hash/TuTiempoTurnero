@@ -1,3 +1,5 @@
+import { MP_TERMS } from "../../lib/cobro.js";
+import { mpPctOf, pctTxt } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { DOW, addDays, dkey } from "../../lib/fechas.js";
 import { ME, pr } from "../../lib/prestadores.js";
@@ -86,13 +88,13 @@ export function vBHorarios() {
     )}<span class="hint">No te pueden reservar con menos anticipación que esto.</span></div>
     <div class="f"><label for="hpay">Al reservar el cliente paga</label>${select(
       "hpay",
-      [
-        ["sena30", "Seña del 30%"],
-        ["sena50", "Seña del 50%"],
-        ["total", "El total"],
-      ],
+      // D30: 30, 40, 50% o el total (si tenía otro %, se sigue mostrando hasta que lo cambie)
+      [["sena30", "Seña del 30%"], ["sena40", "Seña del 40%"], ["sena50", "Seña del 50%"]]
+        .concat(conf.pay !== "total" && ![30, 40, 50].includes(+conf.pct) ? [["sena" + conf.pct, `Seña del ${conf.pct}% (la que tenés hoy)`]] : [])
+        .concat([["total", "El total"]]),
       conf.pay === "total" ? "total" : "sena" + conf.pct,
     )}<span class="hint">Lo pagado no se devuelve. Si el cliente no viene, te queda a vos.</span></div>
+    <div class="f"><label for="hterm">Plazo de acreditación de Mercado Pago</label>${select("hterm", MP_TERMS, conf.term || "instant")}<span class="hint">Tiene que ser el mismo plazo que elegiste en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos). Si no coincide, vas a recibir un poco más o un poco menos que la seña.${mpPctOf(ME()) ? ` Al cliente se le suma ${pctTxt(mpPctOf(ME()))}% por la acreditación.` : ""}</span></div>
    </div>
    <div class="panel" style="text-align:center"><p class="lbl">Tu link de turnos</p><p style="margin:0 0 8px;font-weight:700">${esc(profileLinkText(pr(ME())))}</p><p class="note">Ponelo en tu bio de Instagram y compartilo con tus clientes.</p>
     <button type="button" class="btn btn-ghost btn-block" data-act="copiarLink">Copiar link</button></div>

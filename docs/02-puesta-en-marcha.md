@@ -414,6 +414,20 @@ Si en algún celular no llega nada: Edge Functions → push-send → Logs (el c�
    cobro en lugar de seguir preguntando).
 3. **Frontend:** `npm run build` y subir `dist/` (el texto del motivo en Mis turnos y en "Para revisar").
 
+#### V1 (D30): comisión de TuTiempo sobre la seña y costo de Mercado Pago por plazo
+1. **Migración:** `20261101120000_cobro_d30.sql` (`supabase db push` o `TODO_EN_UNO.sql`). Deja la comisión de TuTiempo en
+   **7% de la seña** y Mercado Pago en **0%** en los cuatro plazos; los prestadores arrancan con "al instante". Los turnos
+   ya reservados no cambian.
+2. **Función:** `supabase functions deploy mp-create-preference --no-verify-jwt` (cobra también lo de Mercado Pago). El
+   webhook y la consulta no cambian: la comparación de la comisión la hace la base con el `fee_details` que ya guardan.
+3. **Frontend:** `npm run build` y subir `dist/`. `config.js` y `.htaccess` no cambian.
+4. **Después:** Admin → Comisión. Revisá la comisión de TuTiempo y, cuando esté la aprobación legal, cargá los % de
+   Mercado Pago (referencias con IVA: 7,61 / 5,31 / 4,10 / 1,80). Cada prestador elige su plazo en Horarios.
+5. **Para probar el control:** con un % cargado, hacé un pago de prueba y mirá en el SQL Editor
+   `select mp_payment_id, amount, mp_cost, mp_cost_expected, review_reasons from payments order by id desc limit 5;`.
+   Si `mp_cost` (lo que informó Mercado Pago) y `mp_cost_expected` difieren en todos los pagos por el IVA (por ejemplo,
+   uno es el otro dividido 1,21), avisame y ajusto la comparación (los montos no se tocan).
+
 #### Si los pagos no se registran (diagnóstico del webhook)
 Desde el Paso 1 un pago aprobado se registra igual aunque el aviso falle (la app le pregunta a Mercado Pago cada 2
 minutos), pero con demora, y "Para revisar" muestra "Los avisos de Mercado Pago no están llegando bien". Para arreglar

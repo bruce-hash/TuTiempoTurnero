@@ -5,10 +5,15 @@ import { sb } from "../../config.js";
 // Escrituras del administrador (todas por funciones de la base que verifican el rol) y, al final, sellos y
 // mensajes del prestador a sus clientes.
 Object.assign(LM, {
-  adminSetCommission: (pct) =>
+  // D30: comisión de TuTiempo (% de la seña) y % de Mercado Pago por plazo
+  adminSetFees: (pct, mp) =>
     saved(
-      sb.rpc("admin_set_commission", {
-        p_pct: pct,
+      sb.rpc("admin_set_fees", {
+        p_commission: pct,
+        p_instant: mp.instant,
+        p_d10: mp.d10,
+        p_d18: mp.d18,
+        p_d35: mp.d35,
       }),
     ),
   adminSetSiteUrl: (url) => saved(sb.rpc("admin_set_site_url", { p_url: url })),

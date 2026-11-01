@@ -96,7 +96,7 @@ async function functions(req, res, url) {
   if (name === "mp-reconcile") return send(res, 200, { ok: true });
   if (!claims || !claims.sub) return send(res, 401, { error: "login_required" });
   if (name === "mp-create-preference") {
-    const r = await db.query("select coalesce(sum(deposit + client_fee - paid_wallet),0)::int as amount, coalesce(sum(client_fee),0)::int as fee, min(provider_id) as pid from public.bookings where id = any($1::bigint[]) and client_id = $2 and status = 'hold'", [j.booking_ids, claims.sub]);
+    const r = await db.query("select coalesce(sum(deposit + client_fee + mp_fee - paid_wallet),0)::int as amount, coalesce(sum(client_fee),0)::int as fee, min(provider_id) as pid from public.bookings where id = any($1::bigint[]) and client_id = $2 and status = 'hold'", [j.booking_ids, claims.sub]);
     // como la función real: solo cobra la cuenta activa del prestador
     if (!(await db.query("select public.provider_can_charge($1) as ok", [r.rows[0].pid])).rows[0].ok) return send(res, 409, { error: "provider_mp_not_connected" });
     // como la función real (Paso 1): anota el cobro con su token de regreso, y la vuelta va a la pantalla del turno

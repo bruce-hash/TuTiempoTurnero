@@ -48,6 +48,7 @@ export const defCfg = () => ({
   notice: 60,
   pay: "sena",
   pct: 50,
+  term: "instant",
   buffer: 0,
   happy: {
     on: true,

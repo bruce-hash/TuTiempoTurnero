@@ -162,7 +162,7 @@ export function admData() {
   Object.keys(byCatMonth).forEach((cat) => (byCatMonth[cat] = Math.round((month.n * byCatMonth[cat]) / totalAct)));
   return {
     st: {
-      commission_pct: Math.round(store.COMISION * 1e4) / 100,
+      commission_pct: store.FEES.commission,
       providers_active: active.length,
       providers_pending: store.DEMO_PENDING.length,
       providers_suspended: list.filter((prov) => prov.status === "suspended").length,

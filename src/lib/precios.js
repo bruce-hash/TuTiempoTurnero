@@ -13,7 +13,7 @@ const VIEWS = ["perfil", "checkoutT"];
 // lo que define el precio: servicios (precio, duración, adicionales), seña, happy hour y la comisión de TuTiempo
 const priceSig = (pid) => {
   const prov = pr(pid);
-  return JSON.stringify([prov ? prov.svcs : null, prov ? cfg(pid) : null, store.COMISION]);
+  return JSON.stringify([prov ? prov.svcs : null, prov ? cfg(pid) : null, store.FEES]);
 };
 // alguien escribiendo en un campo: no se vuelve a dibujar la pantalla (se perdería lo escrito); el control antes de
 // pagar lo agarra igual
@@ -29,7 +29,7 @@ export async function refreshPrices() {
   }
   const pid = S.pid;
   const before = priceSig(pid);
-  await Promise.all([api.loadProvider(pid, true), api.commission()]);
+  await Promise.all([api.loadProvider(pid, true), api.fees()]);
   return priceSig(pid) !== before;
 }
 

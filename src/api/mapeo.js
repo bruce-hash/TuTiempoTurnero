@@ -40,6 +40,8 @@ export function cfgFromDb(st, hours) {
   conf.notice = st.notice_min;
   conf.pay = st.pay_mode === "full" ? "total" : "sena";
   conf.pct = st.deposit_pct;
+  // D30: plazo de acreditación de Mercado Pago (el mismo que eligió en su cuenta)
+  conf.term = st.payout_term || "instant";
   conf.strict = st.strict_no_show;
   conf.happy = {
     on: !!st.happy_on,
@@ -76,6 +78,7 @@ export function cfgToDb(pid, conf) {
     notice_min: conf.notice,
     pay_mode: conf.pay === "total" ? "full" : "deposit",
     deposit_pct: conf.pct || 50,
+    payout_term: conf.term || "instant",
     strict_no_show: !!conf.strict,
     happy_on: !!conf.happy.on,
     happy_pct: conf.happy.pct,
@@ -110,5 +113,14 @@ export function cfgToDb(pid, conf) {
   return {
     st: st,
     hours: hours,
+  };
+}
+
+// D30: fila de app_settings → store.FEES (comisión de TuTiempo en % de la seña y % de Mercado Pago por plazo)
+export function feesFromDb(row) {
+  const num = (value, def) => (isFinite(parseFloat(value)) ? parseFloat(value) : def);
+  return {
+    commission: num(row.deposit_commission_pct, 7),
+    mp: { instant: num(row.mp_pct_instant, 0), d10: num(row.mp_pct_d10, 0), d18: num(row.mp_pct_d18, 0), d35: num(row.mp_pct_d35, 0) },
   };
 }

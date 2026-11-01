@@ -21,12 +21,12 @@ Paso 2: solo organizada, sin programar. Cada bloque se programa recién con el O
 | C04 | General | Poner el logo original en todas las páginas | V8 | Pendiente | Necesito el archivo del logo original (SVG o PNG grande). |
 | C05 | General | Revisar las notificaciones de pago | Paso 1 | Hecho (Paso 1) | Eran los pagos sin registrar (C55). Push y email del turno salen cuando el pago queda registrado. |
 | C06 | General | Avisarle al prestador cuando alguien lo sigue | V8 | Decisión | ¿Por qué canal: aviso en la app, push, email? ¿Con el nombre de pila del cliente, como "Nueva reserva" (D27)? ¿Uno por seguidor o un resumen diario? |
-| C07 | Pagos | Sumar la comisión de Mercado Pago (7,61%) en el detalle del pago | V1 | Decidido (D30) → V1 | **Decidido (31/10):** ver "D30 · Comisión de TuTiempo y de Mercado Pago", más abajo; falta tu OK a la propuesta. |
-| C08 | Pagos | El resumen muestra la comisión de MP sobre la seña (30%, 50% o total) | V1 | Decidido (D30) → V1 | La comisión de MP se calcula sobre todo lo que paga el cliente (seña + comisión de TuTiempo), no solo sobre la seña. **Decidido (31/10):** ver "D30 · Comisión de TuTiempo y de Mercado Pago", más abajo; falta tu OK a la propuesta. |
-| C09 | Pagos | El banner dice el porcentaje que se suma (7,61%) | V1 | Decidido (D30) → V1 | Igual que C07. El cargo real equivale a un 8,24% sobre seña + comisión (ver el ejemplo); el banner debería decir "7,61% del total". **Decidido (31/10):** ver "D30 · Comisión de TuTiempo y de Mercado Pago", más abajo; falta tu OK a la propuesta. |
+| C07 | Pagos | Sumar la comisión de Mercado Pago (7,61%) en el detalle del pago | V1 | Hecho (V1) | El detalle del pago muestra "Costo de Mercado Pago (acreditación al instante / en N días, X% del total)" con su monto, aparte de la seña y de la comisión de TuTiempo (D30). |
+| C08 | Pagos | El resumen muestra la comisión de MP sobre la seña (30%, 50% o total) | V1 | Hecho (V1) | La comisión de Mercado Pago se calcula sobre todo lo que paga el cliente: `total = (seña + comisión) / (1 − % MP)`. Con seña del 30, 40, 50% o el total. |
+| C09 | Pagos | El banner dice el porcentaje que se suma (7,61%) | V1 | Hecho (V1) | El resumen dice el % del plazo "del total" y el aviso, "Se suma la comisión de TuTiempo y el costo de Mercado Pago por la acreditación". Con Mercado Pago en 0% no se muestra. |
 | C10 | Pagos | Volver a la misma página después de pagar | Paso 1 | Hecho (Paso 1) | La vuelta va a la pantalla del turno (`/turno/<id>`), también sin sesión. |
 | C11 | Pagos | Revisar el dinero a liquidar de Mercado Pago | V1 | Verificar | ¿En qué pantalla? ¿Es "cuándo se acredita cada seña" en Finanzas del prestador? Mercado Pago informa la fecha de liberación de cada pago (`money_release_date`); el saldo de la cuenta no lo vemos. |
-| C12 | Pagos | Liquidar la seña al prestador apenas se paga (liquidación instantánea) | V1 | Decisión | El plazo de acreditación se elige en la cuenta de Mercado Pago de cada prestador, no desde la app. La app puede explicarle cómo elegir "al instante" al conectar. Es lo que justifica el 7,61%. |
+| C12 | Pagos | Liquidar la seña al prestador apenas se paga (liquidación instantánea) | V1 | Hecho en parte (V1) | El prestador elige su plazo (al instante, 10, 18 o 35 días) en Horarios, junto a la seña, con el aviso de que tiene que ser el mismo que en su cuenta de Mercado Pago. Liquidar "al instante" lo decide cada prestador en Mercado Pago; la app no puede elegirlo por él. |
 | C13 | Prestador | Sin pantalla principal para el prestador: entra directo a su panel | V2 | Propuesta | ¿Una misma persona puede ser cliente y prestador con la misma cuenta? Si sí, ¿cómo pasa a "modo cliente"? **Propuesta (31/10):** una misma cuenta puede ser cliente y prestador; el prestador entra a su panel y desde el menú de cuenta pasa al lado cliente ("Reservar como cliente"). |
 | C14 | Prestador | Sacar la solapa "Mis turnos" al prestador | V2 | Propuesta | Igual que C13: si el prestador también reserva como cliente, pierde dónde ver sus turnos. **Propuesta (31/10):** igual que C13: "Mis turnos" sale del menú del panel y queda en el lado cliente. |
 | C15 | Prestador | "Mi perfil" pasa a "Ajustes": nombre y celular, notificaciones, profesionales que seguís, seguridad, ir al panel, cerrar sesión y eliminar la cuenta | V2 | Pendiente | Entra el control de notificaciones push y emails de hoy (D25, D27). |
@@ -59,7 +59,7 @@ Paso 2: solo organizada, sin programar. Cada bloque se programa recién con el O
 | C42 | Admin | "No conectados de MP" en Prestadores, con un botón para vincularlos | V6 | WIP + propuesta | El filtro "Sin Mercado Pago" ya está en la rama frenada. El botón: igual que C41 ("Avisarle"). **Propuesta (31/10):** el mismo botón "Avisarle". |
 | C43 | Admin | Corregir el flujo que se corta: el admin no toma los registros de turnos | V6 | Verificar | Probablemente sean los pagos sin registrar del 30/10 (turnos `expired`, que no cuentan). Después del Paso 1, ¿sigue pasando? ¿Con qué turno? |
 | C44 | Admin | Renombrar "Clientes" como "Turnos" | V6 | Verificar | El indicador "Clientes" del Resumen cuenta personas registradas, no turnos. ¿Es otra pantalla? Si es esa, propongo que queden los dos: "Clientes" y "Turnos". |
-| C45 | Admin | Editar el porcentaje de la comisión de la API (Mercado Pago) y que se refleje en el detalle y el precio | V1 | Decidido (D30) → V1 | Con C07: una opción en Comisión, como la de TuTiempo (D02). **Decidido (31/10):** ver "D30 · Comisión de TuTiempo y de Mercado Pago", más abajo; falta tu OK a la propuesta. |
+| C45 | Admin | Editar el porcentaje de la comisión de la API (Mercado Pago) y que se refleje en el detalle y el precio | V1 | Hecho (V1) | Admin → Comisión: "Comisión de TuTiempo (% de la seña)" y la tabla "Comisión de Mercado Pago por plazo" (0 a 15, en 0 hasta la aprobación legal), con un ejemplo que se actualiza al guardar. Vale para las reservas nuevas. |
 | C46 | Ingreso | Botón "Ingresar con Google" | V7 | Verificar | Ya está para el cliente ("Continuar con Google") y para el prestador ("Entrar con Google"). Si no se ve o no anda, falta configurar Google en Supabase para el entorno de prueba (LEEME, PASO 2). ¿Se refieren al alta del prestador con Google (C20)? |
 | C47 | Ingreso | Dejar solo "Ingreso" en el header | V7 | Hecho | Un solo botón "Ingresar"; adentro, pestañas "Soy cliente" y "Soy prestador". "Soy prestador" salió de la cabecera. |
 | C48 | Ingreso | El ingreso en una segunda capa (modal), para usuario y prestador | V7 | Hecho | Abre encima de la página que se mira (la dirección no cambia); se cierra con la cruz, tocando afuera o con Escape, y al ingresar queda la misma página. Ingresar, Crear cuenta, código por email y Olvidé mi contraseña funcionan adentro. Las direcciones `/ingresar`, `/crear-cuenta` y el acceso de prestadores siguen como páginas (links de los emails y páginas que piden sesión, como Mis turnos). |
@@ -92,8 +92,8 @@ plata → **V1**, apenas esté D30 → **V3** → **V4** → **V2** → **V5** �
 ## Contradicen una decisión tomada o necesitan una nueva
 
 - **C01 · dominio propio**: D11 (migrar o no los usuarios del Laravel) y D12 (cuándo reemplazar tutiempo.com.ar), las dos abiertas.
-- **C07–C09, C12, C45 · comisión de Mercado Pago al cliente**: **D30 tomada (31/10)**, cambia D02 (la comisión de TuTiempo
-  pasa a % de la seña). Falta tu OK a la propuesta de V1 y decidir las devoluciones si Mercado Pago no reintegra su comisión.
+- **C07–C09, C12, C45 · comisión de Mercado Pago al cliente**: **D30 tomada (31/10) y programada en V1**, reemplaza D02 (la
+  comisión de TuTiempo es un % de la seña). Queda por decidir las devoluciones si Mercado Pago no reintegra su comisión.
 - **C23 · turnos según la duración del servicio**: hace falta definir la regla (D31).
 - **C28 · sacar el pedido de reseña**: choca con D25, donde la reseña es uno de los avisos automáticos por email, en la app y por push (D27).
 - **C29 · eliminar la tarjeta de sellos**: choca con D04 (fidelidad con sellos), D05 y D22. Propuesta: ocultarla con una
@@ -140,6 +140,12 @@ servicio. Así no quedan huecos más chicos que el servicio entre un turno y otr
 - ¿El descanso entre turnos (C39) se saca del todo?
 
 ## D30 · Comisión de TuTiempo y de Mercado Pago (bloque V1): propuesta
+
+**Aprobada (1/11) y programada en V1** tal como está abajo, con dos notas: (1) el `mercadopago_fee` de `fee_details` puede
+venir con o sin IVA: si en los pagos reales todos dan diferencia, se ajusta la comparación, no los montos, y el aviso muestra
+los dos números; (2) devoluciones: no se cambia nada hasta confirmar con una devolución real si Mercado Pago reintegra su
+comisión. Lo que cambia respecto de la propuesta: el plazo se elige en **Horarios**, junto a la seña (ahí estaba la seña), no en
+Perfil → Cobros.
 
 **Modelo decidido (31/10).**
 - **Comisión de TuTiempo:** un % de la **seña**, editable desde el admin (previsto 7%).
