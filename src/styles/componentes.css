@@ -165,3 +165,22 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .am-tabs button[aria-selected="true"]{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
 body.am-open{overflow:hidden}
 @media (min-width:700px){.authmodal{place-items:center}}
+/* V3b: Horarios se guarda solo (C37) y muestra el happy hour en sus días (C38) */
+.hsaved{margin:0;font-size:13px;color:var(--muted);text-align:right;min-height:18px}
+.hday .hday-h{flex-wrap:wrap}
+.hhchip{display:inline-block;margin-left:auto;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;background:var(--ok-soft);color:var(--ok);white-space:nowrap}
+/* C40 (V3b): hoja del QR para imprimir o guardar en PDF; en pantalla no se ve */
+.qrsheet{display:none}
+@media print{
+  @page{size:A4;margin:16mm}
+  body.printing-qr > *:not(.qrsheet){display:none !important}
+  body.printing-qr{background:#fff !important}
+  body.printing-qr .qrsheet{display:block;text-align:center;color:#111;font-family:var(--font)}
+  .qrsheet .qs-logo{display:flex;justify-content:center;align-items:center;gap:3mm;margin:6mm 0 8mm;font-size:20pt;font-weight:800;color:var(--brand,#111)}
+  .qrsheet .qs-logo svg{width:12mm;height:12mm;flex:none}
+  .qrsheet h1{font-size:30pt;margin:0 0 2mm;font-weight:800}
+  .qrsheet .qs-lead{font-size:16pt;margin:0 0 8mm}
+  .qrsheet .qs-qr svg{width:110mm;height:110mm}
+  .qrsheet .qs-how{font-size:13pt;margin:8mm 0 2mm}
+  .qrsheet .qs-link{font-size:15pt;font-weight:700;margin:0}
+}

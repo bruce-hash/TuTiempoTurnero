@@ -270,6 +270,36 @@ const SOFIA = "sofia-benitez-studio";
   await wait(page, 300);
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   ok("“Copiar link” copia la dirección del perfil con el dominio actual", copied === BASE + "/" + SOFIA, copied);
+  // C40 (V3b): "Imprimir o guardar el QR en PDF" arma una hoja con el nombre, el QR grande y el link, y abre la impresión
+  await page.evaluate(() => { window.__prints = 0; window.print = () => { window.__prints++; }; });
+  await page.click("[data-act=qrPrint]");
+  await wait(page, 200);
+  const sheet = await page.evaluate(() => ({ prints: window.__prints, cls: document.body.classList.contains("printing-qr"), text: (document.querySelector(".qrsheet") || {}).innerText || "", px: +((document.querySelector(".qrsheet .qs-qr svg") || { getAttribute: () => 0 }).getAttribute("width")) }));
+  ok("C40: el botón abre la impresión con la hoja del QR", sheet.prints === 1 && sheet.cls, JSON.stringify(sheet));
+  await page.emulateMedia({ media: "print" });
+  const printed = await page.evaluate(() => ({ app: document.getElementById("app").checkVisibility() ? "visible" : "none", sheet: getComputedStyle(document.querySelector(".qrsheet")).display, text: document.querySelector(".qrsheet").innerText }));
+  ok("C40: al imprimir solo sale la hoja: nombre, “Reservá tu turno online”, el QR de 340 px y el link", printed.app === "none" && printed.sheet !== "none" && printed.text.includes("Reservá tu turno online") && printed.text.includes(new URL(BASE).host + "/" + SOFIA) && sheet.px === 340, JSON.stringify(printed));
+  const sheetPixels = await page.evaluate(async () => {
+    const svg = document.querySelector(".qrsheet .qs-qr svg");
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 340;
+    const g = canvas.getContext("2d");
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, 340, 340);
+    g.drawImage(img, 0, 0, 340, 340);
+    return Array.from(g.getImageData(0, 0, 340, 340).data);
+  });
+  const sheetQr = jsQR(Uint8ClampedArray.from(sheetPixels), 340, 340);
+  ok("C40: el QR de la hoja también lleva al perfil", sheetQr && sheetQr.data === BASE + "/" + SOFIA, sheetQr && sheetQr.data);
+  const pdfBuf = await page.pdf({ format: "A4" }); if (process.env.QR_PDF) require("fs").writeFileSync(process.env.QR_PDF, pdfBuf);
+  const pdf = pdfBuf.toString("latin1");
+  ok("C40: guardada en PDF es una sola hoja A4", (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1);
+  // generar el PDF es imprimir: al terminar llega "afterprint" y la hoja se va
+  await page.emulateMedia({ media: "screen" });
+  ok("C40: después de imprimir la hoja desaparece", await page.evaluate(() => !document.querySelector(".qrsheet") && !document.body.classList.contains("printing-qr")));
   await page.context().close();
   page = await nueva();
   s = await go(page, new URL(copied).pathname);

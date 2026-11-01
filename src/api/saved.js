@@ -20,9 +20,15 @@ export async function call(query) {
 // Toda escritura pasa por acá (api.m.*). En vivo: avisa si se guardó; si falló, avisa, vuelve a cargar los datos de la
 // base para no mostrar algo que no se guardó y corta la cadena (con __shown, para no avisar dos veces). En la demo no
 // hay nada que guardar.
+// pendientes: cuántas escrituras siguen en camino (C22: la Agenda no se vuelve a pedir mientras haya alguna)
+export const pending = { n: 0 };
 export function saved(promise, okMsg) {
   if (LIVE) {
+    pending.n++;
     return Promise.resolve(promise)
+      .finally(() => {
+        pending.n--;
+      })
       .then((res) => {
         if (res && res.error) {
           throw res.error;

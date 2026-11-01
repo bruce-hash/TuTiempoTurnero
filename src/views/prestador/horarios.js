@@ -31,12 +31,16 @@ export function vBHorarios() {
     return `<div class="rng ${off ? "off" : ""}"><label class="mini"><input type="checkbox" id="h${part}${dow}" ${rng.on ? "checked" : ""} ${conf.days[dow].on ? "" : "disabled"}> ${label}</label><input type="time" id="h${part}f${dow}" value="${rng.from}" aria-label="${label} desde" ${off ? "disabled" : ""}><span class="hint">a</span><input type="time" id="h${part}t${dow}" value="${rng.to}" aria-label="${label} hasta" ${off ? "disabled" : ""}></div>`;
   };
   const freeTomorrow = freeCount(ME(), dkey(addDays(1)), 30);
+  // C38 (V3b): en qué días y horas rige el happy hour, en la misma lista de días
+  const hhChip = (dow) =>
+    happy.on && happy.days.includes(dow) && conf.days[dow].on ? `<span class="hhchip">⚡ Happy hour ${esc(happy.from)}–${esc(happy.to)} · −${happy.pct}%</span>` : "";
   return `<form class="stack" id="fHorarios" novalidate>
+   <p class="hsaved" id="hSaved" role="status" aria-live="polite">${S.hSavedAt ? "✓ Guardado" : "Los cambios se guardan solos."}</p>
    <div class="panel"><p class="lbl">Días y horarios</p>
     <div class="hdays">${order
       .map((dow) => {
         const day = conf.days[dow];
-        return `<div class="hday ${day.on ? "" : "off"}"><div class="hday-h"><label class="chk dname"><input type="checkbox" id="hd${dow}" ${day.on ? "checked" : ""}> ${DNAME[dow]}</label><span class="dclosed">Cerrado</span></div>
+        return `<div class="hday ${day.on ? "" : "off"}"><div class="hday-h"><label class="chk dname"><input type="checkbox" id="hd${dow}" ${day.on ? "checked" : ""}> ${DNAME[dow]}</label><span class="dclosed">Cerrado</span>${hhChip(dow)}</div>
       <div class="rngs">${range(dow, "m", "Mañana")}${range(dow, "t", "Tarde")}</div><span class="ferr" id="herr-d${dow}">${errs["d" + dow] || ""}</span></div>`;
       })
       .join("")}</div>
@@ -77,7 +81,6 @@ export function vBHorarios() {
    <div class="panel" style="text-align:center"><p class="lbl">Tu link de turnos</p><p style="margin:0 0 8px;font-weight:700">${esc(profileLinkText(pr(ME())))}</p><p class="note">Ponelo en tu bio de Instagram y compartilo con tus clientes.</p>
     <button type="button" class="btn btn-ghost btn-block" data-act="copiarLink">Copiar link</button></div>
    <p class="note">Con lo guardado, mañana te quedan <b>${freeTomorrow}</b> turnos libres de 30 min.</p>
-   <button class="btn btn-pri btn-block" type="submit">Guardar horarios</button>
    <button type="button" class="btn btn-ghost btn-block" data-act="preview">👁 Ver cómo lo ve un cliente</button>
   </form>${vDayBlocks()}`;
 }

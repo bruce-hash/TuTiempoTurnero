@@ -34,6 +34,7 @@ import { api } from "./api/index.js";
 import { CONFIG_OK, LIVE, sb } from "./config.js";
 import { errMsg } from "./lib/errores.js";
 import { startPriceRefresh } from "./lib/precios.js";
+import { startAgendaRefresh } from "./lib/agenda-al-dia.js";
 import { refreshPush } from "./lib/push.js";
 import { startPwa } from "./lib/pwa.js";
 import { S } from "./state.js";
@@ -149,6 +150,8 @@ async function boot() {
     api.fees().catch(() => {});
     // C52 (V8): precios al día al volver a la pestaña y cada minuto (perfil y confirmación del turno)
     startPriceRefresh();
+    // C22 (V3b): la Agenda del prestador al día cada 30 segundos y al volver a la pestaña
+    startAgendaRefresh();
     api.requireDni().catch(() => {});
     // dirección con la que arranca el enrutador: la actual, salvo que el arranque ya decida la pantalla
     let start = location.href;

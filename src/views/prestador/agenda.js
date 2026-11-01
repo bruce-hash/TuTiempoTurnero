@@ -156,15 +156,20 @@ export function vBAgendaT() {
     const offered = S.offered && S.offered[key];
     return `<div class="tl-gap" style="top:${(from - top) * pxPerMin}px;height:${(to - from) * pxPerMin}px"><span>Libre ${fromMin(from)}–${fromMin(to)}</span><button class="btn ${offered ? "btn-ghost" : "btn-pri"}" data-act="offerGap" data-g="${key}" data-z="${fromMin(to)}" ${offered ? "disabled" : ""}>${offered ? "✓ Ofrecido" : "📣 Ofrecer"}</button></div>`;
   }).join("");
+  // C38 (V3b): la franja del happy hour de este día, dibujada en la línea de tiempo
+  const hh = conf.happy && conf.happy.on && (conf.happy.days || []).includes(dow) ? [toMin(conf.happy.from), toMin(conf.happy.to)] : null;
+  const hhHtml = hh
+    ? `<div class="tl-hh" style="top:${(Math.max(hh[0], top) - top) * pxPerMin}px;height:${Math.max(0, Math.min(hh[1], bottom) - Math.max(hh[0], top)) * pxPerMin}px"><span>⚡ Happy hour −${conf.happy.pct}%</span></div>`
+    : "";
   const nowLine =
     day === TODAY() && nowMin > top && nowMin < bottom
       ? `<div class="tl-now" style="top:${(nowMin - top) * pxPerMin}px"><span>${nowHM()}</span></div>`
       : "";
   return `${weekNav}
   <div class="stats2"><div><b>${bookings.length}</b><span>Turnos</span></div><div><b>${occupancy(day)}%</b><span>Ocupación</span></div><div><b>${money(income)}</b><span>Ingreso estimado</span></div></div>
-  <div class="panel tl-panel"><div class="tl-top"><b>${esc(longLabel(day))}</b><span class="hint">${rangesTxt(rngs)}</span></div>
+  <div class="panel tl-panel"><div class="tl-top"><b>${esc(longLabel(day))}</b><span class="hint">${rangesTxt(rngs)}${hh ? ` · ⚡ Happy hour ${esc(conf.happy.from)}–${esc(conf.happy.to)} (−${conf.happy.pct}%)` : ""}</span></div>
    <div class="tl-leg"><span><i class="lg app"></i>TuTiempo</span><span><i class="lg man"></i>Agendado</span><span><i class="lg walk"></i>Sin turno</span><span><i class="lg gap"></i>Libre</span></div>
-   <div class="tl" style="height:${height}px">${hourLines.join("")}${breakHtml}${gapHtml}${events}${nowLine}</div>
+   <div class="tl" style="height:${height}px">${hourLines.join("")}${hhHtml}${breakHtml}${gapHtml}${events}${nowLine}</div>
    <p class="note">Tocá un turno para ver el detalle. En los huecos libres, “Ofrecer” avisa a tus ${store.COMM.followers} seguidores.</p></div>
   ${selected ? detailCard(selected) : ""}
   ${S.manOpen ? vManualForm(day) : S.blockOpen ? vBlockForm(day) : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-pri" data-act="manOpen">+ Agendar turno</button><button class="btn btn-ghost" data-act="blockOpen">⛔ Bloquear horario</button></div>'}

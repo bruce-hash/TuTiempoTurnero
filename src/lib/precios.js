@@ -17,7 +17,7 @@ const priceSig = (pid) => {
 };
 // alguien escribiendo en un campo: no se vuelve a dibujar la pantalla (se perdería lo escrito); el control antes de
 // pagar lo agarra igual
-const typing = () => {
+export const typing = () => {
   const el = document.activeElement;
   return !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !!document.getElementById("app")?.contains(el);
 };
