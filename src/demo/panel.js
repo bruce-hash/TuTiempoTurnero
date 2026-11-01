@@ -1,4 +1,4 @@
-import { feeFor } from "../lib/dinero.js";
+import { chargeAt } from "../lib/dinero.js";
 import { TODAY, addDays, dkey, prevMonthDay } from "../lib/fechas.js";
 import { pr } from "../lib/prestadores.js";
 import { RUBRO, catName } from "../lib/rubros.js";
@@ -137,11 +137,14 @@ export function seedStore(pid) {
   };
 }
 
-// comisión de los turnos de ejemplo pagados por la app, para que las finanzas y el admin la descuenten
+// D30: comisiones de la demo. TuTiempo 7% de la seña y Mercado Pago con los % de referencia (con IVA) para que se vean
+// los tres conceptos; en vivo arrancan en 0 hasta la aprobación legal.
+export const DEMO_FEES = () => ({ commission: 7, mp: { instant: 7.61, d10: 5.31, d18: 4.1, d35: 1.8 } });
+// comisión de los turnos de ejemplo pagados por la app (% de la seña), para que las finanzas y el admin la descuenten
 export function seedFees() {
   store.BOOK.forEach((booking) => {
     if (booking.src === "app" && booking.type !== "block" && booking.fee == null && (booking.paid || 0) > 0) {
-      booking.fee = feeFor(booking.price);
+      booking.fee = chargeAt(booking.pid, booking.paid).fee;
     }
   });
 }

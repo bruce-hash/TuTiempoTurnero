@@ -111,11 +111,11 @@ registerClick("bCancelYes", (ev, el, act) => {
       setCliStamps(booking.cliente, svc, cliStamps(booking.cliente, svc) + (booking.rwGoal || stampGoal(ME(), svc)));
     }
   }
-  booking.refund = (booking.paid || 0) + (booking.fee || 0);
+  booking.refund = (booking.paid || 0) + (booking.fee || 0) + (booking.mpFee || 0);
   S.bAsk = null;
   const notified = freed(booking);
   toast(
-    `Turno cancelado. ${booking.paid ? "Le devolvemos " + money(booking.paid) + " al cliente. " : ""}${notified ? "Avisamos a " + notified + " persona" + (notified > 1 ? "s" : "") + " en lista de espera." : ""}`,
+    `Turno cancelado. ${booking.paid ? "Le devolvemos " + money(booking.refund) + " al cliente (todo lo que pagó). " : ""}${notified ? "Avisamos a " + notified + " persona" + (notified > 1 ? "s" : "") + " en lista de espera." : ""}`,
   );
   render();
 });

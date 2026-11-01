@@ -1,5 +1,5 @@
 import { liveApi } from "./index.js";
-import { upsertP } from "../mapeo.js";
+import { feesFromDb, upsertP } from "../mapeo.js";
 import { call } from "../saved.js";
 import { CITY, sb } from "../../config.js";
 import { errMsg } from "../../lib/errores.js";
@@ -111,6 +111,8 @@ export const liveCuenta = {
             price: row.price,
             paid: row.paid_mp + row.paid_wallet,
             fee: +row.client_fee || 0,
+            // D30: lo que pagó por Mercado Pago (se le devuelve si cancela el profesional)
+            mpFee: +row.paid_mp_fee || 0,
             disc: row.discount_pct,
             status: statusMap[row.status] || row.status,
             byProv: row.status === "cancelled_provider",
@@ -186,10 +188,13 @@ export const liveCuenta = {
     S.requireDni = !row || row.require_dni !== false;
     return S.requireDni;
   },
-  async commission() {
-    const rate = await call(sb.rpc("commission")).catch(() => null);
-    if (rate != null && isFinite(+rate)) {
-      store.COMISION = +rate;
+  // D30: comisión de TuTiempo (% de la seña) y % de Mercado Pago por plazo (app_settings, lo puede leer cualquiera)
+  async fees() {
+    const row = await call(
+      sb.from("app_settings").select("deposit_commission_pct,mp_pct_instant,mp_pct_d10,mp_pct_d18,mp_pct_d35").maybeSingle(),
+    ).catch(() => null);
+    if (row) {
+      store.FEES = feesFromDb(row);
     }
   },
 };

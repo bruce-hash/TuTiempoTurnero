@@ -105,7 +105,7 @@ registerClick("delYes", (ev, el, act) => {
         booking.date + booking.time >= TODAY() + nowHM()
       ) {
         booking.status = "cancelled";
-        booking.refund = (booking.paid || 0) + (booking.fee || 0);
+        booking.refund = (booking.paid || 0) + (booking.fee || 0) + (booking.mpFee || 0);
         cancelled++;
       }
     });

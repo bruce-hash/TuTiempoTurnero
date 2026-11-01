@@ -42,8 +42,10 @@ const REFUND_WHY = {
   unknown_booking: "pago sin turno de ese prestador",
 };
 const PAYMENT_WHY = {
-  fee_missing: "Mercado Pago no informó la comisión",
-  fee_mismatch: "la comisión de Mercado Pago no coincide con la calculada",
+  fee_missing: "Mercado Pago no informó la comisión de TuTiempo",
+  fee_mismatch: "la comisión de TuTiempo que informó Mercado Pago no coincide con la calculada",
+  // D30 (el texto con los dos números lo arma paymentWhy)
+  mp_cost_mismatch: "la comisión de Mercado Pago no es la del plazo elegido",
   amount_over: "pagó más de lo que debía (la diferencia no se devolvió sola)",
   other_provider: "trae turnos de otro prestador",
   partial_refund_mismatch: "devolución parcial que no hizo la app",
@@ -66,8 +68,10 @@ const EVENT_WHY = {
   recovered: "pago sin aviso: lo encontró la consulta automática",
 };
 const REJECTED = ["bad_signature", "stale_signature", "no_signature", "bad_request", "config_error"];
-const paymentWhy = (reason) =>
-  PAYMENT_WHY[reason] || (/^unregistered_/.test(reason) ? "aviso de un pago que no está registrado" : /^error/.test(reason) ? "error al procesarlo: " + reason.slice(7) : reason);
+const paymentWhy = (reason, payment) =>
+  reason === "mp_cost_mismatch" && payment && payment.mp_cost != null
+    ? `${PAYMENT_WHY[reason]}: cobró ${money(payment.mp_cost)} y se esperaba ${money(payment.mp_cost_expected)} (revisar que el plazo del perfil del prestador sea el de su cuenta)`
+    : PAYMENT_WHY[reason] || (/^unregistered_/.test(reason) ? "aviso de un pago que no está registrado" : /^error/.test(reason) ? "error al procesarlo: " + reason.slice(7) : reason);
 // formulario de "Devolver" (D20): monto (por defecto lo que falta devolver) y nota obligatoria; la devolución la hace
 // mp-refunds con la llave de la cuenta que cobró
 function refundForm(payment) {
@@ -114,7 +118,7 @@ export function admReview() {
      <span class="hint">${refund.status === "failed" ? "❌ Falló: ya no se reintenta sola" : `🔁 Reintentando · ${refund.attempts} intento${refund.attempts === 1 ? "" : "s"}${refund.next_attempt_at ? " · próximo " + esc(dmyIso(refund.next_attempt_at)) : ""}`}${refund.last_error ? " · Último error: " + esc(refund.last_error) : ""}</span>
      ${open.k === "refund" && open.id === refund.id ? resolveForm("refund", refund.id) : `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"><button class="btn btn-ghost btn-sm" data-act="admRetry" data-id="${refund.id}">Reintentar</button><button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="refund" data-id="${refund.id}">Resuelto a mano</button></div>`}</div></li>`;
   const paymentLi = (payment) => `<li><div><b>Pago ${esc(payment.mp_payment_id)} de ${money(payment.amount)} · ${esc(payment.provider_name || "Prestador")}</b>
-     <span>${esc(payment.client_name || "")}${payment.client_name ? " · " : ""}${(payment.review_reasons || []).map((reason) => esc(paymentWhy(reason))).join(" · ")}</span>
+     <span>${esc(payment.client_name || "")}${payment.client_name ? " · " : ""}${(payment.review_reasons || []).map((reason) => esc(paymentWhy(reason, payment))).join(" · ")}</span>
      ${payment.refundable_from_app === false ? '<span class="hint">No es de una cuenta de TuTiempo: la devolución se hace a mano.</span>' : ""}
      ${open.k === "payment" && open.id === payment.id ? resolveForm("payment", payment.id) : open.k === "refundNew" && open.id === payment.id ? refundForm(payment) : open.k === "reprocess" && open.id === payment.id ? reprocessForm(payment.id) : `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">${payment.reprocessable ? `<button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="reprocess" data-id="${payment.id}">Reprocesar</button>` : ""}${payment.refundable_from_app !== false && +payment.refundable > 0 ? `<button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="refundNew" data-id="${payment.id}">Devolver</button>` : ""}<button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="payment" data-id="${payment.id}">Resuelto a mano</button></div>`}</div></li>`;
   // cuenta de Mercado Pago que no puede cobrar o devolver por su llave: sale sola cuando se renueva o el prestador reconecta

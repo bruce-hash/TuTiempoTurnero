@@ -58,8 +58,10 @@ end $$;
 
 -- ---------- Cuentas activas siempre con mp_user_id (H26) ----------
 alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
+-- (incluye 'mp_cost', de D30 / 20261101120000_cobro_d30.sql: así esta migración se puede volver a correr sobre una base
+-- que ya tiene ese aviso)
 alter table public.provider_notices add constraint provider_notices_kind_check
-  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect'));
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost'));
 -- las activas sin id (llaves viejas copiadas de provider_secrets) dejan de cobrar y el prestador recibe el aviso
 do $$ declare r record; begin
   for r in update public.mp_accounts set status = 'refunds_only', disconnected_at = now(),

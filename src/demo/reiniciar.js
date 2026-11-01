@@ -1,6 +1,6 @@
 import { LIVE } from "../config.js";
 import { demoPending0 } from "./admin.js";
-import { seedExtra, seedFees } from "./panel.js";
+import { DEMO_FEES, seedExtra, seedFees } from "./panel.js";
 import { seedTurnos } from "./turnos.js";
 import { demoInbox0, demoStamps0, demoUsers0 } from "./usuarios.js";
 import { $ } from "../lib/dom.js";
@@ -24,7 +24,7 @@ $("#reset").addEventListener("click", () => {
     store.ADM_READY = false;
     store.NID = 1;
     store.AEID = 1;
-    store.COMISION = 0.1;
+    store.FEES = DEMO_FEES();
     store.DEMO_USERS = demoUsers0();
     store.DEMO_OWNER = "juan.perez@tutiempo.demo";
     store.DEMO_ST = {};

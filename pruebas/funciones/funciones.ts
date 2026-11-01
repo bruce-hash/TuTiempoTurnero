@@ -115,7 +115,8 @@ await q("update providers set status = 'active' where id = $1", [pid]);
 await q("update provider_settings set online = true, notice_min = 0, deposit_pct = 50, pay_mode = 'deposit' where provider_id = $1", [pid]);
 await q("delete from provider_hours where provider_id = $1", [pid]);
 await q("insert into provider_hours select $1, g, 1, '08:00', '21:00' from generate_series(0, 6) g", [pid]);
-await q("update app_settings set commission_pct = 10");
+// D30: la comisión de TuTiempo es un % de la seña: 20% de una seña del 50% = el 10% del precio de antes (mismos montos)
+await q("update app_settings set commission_pct = 10, deposit_commission_pct = 20");
 const sv = Number(await one("insert into services (provider_id, category_id, name, duration_min, price) values ($1, 'b', 'Corte', 30, 10000) returning id", [pid]));
 let slotN = 0;
 async function book(): Promise<number[]> {
@@ -217,6 +218,29 @@ ev = await rech("9105", "config_error");
 ok("Paso 1: sin MP_WEBHOOK_SECRET → 500 (Mercado Pago reintenta) y queda como config_error", r.status === 500 && ev && /MP_WEBHOOK_SECRET/.test(ev.detail), JSON.stringify(ev));
 r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&data.id=77&type=merchant_order`, { method: "POST", body: "{}" }));
 ok("Paso 1: un aviso que no es de un pago (merchant_order) sin firma no llena la tabla", r.status === 401 && Number(await one("select count(*) from mp_webhook_events where mp_payment_id = '77'")) === 0);
+
+// ---------- D30 (V1): el cobro suma el costo de Mercado Pago del plazo; la comisión que informa se compara ----------
+await q("update app_settings set mp_pct_instant = 7.61, mp_pct_d10 = 5.31");
+await q("update provider_settings set payout_term = 'd10' where provider_id = $1", [pid]);
+const b30 = await book();
+r = await preference(cli, b30);
+const pref30 = mp.preferencias.at(-1)!;
+ok("D30: mp-create-preference cobra seña + comisión + Mercado Pago ($6.337) y marketplace_fee es solo la comisión de TuTiempo",
+   r.status === 200 && pref30?.body.items[0].unit_price === 6337 && pref30?.body.marketplace_fee === 1000, JSON.stringify(pref30?.body.items?.[0]));
+mp.pago({ id: "9030", collector: "1001", status: "approved", amount: 6337, fee: 1000, mpfee: 336.49, ref: b30.join(",") });
+r = await webhook(pid, A.id, "9030");
+ok("D30: mp-webhook confirma y guarda la comisión de Mercado Pago informada y la esperada (5,31% = $336)",
+   r.status === 200 && (await st(b30[0])) === "confirmed"
+   && JSON.stringify((await q("select outcome, mp_cost, mp_cost_expected from payments where mp_payment_id = '9030'"))[0]) === JSON.stringify({ outcome: "confirmed", mp_cost: 336, mp_cost_expected: 336 }));
+const b31 = await book();
+mp.pago({ id: "9031", collector: "1001", status: "approved", amount: 6337, fee: 1000, mpfee: 482, ref: b31.join(",") });
+r = await webhook(pid, A.id, "9031");
+ok("D30: si Mercado Pago cobró otro % → turno confirmado, pago para revisar y aviso al prestador con los dos números",
+   r.status === 200 && (await st(b31[0])) === "confirmed"
+   && JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9031'")) === '["mp_cost_mismatch"]'
+   && String(await one("select body from provider_notices where provider_id = $1 and kind = 'mp_cost'", [pid])).includes("($482) en vez de 5,31% ($336)"));
+await q("update app_settings set mp_pct_instant = 0, mp_pct_d10 = 0");
+await q("update provider_settings set payout_term = 'instant' where provider_id = $1", [pid]);
 
 // ---------- 4. b) Comisión que informa Mercado Pago ----------
 const b2 = await book();

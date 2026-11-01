@@ -73,7 +73,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.fill("#lc", "123456"); await pg.click("#fCode button[type=submit]"); await pg.waitForSelector("#fTurno"); await wait();
   ok("vuelve al pago ya logueado", (await txt()).includes("Confirmá tu turno"));
   ok("checkout: seña obligatoria y el resto en efectivo o Mercado Pago, sin preguntas ni saldo", (await pg.locator("[data-paym=mp]").count()) === 1 && (await pg.locator("[data-paym=cash]").count()) === 1 && !(await pg.locator(".intake").count()) && !(await txt()).includes("Saldo") && (await txt()).includes("$6.000"));
-  ok("v30: la comisión va aparte de la seña (10% = $1.200) y se paga $7.200", (await pg.locator(".feerow").innerText()).includes("10%") && (await pg.locator(".feerow").innerText()).includes("$1.200") && (await pg.locator("#fTurno .tot").innerText()).includes("$7.200") && (await pg.locator("#fTurno button[type=submit]").innerText()).includes("$7.200"));
+  ok("v30/D30: la comisión va aparte de la seña (20% de la seña = $1.200) y se paga $7.200", (await pg.locator(".feerow").innerText()).includes("20% de la seña") && (await pg.locator(".feerow").innerText()).includes("$1.200") && (await pg.locator("#fTurno .tot").innerText()).includes("$7.200") && (await pg.locator("#fTurno button[type=submit]").innerText()).includes("$7.200"));
   // C52 (V8): el prestador cambia el precio mientras la clienta está en la confirmación
   const holdsAntes = (await q("select count(*)::int c from bookings where status = 'hold'"))[0].c;
   await db.query("update services set price = 14000 where name = 'Esmaltado semipermanente'");
@@ -84,9 +84,24 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await db.query("update services set price = 12000 where name = 'Esmaltado semipermanente'");
   await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /antes \$8\.400/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
   ok("C52: …y si vuelve al precio de antes, lo avisa igual", (await pg.locator("#fTurno .tot").innerText()).includes("$7.200"));
+  // D30 (V1): el admin carga los % de Mercado Pago y la prestadora elige "10 días" mientras la clienta está en la confirmación
+  await db.query("update app_settings set mp_pct_instant = 7.61, mp_pct_d10 = 5.31");
+  await db.query("update provider_settings set payout_term = 'd10' where provider_id = (select id from providers where name like 'Sofía%')");
+  await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /antes \$7\.200/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  const fr30 = await pg.locator("#fTurno .feerow").allInnerTexts();
+  ok("D30: antes de cobrar avisa el total nuevo con el costo de Mercado Pago ($6.000 + $1.200 + $404 = $7.604)",
+     /ahora pagás \$7\.604 \(antes \$7\.200\)/.test(await pg.locator("#terr").innerText()) && (await pg.locator("#fTurno .tot").innerText()).includes("$7.604"));
+  ok("D30: el resumen muestra los tres conceptos por separado (seña, comisión de TuTiempo y costo de Mercado Pago con su plazo)",
+     fr30.length === 2 && fr30[0].includes("20% de la seña") && fr30[0].includes("$1.200") && /acreditación en 10 días, 5,31% del total/.test(fr30[1]) && fr30[1].includes("$404")
+     && (await pg.locator("#fTurno").innerText()).includes("Se suma la comisión de TuTiempo y el costo de Mercado Pago"));
   await Promise.all([pg.waitForURL(/mp=success/).catch(() => {}), pg.click("#fTurno button[type=submit]")]);
   await pg.waitForSelector(".booked", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("vuelve de Mercado Pago con el turno confirmado", await pg.isVisible(".booked"));
+  const bk30 = (await q("select deposit, client_fee, mp_fee, paid_mp, app_fee, paid_mp_fee, status from bookings where client_id = (select id from auth.users where email='ana@test.ar') order by id desc limit 1"))[0];
+  ok("D30: en la base: seña completa para la prestadora, comisión de TuTiempo y lo de Mercado Pago aparte",
+     bk30 && bk30.status === "confirmed" && bk30.deposit === 6000 && bk30.client_fee === 1200 && bk30.mp_fee === 404 && bk30.paid_mp === 6000 && bk30.app_fee === 1200 && bk30.paid_mp_fee === 404, JSON.stringify(bk30));
+  await db.query("update app_settings set mp_pct_instant = 0, mp_pct_d10 = 0");
+  await db.query("update provider_settings set payout_term = 'instant' where provider_id = (select id from providers where name like 'Sofía%')");
   {
     // C52: en el perfil, al volver a la pestaña, los precios se actualizan solos
     const pv = await ctx.newPage(); pv.on("pageerror", (e) => errs.push(e.message));
@@ -105,7 +120,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const conf = await q("select m.body, m.kind from client_messages m join auth.users u on u.id=m.user_id where u.email='ana@test.ar' and m.kind='conf'");
   ok("aviso de confirmación en la app (sin WhatsApp)", conf.length === 1 && conf[0].body.includes("Sofía Benítez Studio"));
   ok("en la base: comisión cobrada aparte y guardada", (await q("select app_fee, client_fee from bookings where client_id = (select id from auth.users where email='ana@test.ar')"))[0].app_fee === 1200);
-  ok("v30: el aviso dice seña + comisión", (await pg.locator(".booked .bk-must").innerText()).includes("$6.000 + $1.200 de comisión"));
+  ok("v30/D30: el aviso dice seña + comisiones (TuTiempo y Mercado Pago)", (await pg.locator(".booked .bk-must").innerText()).includes("$6.000 + $1.604 de comisiones"));
   ok("Paso 1: la vuelta de Mercado Pago llega a /turno/<id> (no al inicio)", /^\/turno\/\d+$/.test(new URL(pg.url()).pathname));
   {
     // Paso 1: pagó desde la app instalada y Mercado Pago volvió al navegador, que no tiene la sesión
@@ -444,15 +459,32 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("admin: tablero con datos reales", (await pg.locator(".kpis.adm .kpi").count()) === 8 && (await pg.locator(".admtop li").count()) >= 2);
   ok("v30: sin la proyección y con el tablero simple (hoy/ayer + 4 semanas)", !(await txt()).includes("cerrás el mes") && (await pg.locator(".admday>div").count()) === 2 && (await pg.locator(".wkrow").count()) === 4 && (await pg.locator(".admbars").count()) === 0);
   await pg.click("[data-act=admT][data-t=com]"); await wait(300);
-  ok("admin: comisión 10% en su pestaña", (await pg.inputValue("#admCom")) === "10");
+  ok("admin/D30: comisión de TuTiempo 20% de la seña y Mercado Pago en 0% en los cuatro plazos", (await pg.inputValue("#admCom")) === "20"
+     && (await Promise.all(["instant", "d10", "d18", "d35"].map((t) => pg.inputValue("#admMp-" + t)))).every((v) => v === "0"));
   ok("admin: comisión sin botones fijos", (await pg.locator("[data-act=admComQuick]").count()) === 0);
-  await pg.fill("#admCom", "12"); await pg.click("#fCom button[type=submit]"); await wait(1000);
-  ok("admin: comisión guardada en la base (12%)", Number((await q("select commission_pct from app_settings"))[0].commission_pct) === 12);
-  await pg.fill("#admCom", "8,5"); await pg.click("#fCom button[type=submit]"); await wait(1000);
-  ok("admin: comisión libre con decimales (8,5%)", Number((await q("select commission_pct from app_settings"))[0].commission_pct) === 8.5);
-  await pg.fill("#admCom", "10"); await pg.click("#fCom button[type=submit]"); await wait(800);
-  probing = true; const forb = await pg.evaluate(async () => { const r = await sb.from("app_settings").update({ commission_pct: 1 }).eq("id", true).select(); return (r.data || []).length }); probing = false;
-  ok("nadie cambia la comisión por fuera de la función", forb === 0 && Number((await q("select commission_pct from app_settings"))[0].commission_pct) === 10);
+  // D30: guarda Comisión y espera a que el panel se vuelva a dibujar con lo guardado (si no, el render tardío pisa lo que se
+  // escribe después: en el CI pasa)
+  const saveCom = async () => {
+    await wait(500);   // la app ignora un segundo envío del mismo formulario en menos de 450 ms (doble toque)
+    await pg.evaluate(() => document.getElementById("fCom").setAttribute("data-viejo", "1"));
+    await pg.click("#fCom button[type=submit]");
+    await pg.waitForFunction(() => { const f = document.getElementById("fCom"); return f && !f.hasAttribute("data-viejo"); }, null, { timeout: 10000 }).catch(() => {});
+    await wait(200);
+  };
+  await pg.fill("#admCom", "7"); await pg.fill("#admMp-instant", "7,61"); await pg.fill("#admMp-d10", "5,31"); await pg.fill("#admMp-d18", "4,10"); await pg.fill("#admMp-d35", "1,80");
+  await saveCom();
+  const fs30 = (await q("select deposit_commission_pct, mp_pct_instant, mp_pct_d10, mp_pct_d18, mp_pct_d35 from app_settings"))[0];
+  ok("admin/D30: comisiones guardadas en la base (7% de la seña; 7,61 / 5,31 / 4,10 / 1,80)", [fs30.deposit_commission_pct, fs30.mp_pct_instant, fs30.mp_pct_d10, fs30.mp_pct_d18, fs30.mp_pct_d35].map(Number).join() === "7,7.61,5.31,4.1,1.8");
+  ok("admin/D30: el ejemplo (corte $20.000, seña 50%, al instante) da $10.000 + $700 + $882 = $11.582", (await pg.locator(".comex .tot").innerText()).includes("$11.582")
+     && (await pg.locator(".comex").innerText()).includes("$700") && (await pg.locator(".comex").innerText()).includes("$882"));
+  await pg.fill("#admMp-d10", "16"); await pg.click("#fCom button[type=submit]"); await wait(700);   // la app ignora un segundo envío en menos de 450 ms (doble toque)
+  ok("admin/D30: Mercado Pago fuera de rango no se guarda", (await pg.locator("#comerr").innerText()).includes("entre 0 y 15") && Number((await q("select mp_pct_d10 from app_settings"))[0].mp_pct_d10) === 5.31);
+  await pg.fill("#admCom", "8,5"); await pg.fill("#admMp-d10", "5,31"); await saveCom();
+  ok("admin: comisión libre con decimales (8,5% de la seña)", await until("select deposit_commission_pct from app_settings", [], (r) => Number(r[0].deposit_commission_pct) === 8.5, 8000));
+  await pg.fill("#admCom", "20"); for (const t of ["instant", "d10", "d18", "d35"]) await pg.fill("#admMp-" + t, "0"); await saveCom();
+  await until("select deposit_commission_pct, mp_pct_instant from app_settings", [], (r) => Number(r[0].deposit_commission_pct) === 20 && Number(r[0].mp_pct_instant) === 0, 8000);
+  probing = true; const forb = await pg.evaluate(async () => { const r = await sb.from("app_settings").update({ deposit_commission_pct: 1, mp_pct_d10: 9 }).eq("id", true).select(); return (r.data || []).length }); probing = false;
+  ok("nadie cambia las comisiones por fuera de la función", forb === 0 && Number((await q("select deposit_commission_pct from app_settings"))[0].deposit_commission_pct) === 20);
   // H24: la dirección del sitio para los links de los avisos
   ok("H24: Comisión muestra la dirección del sitio", (await pg.inputValue("#admSite")) === "https://tutiempo.com.ar");
   // solo https:// y el dominio: cada dirección inválida avisa y no guarda (entre envíos, más que el antidoble toque)
