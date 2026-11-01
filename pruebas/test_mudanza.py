@@ -67,6 +67,13 @@ ok("…y el resto de los metadatos queda igual (nombre y datos del alta)",
    == {"full_name": "Pendiente", "provider_reg": {k: v for k, v in reg.items() if k != "dni"}}
    and q("select raw_user_meta_data from auth.users where email = 'viejo@test.ar'")[0][0] == {"full_name": "Viejo"}
    and q("select raw_user_meta_data from auth.users where email = 'cliente@test.ar'")[0][0] == {"full_name": "Cliente", "provider_reg": None})
+ok("alta por pasos: los prestadores de la versión 31 quedan con los 5 pasos hechos (no ven nada nuevo)",
+   q("select count(*) from providers")[0][0] > 0
+   and q("select count(*) from providers p left join provider_settings s on s.provider_id = p.id "
+         "where coalesce(s.setup_done, '{1,2,3,4,5}') <> '{1,2,3,4,5}'")[0][0] == 0
+   and all(q("select set_config('request.jwt.claims', json_build_object('sub', %s::text, 'role', 'authenticated')::text, false), "
+             "my_setup()->'steps' = '[1,2,3,4,5]'::jsonb", (str(o),))[0][1] for (o,) in q("select owner_id from providers where owner_id is not null")))
+q("select set_config('request.jwt.claims', '', false)")
 ok("provider_secrets ya no existe", q("select to_regclass('public.provider_secrets')")[0][0] is None)
 
 # reconectar la misma cuenta: la fila vuelve a cobrar con llaves cifradas
@@ -81,7 +88,8 @@ for m in MIG:
     q(m.read_text())
 ok("las migraciones se pueden volver a correr: la cuenta reconectada sigue cobrando y no hay avisos nuevos",
    q("select status from mp_accounts where provider_id = %s", (con_id,)) == [("active",)]
-   and q("select count(*) from provider_notices where kind = 'mp_reconnect'")[0][0] == 2)
+   and q("select count(*) from provider_notices where kind = 'mp_reconnect'")[0][0] == 2
+   and q("select count(*) from provider_settings where setup_done <> '{1,2,3,4,5}'")[0][0] == 0)
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
