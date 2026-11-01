@@ -64,7 +64,12 @@ async function auth(req, res, url) {
     if (!valid) return send(res, 400, { code: 400, error_code: "captcha_failed", msg: "captcha protection: request disallowed (captcha verification process failed)", message: "captcha protection: request disallowed (captcha verification process failed)" });
     USED.add(token);
   }
-  if (p === "/otp") { OTP[j.email] = "123456"; if (!(await userRow("email", j.email))) await db.query("insert into auth.users (email, raw_user_meta_data) values ($1, $2)", [j.email, JSON.stringify({ full_name: j.email.split("@")[0] })]); return send(res, 200, {}) }
+  if (p === "/otp") {
+    // como Supabase: con create_user false (shouldCreateUser), un email sin cuenta no recibe nada y no se crea
+    LOG.push({ otp: j.email, create_user: j.create_user });
+    const exists = !!(await userRow("email", j.email));
+    if (!exists && j.create_user === false) return send(res, 422, { code: 422, error_code: "otp_disabled", msg: "Signups not allowed for otp", message: "Signups not allowed for otp" });
+    OTP[j.email] = "123456"; if (!exists) await db.query("insert into auth.users (email, raw_user_meta_data) values ($1, $2)", [j.email, JSON.stringify({ full_name: j.email.split("@")[0] })]); return send(res, 200, {}) }
   if (p === "/verify" && j.token_hash) { const t = HASH[j.token_hash]; if (!t || (t.type !== j.type && !(t.type === "signup" && j.type === "email"))) return send(res, 403, { error_code: "otp_expired", msg: "Email link is invalid or has expired", message: "Email link is invalid or has expired" });
     delete HASH[j.token_hash]; if (t.type === "signup") await db.query("update auth.users set email_confirmed_at = now() where email = $1", [t.email]).catch(() => {}); return send(res, 200, session(await userRow("email", t.email))) }
   if (p === "/verify") { if (OTP[j.email] !== j.token) return send(res, 403, { error: "invalid", msg: "Token has expired or is invalid", message: "Token has expired or is invalid" });

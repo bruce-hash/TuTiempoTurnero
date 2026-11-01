@@ -1,4 +1,6 @@
 import { approved, dniMissing, dniRequired } from "../../lib/verificacion.js";
+import { nextStep, setupTodo } from "../../lib/alta.js";
+import { esc } from "../../lib/dom.js";
 import { S } from "../../state.js";
 
 // H10: formatos de las fotos del DNI (los mismos que acepta el bucket dni)
@@ -32,4 +34,25 @@ export function setupSteps(prov, where) {
     !mpOk && !inPerfil ? '<button class="lnk" data-btab="perfil">Ir a Perfil →</button>' : ""
   }</div></li>`;
   return `<div class="panel setup"><p class="lbl">Activá tu perfil</p><ol class="steps"><li class="done"><span class="dot">✓</span><div><b>Datos cargados</b></div></li>${step2}${step3}</ol></div>`;
+}
+
+// Registrá tu negocio (aprobado el 1/11): arriba de la Agenda, lo que falta para recibir reservas con una barra de
+// avance y "Seguir con el alta" (lleva al primer paso sin guardar). Desaparece con el perfil aprobado y Mercado Pago
+// conectado. Reemplaza la tarjeta "Activá tu perfil" de la Agenda (en Perfil siguen los pasos con el formulario del DNI).
+export function setupCard() {
+  const items = setupTodo();
+  if (!items.length || items.every((item) => item[1])) {
+    return "";
+  }
+  const done = items.filter((item) => item[1]).length;
+  const next = nextStep();
+  const mpMissing = !items.find((item) => item[2] === "mp")[1];
+  const action = next
+    ? '<button class="btn btn-pri btn-sm" data-act="bizStart">Seguir con el alta</button>'
+    : mpMissing
+      ? '<button class="btn btn-pri btn-sm" data-act="mpConnect">Conectar Mercado Pago</button>'
+      : "";
+  return `<div class="panel todo"><b class="todo-h">Te falta poco para recibir reservas</b><p>Tu perfil todavía no aparece en TuTiempo. Completá lo que falta:</p>
+   <div class="todo-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${items.length}" aria-valuenow="${done}" aria-label="Avance del alta"><i style="width:${Math.round((done / items.length) * 100)}%"></i></div>
+   <ul>${items.map(([label, ok]) => `<li class="${ok ? "ok" : ""}">${ok ? "✓" : "○"} ${esc(label)}</li>`).join("")}</ul>${action}</div>`;
 }

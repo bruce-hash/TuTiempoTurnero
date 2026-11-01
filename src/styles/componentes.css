@@ -154,16 +154,59 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .pwa-update{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;display:flex;gap:12px;align-items:center;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:14px;padding:10px 12px 10px 16px;box-shadow:0 12px 30px rgba(0,0,0,.18);max-width:calc(100vw - 32px)}
 @media (min-width:700px){.pwa-guide{place-items:center}}
 /* V7 (C48): el ingreso en una segunda capa, encima de la página (mismos formularios que /ingresar) */
-.authmodal{position:fixed;inset:0;z-index:85;display:grid;place-items:end center;padding:12px;overflow-y:auto}
+/* Ingreso y registro (rediseño aprobado el 1/11): la ventana (compu) / hoja (celular) y el ticket */
+.authmodal{position:fixed;inset:0;z-index:85;display:grid;place-items:center;padding:24px}
 .am-bg{position:fixed;inset:0;background:rgba(0,0,0,.5)}
-.am-box{position:relative;width:100%;max-width:460px;max-height:calc(100dvh - 24px);overflow-y:auto;background:var(--bg);border-radius:18px;padding:44px 12px 12px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-.am-box .narrow{max-width:none}
-.am-box .narrow > .panel,.am-box .narrow > form.panel{margin-top:10px !important}
-.am-x{position:absolute;top:8px;right:8px;width:36px;height:36px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:16px;cursor:pointer}
-.am-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.am-tabs button{border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:10px;padding:9px 10px;font-weight:700;cursor:pointer}
-.am-tabs button[aria-selected="true"]{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+.am-box{position:relative;width:440px;max-width:100%;max-height:calc(100dvh - 48px);overflow:auto;background:var(--card);color:var(--fg);border-radius:var(--r);box-shadow:0 24px 70px rgba(0,0,0,.32);padding:26px 28px 22px;text-align:left;outline:none}
+.am-grab{display:none}
+.am-top{display:flex;justify-content:space-between;align-items:center;margin:-8px -10px 12px 0}
+.am-logo{display:flex;transform:scale(.8);transform-origin:left center}
+.am-x{width:36px;height:36px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:15px;cursor:pointer}
+.am-h{font-family:var(--font-d);text-transform:var(--d-tt);letter-spacing:var(--d-ls);font-weight:var(--d-w);font-size:22px;line-height:1.2;margin:2px 0 6px}
+.am-sub{color:var(--muted);font-size:14px;margin:0 0 16px}
+.am-box .f,.authpage .f{margin-bottom:12px}
+.am-sec{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:14px 0 0;font-size:14px}
+.am-foot{border-top:1px solid var(--line);margin:18px -28px -22px;padding:14px 28px 16px;text-align:center;font-size:14px;color:var(--muted)}
+.am-foot .lnk{font-weight:700}
+.am-back{display:inline-flex;gap:6px;align-items:center;font-size:14px;margin:0 0 10px}
+.am-ok{background:var(--ok-soft);border:1px solid var(--ok-line);border-radius:10px;padding:10px 12px;font-size:14px;margin:0 0 14px}
+.am-mail{font-size:40px;text-align:center;margin:6px 0 4px}
+.am-note{margin-top:14px}
+.gterms{font-size:12.5px;color:var(--muted);text-align:center;margin:8px 0 0}
+.gterms .lnk{font-size:inherit}
+input.otp{text-align:center;letter-spacing:.3em;font-size:20px;font-weight:700}
+.demoprov{margin-top:6px}.demoprov summary{cursor:pointer;font-weight:700}
+.authpage{margin-top:24px;padding:26px 28px 22px}
+.authpage .am-foot{margin:18px -28px -22px}
 body.am-open{overflow:hidden}
+/* el ticket: el único elemento llamativo (borde troquelado, como un ticket de turno) */
+.tk{position:relative;display:grid;grid-template-columns:78px 1fr;background:var(--brand-soft);border:1px solid var(--brand-line);border-radius:12px;margin:0 0 18px}
+.tk::before,.tk::after{content:"";position:absolute;left:71px;width:14px;height:14px;border-radius:50%;background:var(--card);border:1px solid var(--brand-line)}
+.tk::before{top:-8px;clip-path:inset(50% 0 0 0)}.tk::after{bottom:-8px;clip-path:inset(0 0 50% 0)}
+.tk-stub{display:grid;align-content:center;justify-items:center;text-align:center;padding:12px 6px;border-right:2px dashed var(--brand-line);line-height:1.05}
+.tk-stub small{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.tk-stub b{font-size:24px;font-weight:800;margin:2px 0}.tk-stub span{font-size:15px;font-weight:700}
+.tk-info{padding:11px 14px;display:grid;gap:2px;align-content:center;min-width:0}
+.tk-info b{font-size:15px}.tk-info span{font-size:13px;color:var(--muted)}
+.tk-info em{font-style:normal;font-size:12px;font-weight:700;margin-top:4px}
+.tk.slim{grid-template-columns:52px 1fr}.tk.slim::before,.tk.slim::after{left:45px}.tk.slim .tk-stub b{font-size:22px}
+@media (max-width:699px){
+ .authmodal{place-items:end stretch;padding:0}
+ .am-box{width:auto;height:calc(100dvh - 22px);max-height:none;border-radius:var(--r) var(--r) 0 0;padding:10px 18px 22px}
+ .am-grab{display:block;width:40px;height:5px;border-radius:9px;background:var(--line);margin:0 auto 12px}
+ .am-foot,.authpage .am-foot{margin:18px -18px -22px;padding:14px 18px 18px}
+ .authpage{padding:20px 18px 22px}
+ .authmodal.kb{padding-bottom:var(--kb,0px)}
+ .authmodal.kb .am-box{height:calc(100dvh - 22px - var(--kb,0px))}
+}
+@media (prefers-reduced-motion:no-preference){
+ .am-anim .am-box{animation:am-in .22s ease-out}
+ @keyframes am-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+}
+@media (prefers-reduced-motion:no-preference) and (max-width:699px){
+ .am-anim .am-box{animation:am-up .26s ease-out}
+ @keyframes am-up{from{transform:translateY(40%)}to{transform:none}}
+}
 @media (min-width:700px){.authmodal{place-items:center}}
 /* V3b: Horarios se guarda solo (C37) y muestra el happy hour en sus días (C38) */
 .hsaved{margin:0;font-size:13px;color:var(--muted);text-align:right;min-height:18px}
@@ -183,4 +226,70 @@ body.am-open{overflow:hidden}
   .qrsheet .qs-qr svg{width:110mm;height:110mm}
   .qrsheet .qs-how{font-size:13pt;margin:8mm 0 2mm}
   .qrsheet .qs-link{font-size:15pt;font-weight:700;margin:0}
+}
+/* Registrá tu negocio (ingreso y registro, aprobado el 1/11): página completa en 5 pasos */
+.biz{max-width:1040px;margin:20px auto 40px;display:grid;grid-template-columns:250px minmax(0,1fr);gap:24px;align-items:start;text-align:left}
+.biz.biz-one{grid-template-columns:minmax(0,1fr);max-width:560px}
+.biz-steps{position:sticky;top:84px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.biz-steps > p:first-child{margin:0 0 12px;font-weight:800}
+.biz-steps .note{text-align:left;margin:14px 0 0}
+.biz-steps ol{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.biz-steps li button{display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:center;width:100%;padding:8px;border:0;border-radius:10px;background:none;color:var(--muted);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.biz-steps li button:disabled{cursor:default}
+.biz-steps li .d{display:grid;place-items:center;width:26px;height:26px;border-radius:999px;border:1.5px solid var(--line);font-size:12px;font-weight:700;background:var(--card)}
+.biz-steps li.done button{color:var(--fg)}.biz-steps li.done .d{background:var(--ok);border-color:var(--ok);color:var(--on-ok)}
+.biz-steps li.now button{background:var(--brand-soft);color:var(--fg);font-weight:700}.biz-steps li.now .d{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.biz-prog{display:none}
+.biz-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px;min-width:0}
+.biz-h{font-family:var(--font-d);text-transform:var(--d-tt);letter-spacing:var(--d-ls);font-weight:var(--d-w);font-size:24px;margin:0 0 6px}
+.biz-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.biz-acts{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.biz-acts .btn-pri{min-width:180px}
+.biz-saved{font-size:13px;color:var(--muted)}
+.biz-svcs{display:grid;gap:10px;margin-bottom:10px}
+.biz-svc{display:grid;grid-template-columns:minmax(0,1fr) 120px 120px 42px;gap:8px;align-items:end}
+.biz-svc.with-cat{grid-template-columns:minmax(0,1fr) 110px 110px 130px 42px}
+.biz-svc .f{margin:0}.biz-x{height:42px;padding:0}
+.biz-chips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 14px}
+.biz-chips .chip{border:1px dashed var(--brand-line);border-radius:999px;padding:6px 11px;font-size:13px;background:var(--bg);color:var(--fg);cursor:pointer}
+.biz-opt{display:grid;gap:8px;margin:0 0 14px}
+.biz-opt label{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:14px;background:var(--card);cursor:pointer}
+.biz-opt label.on{border-color:var(--fg);box-shadow:0 0 0 1px var(--fg)}
+.biz-opt label span{display:grid;gap:2px}.biz-opt label small{color:var(--muted);font-size:12.5px}
+.biz-seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 6px}
+.biz-seg button{border:1px solid var(--line);border-radius:10px;padding:10px 4px;text-align:center;font-weight:700;font-size:14px;background:var(--card);color:var(--fg);cursor:pointer}
+.biz-seg button.on{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+.biz-days{display:grid;gap:6px;margin:0 0 6px}
+.biz-day{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.biz-day.off{color:var(--muted);background:var(--bg)}
+.biz-day .chk{margin:0;min-width:64px}.biz-day .ferr{flex-basis:100%}
+.biz-rng{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.biz-rng input[type=time]{width:auto;min-width:0;padding:6px 8px}
+.biz-mp{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:4px}
+.biz-photo{display:flex;gap:12px;align-items:center}
+.biz-photo i{display:grid;place-items:center;width:64px;height:64px;flex:none;border-radius:14px;border:1.5px dashed var(--brand-line);font-style:normal;font-size:24px;background:var(--bg);overflow:hidden}
+.biz-photo i img{width:100%;height:100%;object-fit:cover}
+.biz-photo input[type=file]{max-width:100%}
+/* Agenda: lo que falta para recibir reservas */
+.todo{border:1px solid var(--warn-line);text-align:left}
+.todo b.todo-h{display:block;font-size:16px;margin-bottom:4px}.todo > p{margin:0 0 10px;font-size:14px;color:var(--muted)}
+.todo ul{margin:0 0 12px;padding:0;list-style:none;display:grid;gap:6px;font-size:14px}
+.todo li.ok{color:var(--muted);text-decoration:line-through}
+.todo-bar{height:6px;border-radius:9px;background:var(--line);overflow:hidden;margin:0 0 12px}.todo-bar i{display:block;height:100%;background:var(--ok)}
+/* inicio: la puerta "Registrá tu negocio" */
+.bizcta{display:flex;gap:16px;align-items:center;justify-content:space-between;text-align:left;margin:18px 0}
+.bizcta b{font-size:18px}.bizcta p{margin:4px 0 0;color:var(--muted);font-size:14px}
+/* el prestador reservando como cliente */
+.asclient{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--brand-soft);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:12px 0 0;font-size:14px}
+@media (max-width:899px){
+ .biz{grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px}
+ .biz-steps{display:none}
+ .biz-prog{display:block;font-size:13px;color:var(--muted)}
+ .biz-prog .segs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:6px 0 10px}.biz-prog .segs i{height:5px;border-radius:9px;background:var(--line)}
+ .biz-prog .segs i.done{background:var(--ok)}.biz-prog .segs i.now{background:var(--brand)}
+ .biz-card{padding:18px}
+ .biz-row{grid-template-columns:minmax(0,1fr)}
+ .biz-svc,.biz-svc.with-cat{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 42px}.biz-svc .f:first-child{grid-column:1/-1}.biz-svc.with-cat .f:nth-child(4){grid-column:1/3}
+ .biz-acts{flex-direction:column-reverse;align-items:stretch}.biz-acts .btn-pri{min-width:0}
+ .bizcta{flex-direction:column;align-items:stretch}
 }

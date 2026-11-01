@@ -23,3 +23,5 @@ update public.services set repeat_days=21, prep_note='Venir sin esmalte' where n
 insert into public.service_addons (service_id, name, price, duration_min) select id, 'Nail art', 2000, 15 from public.services where name='Esmaltado semipermanente';
 -- cuenta de Mercado Pago activa (Bloque 1: mp_accounts; mp_connected lo actualiza la base)
 select public.mp_connect(id, 'mp-test-' || id, 'v1:aXY=:VEVTVC10b2tlbg==', null, 15552000) from public.providers;   -- llave con el formato cifrado (el e2e no la usa)
+-- Ingreso y registro: los prestadores de la siembra ya estaban dados de alta (como los de antes de la migración)
+update public.provider_settings set setup_done = '{1,2,3,4,5}';

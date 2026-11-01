@@ -103,13 +103,3 @@ export async function navigate(href) {
   render();
   window.scrollTo(0, 0);
 }
-// después de ingresar al panel: si venía de una dirección del panel, a esa
-export function afterPanelLogin() {
-  const back = S.after;
-  if (back && String(back).startsWith("/panel")) {
-    S.after = null;
-    navigate(back);
-    return true;
-  }
-  return false;
-}

@@ -1,25 +1,110 @@
 import { S } from "../state.js";
-import { vLoginBarbero } from "../views/auth/acceso-prestadores.js";
-import { vLogin } from "../views/auth/login.js";
+import { authBody } from "../views/auth/login.js";
+import { LOGO } from "./iconos.js";
 
-// V7 (C47–C49): el ingreso en una segunda capa, encima de la página que se está mirando, para clientes y prestadores.
-// Usa los mismos formularios que las páginas /ingresar y de acceso de prestadores (mismos ids y acciones); al ingresar
-// se cierra y queda la misma página. Las páginas siguen existiendo para los links de los emails y las direcciones
-// protegidas (Mis turnos, Mi perfil, reservar).
-export const AUTH_PAGES = ["login", "register", "loginBarbero"];
+// Ingreso y registro (rediseño aprobado el 1/11): la ventana de ingreso, la misma para clientes y prestadores. En la
+// compu, una ventana centrada de 440 px; en el celular, una hoja que sube desde abajo, casi a pantalla completa. Es
+// role="dialog" con título, el foco queda adentro (Tab no se escapa), Esc y tocar afuera cierran y el foco vuelve al
+// botón que la abrió. Con el teclado del celular abierto, la hoja se achica hasta el borde del teclado (visualViewport)
+// y el campo activo queda a la vista. Las páginas /ingresar, /crear-cuenta y /registrar-negocio muestran lo mismo.
+export const AUTH_PAGES = ["login", "register", "negocio"];
 
 export function authModal() {
   // ni encima de una página que ya muestra un ingreso (mismos ids): las de ingreso, y Mi perfil y Mis turnos sin sesión
-  if (!S.authModal || S.user || S.barberAuth || AUTH_PAGES.includes(S.view) || ["cuenta", "misturnos"].includes(S.view)) {
+  if (!S.authModal || S.user || S.role !== "cliente" || AUTH_PAGES.includes(S.view) || ["cuenta", "misturnos"].includes(S.view)) {
     return "";
   }
-  const prov = S.authModal === "prestador";
-  const tab = (key, label) =>
-    `<button type="button" role="tab" aria-selected="${S.authModal === key}" data-act="authSide" data-k="${key}">${label}</button>`;
-  return `<div class="authmodal" role="dialog" aria-modal="true" aria-label="Ingresar a TuTiempo">
+  return `<div class="authmodal" role="dialog" aria-modal="true" aria-labelledby="amTitle">
    <div class="am-bg" data-act="authClose"></div>
-   <div class="am-box"><button type="button" class="am-x" data-act="authClose" aria-label="Cerrar">✕</button>
-    <div class="seg3 am-tabs" role="tablist" aria-label="Ingresar como">${tab("cliente", "Soy cliente")}${tab("prestador", "Soy prestador")}</div>
-    ${prov ? vLoginBarbero() : vLogin()}
+   <div class="am-box"><div class="am-grab" aria-hidden="true"></div>
+    <div class="am-top"><span class="logo am-logo" aria-hidden="true">${LOGO}</span><button type="button" class="am-x" data-act="authClose" aria-label="Cerrar">✕</button></div>
+    ${authBody()}
    </div></div>`;
+}
+
+// ---------- foco y teclado ----------
+let opener = null;
+// recuerda el botón que abrió la ventana (para devolverle el foco al cerrar). Como la pantalla se vuelve a dibujar, se
+// guarda también cómo encontrarlo: la zona (cabecera, footer, la página), su acción y su texto.
+export function rememberOpener(el) {
+  const btn = el && el.closest ? el.closest("button, a, [tabindex]") : null;
+  const zone = btn && btn.closest("#nav, footer, #app");
+  opener = btn ? { el: btn, zone: zone ? (zone.id ? "#" + zone.id : zone.tagName.toLowerCase()) : "body", act: btn.getAttribute("data-act"), text: btn.textContent.trim() } : null;
+}
+export function returnFocus() {
+  const from = opener;
+  opener = null;
+  if (!from) {
+    return;
+  }
+  const el = document.contains(from.el)
+    ? from.el
+    : [...document.querySelectorAll(`${from.zone} [data-act="${from.act}"]`)].find((item) => item.textContent.trim() === from.text);
+  if (el) {
+    el.focus();
+  }
+}
+// foco en el primer campo solo en la compu: en el celular abriría el teclado tapando la ventana
+export function focusFirstField() {
+  if (!window.matchMedia || !window.matchMedia("(min-width: 700px)").matches) {
+    const box = document.querySelector(".am-box");
+    if (box) {
+      box.setAttribute("tabindex", "-1");
+      box.focus({ preventScroll: true });
+    }
+    return;
+  }
+  const field = document.querySelector(".am-box input:not([type=checkbox]), .authpage input:not([type=checkbox])");
+  if (field) {
+    field.focus();
+  }
+}
+const focusables = (root) =>
+  [...root.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])')].filter(
+    (el) => el.offsetParent !== null || el === document.activeElement,
+  );
+// Tab y Shift+Tab dan la vuelta adentro de la ventana
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Tab") {
+    return;
+  }
+  const box = document.querySelector(".authmodal .am-box");
+  if (!box) {
+    return;
+  }
+  const items = focusables(box);
+  if (!items.length) {
+    return;
+  }
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (!box.contains(document.activeElement)) {
+    ev.preventDefault();
+    first.focus();
+  } else if (ev.shiftKey && document.activeElement === first) {
+    ev.preventDefault();
+    last.focus();
+  } else if (!ev.shiftKey && document.activeElement === last) {
+    ev.preventDefault();
+    first.focus();
+  }
+});
+// teclado del celular: la hoja llega hasta el borde del teclado y el campo activo se ve
+function fitKeyboard() {
+  const vv = window.visualViewport;
+  const modal = document.querySelector(".authmodal");
+  if (!vv || !modal) {
+    return;
+  }
+  const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+  modal.style.setProperty("--kb", covered + "px");
+  modal.classList.toggle("kb", covered > 80);
+  const el = document.activeElement;
+  if (covered > 80 && el && modal.contains(el) && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName) && el.scrollIntoView) {
+    el.scrollIntoView({ block: "center" });
+  }
+}
+if (typeof window !== "undefined" && window.visualViewport) {
+  window.visualViewport.addEventListener("resize", fitKeyboard);
+  document.addEventListener("focusin", () => setTimeout(fitKeyboard, 50));
 }

@@ -9,13 +9,58 @@ import { RESEND_WAIT_MS, afterLogin, authErr, goAfter, rememberEmail, resendLeft
 import { EMAIL, PWRULE, pwOk, pwScore } from "../lib/validar.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
-import { AUTH_PAGES } from "../ui/ingreso.js";
+import { AUTH_PAGES, focusFirstField, rememberOpener, returnFocus } from "../ui/ingreso.js";
+import { clearPending, setPending, stashPending } from "../lib/pendiente.js";
+import { pr } from "../lib/prestadores.js";
+import { useProvider } from "../views/prestador/panel.js";
 import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
+// abre la ventana de ingreso. opts.mode: "in" (por defecto) o "up"; opts.pending: la acción que lo pidió (ticket).
+// Sin acción pendiente, al ingresar queda la misma página (S.after "blando": el prestador va a su Agenda).
+export function openAuth(el, opts = {}) {
+  if (S.user) {
+    go("cuenta");
+    return;
+  }
+  if (opts.pending) {
+    setPending(opts.pending);
+  } else if (!opts.keepPending) {
+    clearPending();
+  }
+  rememberOpener(el);
+  S.login = { mode: opts.mode || "in", email: S.login.email || "", err: "", fails: S.login.fails || 0, locked: S.login.locked };
+  if (AUTH_PAGES.includes(S.view)) {
+    render();
+    focusFirstField();
+    return;
+  }
+  S.authModal = true;
+  S.after = location.pathname + location.search;
+  S.afterSoft = !opts.pending;
+  render();
+  focusFirstField();
+}
+const closeAuth = () => {
+  S.authModal = null;
+  S.after = null;
+  S.afterSoft = false;
+  clearPending();
+  render();
+  returnFocus();
+};
+registerClick("authOpen", (ev, el, act) => openAuth(el));
+registerClick("authClose", (ev, el, act) => closeAuth());
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && S.authModal && document.querySelector(".authmodal")) {
+    closeAuth();
+  }
+});
 registerClick("google", (ev, el, act) => {
   if (LIVE) {
-    saveAfter(S.after || "home");
+    // la vuelta de Google recarga la página: adónde volver y la acción pendiente quedan en esta pestaña
+    saveAfter(S.after || "home", S.afterSoft || !S.after);
+    stashPending();
     sb.auth
       .signInWithOAuth({
         provider: "google",
@@ -44,60 +89,15 @@ registerClick("authMode", (ev, el, act) => {
     email: email,
     err: "",
     fails: S.login.fails || 0,
+    locked: S.login.locked,
   };
-  if (S.view !== "login" && S.view !== "register" && !S.authModal) {
+  if (!AUTH_PAGES.includes(S.view) && !S.authModal) {
     S.keepLogin = true;
-    go("login");
+    go(el.dataset.m === "up" ? "register" : "login");
     return;
   }
   render();
-  const field = $("#ai_e,#au_n,#af_e,#le");
-  if (field && !field.value) {
-    field.focus();
-  }
-});
-// V7 (C47–C49): abrir el ingreso en una segunda capa, desde la cabecera o el footer. Después de ingresar queda la misma
-// página (S.after). En las páginas de ingreso no se abre otra capa encima.
-const authFocus = () => {
-  const field = document.querySelector(".am-box input:not([type=checkbox])");
-  if (field) {
-    field.focus();
-  }
-};
-registerClick("authOpen", (ev, el, act) => {
-  const side = el.dataset.k === "prestador" ? "prestador" : "cliente";
-  // ya ingresó (por ejemplo, "Iniciar sesión" del footer con la sesión abierta): a su cuenta
-  if (S.user) {
-    go("cuenta");
-    return;
-  }
-  if (AUTH_PAGES.includes(S.view)) {
-    go(side === "prestador" ? "loginBarbero" : "login");
-    return;
-  }
-  S.authModal = side;
-  S.after = location.pathname + location.search;
-  S.login = { mode: "in", email: S.login.email || "", err: "", fails: S.login.fails || 0 };
-  S.blogin = Object.assign(S.blogin, { step: "form", err: "" });
-  render();
-  authFocus();
-});
-registerClick("authSide", (ev, el, act) => {
-  S.authModal = el.dataset.k === "prestador" ? "prestador" : "cliente";
-  render();
-  authFocus();
-});
-registerClick("authClose", (ev, el, act) => {
-  S.authModal = null;
-  S.after = null;
-  render();
-});
-document.addEventListener("keydown", (ev) => {
-  if (ev.key === "Escape" && S.authModal && document.querySelector(".authmodal")) {
-    S.authModal = null;
-    S.after = null;
-    render();
-  }
+  focusFirstField();
 });
 registerClick("pwShow", (ev, el, act) => {
   const input = document.getElementById(el.dataset.for);
@@ -166,11 +166,12 @@ registerClick("reenviar", async (ev, el, act) => {
       .signInWithOtp({
         email: S.login.email,
         options: {
+          shouldCreateUser: false,
           captchaToken: token,
         },
       })
       .then((res) => {
-        if (res.error) {
+        if (res.error && !NO_ACCOUNT.test(res.error.message || res.error.code || "")) {
           toast(errMsg(res.error));
         }
       });
@@ -194,7 +195,35 @@ registerInput(["au_p", "np1"], (ev) => {
   }
   return;
 });
-// ingreso con email y contraseña; 5 intentos fallidos bloquean 30 segundos
+// el mismo mensaje si el email no existe o la contraseña está mal (nadie puede averiguar qué emails tienen cuenta)
+const BAD_LOGIN = "Email o contraseña incorrectos. Revisalos o entrá con un código.";
+// demo: cuentas de ejemplo de prestadores (H18: nada de esto vale en vivo)
+const DEMO_PROVIDERS = LIVE
+  ? {}
+  : { "filo@tutiempo.demo": { pass: "barbero123", pid: 7 }, "sofia@tutiempo.demo": { pass: "prestador123", pid: 21 } };
+function demoProviderSignIn(email, pid) {
+  demoSignIn(email, pr(pid).name);
+  useProvider(pid);
+  S.barberAuth = true;
+  S.btab = "agenda";
+  S.pctx = null;
+}
+if (!LIVE) {
+  // demo: entrar como cualquier prestador de ejemplo (botones de la ventana de ingreso)
+  registerClick("demoLogin", (ev, el, act) => {
+    const pid = +el.dataset.id;
+    useProvider(pid);
+    S.barberAuth = true;
+    S.btab = "agenda";
+    S.pctx = null;
+    S.authModal = null;
+    S.after = null;
+    S.afterSoft = false;
+    toast("Entraste como " + pr(pid).name);
+    goAfter();
+  });
+}
+// ingreso con email y contraseña (clientes y prestadores); 5 intentos fallidos bloquean 30 segundos
 registerSubmit("fLogin", (ev) => {
   const login = S.login;
   const email = $("#ai_e").value.trim().toLowerCase();
@@ -264,7 +293,8 @@ registerSubmit("fLogin", (ev) => {
             render();
             return;
           }
-          return fail(errMsg(res.error), /invalid login credentials/i.test(res.error.message || ""));
+          const bad = /invalid login credentials/i.test(res.error.message || "");
+          return fail(bad ? BAD_LOGIN : errMsg(res.error), bad);
         }
         rememberEmail(email, keep);
         await api.session();
@@ -273,9 +303,17 @@ registerSubmit("fLogin", (ev) => {
       .catch((err) => fail(errMsg(err)));
     return;
   }
+  // demo: las cuentas de ejemplo de clientes y de prestadores entran por el mismo formulario
+  const prov = DEMO_PROVIDERS[email];
+  if (prov && prov.pass === pass && !pr(prov.pid).deleted) {
+    rememberEmail(email, keep);
+    demoProviderSignIn(email, prov.pid);
+    afterLogin();
+    return;
+  }
   const user = store.DEMO_USERS[email];
   if (!user || user.pass !== pass) {
-    return fail("Email o contraseña incorrectos.", true);
+    return fail(BAD_LOGIN, true);
   }
   rememberEmail(email, keep);
   demoSignIn(email, user.name);
@@ -318,6 +356,8 @@ registerSubmit("fForgot", (ev) => {
   showSent();
   return;
 });
+// lo que responde Supabase cuando el email no tiene cuenta y no se deja crear una (shouldCreateUser: false)
+const NO_ACCOUNT = /signups not allowed|otp_disabled|user not found/i;
 registerSubmit("fMail", (ev) => {
   const email = $("#le").value.trim();
   S.login.email = email;
@@ -335,13 +375,15 @@ registerSubmit("fMail", (ev) => {
         sb.auth.signInWithOtp({
           email: email,
           options: {
-            shouldCreateUser: true,
+            // solo para cuentas que ya existen: antes creaba una cuenta sin aceptar los términos
+            shouldCreateUser: false,
             captchaToken: token,
           },
         }),
       )
       .then((res) => {
-        if (res.error) {
+        // "no existe la cuenta" no se muestra: la pantalla es la misma exista o no
+        if (res.error && !NO_ACCOUNT.test(res.error.message || res.error.code || "")) {
           S.login.err = errMsg(res.error);
           render();
           return;
@@ -393,13 +435,7 @@ registerSubmit("fCode", (ev) => {
           return;
         }
         await api.session();
-        S.login = {
-          mode: "in",
-          email: "",
-          err: "",
-        };
-        toast("Ingresaste como " + S.user.name);
-        goAfter();
+        afterLogin();
       })
       .catch((err) => {
         S.login.err = errMsg(err);
@@ -416,16 +452,11 @@ registerSubmit("fCode", (ev) => {
     .split("@")[0]
     .replace(/[._-]+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
-  S.user = {
-    name: name,
-    email: S.login.email,
-  };
-  S.login = {
-    mode: "in",
-    email: "",
-    err: "",
-  };
-  toast("Ingresaste como " + name);
-  goAfter();
+  if (DEMO_PROVIDERS[S.login.email.toLowerCase()]) {
+    demoProviderSignIn(S.login.email.toLowerCase(), DEMO_PROVIDERS[S.login.email.toLowerCase()].pid);
+  } else {
+    demoSignIn(S.login.email, store.DEMO_USERS[S.login.email.toLowerCase()] ? null : name);
+  }
+  afterLogin();
   return;
 });

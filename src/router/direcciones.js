@@ -110,14 +110,13 @@ function describeClient(view) {
     }
     case "newpass":
       return { url: "/nueva-contrasena", key: "nueva-contrasena", title: `Contraseña nueva · ${SITE}` };
-    case "prestador":
-      return { url: "/sumate", key: "sumate", title: `Sumate como prestador · ${SITE}` };
-    case "loginBarbero": {
-      const back = afterPath();
+    case "negocio": {
+      const step = S.bizStep || 0;
       return {
-        url: withParams("/prestadores/ingresar", { volver: back && back.startsWith("/panel") ? back : null }),
-        key: "prestadores-ingresar",
-        title: `Acceso prestadores · ${SITE}`,
+        url: "/registrar-negocio" + (step ? "/" + step : ""),
+        key: "negocio:" + step,
+        title: `Registrá tu negocio · ${SITE}`,
+        desc: `Tu agenda online en ${CITY_NAME}: tus clientes reservan y pagan la seña con Mercado Pago.`,
       };
     }
     case "terminos":

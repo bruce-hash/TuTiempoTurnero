@@ -70,7 +70,7 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   };
 
   // visitante
-  for (const route of ["/", "/rubro/barberias", "/buscar?q=corte", "/ingresar", "/crear-cuenta", "/sumate", "/prestadores/ingresar", "/terminos", "/no-existe"]) await go(route);
+  for (const route of ["/", "/rubro/barberias", "/buscar?q=corte", "/ingresar", "/crear-cuenta", "/sumate", "/registrar-negocio", "/prestadores/ingresar", "/terminos", "/no-existe"]) await go(route);
   await page.goto(BASE + "/");
   await page.waitForSelector(".grid .card");
   await page.click(".grid .card [data-go=perfil]");
@@ -96,6 +96,13 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   await check("mis turnos");
   await page.evaluate(() => go("cuenta"));
   await check("mi perfil");
+  // Registrá tu negocio: los 5 pasos y el final (como un prestador con el alta a medias)
+  for (const step of [1, 2, 3, 4, 5, "listo"]) {
+    await page.evaluate((n) => { S.role = "cliente"; S.barberAuth = true; S.setupBy = { [S.me || 7]: { steps: [1, 2], status: "pending" } }; S.biz = {}; S.bizStep = n; go("negocio"); }, step);
+    await wait(200);
+    await check(`registrá tu negocio · paso ${step}`);
+  }
+  await page.evaluate(() => { S.setupBy = {}; });
   // prestador y admin
   await role("barbero");
   for (const tab of ["agenda", "caja", "finanzas", "clientes", "productos", "horarios", "stats", "comunidad", "perfil"]) {

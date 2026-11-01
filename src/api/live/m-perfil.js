@@ -1,6 +1,6 @@
 import { LM } from "./index.js";
 import { call, saved } from "../saved.js";
-import { sb } from "../../config.js";
+import { CITY, sb } from "../../config.js";
 import { safeRedirect } from "../../lib/dom.js";
 import { S } from "../../state.js";
 import { mediaUrl } from "../../ui/fotos.js";
@@ -25,14 +25,17 @@ Object.assign(LM, {
         })
         .eq("id", prof.id),
     );
-    await saved(
-      sb
-        .from("provider_private")
-        .update({
-          phone: prof.tel || null,
-        })
-        .eq("provider_id", prof.id),
-    );
+    // el celular solo si se cargó (antes, guardar Perfil sin haberlo leído lo dejaba vacío)
+    if (prof.tel !== undefined) {
+      await saved(
+        sb
+          .from("provider_private")
+          .update({
+            phone: prof.tel || null,
+          })
+          .eq("provider_id", prof.id),
+      );
+    }
     const currentCats = (
       (await call(sb.from("provider_categories").select("category_id").eq("provider_id", prof.id))) || []
     ).map((row) => row.category_id);
@@ -181,6 +184,24 @@ Object.assign(LM, {
   deleteProvider: () => saved(sb.rpc("delete_my_provider")),
   // desconecta de verdad (la cuenta queda solo para devoluciones) y devuelve el estado nuevo (my_mp_status)
   mpDisconnect: () => saved(sb.rpc("mp_disconnect")),
+  // Registrá tu negocio (paso 1): crea el negocio de la cuenta que llama y marca el paso
+  registerBusiness: async (reg) => {
+    const pid = await saved(
+      sb.rpc("register_provider", {
+        p_name: reg.name,
+        p_address: reg.addr || "",
+        p_categories: reg.cats,
+        p_phone: reg.tel,
+        p_dni: null,
+        p_instagram: reg.ig || null,
+        p_city: CITY,
+      }),
+    );
+    await saved(sb.rpc("setup_step", { p_step: 1 }));
+    return pid;
+  },
+  // un paso del alta guardado (2 a 5; el 1 lo marca registerBusiness)
+  setupStep: (step) => saved(sb.rpc("setup_step", { p_step: step })),
   readNotices: () => saved(sb.rpc("mark_provider_notices_read")),
   mpConnect: async () => {
     const res = await sb.functions.invoke("mp-oauth", {

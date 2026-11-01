@@ -6,7 +6,7 @@ const { chromium } = require("playwright");
 const { Client } = require("pg");
 const BASE = process.argv[2] || "http://localhost:8787";
 const PG = process.argv[3];
-let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL ") + n) };
+let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FAIL ") + n); if (!c && d) console.log("     ", d) };
 (async () => {
   const db = new Client({ connectionString: PG }); await db.connect();
   const q = async (s, a) => (await db.query(s, a)).rows;
@@ -25,27 +25,34 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
 
   await pg.goto(BASE); await pg.waitForSelector(".grid .card"); await wait();
   ok("modo en vivo: sin barra demo", !(await pg.isVisible(".modebar")) && !(await pg.isVisible(".demo")));
-  // V7 (C47–C51): un solo "Ingresar" en la cabecera; el ingreso abre encima de la página, con cliente y prestador
-  ok("V7: la cabecera sin sesión tiene solo Ingresar (sin Soy prestador)", (await pg.locator("nav [data-act=authOpen]").count()) === 1 && (await pg.locator("nav [data-go=loginBarbero], nav [data-go=login]").count()) === 0);
+  // Ingreso y registro (rediseño aprobado el 1/11): un solo "Ingresar"; la ventana es la misma para clientes y prestadores
+  ok("ingreso: la cabecera sin sesión tiene solo Ingresar", (await pg.locator("nav [data-act=authOpen]").count()) === 1 && (await pg.locator("nav [data-go=login]").count()) === 0);
   const urlHome = pg.url();
-  await pg.click("nav [data-act=authOpen]"); await wait();
-  ok("V7: Ingresar abre una segunda capa sobre la misma página", (await pg.isVisible(".authmodal #fLogin")) && pg.url() === urlHome && (await pg.locator(".grid .card").count()) === 2 && (await pg.evaluate(() => document.body.classList.contains("am-open"))));
-  ok("V7: la capa arranca en Soy cliente, con el foco en el email", (await pg.getAttribute(".am-tabs [data-k=cliente]", "aria-selected")) === "true" && (await pg.evaluate(() => document.activeElement && document.activeElement.id)) === "ai_e");
-  await pg.click(".am-tabs [data-k=prestador]"); await wait(200);
-  ok("V7: Soy prestador muestra el acceso de prestadores en la misma capa", (await pg.isVisible(".authmodal #fBarb")) && !(await pg.isVisible(".authmodal #fLogin")) && pg.url() === urlHome);
-  await pg.click(".am-tabs [data-k=cliente]"); await wait(200);
+  const opener = pg.locator("nav [data-act=authOpen]");
+  await opener.click(); await wait();
+  ok("ingreso: abre una ventana sobre la misma página (role=dialog con título)", (await pg.isVisible(".authmodal #fLogin")) && pg.url() === urlHome && (await pg.locator(".grid .card").count()) === 2
+     && (await pg.evaluate(() => document.body.classList.contains("am-open"))) && (await pg.getAttribute(".authmodal", "role")) === "dialog" && (await pg.locator("#amTitle").innerText()).length > 0);
+  ok("ingreso: sin elegir cliente o prestador (una cuenta = una persona)", (await pg.locator(".am-tabs, [data-act=authSide], #fBarb").count()) === 0 && (await pg.locator(".am-sub").innerText()).includes("Clientes y prestadores entran por acá"));
+  ok("ingreso: en el celular no enfoca un campo (no abre el teclado tapando la ventana)", await pg.evaluate(() => document.activeElement && document.activeElement.classList.contains("am-box")));
+  ok("ingreso: debajo de Google, la aceptación de los Términos y la Política de privacidad", /Al continuar, aceptás los Términos y la Política de privacidad/.test(await pg.locator(".authmodal .gterms").innerText()) && (await pg.locator(".authmodal .gterms [data-go=terminos]").count()) === 2);
+  // el foco no se escapa de la ventana
+  for (let i = 0; i < 30; i++) await pg.keyboard.press("Tab");
+  ok("ingreso: Tab da la vuelta adentro de la ventana", await pg.evaluate(() => !!document.activeElement.closest(".am-box")));
   await pg.click(".authmodal [data-act=authMode][data-m=up]"); await wait(200);
-  ok("V7: Crear cuenta adentro de la capa (sin ir a otra página)", (await pg.isVisible(".authmodal #fSignup")) && pg.url() === urlHome);
+  ok("ingreso: Crear cuenta adentro de la ventana, con el pie para registrar un negocio", (await pg.isVisible(".authmodal #fSignup")) && pg.url() === urlHome && (await pg.locator(".authmodal .am-foot [data-act=bizStart]").count()) === 1 && (await pg.locator(".authmodal .gterms").count()) === 1);
   await pg.keyboard.press("Escape"); await wait(200);
-  ok("V7: Escape cierra la capa", (await pg.locator(".authmodal").count()) === 0 && !(await pg.evaluate(() => document.body.classList.contains("am-open"))));
-  await pg.click("footer [data-act=authOpen][data-k=cliente]"); await wait();
-  ok("V7: Iniciar sesión del footer abre la misma capa", await pg.isVisible(".authmodal #fLogin"));
+  ok("ingreso: Escape cierra la ventana y el foco vuelve a Ingresar", (await pg.locator(".authmodal").count()) === 0 && !(await pg.evaluate(() => document.body.classList.contains("am-open")))
+     && (await pg.evaluate(() => document.activeElement && document.activeElement.matches("nav [data-act=authOpen]"))));
+  await pg.click("footer [data-act=authOpen]"); await wait();
+  ok("ingreso: Ingresar del footer abre la misma ventana", await pg.isVisible(".authmodal #fLogin"));
   await pg.click(".authmodal .am-x"); await wait(200);
-  ok("V7: la cruz cierra la capa", (await pg.locator(".authmodal").count()) === 0);
-  await pg.click("footer [data-act=authOpen][data-k=prestador]"); await wait();
-  ok("V7: Acceso prestadores del footer abre la capa del lado prestador", await pg.isVisible(".authmodal #fBarb"));
+  ok("ingreso: la cruz cierra la ventana", (await pg.locator(".authmodal").count()) === 0);
+  await pg.click("footer [data-act=bizStart]"); await wait();
+  ok("ingreso: Registrá tu negocio del footer abre el paso 0 (la cuenta) en la ventana", (await pg.isVisible(".authmodal #fSignup")) && (await pg.locator("#amTitle").innerText()).includes("Registrá tu negocio") && (await pg.locator("#au_t").count()) === 0);
   await pg.mouse.click(5, 5); await wait(200);
-  ok("V7: tocar afuera cierra la capa", (await pg.locator(".authmodal").count()) === 0);
+  ok("ingreso: tocar afuera cierra la ventana", (await pg.locator(".authmodal").count()) === 0);
+  ok("ingreso: el footer dice Ingresar y Registrá tu negocio (sin Acceso prestadores ni Sumate)", /Registrá tu negocio/.test(await pg.locator("footer").innerText()) && !/Acceso prestadores|Sumate/.test(await pg.locator("footer").innerText()));
+  ok("ingreso: el inicio tiene la puerta Registrá tu negocio debajo del listado", (await pg.locator("#app .bizcta [data-act=bizStart]").count()) === 1);
   const foot = await pg.locator("footer").innerText();
   const socials = await pg.evaluate(() => [...document.querySelectorAll("footer a[target=_blank]")].map((a) => [a.href, a.rel]));
   ok("V7: footer con teléfono, las cuatro redes (pestaña nueva) y sin Prototipo",
@@ -64,10 +71,25 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.click("[data-quick]"); await wait(200);
   const slotTime = await pg.evaluate(() => S.slot && S.slot.date + " " + S.slot.time);
   await pg.click("[data-act=reservarT]"); await wait();
-  ok("pide ingresar para reservar", (await txt()).includes("Ingresá para reservar"));
+  ok("pide ingresar para reservar, en la ventana encima del perfil", (await txt()).includes("Ingresá para reservar") && (await pg.isVisible(".authmodal #fLogin")));
+  const tk = await pg.locator(".authmodal .tk").innerText().catch(() => "");
+  const [slotDay, slotHM] = slotTime.split(" ");
+  ok("ingreso: el ticket muestra día, hora, servicio y negocio, y que sigue directo al pago",
+     tk.includes(slotHM) && tk.includes(+slotDay.slice(8) + "/" + +slotDay.slice(5, 7)) && /Esmaltado/.test(tk) && /Sofía/.test(tk) && tk.includes("Al ingresar seguís directo al pago"), tk);
   ok("ingreso con Google, email y contraseña", await pg.isVisible("[data-act=google]") && await pg.isVisible("#ai_p"));
+  // el código por email es solo para cuentas que ya existen, con el mismo mensaje exista o no
   await pg.click("[data-act=authMode][data-m=code]"); await wait(200);
+  ok("ingreso: el ticket sigue en Entrar con un código", (await pg.locator(".authmodal .tk").count()) === 1);
+  probing = true; await pg.fill("#le", "nadie.todavia@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc"); await wait(300); probing = false;
+  const noAcc = await pg.locator(".am-sub").innerText();
+  ok("código por email: un email sin cuenta ve el mismo mensaje y no se crea ninguna cuenta",
+     noAcc.includes("Si nadie.todavia@test.ar tiene cuenta, le llega un código") && !(await pg.locator("#lerr").innerText()) && (await q("select count(*)::int c from auth.users where email='nadie.todavia@test.ar'"))[0].c === 0
+     && (await (await fetch(BASE + "/__log")).json()).some((x) => x.otp === "nadie.todavia@test.ar" && x.create_user === false));
+  await pg.click("[data-act=loginBack]"); await wait(200);
+  // Ana ya tiene cuenta (antes el código creaba una cuenta sin aceptar los términos; ahora solo entra a las que existen)
+  await db.query("insert into auth.users (email, raw_user_meta_data) values ('ana@test.ar', '{\"full_name\":\"ana\"}')");
   await pg.fill("#le", "ana@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc");
+  ok("código por email: el mismo mensaje con una cuenta que existe", (await pg.locator(".am-sub").innerText()).includes("Si ana@test.ar tiene cuenta, le llega un código"));
   probing = true; await pg.fill("#lc", "111111"); await pg.click("#fCode button[type=submit]"); await wait(); probing = false;
   ok("código incorrecto avisa", (await pg.locator("#lerr").innerText()).includes("incorrecto"));
   await pg.fill("#lc", "123456"); await pg.click("#fCode button[type=submit]"); await pg.waitForSelector("#fTurno"); await wait();
@@ -212,7 +234,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("Bloque D: Esc cierra y vuelve al botón", await pg.evaluate(() => document.getElementById("acctMenu").hidden && document.activeElement === document.querySelector("nav .acct-btn") && document.querySelector("nav .acct-btn").getAttribute("aria-expanded") === "false"));
   await pg.click("nav .acct-btn"); await wait(150); await pg.mouse.click(20, 400); await wait(150);
   ok("Bloque D: tocar afuera lo cierra", await pg.evaluate(() => document.getElementById("acctMenu").hidden));
-  ok("Bloque D: el menú del cliente tiene Mi perfil, Mis turnos y Cerrar sesión (sin paneles)", await pg.evaluate(() => [...document.querySelectorAll("#acctMenu [role=menuitem]")].map((b) => b.dataset.go || b.dataset.act).join(",") === "cuenta,misturnos,logout"));
+  ok("Bloque D: el menú del cliente tiene Mi perfil, Mis turnos, Registrá tu negocio y Cerrar sesión (sin paneles)", await pg.evaluate(() => [...document.querySelectorAll("#acctMenu [role=menuitem]")].map((b) => b.dataset.go || b.dataset.act).join(",") === "cuenta,misturnos,bizStart,logout"));
   await menu("[data-go=misturnos]");
   ok("mis turnos desde la base", (await pg.locator(".tcard").count()) >= 1 && (await txt()).includes("Sofía"));
   ok("mis turnos: confirmado sin pedir asistencia ni mostrar saldo", (await txt()).includes("Confirmado") && !(await txt()).includes("Confirmá tu asistencia") && !(await txt()).includes("Saldo"));
@@ -267,10 +289,15 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.click("#app [data-act=logout]"); await wait();
 
   // ---------- Prestadora ----------
-  await pg.click("footer [data-act=authOpen][data-k=prestador]"); await wait();
-  probing = true; await pg.fill("#be", "sofia@test.ar"); await pg.fill("#bp", "mal"); await pg.click("#fBarb button[type=submit]"); await wait(); probing = false;
-  ok("contraseña incorrecta", (await pg.locator("#berr").innerText()).includes("incorrectos"));
-  await pg.fill("#bp", "prestador123"); await pg.click("#fBarb button[type=submit]"); await pg.waitForSelector(".bhead"); await wait();
+  // el mismo ingreso que los clientes; desde cualquier página, la prestadora entra a su Agenda
+  await pg.click("footer [data-act=authOpen]"); await wait();
+  const BAD = "Email o contraseña incorrectos. Revisalos o entrá con un código.";
+  probing = true; await pg.fill("#ai_e", "nadie.registrado@test.ar"); await pg.fill("#ai_p", "Cualquiera2026"); await pg.click("#fLogin button[type=submit]"); await wait(900);
+  const badNoAccount = await pg.locator("#ai_p_err").innerText().catch(() => "");
+  await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "mal"); await pg.click("#fLogin button[type=submit]"); await wait(900); probing = false;
+  ok("ingreso: el mismo mensaje si el email no tiene cuenta o si la contraseña está mal", badNoAccount.includes(BAD) && (await pg.locator("#ai_p_err").innerText()).includes(BAD), badNoAccount);
+  await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector(".bhead"); await wait();
+  ok("ingreso: la prestadora entra a su Agenda, aunque abrió el ingreso desde el inicio", new URL(pg.url()).pathname === "/panel/agenda");
   ok("panel de Sofía con sus 3 rubros", (await pg.locator(".bhead .cchip").count()) === 3);
   await pg.evaluate((d) => { S.aday = d; render() }, d); await wait(300);
   ok("su agenda muestra la reserva de la app", (await pg.locator(".ev.app").count()) >= 1);
@@ -474,7 +501,7 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.click("#fSignup button[type=submit]"); await wait(700);   // la app ignora un segundo envío en menos de medio segundo (doble toque)
   ok("crear cuenta pide aceptar términos", (await pg.locator("#au_ok_err").innerText()).includes("términos"));
   await pg.check("#au_ok"); await pg.click("#fSignup button[type=submit]"); await wait(800);
-  ok("cuenta creada: pide activarla por email", (await txt()).includes("Tocá el link del email") && !(await pg.evaluate(() => !!S.user)));
+  ok("cuenta creada: pide activarla por email", (await txt()).includes("Tocalo para activar la cuenta") && !(await pg.evaluate(() => !!S.user)));
   ok("Bloque D: Reenviar el email espera un minuto (cuenta regresiva)", await pg.isDisabled("[data-act=resendConfirm]") && /\(en 0:\d\d\)/.test(await pg.locator("[data-act=resendConfirm]").innerText()));
   const pc = await q("select p.full_name, p.phone from profiles p join auth.users u on u.id = p.id where u.email = 'carla@test.ar'");
   ok("en la base: nombre y celular guardados", pc.length === 1 && pc[0].full_name === "Carla Ruiz" && pc[0].phone === "2284 445566");
@@ -486,7 +513,11 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.click("nav [data-act=authOpen]"); await wait();
   probing = true; await pg.fill("#ai_e", "carla@test.ar"); await pg.fill("#ai_p", "otra1234"); await pg.click("#fLogin button[type=submit]"); await wait(800); probing = false;
   ok("contraseña incorrecta avisa", (await txt()).includes("Email o contraseña incorrectos"));
-  ok("Bloque D: el error va debajo de la contraseña y avisa cuántos intentos quedan", (await pg.getAttribute("#ai_p", "aria-invalid")) === "true" && (await pg.locator("#ai_p_err").innerText()).includes("incorrectos") && /Te quedan 4 intentos/.test(await pg.locator(".tries").innerText()));
+  ok("Bloque D: el error va debajo de la contraseña (sin aviso de intentos todavía)", (await pg.getAttribute("#ai_p", "aria-invalid")) === "true" && (await pg.locator("#ai_p_err").innerText()).includes("incorrectos") && (await pg.locator(".tries").count()) === 0);
+  probing = true;
+  for (let i = 0; i < 2; i++) { await pg.fill("#ai_p", "otra1234"); await pg.click("#fLogin button[type=submit]"); await wait(800); }
+  probing = false;
+  ok("ingreso: desde el tercer intento avisa cuántos quedan y «Olvidé mi contraseña» va en negrita", /Te quedan 2 intentos/.test(await pg.locator(".tries").innerText()) && (await pg.getAttribute("[data-act=authMode][data-m=forgot]", "style") || "").includes("700"));
   await pg.fill("#ai_e", "carla@test.ar"); await pg.fill("#ai_p", "Mate2026x"); await pg.click("#fLogin button[type=submit]"); await wait(1200);
   ok("ingresar con email y contraseña", (await pg.evaluate(() => S.user && S.user.name)) === "Carla Ruiz");
   await menu("[data-act=logout]"); await wait(800);
@@ -635,8 +666,8 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const pay0 = (await q("select mp_payment_id from payments order by id desc limit 1"))[0].mp_payment_id;
   await db.query("select payment_mp_update($1, 'in_mediation')", [pay0]);   // un reclamo abierto: le llega el aviso
   await pg.goto(BASE); await wait(1200); await menu("[data-act=logout]"); await wait(800);
-  await pg.click("footer [data-act=authOpen][data-k=prestador]"); await wait();
-  await pg.fill("#be", "sofia@test.ar"); await pg.fill("#bp", "prestador123"); await pg.click("#fBarb button[type=submit]"); await pg.waitForSelector(".bhead"); await wait(800);
+  await pg.click("footer [data-act=authOpen]"); await wait();
+  await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector(".bhead"); await wait(800);
   ok("Bloque 1: el panel muestra el aviso del reclamo", /Avisos de cobros/i.test(await txt()) && /reclamo en Mercado Pago/.test(await txt()));
   await pg.click("[data-act=noticesRead]"); await wait(800);
   ok("Bloque 1: Entendido marca el aviso leído", !/Avisos de cobros/i.test(await txt()) && (await q("select count(*)::int c from provider_notices where read_at is null"))[0].c === 0);
@@ -675,8 +706,9 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("D22: el premio queda reservado sin pago", (await q("select count(*)::int c from bookings where pay_method = 'reward' and status = 'confirmed'"))[0].c === rewardsBefore + 1);
   await menu("[data-act=logout]"); await wait(800);
   // "Volver al panel" cierra la sesión del prestador: se vuelve a ingresar y la app vuelve a Perfil (?volver=)
-  await pg.goto(BASE + "/panel/perfil"); await pg.waitForSelector("#fBarb", { timeout: 8000 }).catch(() => {}); await wait(400);
-  await pg.fill("#be", "sofia@test.ar"); await pg.fill("#bp", "prestador123"); await pg.click("#fBarb button[type=submit]"); await pg.waitForSelector("[data-act=mpConnect]", { timeout: 8000 }).catch(() => {}); await wait(400);
+  await pg.goto(BASE + "/panel/perfil"); await pg.waitForSelector("#fLogin", { timeout: 8000 }).catch(() => {}); await wait(400);
+  ok("ingreso: una dirección del panel sin sesión lleva al mismo ingreso, con ?volver=", new URL(pg.url()).pathname === "/ingresar" && new URL(pg.url()).searchParams.get("volver") === "/panel/perfil");
+  await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector("[data-act=mpConnect]", { timeout: 8000 }).catch(() => {}); await wait(400);
   await Promise.all([pg.waitForURL(/mp_connected=1/, { timeout: 8000 }).catch(() => {}), pg.click("[data-act=mpConnect]")]); await wait(1500);
   const accRe = (await q("select id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   ok("H23: reconectar la misma cuenta vuelve a cobrar con la misma fila", accRe && accRe.id === accBefore.id);
@@ -686,28 +718,61 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await pg.evaluate(async () => { await api.loadMine(); S.role = "barbero"; S.btab = "clientes"; S.cli = null; S.cf = "todos"; S.msgOpen = S.contactOpen = false; render() }); await wait(600);
   ok("H21: un cliente real llamado “Bruno F.” aparece en la lista de clientes", (await pg.locator('.clist [data-cli="Bruno F."]').count()) === 1);
   // ---------- Bloque 2b (H10): alta de prestador sin DNI en los metadatos; DNI y fotos después; activar = verificar ----------
-  const ctx2 = await b.newContext({ viewport: { width: 400, height: 900 } }); const p2 = await ctx2.newPage();
+  const ctx2 = await b.newContext({ viewport: { width: 400, height: 900 } }); let p2 = await ctx2.newPage();
   p2.on("pageerror", (e) => errs.push(e.message));
   const wait2 = (ms = 400) => p2.waitForTimeout(ms); const txt2 = () => p2.locator("#app").innerText();
-  await p2.goto(BASE + "/sumate"); await p2.waitForSelector("#fPrest");
-  await p2.fill("#pn", "Uñas Nuevas"); await p2.fill("#pe", "nuevas@test.ar"); await p2.fill("#pp", "Nuevas2026x");
-  await p2.fill("#ptel", "2284 555666");
-  ok("Bloque D: el alta ya no pide el DNI (se carga en el panel)", (await p2.locator("#pd, #pf, #pf2").count()) === 0 && (await txt2()).includes("El DNI lo cargás después"));
-  const DNIF = (n) => ({ name: n + ".png", mimeType: "image/png", buffer: PNG.buffer });
-  await p2.evaluate(() => { document.querySelector("#rr-u").checked = true; document.querySelector("#ptc").checked = true }); await p2.click("#fPrest button[type=submit]"); await wait2(1200);
-  ok("H10: alta con confirmación de email: pide cargar el DNI después", (await txt2()).includes("dónde cargar tu DNI"));
+  // Registrá tu negocio (aprobado el 1/11): paso 0 la cuenta, después los 5 pasos; la intención viaja en la cuenta
+  await p2.goto(BASE + "/registrar-negocio"); await p2.waitForSelector("#fSignup");
+  ok("alta: /registrar-negocio sin sesión es el paso 0 (la cuenta personal), sin celular ni DNI", (await p2.locator("#amTitle").innerText()).includes("Registrá tu negocio") && (await p2.locator("#au_t, #dniN").count()) === 0);
+  await p2.fill("#au_n", "Nora Nuevas"); await p2.fill("#au_e", "nuevas@test.ar"); await p2.fill("#au_p", "Clave2026xy"); await p2.check("#au_ok", { force: true });
+  await p2.click("#fSignup button[type=submit]"); await p2.waitForSelector(".am-mail"); await wait2(300);
+  const conf2 = await txt2();
+  ok("alta: Revisá tu email, con la línea para quien ya tenía cuenta", conf2.includes("Revisá tu email") && conf2.includes("seguís con tu negocio") && conf2.includes("¿No te llega? Si ya tenías cuenta, ingresá o recuperá tu contraseña.")
+     && (await p2.locator(".am-note [data-act=authMode][data-m=in]").count()) === 1 && (await p2.locator(".am-note [data-act=authMode][data-m=forgot]").count()) === 1);
   const meta = (await q("select raw_user_meta_data m from auth.users where email='nuevas@test.ar'"))[0].m;
-  ok("H10: el DNI no viaja en los metadatos de la cuenta", meta.provider_reg && meta.provider_reg.name === "Uñas Nuevas" && !JSON.stringify(meta).includes("33444555"));
-  await p2.goto(BASE + "/?token_hash=" + (await mailOf("nuevas@test.ar")).signup + "&type=signup"); await wait2(2000);
-  const np = (await q("select p.id, p.status, pp.dni_number from providers p join provider_private pp on pp.provider_id=p.id join auth.users u on u.id=p.owner_id where u.email='nuevas@test.ar'"))[0];
-  ok("H10: al confirmar se crea el perfil pendiente, todavía sin DNI", np && np.status === "pending" && np.dni_number === null);
-  await p2.waitForSelector("#fDni", { timeout: 8000 }).catch(() => {}); await wait2(400);
-  ok("Bloque D: el primer ingreso lleva a Perfil, con los pasos para activar el perfil", new URL(p2.url()).pathname === "/panel/perfil" && (await p2.locator(".setup").innerText().catch(() => "")).includes("Verificación de DNI"));
-  ok("H10: los pasos de Perfil piden número, frente y dorso", await p2.isVisible("#fDni") && await p2.isVisible("#dniFront") && await p2.isVisible("#dniBack"));
-  ok("D24: los pasos avisan cuánto se guardan las fotos", (await p2.innerText("body")).includes("Guardamos las fotos hasta 30 días después de verificarte"));
-  await p2.click("[data-btab=agenda]"); await wait2(500);
-  ok("Bloque D: mientras falta el DNI, los pasos aparecen también arriba de la Agenda", (await p2.locator(".setup").innerText().catch(() => "")).includes("Falta el número, la foto del frente y la del dorso") && await p2.isVisible(".setup [data-btab=perfil]"));
-  await p2.click(".setup [data-btab=perfil]"); await p2.waitForSelector("#fDni");
+  ok("alta: la cuenta guarda solo la intención (registrar un negocio), sin datos del negocio ni DNI", meta.tt_pending && meta.tt_pending.a === "negocio" && !meta.provider_reg && !JSON.stringify(meta).includes("dni"));
+  ok("alta: todavía no hay negocio (se crea en el paso 1)", (await q("select count(*)::int c from providers p join auth.users u on u.id=p.owner_id where u.email='nuevas@test.ar'"))[0].c === 0);
+  // el link del email se abre en otro navegador (otro celular): sigue igual con el paso 1
+  await ctx2.close();
+  const ctx2b = await b.newContext({ viewport: { width: 400, height: 900 } }); const p2b = await ctx2b.newPage(); p2b.on("pageerror", (e) => errs.push(e.message));
+  await p2b.goto(BASE + "/?token_hash=" + (await mailOf("nuevas@test.ar")).signup + "&type=signup"); await p2b.waitForSelector("#fBiz1", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(400);
+  ok("alta: el link del email abierto en otro navegador sigue en el paso 1", new URL(p2b.url()).pathname === "/registrar-negocio/1" && (await p2b.isVisible("#fBiz1")));
+  ok("alta: la intención se usa una vez y se borra de la cuenta", await until("select raw_user_meta_data m from auth.users where email='nuevas@test.ar'", [], (r) => r[0].m.tt_pending === null || r[0].m.tt_pending === undefined));
+  ok("alta: en el celular, «Paso 1 de 5» con la barra", (await p2b.locator(".biz-prog").innerText()).includes("Paso 1 de 5") && !(await p2b.isVisible(".biz-steps")));
+  // paso 1 con un error y corregido
+  await p2b.fill("#bn", "Uñas Nuevas"); await p2b.click("#fBiz1 button[type=submit]"); await p2b.waitForTimeout(400);
+  ok("alta paso 1: sin rubro ni celular lo marca al lado de cada campo y no crea nada", (await p2b.locator("#berr-cats").count()) === 1 && (await p2b.locator("#berr-bt").count()) === 1
+     && (await q("select count(*)::int c from providers where name='Uñas Nuevas'"))[0].c === 0);
+  await p2b.check("#bc-u", { force: true }); await p2b.fill("#ba", "Hornos 300"); await p2b.fill("#bt", "2284 555666"); await p2b.fill("#bi", "@unas.nuevas");
+  await p2b.click("#fBiz1 button[type=submit]"); await p2b.waitForSelector("#fBiz2", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(400);
+  const np = (await q("select p.id, p.status, p.instagram, pp.dni_number, pp.phone, ps.setup_done from providers p join provider_private pp on pp.provider_id=p.id join provider_settings ps on ps.provider_id=p.id join auth.users u on u.id=p.owner_id where u.email='nuevas@test.ar'"))[0];
+  ok("alta paso 1: crea el negocio pendiente, con el celular privado y el Instagram, sin DNI", np && np.status === "pending" && np.dni_number === null && np.phone === "2284 555666" && np.instagram === "unas.nuevas" && JSON.stringify(np.setup_done) === "[1]");
+  ok("alta paso 2: ejemplos de uñas para tocar y agregar", new URL(p2b.url()).pathname === "/registrar-negocio/2" && /Esmaltado semipermanente · 60 min/.test(await p2b.locator(".biz-chips").innerText()));
+  await p2b.click("#fBiz2 button[type=submit]"); await p2b.waitForTimeout(400);
+  ok("alta paso 2: sin servicios no sigue", new URL(p2b.url()).pathname === "/registrar-negocio/2" && /al menos un servicio/.test(await p2b.locator("#bizErr").innerText()));
+  await p2b.click('[data-act=bizEx][data-n="Esmaltado semipermanente"]'); await p2b.fill("#bsp0", "12000");
+  await p2b.click("#fBiz2 button[type=submit]"); await p2b.waitForSelector("#fBiz3", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(400);
+  ok("alta paso 2: el servicio queda en la base con su duración y precio", (await q("select count(*)::int c from services where provider_id=$1 and name='Esmaltado semipermanente' and duration_min=60 and price=12000 and active", [np.id]))[0].c === 1);
+  // sale en el paso 3 y vuelve: la Agenda le muestra lo que falta y "Seguir con el alta" lo lleva al paso 3
+  await p2b.goto(BASE + "/"); await p2b.waitForSelector(".btabs", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(500);
+  const todo2 = await p2b.locator(".todo").innerText().catch(() => "");
+  ok("alta: al volver entra a su Agenda, con «Te falta poco» y lo que falta", new URL(p2b.url()).pathname === "/panel/agenda" && todo2.includes("Te falta poco para recibir reservas") && todo2.includes("Conectar Mercado Pago") && (await p2b.locator(".todo [data-act=bizStart]").count()) === 1, todo2);
+  await p2b.click(".todo [data-act=bizStart]"); await p2b.waitForSelector("#fBiz3", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(300);
+  ok("alta: «Seguir con el alta» abre el paso 3, donde había quedado", new URL(p2b.url()).pathname === "/registrar-negocio/3");
+  ok("alta paso 3: las 4 plantillas", (await p2b.locator("[data-act=bizTpl]").count()) === 4 && /Martes a sábado, 10 a 20/.test(await p2b.locator(".biz-opt").innerText()));
+  await p2b.click('[data-act=bizTpl][data-k=ms]'); await p2b.waitForTimeout(200);
+  await p2b.click("#fBiz3 button[type=submit]"); await p2b.waitForSelector("[data-act=bizNext]", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(300);
+  const hrs = await q("select dow, opens::text o, closes::text c from provider_hours where provider_id=$1 order by dow", [np.id]);
+  ok("alta paso 3: martes a sábado de 10 a 20 en la base", hrs.length === 5 && hrs.every((h, i) => h.dow === i + 2 && h.o.startsWith("10:00") && h.c.startsWith("20:00")), JSON.stringify(hrs));
+  await p2b.click('[data-act=bizPay][data-v="40"]'); await p2b.click('[data-act=bizTerm][data-v=d10]'); await p2b.click("[data-act=bizNext]"); await p2b.waitForTimeout(800);
+  const st2 = (await q("select deposit_pct, pay_mode, payout_term, setup_done from provider_settings where provider_id=$1", [np.id]))[0];
+  ok("alta paso 4: seña del 40% y plazo de 10 días; se puede seguir sin Mercado Pago", st2.deposit_pct === 40 && st2.pay_mode === "deposit" && st2.payout_term === "d10" && JSON.stringify(st2.setup_done) === "[1,2,3,4]" && new URL(p2b.url()).pathname === "/registrar-negocio/5");
+  ok("alta paso 5: con «Exigir DNI», pide número, frente y dorso", await p2b.isVisible("#fDni") && await p2b.isVisible("#dniFront") && await p2b.isVisible("#dniBack"));
+  ok("D24: el paso avisa cuánto se guardan las fotos", (await p2b.innerText("body")).includes("Guardamos las fotos hasta 30 días después de verificarte"));
+  await p2b.click("[data-act=bizFinish]"); await p2b.waitForTimeout(300);
+  ok("alta paso 5: sin el DNI no se envía (y queda guardado para seguir después)", /Para enviarlo falta el número, la foto del frente y la del dorso/.test(await p2b.locator("#bizErr").innerText()));
+  p2 = p2b;
+  const DNIF = (n) => ({ name: n + ".png", mimeType: "image/png", buffer: PNG.buffer });
   await p2.fill("#dniN", "30111222"); await p2.click("#fDni button[type=submit]"); await wait2(800);
   ok("H10: un DNI de otro prestador se rechaza con un mensaje claro", (await p2.locator("#toast").innerText().catch(() => "")).includes("ya está registrado")
      && (await q("select dni_number from provider_private where provider_id=$1", [np.id]))[0].dni_number === null);
@@ -737,8 +802,13 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   await p3.click(`[data-act=admSet][data-id="${np.id}"]`); await p3.waitForTimeout(1200);
   const ver = (await q("select p.status, p.dni_verified, pp.dni_verified_at is not null at, (select email from auth.users where id = pp.dni_verified_by) by from providers p join provider_private pp on pp.provider_id=p.id where p.id=$1", [np.id]))[0];
   ok("H10: aprobar = verificar, con quién y cuándo", ver.status === "active" && ver.dni_verified === true && ver.at && ver.by === "carla@test.ar");
-  await p2.goto(BASE + "/panel/agenda"); await p2.waitForSelector(".btabs"); await wait2(500);
-  ok("Bloque D: verificado, los pasos ya no aparecen", (await p2.locator(".setup").count()) === 0);
+  await p2.goto(BASE + "/registrar-negocio/5"); await p2.waitForSelector("[data-act=bizFinish]"); await wait2(300);
+  await p2.click("[data-act=bizFinish]"); await p2.waitForURL(/registrar-negocio\/listo/, { timeout: 8000 }).catch(() => {}); await wait2(400);
+  ok("alta: con el DNI completo se envía y queda en «¡Listo!» con lo que falta (Mercado Pago)", new URL(p2.url()).pathname === "/registrar-negocio/listo" && /¡Listo/.test(await txt2()) && /Conectar Mercado Pago/.test(await txt2())
+     && JSON.stringify((await q("select setup_done from provider_settings where provider_id=$1", [np.id]))[0].setup_done) === "[1,2,3,4,5]");
+  await p2.click(".biz-card [data-act=toPanel]"); await p2.waitForSelector(".btabs"); await wait2(500);
+  const todoV = await p2.locator(".todo").innerText().catch(() => "");
+  ok("Bloque D: verificado, en la Agenda solo falta Mercado Pago (sin la tarjeta vieja)", (await p2.locator(".setup").count()) === 0 && todoV.includes("○ Conectar Mercado Pago") && !todoV.includes("○ Verificación") && !todoV.includes("○ Aprobación") && (await p2.locator(".todo [data-act=mpConnect]").count()) === 1, todoV);
   // ---------- Bloque D (D26): "Exigir DNI para aprobar prestadores" apagada desde Comisión ----------
   await p3.goto(BASE + "/admin/comision"); await p3.waitForSelector("[data-act=admReqDni]");
   ok("D26: la opción está activada", (await p3.getAttribute("[data-act=admReqDni]", "aria-pressed")) === "true");
@@ -746,12 +816,20 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   ok("D26: el admin la apaga", (await q("select require_dni from app_settings"))[0].require_dni === false && (await p3.getAttribute("[data-act=admReqDni]", "aria-pressed")) === "false");
   const ctx4 = await b.newContext({ viewport: { width: 400, height: 900 } }); const p4 = await ctx4.newPage();
   p4.on("pageerror", (e) => errs.push(e.message));
-  await p4.goto(BASE + "/sumate"); await p4.waitForSelector("#fPrest");
-  await p4.fill("#pn", "Masajes Sin DNI"); await p4.fill("#pe", "sindni@test.ar"); await p4.fill("#pp", "SinDni2026x"); await p4.fill("#ptel", "2284 555777");
-  await p4.evaluate(() => { document.querySelector("#rr-m").checked = true; document.querySelector("#ptc").checked = true }); await p4.click("#fPrest button[type=submit]"); await p4.waitForTimeout(1200);
-  await p4.goto(BASE + "/?token_hash=" + (await mailOf("sindni@test.ar")).signup + "&type=signup"); await p4.waitForSelector(".setup", { timeout: 8000 }).catch(() => {}); await p4.waitForTimeout(500);
-  const setup4 = await p4.locator(".setup").innerText().catch(() => "");
-  ok("D26: sin DNI exigido, los pasos dicen Aprobación de TuTiempo y no piden el DNI", setup4.includes("Aprobación de TuTiempo") && !setup4.includes("DNI") && (await p4.locator("#fDni").count()) === 0);
+  // el alta desde el pie de Crear cuenta ("¿Tenés un negocio? Registralo") y sin DNI exigido
+  await p4.goto(BASE + "/crear-cuenta"); await p4.waitForSelector("#fSignup"); await p4.click(".am-foot [data-act=bizStart]"); await p4.waitForTimeout(300);
+  ok("alta: «¿Tenés un negocio? Registralo» pasa al paso 0 sin salir de la página", (await p4.locator("#amTitle").innerText()).includes("Registrá tu negocio"));
+  await p4.fill("#au_n", "Mara Sin DNI"); await p4.fill("#au_e", "sindni@test.ar"); await p4.fill("#au_p", "Clave2026zz"); await p4.check("#au_ok", { force: true });
+  await p4.click("#fSignup button[type=submit]"); await p4.waitForTimeout(1200);
+  await p4.goto(BASE + "/?token_hash=" + (await mailOf("sindni@test.ar")).signup + "&type=signup"); await p4.waitForSelector("#fBiz1", { timeout: 8000 }).catch(() => {}); await p4.waitForTimeout(400);
+  await p4.fill("#bn", "Masajes Sin DNI"); await p4.check("#bc-m", { force: true }); await p4.fill("#bt", "2284 555777"); await p4.click("#fBiz1 button[type=submit]"); await p4.waitForSelector("#fBiz2", { timeout: 8000 }).catch(() => {});
+  await p4.click('[data-act=bizEx][data-n="Relajante"]'); await p4.fill("#bsp0", "15000"); await p4.click("#fBiz2 button[type=submit]"); await p4.waitForSelector("#fBiz3", { timeout: 8000 }).catch(() => {});
+  await p4.click("#fBiz3 button[type=submit]"); await p4.waitForSelector("[data-act=bizNext]", { timeout: 8000 }).catch(() => {}); await p4.click("[data-act=bizNext]"); await p4.waitForSelector("[data-act=bizFinish]", { timeout: 8000 }).catch(() => {});
+  const step5 = await p4.locator(".biz-card").innerText().catch(() => "");
+  ok("D26: sin DNI exigido, el paso 5 dice Aprobación de TuTiempo y no pide el DNI", step5.includes("Aprobación de TuTiempo") && (await p4.locator("#fDni").count()) === 0);
+  ok("alta paso 3: sin tocar nada queda la plantilla sugerida (lunes a viernes de 9 a 18)", (await q("select count(*)::int c from provider_hours h join providers p on p.id=h.provider_id where p.name='Masajes Sin DNI' and h.opens='09:00' and h.closes='18:00'"))[0].c === 5);
+  await p4.click("[data-act=bizFinish]"); await p4.waitForURL(/registrar-negocio\/listo/, { timeout: 8000 }).catch(() => {});
+  ok("alta: sin DNI se envía directo", new URL(p4.url()).pathname === "/registrar-negocio/listo");
   const sd = (await q("select p.id from providers p join auth.users u on u.id=p.owner_id where u.email='sindni@test.ar'"))[0];
   await p3.goto(BASE + "/admin/prestadores"); await p3.waitForSelector(`[data-act=admSet][data-id="${sd.id}"]`, { timeout: 8000 }).catch(() => {}); await p3.waitForTimeout(500);
   ok("D26: el admin lo ve en Para aprobar, sin la línea del DNI", (await p3.locator("#app").innerText()).toLowerCase().includes("para aprobar") && (await p3.locator(`[data-act=admDni][data-id="${sd.id}"]`).count()) === 0);
@@ -759,11 +837,71 @@ let F = 0; const ok = (n, c) => { if (!c) F++; console.log((c ? "OK   " : "FAIL 
   const sv = (await q("select status, dni_verified from providers where id=$1", [sd.id]))[0];
   ok("D26: se aprueba sin DNI y sin el sello de identidad verificada", sv.status === "active" && sv.dni_verified === false);
   await p4.goto(BASE + "/panel/agenda"); await p4.waitForSelector(".btabs"); await p4.waitForTimeout(500);
-  ok("D26: aprobado, los pasos ya no aparecen", (await p4.locator(".setup").count()) === 0);
+  const todo4 = await p4.locator(".todo").innerText().catch(() => "");
+  ok("D26: aprobado, en la Agenda solo falta Mercado Pago", (await p4.locator(".setup").count()) === 0 && todo4.includes("✓ Aprobación de TuTiempo") && todo4.includes("○ Conectar Mercado Pago"), todo4);
   await p3.goto(BASE + "/admin/comision"); await p3.waitForSelector("[data-act=admReqDni]"); await p3.click("[data-act=admReqDni]"); await p3.waitForTimeout(1200);
   ok("D26: el admin la vuelve a activar", (await q("select require_dni from app_settings"))[0].require_dni === true);
   await ctx4.close();
-  await p3.close(); await ctx2.close();
+  await p3.close(); await ctx2b.close();
+  // ---------- Ingreso y registro: la acción que pidió ingresar sigue sola ----------
+  const ctx6 = await b.newContext({ viewport: { width: 1366, height: 900 } }); const p6 = await ctx6.newPage(); p6.on("pageerror", (e) => errs.push(e.message));
+  const sofiaPath = "/" + (await q("select slug from providers where name like 'Sofía%'"))[0].slug;
+  await p6.goto(BASE + sofiaPath); await p6.waitForSelector(".sgroup"); await p6.waitForTimeout(400);
+  await p6.click("[data-act=seguir]"); await p6.waitForTimeout(300);
+  ok("ingreso: en la compu el foco va al primer campo (el email)", (await p6.evaluate(() => document.activeElement && document.activeElement.id)) === "ai_e");
+  ok("pendiente: Seguir sin sesión abre la ventana con el ticket «Seguir a…»", (await p6.locator(".authmodal .tk[data-ticket=seguir]").innerText().catch(() => "")).includes("Al ingresar queda hecho") && (await p6.locator("#amTitle").innerText()).includes("Ingresá para seguir"));
+  await p6.click(".authmodal [data-act=authMode][data-m=up]"); await p6.waitForTimeout(200);
+  ok("pendiente: el ticket sigue en Crear cuenta", (await p6.locator(".authmodal .tk[data-ticket=seguir]").count()) === 1);
+  await p6.fill("#au_n", "Luz Pérez"); await p6.fill("#au_e", "luz@test.ar"); await p6.fill("#au_p", "Luz2026clave"); await p6.check("#au_ok", { force: true });
+  await p6.click("#fSignup button[type=submit]"); await p6.waitForSelector(".am-mail"); await p6.waitForTimeout(200);
+  ok("pendiente: Revisá tu email dice que se retoma lo que estaba haciendo", /seguís donde lo dejaste/.test(await p6.locator(".authmodal").innerText()) && (await p6.locator(".authmodal .tk").count()) === 1);
+  await p6.goto(BASE + "/?token_hash=" + (await mailOf("luz@test.ar")).signup + "&type=signup"); await p6.waitForTimeout(1800);
+  ok("pendiente: al tocar el link queda siguiendo, en el perfil del prestador", new URL(p6.url()).pathname === sofiaPath
+     && (await q("select count(*)::int c from follows f join auth.users u on u.id=f.user_id where u.email='luz@test.ar'"))[0].c === 1);
+  // reservar: crea la cuenta desde el ticket y abre el link en otro navegador → directo al pago con ese horario
+  await p6.evaluate(() => document.querySelector("[data-act=logout]") ? document.querySelector("[data-act=logout]").click() : null); await p6.waitForTimeout(800);
+  await p6.goto(BASE + sofiaPath); await p6.waitForSelector(".sgroup"); await p6.click(".sgroup.seg-u .svci"); await p6.waitForTimeout(200); await p6.click("[data-quick]"); await p6.waitForTimeout(200);
+  const pick = await p6.evaluate(() => S.slot && { day: S.slot.date, time: S.slot.time });
+  await p6.click("[data-act=reservarT]"); await p6.waitForTimeout(300);
+  await p6.click(".authmodal [data-act=authMode][data-m=up]"); await p6.waitForTimeout(200);
+  await p6.fill("#au_n", "Lola Gómez"); await p6.fill("#au_e", "lola@test.ar"); await p6.fill("#au_p", "Clave2026lg"); await p6.check("#au_ok", { force: true });
+  await p6.click("#fSignup button[type=submit]"); await p6.waitForSelector(".am-mail"); await p6.waitForTimeout(200);
+  const ctx7 = await b.newContext({ viewport: { width: 390, height: 844 } }); const p7 = await ctx7.newPage(); p7.on("pageerror", (e) => errs.push(e.message));
+  await p7.goto(BASE + "/?token_hash=" + (await mailOf("lola@test.ar")).signup + "&type=signup"); await p7.waitForSelector("#fTurno", { timeout: 8000 }).catch(() => {}); await p7.waitForTimeout(300);
+  const back7 = new URL(p7.url());
+  ok("pendiente: el link del email en otro celular lleva directo a «Confirmá tu turno» con ese horario", (await p7.isVisible("#fTurno")) && back7.pathname === sofiaPath + "/reservar" && back7.searchParams.get("dia") === pick.day && back7.searchParams.get("hora") === pick.time, p7.url());
+  await ctx7.close();
+  // el horario lo toma otro mientras ingresa: lo dice y deja la ficha en ese día (sin cobrar nada)
+  await p6.goto(BASE + "/"); await p6.waitForTimeout(800);
+  if (await p6.evaluate(() => !!S.user)) { await p6.evaluate(() => document.querySelector("[data-act=logout]").click()); await p6.waitForTimeout(800); }
+  await p6.goto(BASE + sofiaPath); await p6.waitForSelector(".sgroup"); await p6.click(".sgroup.seg-u .svci"); await p6.waitForTimeout(200); await p6.click("[data-quick]"); await p6.waitForTimeout(200);
+  const pick2 = await p6.evaluate(() => S.slot && { day: S.slot.date, time: S.slot.time });
+  await p6.click("[data-act=reservarT]"); await p6.waitForTimeout(300);
+  await db.query("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at) select p.id, 'Ocupado', 'Otro', 'manual', 'confirmed', ($1::date + $2::time) at time zone 'America/Argentina/Buenos_Aires', ($1::date + $2::time + interval '60 minutes') at time zone 'America/Argentina/Buenos_Aires' from providers p where p.name like 'Sofía%'", [pick2.day, pick2.time]);
+  const holdsBefore = (await q("select count(*)::int c from bookings where status='hold'"))[0].c;
+  await p6.fill("#ai_e", "luz@test.ar"); await p6.fill("#ai_p", "Luz2026clave"); await p6.click("#fLogin button[type=submit]"); await p6.waitForTimeout(1500);
+  ok("pendiente: si el horario ya lo tomó otro, lo dice y deja la ficha abierta en ese día, sin cobrar", (await p6.evaluate(() => S.view)) === "perfil" && (await p6.evaluate(() => S.day)) === pick2.day
+     && /ya no está libre/i.test(await p6.locator("#toast").innerText().catch(() => "")) && (await q("select count(*)::int c from bookings where status='hold'"))[0].c === holdsBefore,
+     JSON.stringify([await p6.evaluate(() => [S.view, S.day, location.pathname]), pick2, await p6.locator("#toast").innerText().catch(() => "")]));
+  await ctx6.close();
+  // ---------- C13/C14: la misma cuenta es prestadora y clienta ----------
+  const ctx8 = await b.newContext({ viewport: { width: 1366, height: 900 } }); const p8 = await ctx8.newPage(); p8.on("pageerror", (e) => errs.push(e.message));
+  await p8.goto(BASE + "/ingresar"); await p8.waitForSelector("#fLogin");
+  await p8.fill("#ai_e", "sofia@test.ar"); await p8.fill("#ai_p", "prestador123"); await p8.click("#fLogin button[type=submit]"); await p8.waitForSelector(".bhead", { timeout: 8000 }).catch(() => {}); await p8.waitForTimeout(400);
+  ok("C13: desde /ingresar, el prestador entra a su Agenda", new URL(p8.url()).pathname === "/panel/agenda", p8.url() + " " + (await p8.locator("#app").innerText().catch(() => "")).slice(0, 300));
+  await p8.click("nav .acct-btn"); await p8.waitForSelector("#acctMenu:not([hidden])");
+  const menu8 = await p8.locator("#acctMenu").innerText();
+  ok("C14: el menú del prestador tiene Mi agenda, Ver mi perfil público, Reservar como cliente y Mis turnos (como cliente)", ["Mi agenda", "Ver mi perfil público", "Reservar como cliente", "Mis turnos (como cliente)"].every((x) => menu8.includes(x)), menu8);
+  await p8.click("#acctMenu [data-act=asClient][data-to=home]"); await p8.waitForTimeout(500);
+  ok("C13: reservando como cliente, la barra para volver a su agenda", new URL(p8.url()).pathname === "/" && (await p8.locator(".asclient").innerText()).includes("Estás reservando como cliente"));
+  await p8.click("#logoLink"); await p8.waitForTimeout(400);
+  ok("C13: el logo lo lleva a su Agenda", new URL(p8.url()).pathname === "/panel/agenda");
+  await p8.goto(BASE + "/"); await p8.waitForSelector(".btabs", { timeout: 8000 }).catch(() => {}); await p8.waitForTimeout(300);
+  ok("C13: al abrir la app (en «/») el prestador entra a su Agenda", new URL(p8.url()).pathname === "/panel/agenda");
+  ok("alta: un prestador ya dado de alta no ve «Te falta poco»", (await p8.locator(".todo").count()) === 0);
+  await p8.goto(BASE + "/sumate"); await p8.waitForTimeout(600);
+  ok("alta: /sumate (el alta de antes) a Registrá tu negocio, y con todo hecho a la Agenda", new URL(p8.url()).pathname === "/panel/agenda");
+  await ctx8.close();
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));
   await b.close(); await db.end();

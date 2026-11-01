@@ -3,12 +3,15 @@
 //    montos de la app pasen por parsePesos.
 //  - H24: siteUrl (src/lib/sitio.js), la dirección del sitio: solo https:// y el dominio.
 //  - D30: chargeFor (src/lib/cobro.js), lo que paga el cliente al reservar: la misma cuenta que charge_parts en la base.
+//  - Ingreso y registro: cleanPending (src/lib/pendiente.js), la acción pendiente que vuelve de sessionStorage o de los
+//    datos de la cuenta: solo lo esperado, con el formato esperado, y vence a las 2 horas.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chargeFor } from "../src/lib/cobro.js";
 import { parsePesos } from "../src/lib/montos.js";
 import { SITE_URL_RE, siteUrl } from "../src/lib/sitio.js";
+import { cleanPending } from "../src/lib/pendiente.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let F = 0;
@@ -86,6 +89,27 @@ ok("D30: el total es el mínimo que deja la seña completa (sin quedarse corto n
 const migD30 = fs.readFileSync(path.join(ROOT, "supabase/migrations/20261101120000_cobro_d30.sql"), "utf8");
 ok("D30: charge_parts de la base usa la misma cuenta (comisión al peso, total redondeado para arriba)",
   migD30.includes("fee := (dep * c100 + 5000) / 10000;") && migD30.includes("total := ((dep + fee) * 10000 + d - 1) / d;"));
+
+// ---------- Ingreso y registro · la acción pendiente ----------
+const now = Date.now();
+const res = { a: "reservar", pid: 7, svc: "12", day: "2026-11-03", time: "09:30", at: now };
+ok("pendiente: una reserva válida pasa entera", JSON.stringify(cleanPending(res)) === JSON.stringify({ a: "reservar", at: now, pid: 7, svc: "12", day: "2026-11-03", time: "09:30" }));
+ok("pendiente: seguir y lista solo llevan lo suyo", JSON.stringify(cleanPending({ a: "seguir", pid: "7", day: "x", at: now, extra: 1 })) === JSON.stringify({ a: "seguir", at: now, pid: 7 })
+  && JSON.stringify(cleanPending({ a: "lista", pid: 7, day: "2026-11-03", at: now })) === JSON.stringify({ a: "lista", at: now, pid: 7, day: "2026-11-03" }));
+ok("pendiente: negocio no lleva prestador", JSON.stringify(cleanPending({ a: "negocio", pid: 9, at: now })) === JSON.stringify({ a: "negocio", at: now }));
+for (const [why, raw] of [
+  ["acción desconocida", { a: "pagar", pid: 7, at: now }],
+  ["sin fecha", { a: "seguir", pid: 7 }],
+  ["vencida (más de 2 horas)", { a: "seguir", pid: 7, at: now - 2 * 3600e3 - 1000 }],
+  ["del futuro", { a: "seguir", pid: 7, at: now + 3600e3 }],
+  ["prestador que no es un número", { a: "seguir", pid: "7;drop", at: now }],
+  ["día mal escrito", { ...res, day: "3/11/2026" }],
+  ["hora mal escrita", { ...res, time: "9:30" }],
+  ["servicio muy largo", { ...res, svc: "x".repeat(200) }],
+  ["no es un objeto", "reservar"],
+]) {
+  ok(`pendiente: se descarta (${why})`, cleanPending(raw) === null);
+}
 
 console.log(F ? `${F} FALLAS` : "TODO OK");
 process.exit(F ? 1 : 0);
