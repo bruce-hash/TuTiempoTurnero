@@ -217,6 +217,10 @@ const PUSH_STUB = `(() => {
   ok("Perfil del panel: notificaciones con «Nuevas reservas y cancelaciones de clientes»", await page.isVisible(".push-panel") && await page.isChecked("#bPushBk"));
   await page.uncheck("#bPushBk"); await page.waitForTimeout(800);
   ok("…que se guarda en la base", (await q("select push_bookings from profiles where id = $1", [sofia.owner_id]))[0].push_bookings === false);
+  // C06 (V8): «Nuevos seguidores» aparte de las reservas
+  ok("C06: Perfil del panel suma «Nuevos seguidores», prendido", await page.isChecked("#bPushFl"));
+  await page.uncheck("#bPushFl"); await page.waitForTimeout(800);
+  ok("C06: …que se guarda aparte (las reservas no cambian)", (await q("select push_followers, push_bookings from profiles where id = $1", [sofia.owner_id]))[0].push_followers === false);
   await open(page, "/panel/agenda?dia=" + new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10));
   ok("/panel/agenda?dia= (desde la notificación de una reserva) abre la Agenda en ese día", await page.evaluate(() => S.aday) === new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10));
   // instalar: el aviso del navegador (simulado: Chromium headless no lo dispara)

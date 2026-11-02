@@ -105,6 +105,11 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### V8 (C06, seguidor nuevo)
+- Migración nueva: `20261103020000_seguidor_nuevo.sql` (`profiles.push_followers`, aviso `new_follower` en
+  `provider_notices` con el trigger `follows_notice`, push `new_follower` en `push_enqueue`/`provider_notices_push`/`push_due`).
+  No cambia datos: los que ya seguían no generan avisos. Sin Edge Functions ni cambios de `config.js`.
+
 ### V6 resto (C44)
 - Migración nueva: `20261103010000_admin_clientes.sql` (`admin_client_counts`: el indicador «Clientes» del panel de
   TuTiempo cuenta solo cuentas de cliente). Sin Edge Functions ni cambios de `config.js`.

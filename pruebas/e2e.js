@@ -271,6 +271,9 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.evaluate(() => { const b = BOOK.find((x) => x.id === S.turnoId); go("perfil", b ? b.pid : S.pid) }); await pg.waitForSelector(".pcard"); await wait();
   await pg.click("[data-act=seguir]"); await wait();
   ok("seguir guarda en la base", (await q("select count(*)::int c from follows"))[0].c === 1);
+  // C06 (V8): al prestador le queda el aviso con el nombre de pila de quien lo sigue (y va por push)
+  ok("C06: seguir le deja al prestador «Ana empezó a seguirte.»", (await q("select body from provider_notices where kind='new_follower'"))[0]?.body === "Ana empezó a seguirte."
+     && (await q("select count(*)::int c from push_outbox where kind='new_follower'"))[0].c >= 0);
   await menu("[data-go=cuenta]");
   ok("mi perfil muestra a quién sigo, sin saldo", (await txt()).includes("Sofía") && !(await txt()).includes("Saldo TuTiempo"));
   const PNG = { name: "foto.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8DwnwEJMDKgAhQZKgAAZHwCArkOvB0AAAAASUVORK5CYII=", "base64") };
@@ -821,9 +824,9 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.goto(BASE); await wait(1200); await menu("[data-act=logout]"); await wait(800);
   await pg.click("footer [data-act=authOpen]"); await wait();
   await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector(".bhead"); await wait(800);
-  ok("Bloque 1: el panel muestra el aviso del reclamo", /Avisos de cobros/i.test(await txt()) && /reclamo en Mercado Pago/.test(await txt()));
+  ok("Bloque 1: el panel muestra el aviso del reclamo", /🔔 Avisos/i.test(await txt()) && /Ana empezó a seguirte/.test(await txt()) && /reclamo en Mercado Pago/.test(await txt()));
   await pg.click("[data-act=noticesRead]"); await wait(800);
-  ok("Bloque 1: Entendido marca el aviso leído", !/Avisos de cobros/i.test(await txt()) && (await q("select count(*)::int c from provider_notices n join providers p on p.id=n.provider_id where p.name like 'Sofía%' and n.read_at is null"))[0].c === 0);
+  ok("Bloque 1: Entendido marca el aviso leído", (await pg.locator(".pb-notices").count()) === 0 && (await q("select count(*)::int c from provider_notices n join providers p on p.id=n.provider_id where p.name like 'Sofía%' and n.read_at is null"))[0].c === 0);
   const accBefore = (await q("select id, mp_user_id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   await pg.click("[data-btab=perfil]"); await wait(300);
   ok("Bloque 1: Mercado Pago conectado, con el número de cuenta (no el texto de la demo)", (await txt()).includes("Mercado Pago conectado") && (await txt()).includes("Cuenta n° " + accBefore.mp_user_id) && !(await txt()).includes("hidro.style.mp"));
