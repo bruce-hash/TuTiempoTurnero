@@ -105,6 +105,10 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### V6 resto (C44)
+- Migración nueva: `20261103010000_admin_clientes.sql` (`admin_client_counts`: el indicador «Clientes» del panel de
+  TuTiempo cuenta solo cuentas de cliente). Sin Edge Functions ni cambios de `config.js`.
+
 ### V5 resto (C29, sellos)
 - Migración nueva: `20261103000000_sellos_global.sql` (`app_settings.stamps_on`, encendido por defecto; `admin_set_stamps`;
   `stamp_add` no suma ni canjea con los sellos apagados). No cambia datos. Sin Edge Functions ni cambios de `config.js`.

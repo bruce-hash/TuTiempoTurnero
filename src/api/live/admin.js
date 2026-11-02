@@ -28,7 +28,7 @@ export const liveAdmin = {
         }
       });
     }
-    const [stats, providers, settings] = await Promise.all([
+    const [stats, providers, settings, clientCounts] = await Promise.all([
       call(sb.rpc("admin_stats")),
       call(
         sb.rpc("admin_providers", {
@@ -36,7 +36,13 @@ export const liveAdmin = {
         }),
       ),
       call(sb.from("app_settings").select("site_url,require_dni,deposit_commission_pct,mp_pct_instant,mp_pct_d10,mp_pct_d18,mp_pct_d35").maybeSingle()).catch(() => null),
+      // C44: "Clientes" cuenta solo las cuentas de cliente (admin_stats cuenta todas, también las de negocio)
+      call(sb.rpc("admin_client_counts")).catch(() => null),
     ]);
+    if (stats && clientCounts) {
+      stats.clients = clientCounts.clients;
+      stats.new_clients_month = clientCounts.new_clients_month;
+    }
     // Bloque D (D26): "Exigir DNI para aprobar prestadores" (si no se puede leer, se exige, como hasta ahora)
     S.requireDni = !settings || settings.require_dni !== false;
     S.adm = {
