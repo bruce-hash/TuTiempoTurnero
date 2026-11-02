@@ -196,8 +196,15 @@ ok("con «Nueva reserva y cancelaciones» apagada, al prestador no le llegan", c
 q("insert into provider_notices (provider_id, kind, ref, body) values (%s, 'mp_refunded', 'P-1', 'El pago de Ana María Pérez se devolvió: $ 6.250 desde tu cuenta.'), "
   "(%s, 'mp_charged_back', 'P-2', 'Contracargo de $ 12.500'), (%s, 'mp_reconnect', 'R-1', 'Volvé a conectar'), (%s, 'mp_connect', 'aviso-1', 'Conectá')", (pid2, pid2, pid2, pid2))
 ok("los avisos de cobros llegan siempre (aunque apague las reservas); el de conectar Mercado Pago (V6) va como el de reconectar",
-   [r[0] for r in cola(owner2)] == ["cobros", "cobros", "mp_reconnect", "mp_reconnect"])
+   [r[0] for r in cola(owner2) if r[0] != "new_follower"] == ["cobros", "cobros", "mp_reconnect", "mp_reconnect"])
 
+# V8 · C06: alguien empieza a seguir al prestador → aviso en la app y push, con el nombre de pila (una vez por persona)
+q("insert into follows (user_id, provider_id) values (%s, %s)", (ana, pid2))
+seg = q("select id, body from provider_notices where provider_id=%s and kind='new_follower'", (pid2,))
+ok("C06: seguir deja el aviso en la app del prestador con el nombre de pila", len(seg) == 1 and seg[0][1] == "Ana empezó a seguirte." and "Pérez" not in seg[0][1])
+ok("C06: …y el push al prestador (Nuevos seguidores)", [r[0] for r in cola(owner2, "new_follower")] == ["new_follower"])
+q("delete from follows where user_id=%s and provider_id=%s", (ana, pid2)); q("insert into follows (user_id, provider_id) values (%s, %s)", (ana, pid2))
+ok("C06: dejar de seguir y volver a seguir no lo repite", q("select count(*) from provider_notices where provider_id=%s and kind='new_follower'", (pid2,))[0][0] == 1)
 # ---------- 4. Lo que manda la función: lo mínimo ----------
 D = due()
 by_kind = {}
@@ -225,12 +232,21 @@ mrs = sorted(by_kind["mp_reconnect"], key=lambda x: x["title"])
 ok("reconectar Mercado Pago: lleva al perfil", mrs[1]["title"] == "Volvé a conectar Mercado Pago" and mrs[1]["url"] == "/panel/perfil")
 ok("V6 · «Avisarle» del admin: «Conectá Mercado Pago», al perfil, urgente", mrs[0]["title"] == "Conectá Mercado Pago" and mrs[0]["url"] == "/panel/perfil"
    and mrs[0]["urgency"] == "high" and "Conectalo desde tu perfil" in mrs[0]["body"])
+nf = by_kind["new_follower"][0]
+ok("C06: push «Nuevo seguidor» · «Ana empezó a seguirte.», lleva a Trabajos del panel", nf["title"] == "Nuevo seguidor" and nf["body"] == "Ana empezó a seguirte." and nf["url"] == "/panel/trabajos")
 everything = " ".join(d["title"] + " " + d["body"] for d in D.values())
 ok("ninguna notificación lleva montos, DNI, apellido ni teléfono", "$" not in everything and "30111900" not in everything and "Pérez" not in everything and "2284" not in everything)
 ok("cada notificación va al endpoint de su dispositivo", {d["endpoint"] for d in D.values()} >= {ep_ana, ep_ana2, ep_owner, ep_owner2})
 ok("lo que se tomó queda reservado (otra corrida no lo manda dos veces)", due() == {})
 
 # ---------- 5. Descartes al mandar ----------
+own3 = mkuser("seg3@test.ar", "Seg Tres"); sub(own3)
+pid3 = q("select register_provider('Seguidores Push', 'Calle 3', array['b'], '2284 3', null)", uid=own3)[0][0]
+q("update profiles set push_followers = false where id = %s", (own3,))
+q("insert into follows (user_id, provider_id) values (%s, %s)", (ana, pid3))
+ok("C06: con «Nuevos seguidores» apagado no hay push (el aviso en la app queda)", cola(own3, "new_follower") == []
+   and q("select count(*) from provider_notices where provider_id=%s and kind='new_follower'", (pid3,))[0][0] == 1)
+
 q("update push_outbox set next_attempt_at = now() where status = 'pending'")
 q("update profiles set push_notices = false where id = %s", (ana,))
 D = due()
