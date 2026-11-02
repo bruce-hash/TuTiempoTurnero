@@ -263,7 +263,7 @@ jobs:
         run: npm run test:funciones
 
   apache:
-    name: Apache (.htaccess real · fallback, HTTPS, CSP)
+    name: Apache y LiteSpeed (.htaccess real · fallback, HTTPS, CSP)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -295,6 +295,9 @@ jobs:
 
       - name: Probar el .htaccess (rutas profundas, 404, HTTPS, CSP, retornos ?mp= y ?token_hash=)
         run: node pruebas/htaccess.mjs dist
+
+      - name: C02 · el mismo .htaccess con OpenLiteSpeed (el servidor de Hostinger, versión libre)
+        run: node pruebas/litespeed.mjs dist
 
       - name: Log de Apache
         if: failure()
