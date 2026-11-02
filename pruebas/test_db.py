@@ -866,5 +866,42 @@ ok("alta por pasos: con un servicio y Mercado Pago conectado, my_setup lo reflej
 ok("alta por pasos: un cliente sin negocio recibe null", q("select my_setup()", uid=mkuser("cli.setup@test.ar", "Cli"))[0][0] is None)
 ok("alta por pasos: nadie puede guardar un paso fuera de 1 a 5 (constraint)", err(q("update provider_settings set setup_done='{7}' where provider_id=%s", (p_s,))))
 
+# ---------- D33 · cuentas separadas: una cuenta es de cliente o de negocio ----------
+dueno33 = mkuser("negocio33@test.ar", "Negocio")
+p33 = q("select register_provider('Negocio D33', 'Calle 33', array['b'], '2284 3333', null)", uid=dueno33)[0][0]
+q("update providers set status='active' where id=%s", (p33,))
+q("update provider_settings set online=true, notice_min=0 where provider_id=%s", (p33,))
+q("insert into provider_hours select %s, g, 1, '08:00', '20:00' from generate_series(0, 6) g on conflict do nothing", (p33,))
+s33 = q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Corte',30,8000) returning id", (p33,), uid=dueno33)[0][0]
+conectar_mp(p33)
+d33 = next_weekday(3)
+otro33 = mkuser("otronegocio33@test.ar", "Otro negocio")
+q("select register_provider('Otro Negocio D33', 'Calle 34', array['u'], '2284 3434', null)", uid=otro33)
+rb = q("select book_slot(%s, %s)", (s33, dt.datetime.combine(d33, dt.time(10, 0), tz)), uid=otro33)
+ok("D33: una cuenta de negocio no puede reservar en otro negocio", err(rb, "business_account"), str(rb))
+ok("D33: …ni seguir", err(q("insert into follows (user_id, provider_id) values (%s, %s)", (otro33, p33), uid=otro33), "business_account"))
+ok("D33: …ni anotarse para que le avisen", err(q("insert into waitlist (user_id, provider_id, day) values (%s, %s, %s)", (otro33, p33, d33), uid=otro33), "business_account"))
+ok("D33: …ni dejar una reseña", err(q("insert into reviews (provider_id, client_id, author, stars) values (%s, %s, 'Otro', 5)", (p33, otro33)), "business_account"))
+cli33 = mkuser("cliente33@test.ar", "Cliente 33")
+r33 = q("select book_slot(%s, %s)", (s33, dt.datetime.combine(d33, dt.time(10, 0), tz)), uid=cli33)
+ok("D33: una cuenta de cliente reserva como siempre", not err(r33), str(r33))
+ok("D33: un turno a mano del prestador (con un cliente cualquiera) sigue andando",
+   not err(q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at) values (%s,'A mano','Corte','manual','confirmed',%s,%s)",
+             (p33, dt.datetime.combine(d33, dt.time(15, 0), tz), dt.datetime.combine(d33, dt.time(15, 30), tz)), uid=dueno33)))
+q("insert into follows (user_id, provider_id) values (%s, %s)", (cli33, p33), uid=cli33)
+ok("D33: una cuenta con historial de cliente no puede registrar un negocio", err(q("select register_provider('Mi Negocio', 'x', array['u'], '2284 1', null)", uid=cli33), "client_history"))
+mh = q("select my_client_history()", uid=cli33)[0][0]
+ok("D33: my_client_history cuenta turnos, seguidos y reseñas", mh["any"] is True and mh["follows"] == 1 and mh["bookings"] == 0)
+nueva33 = mkuser("nueva33@test.ar", "Nueva")
+ok("D33: una cuenta sin historial ve que no tiene", q("select my_client_history()", uid=nueva33)[0][0]["any"] is False)
+ok("D33: …y puede registrar su negocio", not err(q("select register_provider('Negocio Nuevo 33', 'x', array['u'], '2284 1', null)", uid=nueva33)))
+ok("D33: un cobro abandonado (hold vencido) no cuenta como historial",
+   q("select has_client_history(%s)", (mkuser("solo.hold@test.ar", "Hold"),))[0][0] is False)
+adm33 = mkuser("admin33@test.ar", "Admin 33")
+q("insert into app_admins (user_id) values (%s)", (adm33,))
+q("insert into follows (user_id, provider_id) values (%s, %s)", (adm33, p33), uid=adm33)
+ok("D33: una cuenta admin sigue como hoy (con historial puede tener un negocio)", not err(q("select register_provider('Negocio Admin', 'x', array['b'], '2284 1', null)", uid=adm33)))
+ok("D33: sin sesión, my_client_history no devuelve nada", q("select my_client_history()", role="anon") == [] or err(q("select my_client_history()", role="anon")))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
