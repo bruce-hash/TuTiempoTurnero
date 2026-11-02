@@ -169,6 +169,26 @@ registerClick("admDni", (ev, el, act) => {
   return;
 });
 // activar o suspender (suspender pide un segundo toque); en la demo, activar una solicitud la convierte en prestador
+// C41/C42 (V6): "Avisarle" a un prestador activo sin Mercado Pago: le llega un aviso en la app y por push con el camino
+// para conectarlo (uno por día; en la demo solo se marca)
+registerClick("admNudge", (ev, el, act) => {
+  const id = +el.dataset.id;
+  const done = (sent) => {
+    S.admNudged = { ...(S.admNudged || {}), [id]: true };
+    toast(sent ? "Listo: le avisamos que conecte Mercado Pago (en la app y en el celular)." : "Ya le avisamos hoy: mañana le podés volver a avisar.");
+    render();
+  };
+  if (!LIVE) {
+    return done(true);
+  }
+  el.disabled = true;
+  api.m
+    .adminNudgeMp({ id })
+    .then((res) => done(!res || res.sent !== false))
+    .catch(() => {
+      el.disabled = false;
+    });
+});
 registerClick("admSet", (ev, el, act) => {
   const id = +el.dataset.id;
   const status = el.dataset.s;

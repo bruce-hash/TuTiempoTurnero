@@ -18,6 +18,8 @@ Object.assign(LM, {
     ),
   adminSetSiteUrl: (url) => saved(sb.rpc("admin_set_site_url", { p_url: url })),
   adminSetRequireDni: (on) => saved(sb.rpc("admin_set_require_dni", { p_on: on })),
+  // C41/C42 (V6): "Avisarle" a un prestador activo sin Mercado Pago (aviso en la app y push; uno por día)
+  adminNudgeMp: (prov) => saved(sb.rpc("admin_nudge_mp", { p_provider: prov.id })),
   adminSetProvider: (providerId, status, verified) =>
     saved(
       sb.rpc("admin_set_provider", {
