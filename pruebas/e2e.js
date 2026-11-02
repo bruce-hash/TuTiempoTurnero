@@ -350,8 +350,31 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   const msum = await pg.evaluate(() => (document.querySelector(".msum") || {}).textContent || "");
   ok("C33: el resumen del mes separa ingresos por origen y gastos fijos y de productos", /Resumen de [A-ZÁÉÍÓÚ]/.test(msum) && msum.includes("Sin turno") && msum.includes("Gastos fijos") && msum.includes("$150.000") && /Balance: /.test(msum), msum);
   ok("C32: los meses van con mayúscula y el balance negativo en rojo", /Balance de [A-ZÁÉÍÓÚ]/.test(await pg.locator(".kpi.big").innerText()) && (await pg.locator(".msum .mbal.neg").count()) === 1);
+  // C31 (V4 resto): gastos fijos precargados, sin monto; se cargan con ✎ y se repiten solos
+  {
+    const sofiP = (await q("select id from providers where name like 'Sofía%'"))[0].id;
+    ok("C31: precargados alquiler, luz, gas, internet y monotributo (sin monto)", (await q("select count(*)::int c from fixed_expenses where provider_id=$1", [sofiP]))[0].c === 5
+       && /Gastos fijos/.test(await txt()) && /Monotributo/.test(await txt()) && /Sin monto: tocá ✎ para cargarlo/.test(await txt()));
+    const luz = (await q("select id from fixed_expenses where provider_id=$1 and concept='Luz'", [sofiP]))[0].id;
+    await pg.click(`[data-act=fxEdit][data-id="${luz}"]`); await wait(200);
+    await pg.fill("#fxm", "25000"); await pg.click("#fFixed button[type=submit]");
+    ok("C31: el monto de la luz queda como gasto de este mes (desde este mes en adelante)", await until("select amount from expenses where fixed_id=$1", [luz], (r) => r.length === 1 && r[0].amount === 25000)
+       && (await q("select amount from fixed_expenses where id=$1", [luz]))[0].amount === 25000);
+    await wait(400);
+    ok("C31: …y se ve en Gastos fijos con el total", /Gastos fijos · \$25\.000/i.test(await txt()));
+    await pg.click("[data-act=fxNew]"); await wait(200);
+    await pg.fill("#fxc", "Seguro del local"); await pg.fill("#fxm", "9000"); await pg.click("#fFixed button[type=submit]");
+    const seg = await until("select e.amount from expenses e join fixed_expenses f on f.id=e.fixed_id where f.concept='Seguro del local'", [], (r) => r.length === 1 && r[0].amount === 9000);
+    ok("C31: un gasto fijo nuevo entra este mes", seg);
+    await wait(400);
+    const segId = (await q("select id from fixed_expenses where concept='Seguro del local'"))[0].id;
+    await pg.click(`[data-act=fxEdit][data-id="${segId}"]`); await wait(200); await pg.click("[data-act=fxStop]");
+    ok("C31: «Dejar de repetirlo desde este mes» lo saca", await until("select count(*)::int c from expenses where fixed_id=$1", [segId], (r) => r[0].c === 0));
+    await wait(400);
+  }
   await pg.click("[data-act=closeMonth]"); await wait(800);
   ok("mes cerrado en la base", (await q("select count(*)::int c from cash_closings where kind='month'"))[0].c === 1);
+  ok("C31: con el mes cerrado, los gastos fijos de ese mes no se editan", (await pg.locator("[data-act=fxEdit]").count()) === 0 && /Mes cerrado: los gastos fijos de este mes quedan como están/.test(await txt()));
   // V4b · C25 "Cargar diferencia": al marcar "Asistió", el resto en dos medios; después se cambia desde la Caja del día
   {
     const [sv] = await q("select s.id, s.provider_id from services s join providers p on p.id=s.provider_id where p.name like 'Sofía%' and s.active order by s.id limit 1");
@@ -386,6 +409,32 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pg.click('.movs [data-act=restMedio][data-m="Transferencia"]'); await wait(800);
     ok("V4b: un solo medio vuelve al resto entero (sin partes)", (await q("select rest_parts, rest_method from bookings where id=$1", [bd.id]))[0].rest_method === "transfer"
        && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
+    // C30 (V4 resto): antes de cerrar el día, lo pendiente: turnos de hoy sin marcar y cobros sin medio de pago (el
+    // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba)
+    await q("insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1,$2,'Pendiente C30','Corte','manual','confirmed',($3||' 00:00')::timestamp at time zone 'America/Argentina/Buenos_Aires',($3||' 00:30')::timestamp at time zone 'America/Argentina/Buenos_Aires',4000)", [sv.provider_id, sv.id, hoyBA]);
+    await pg.reload(); await wait(1500);
+    await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
+    if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(600); }
+    ok("C30: antes de cerrar avisa el turno de hoy sin marcar", /Antes de cerrar · 1 pendiente/i.test(await txt()) && (await pg.locator('.pendday li:has-text("Pendiente C30") [data-act=bDone]').count()) === 1
+       && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText()));
+    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=bDone]'); await wait(900);
+    ok("C30: «Vino» lo marca y pasa a pedir con qué pagó", (await q("select status from bookings where client_name='Pendiente C30'"))[0].status === "done"
+       && /¿Cómo te pagó \$4\.000\?/.test(await pg.locator(".pendday").innerText()));
+    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=restMedio][data-m="Efectivo"]'); await wait(800);
+    ok("C30: con el medio anotado no queda nada pendiente y el botón vuelve a «Cerrar la caja»", (await q("select rest_method from bookings where client_name='Pendiente C30'"))[0].rest_method === "cash"
+       && (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText()));
+    // C36 (V4 resto): precio de compra y "Vendí uno" desde Productos, que entra en la Caja del día
+    await pg.click("[data-btab=productos]"); await wait(300);
+    await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Cera C36"); await pg.fill("#pnp", "8000"); await pg.fill("#pnc", "4500"); await pg.fill("#pns", "2");
+    await pg.click("#fProd button[type=submit]");
+    ok("C36: el producto guarda el precio de compra y muestra lo que ganás", await until("select cost from products where name='Cera C36'", [], (r) => r[0]?.cost === 4500) && /compra \$4\.500 · ganás \$3\.500/.test(await txt()));
+    await wait(500);
+    await pg.click('.plist li:has-text("Cera C36") [data-act=prodSell]'); await wait(200);
+    await pg.click('.plist li:has-text("Cera C36") [data-act=prodSellMedio][data-m="Transferencia"]');
+    ok("C36: «Vendí uno» la carga en la Caja del día con su medio y descuenta el stock", await until("select amount, method from walkins where kind='product' and description='Cera C36'", [], (r) => r.length === 1 && r[0].amount === 8000 && r[0].method === "transfer")
+       && (await q("select stock from products where name='Cera C36'"))[0].stock === 1);
+    await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
+    ok("C36: …y se ve en los movimientos de hoy", (await pg.locator('.movs li:has-text("Cera C36")').count()) === 1);
   }
   // rubros y servicios: sumar Masajes
   await pg.click("[data-btab=perfil]"); await wait(300);
