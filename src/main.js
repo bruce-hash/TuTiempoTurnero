@@ -249,5 +249,13 @@ if (import.meta.env.VITE_TEST_HOOKS) {
 if (!CONFIG_OK && !import.meta.env.VITE_DEMO) {
   faltaConfig();
 } else {
-  boot();
+  // C02: si el arranque falla antes de resolver la dirección, igual se sale de la carga (nunca queda colgada)
+  boot()
+    .catch((err) => console.error(err))
+    .finally(() => {
+      if (S.booting) {
+        S.booting = false;
+        render();
+      }
+    });
 }

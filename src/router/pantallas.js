@@ -14,7 +14,7 @@ import { svcByKey } from "../ui/sellos.js";
 import { toast } from "../ui/toast.js";
 import { setBtab } from "../views/prestador/panel.js";
 import { nextStep } from "../lib/alta.js";
-import { ADMIN_TABS, PANEL_TABS, PROFILE_TABS, keyOf } from "./direcciones.js";
+import { ADMIN_TABS, PANEL_TABS, PROFILE_TABS, SLUG_OF, keyOf } from "./direcciones.js";
 
 const safePath = (value) => (typeof value === "string" && /^\/(?!\/)/.test(value) && !/[\\\s]/.test(value) ? value : null);
 
@@ -358,6 +358,7 @@ export async function applyUrl(href) {
       if (!pid) {
         return showNotFound(path);
       }
+      SLUG_OF[pid] = first;
       return openProfile(pid, parts, params, path);
     }
   }

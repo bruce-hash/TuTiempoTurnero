@@ -2,6 +2,8 @@
 // view/pid (pantalla del cliente), role (cliente, barbero = prestador, admin), btab (pestaña del panel),
 // svc/day/slot/rep (la reserva en curso), me (prestador del panel).
 export const fresh = () => ({
+  // C02: true hasta que el enrutador resolvió la dirección y la sesión; mientras tanto solo se dibuja la carga
+  booting: true,
   role: "cliente",
   view: "home",
   pid: null,
@@ -104,4 +106,6 @@ export let S = fresh();
 // Reinicio de la demo: S pasa a ser un estado nuevo (los módulos que importan S ven el nuevo).
 export function resetState() {
   S = fresh();
+  // la app ya arrancó: un estado nuevo no vuelve a la carga del arranque (C02)
+  S.booting = false;
 }

@@ -33,8 +33,13 @@ export const META = { homeDesc: "" };
 
 // ---------- Del estado a la URL ----------
 // perfil de un prestador: /<slug>, o /p/<id> si todavía no se sabe el slug o es una palabra reservada
+// C02: el slug con el que se abrió la dirección, mientras todavía no llegaron los datos del perfil (la barra no pasa
+// por /p/<id> mientras carga)
+export const SLUG_OF = {};
 export function profilePath(prov, pid) {
-  return prov && prov.slug && !isReservedSlug(prov.slug) ? "/" + prov.slug : "/p/" + (prov ? prov.id : pid);
+  const id = prov ? prov.id : pid;
+  const slug = (prov && prov.slug) || SLUG_OF[id];
+  return slug && !isReservedSlug(slug) ? "/" + slug : "/p/" + id;
 }
 // link para compartir (copiar, QR): siempre con el dominio en el que está corriendo la app (Bloque B, H24)
 export const profileUrl = (prov) => location.origin + profilePath(prov, prov && prov.id);

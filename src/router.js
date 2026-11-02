@@ -93,6 +93,8 @@ export async function startRouter(href) {
   started = true;
   nextReplace = true;
   window.addEventListener("popstate", onPopState);
+  // C02: recién ahora (dirección y sesión resueltas) se dibuja la pantalla
+  S.booting = false;
   render();
 }
 // ir a una dirección desde el código (por ejemplo, después de ingresar): queda en el historial
