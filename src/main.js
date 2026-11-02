@@ -43,6 +43,7 @@ import { S } from "./state.js";
 import { P, store } from "./store.js";
 import { startRouter } from "./router.js";
 import { render } from "./ui/render.js";
+import { reloadTarget } from "./lib/recarga.js";
 import { toast } from "./ui/toast.js";
 import "./demo/index.js";
 
@@ -156,6 +157,11 @@ async function boot() {
     startAgendaRefresh();
     api.requireDni().catch(() => {});
     // dirección con la que arranca el enrutador: la actual, salvo que el arranque ya decida la pantalla
+    // C02: si una recarga cayó en el inicio porque el servidor no devolvió la dirección, la de antes de recargar
+    const back = reloadTarget();
+    if (back) {
+      history.replaceState(null, "", back);
+    }
     let start = location.href;
     if (S.recovering && S.user) {
       S.view = "newpass";
@@ -222,6 +228,10 @@ async function boot() {
     if (demoBar && demoBar.parentNode) {
       demoBar.parentNode.insertBefore(bar, demoBar.nextSibling);
     }
+  }
+  const back = reloadTarget();
+  if (back) {
+    history.replaceState(null, "", back);
   }
   await startRouter(location.href);
 }

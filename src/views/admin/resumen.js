@@ -5,6 +5,7 @@ import { CATS } from "../../lib/rubros.js";
 import { dniRequired } from "../../lib/verificacion.js";
 import { admIc } from "./admin.js";
 import { admReview } from "./revisar.js";
+import { S } from "../../state.js";
 import { store } from "../../store.js";
 
 // resumen del admin: comisión del mes, alertas, hoy y ayer, últimas 4 semanas, indicadores, más activos y rubros
@@ -76,6 +77,10 @@ export function admRes(data) {
       ? `⛔ <b>${st.providers_suspended}</b> suspendido${+st.providers_suspended > 1 ? "s" : ""}.`
       : "",
     nsPct >= 8 ? `⚠ Las faltas llegan al ${nsPct}% de los turnos del mes.` : "",
+    // C02: el servidor no devuelve la app en las direcciones internas (recargar o abrir un link lleva al inicio)
+    S.routesOk === false
+      ? "🌐 <b>El sitio no devuelve la app en sus direcciones</b> (por ejemplo /panel/agenda): al recargar o al abrir un link o el QR de un perfil se puede volver al inicio. Revisá que el archivo .htaccess esté subido a la carpeta del sitio (docs/02, «Hostinger»)."
+      : "",
   ].filter(Boolean);
   const byCatMonth = st.by_category_month || {};
   const byCat = st.by_category || {};
