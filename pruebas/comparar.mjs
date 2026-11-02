@@ -89,6 +89,9 @@ async function pagina(browser, { relojFijo }) {
 // recuadro fijos; el resto de la pantalla se compara igual, texto y píxeles.
 async function normalizar(page) {
   await page.evaluate(() => {
+    // D31 (a propósito): el «primer turno libre» de hoy sale de la duración del servicio (antes, de otra grilla): según
+    // la hora del CI la referencia ofrece 15:30 y la versión de hoy 16:00. El botón queda con un texto fijo.
+    document.querySelectorAll("#app [data-quick]").forEach((btn) => { btn.textContent = "⚡ Primer turno: HORARIO"; });
     document.querySelectorAll("#app p.lbl").forEach((label) => {
       if (!/^(Tu link de turnos|Sumá seguidores)$/.test(label.textContent.trim())) return;
       const box = label.parentElement;
@@ -249,7 +252,14 @@ async function recorridoVivo(browser, url) {
   await clic(page, ".grid .card:has-text('Sofía') [data-go=perfil]");
   await page.waitForSelector(".sgroup");
   await clic(page, ".sgroup.seg-u .svci");
-  await clic(page, "[data-quick]");
+  // no el «primer turno libre»: cerca de la hora actual, la versión de referencia (horarios de antes de D31) ofrece
+  // horarios que la base de hoy ya no acepta (slot_not_available) y la comparación dependía de la hora del CI. Un día
+  // abierto de dentro de 5 días o más y su primer horario (la apertura): el mismo en las dos versiones, a cualquier hora.
+  const desde = new Date(Date.now() + 5 * 864e5).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  const dia = await page.evaluate((d) => [...document.querySelectorAll("[data-day]")].map((b) => ({ day: b.dataset.day, ok: !b.className.match(/closed|full/) })).find((x) => x.ok && x.day >= d)?.day, desde);
+  if (!dia) throw new Error("comparar: no hay un día abierto desde " + desde);
+  await clic(page, `[data-day="${dia}"]`);
+  await clic(page, "[data-slot]");
   await foto(page, pasos, "perfil con horario elegido");
   await clic(page, "[data-act=reservarT]");
   await clic(page, "[data-act=authMode][data-m=code]");
