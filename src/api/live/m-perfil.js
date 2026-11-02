@@ -137,6 +137,8 @@ Object.assign(LM, {
         })
         .eq("id", review.id),
     ),
+  // C26 (V5): el nombre de un trabajo ya subido (si todavía se está subiendo, lo guarda la subida)
+  renameMedia: (media) => (media.id ? saved(sb.from("media").update({ label: media.label || null }).eq("id", media.id)) : Promise.resolve()),
   // sube la foto o el video al bucket media y completa media.id y media.url con lo guardado
   upload: async (file, media) => {
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -154,7 +156,8 @@ Object.assign(LM, {
           provider_id: S.me,
           storage_path: storagePath,
           kind: file.type.startsWith("video") ? "video" : "image",
-          label: file.name.slice(0, 80),
+          // el nombre que le haya puesto mientras se subía (C26), o ninguno
+          label: media.label || null,
         })
         .select("id")
         .single(),

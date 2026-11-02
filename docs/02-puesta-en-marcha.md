@@ -105,6 +105,11 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### V5 (Trabajos y reseñas)
+- Migración nueva: `20261102200000_trabajos_resenas.sql` (C26: el prestador renombra sus trabajos, `update (label)` con
+  su política; C28: el pedido de reseña queda siempre encendido, también para los que lo habían apagado). Sin Edge
+  Functions ni cambios de `config.js` o `.htaccess`.
+
 ### V4b (Cargar diferencia)
 - Migración nueva: `20261102180000_cargar_diferencia.sql` (`bookings.rest_parts`, `set_rest_parts`; `set_rest_method`
   borra las partes; `provider_finance` no cuenta lo que quedó sin cobrar del resto). No cambia datos: los turnos de antes

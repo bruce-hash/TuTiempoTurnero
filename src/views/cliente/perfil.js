@@ -96,7 +96,7 @@ export function vPerfil() {
   if (tab === "works") {
     body = `<div class="panel">${
       nMedia
-        ? `<div class="gal">${provComm.media.map((item, index) => `<button class="gi" data-act="story" data-i="${index}" aria-label="Ver ${esc(item.label || "trabajo")}">${item.url ? (item.video ? `<video src="${esc(item.url)}" muted playsinline preload="metadata"></video><span class="gi-play">▶</span>` : `<img src="${esc(item.url)}" alt="${esc(item.label)}" loading="lazy">`) : `<span class="gi-ph" style="--h:${+item.hue || 0}"><span>${item.video ? "▶ " : ""}${esc(item.label)}</span></span>`}</button>`).join("")}</div>
+        ? `<div class="gal">${provComm.media.map((item, index) => `<button class="gi" data-act="story" data-i="${index}" aria-label="Ver ${esc(item.label || "trabajo")}">${item.url ? (item.video ? `<video src="${esc(item.url)}" muted playsinline preload="metadata"></video><span class="gi-play">▶</span>` : `<img src="${esc(item.url)}" alt="${esc(item.label)}" loading="lazy">`) : `<span class="gi-ph" style="--h:${+item.hue || 0}"><span>${item.video ? "▶ " : ""}${esc(item.label)}</span></span>`}${item.url && item.label ? `<span class="gi-cap">${esc(item.label)}</span>` : ""}</button>`).join("")}</div>
       <p class="note" style="margin:10px 0 0">Tocá una foto para verlas como historia.</p>`
         : '<p class="note">Todavía no subió trabajos.</p>'
     }</div>`;
