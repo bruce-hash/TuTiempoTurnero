@@ -49,7 +49,7 @@ const FAKE = (pass) => `(() => {
     page.on("console", (m) => { if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) csp.push(m.text()); });
     return page;
   }
-  const open = async (page, route) => { await page.goto(BASE + route); await page.waitForFunction(() => document.querySelector("#app").children.length); await page.waitForTimeout(400); };
+  const open = async (page, route) => { await page.goto(BASE + route); await page.waitForFunction(() => (document.querySelector("#app").children.length && !document.querySelector("#app .bootload"))); await page.waitForTimeout(400); };
   const text = (page) => page.locator("#app").innerText();
   const last = async (path) => (await log()).filter((x) => x.captcha === path).at(-1);
 
