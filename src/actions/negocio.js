@@ -1,4 +1,5 @@
 import { openAuth } from "./auth.js";
+import { signOutHere } from "./cuentas.js";
 import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
@@ -66,6 +67,13 @@ registerClick("bizStart", (ev, el, act) => {
   navigate(bizStartPath());
 });
 registerClick("bizGo", (ev, el, act) => toStep(+el.dataset.n));
+// D33: una cuenta de cliente sin historial se usa para el negocio; con historial (o si prefiere), una cuenta aparte
+registerClick("bizUseThis", (ev, el, act) => toStep(1));
+registerClick("bizNewAccount", async (ev, el, act) => {
+  await signOutHere();
+  setPending({ a: "negocio" });
+  navigate("/registrar-negocio");
+});
 registerClick("bizBack", (ev, el, act) => {
   S.biz = {};
   toStep(Math.max(1, (+S.bizStep || 2) - 1));

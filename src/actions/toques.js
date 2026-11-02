@@ -32,7 +32,7 @@ document.addEventListener("click", (ev) => {
   const goEl = ev.target.closest("[data-go]");
   if (goEl) {
     ev.preventDefault();
-    // el prestador entra siempre a su Agenda: el logo lo lleva ahí (para ver TuTiempo como cliente, "Reservar como cliente")
+    // el prestador entra siempre a su Agenda: el logo lo lleva ahí
     if (goEl.id === "logoLink" && S.barberAuth && S.role !== "admin") {
       S.role = "barbero";
       S.preview = false;

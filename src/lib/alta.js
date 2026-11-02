@@ -13,8 +13,9 @@ export const stepDone = (n, pid = ME()) => stepsDone(pid).includes(n);
 export const nextStep = (pid = ME()) => [1, 2, 3, 4, 5].find((n) => !stepDone(n, pid)) || null;
 // adónde lleva "Registrá tu negocio" / "Seguir con el alta" a alguien con sesión
 export function bizStartPath() {
+  // D33: una cuenta de cliente elige antes si la usa para el negocio (si recién se creó para eso, va directo al paso 1)
   if (!S.barberAuth) {
-    return "/registrar-negocio/1";
+    return S.bizNew ? "/registrar-negocio/1" : "/registrar-negocio";
   }
   const n = nextStep();
   return n ? "/registrar-negocio/" + n : "/panel/agenda";

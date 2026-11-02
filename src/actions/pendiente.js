@@ -9,6 +9,8 @@ import { S } from "../state.js";
 import { render } from "../ui/render.js";
 import { setFollow } from "./navegacion.js";
 import { joinWaitlist } from "./reserva.js";
+import { blockBusiness } from "./cuentas.js";
+import { isBusiness } from "../lib/cuentas.js";
 
 // Ingreso y registro: después de ingresar (o de tocar el link del email), sigue sola la acción que pidió ingresar.
 //   reservar → la confirmación del turno con ese horario (si ya lo tomó otro, la ficha en ese día para elegir otro;
@@ -21,6 +23,12 @@ export async function resumePending() {
   }
   if (pending.a === "negocio") {
     await navigate(bizStartPath());
+    return;
+  }
+  // D33: con una cuenta de negocio la acción de cliente no sigue: el aviso, con la salida a la cuenta personal
+  if (isBusiness()) {
+    await navigate("/panel/agenda");
+    blockBusiness(null, pending);
     return;
   }
   let prov = pr(pending.pid);

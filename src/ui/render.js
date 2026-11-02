@@ -1,5 +1,6 @@
 import { mountCaptchas } from "../lib/captcha.js";
 import { authModal } from "./ingreso.js";
+import { isBusiness } from "../lib/cuentas.js";
 import { pwaAfterRender } from "../lib/pwa.js";
 import { $ } from "../lib/dom.js";
 import { ME, pr } from "../lib/prestadores.js";
@@ -47,17 +48,17 @@ function nav() {
     });
     return;
   }
-  if (S.role === "barbero") {
+  // D33: una cuenta de negocio tiene el mismo menú en cualquier pantalla
+  if (S.role === "barbero" || isBusiness()) {
     const prov = pr(ME());
     $("#nav").innerHTML = accountMenu({
       who: prov,
       email,
       items: [
-        // C13/C14: una cuenta = una persona; el prestador también reserva como cliente (Mis turnos sale del panel)
+        // D33: una cuenta de negocio no reserva (sin Mis turnos ni "Reservar como cliente")
         ["📅", "Mi agenda", 'data-act="toPanel"'],
         ["👁", "Ver mi perfil público", 'data-act="preview"'],
-        ["🛒", "Reservar como cliente", 'data-act="asClient" data-to="home"'],
-        ...(S.user ? [["🧾", "Mis turnos (como cliente)", 'data-act="asClient" data-to="misturnos"', count], ["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"']] : []),
+        ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"']] : []),
         ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
         ...installItem(),
         ["↪", "Cerrar sesión", 'data-act="salirBarbero"'],
@@ -147,7 +148,10 @@ function renderInner() {
   if (app) {
     app.insertAdjacentHTML("beforeend", installGuide() + updateBar());
   }
-  // la ventana de ingreso (se cierra sola al ingresar)
+  // la ventana de ingreso (se cierra sola al ingresar); el aviso de D33 solo con sesión
+  if (S.bizBlock && !S.user) {
+    S.bizBlock = null;
+  }
   if (S.authModal && S.user) {
     S.authModal = null;
   }
@@ -224,10 +228,6 @@ function renderMain() {
       default:
         html = vHome();
     }
-  }
-  // C13/C14: el prestador reservando como cliente, con la vuelta a su agenda a mano
-  if (S.role === "cliente" && S.barberAuth && S.user && S.view !== "negocio") {
-    html = '<div class="asclient" role="status"><span>Estás reservando como cliente</span><button class="btn btn-ghost btn-sm" data-act="toPanel">Volver a mi agenda</button></div>' + html;
   }
   $("#app").innerHTML = html;
 }

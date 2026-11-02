@@ -1,4 +1,6 @@
 import { openAuth } from "./auth.js";
+import { blockBusiness } from "./cuentas.js";
+import { isBusiness } from "../lib/cuentas.js";
 import { registerClick } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
@@ -107,6 +109,11 @@ registerClick("seguir", (ev, el, act) => {
   // sin sesión: la ventana de ingreso con el ticket "Seguir a…" (al ingresar queda hecho)
   if (!S.user && S.role !== "barbero") {
     openAuth(el, { pending: { a: "seguir", pid } });
+    return;
+  }
+  // D33: una cuenta de negocio no sigue a otros negocios
+  if (isBusiness()) {
+    blockBusiness(el, { a: "seguir", pid });
     return;
   }
   setFollow(pid, !isFol(pid));

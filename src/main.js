@@ -17,6 +17,7 @@ import "./actions/cliente.js";
 import "./actions/contrasena-nueva.js";
 import "./actions/crear-cuenta.js";
 import "./actions/cuenta.js";
+import "./actions/cuentas.js";
 import "./actions/formularios.js";
 import "./actions/navegacion.js";
 import "./actions/prestador-agenda.js";

@@ -1,7 +1,8 @@
 import { PAGE } from "../config.js";
 import { activity, norm, rot } from "../lib/prestadores.js";
 import { CATS, catInfo } from "../lib/rubros.js";
-import { P } from "../store.js";
+import { P, store } from "../store.js";
+import { S } from "../state.js";
 
 // Modo demo: el listado y los conteos salen de los datos de ejemplo en memoria; el resto no hace nada (api.m.* son
 // funciones vacías y las pantallas cambian los datos directamente cuando no es LIVE).
@@ -41,6 +42,12 @@ export const demoApi = {
     };
   },
   async loadProvider() {},
+  // D33: en la demo, el historial de cliente sale de sus turnos y de a quién sigue
+  async clientHistory() {
+    const bookings = store.BOOK.filter((booking) => booking.mine).length;
+    const follows = Object.values(S.followingBy || {}).filter(Boolean).length;
+    return { bookings, follows, reviews: 0, any: bookings + follows > 0 };
+  },
   async myBookings() {},
   async book() {
     return null;

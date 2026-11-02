@@ -9,7 +9,22 @@ import { LOGO } from "./iconos.js";
 // y el campo activo queda a la vista. Las páginas /ingresar, /crear-cuenta y /registrar-negocio muestran lo mismo.
 export const AUTH_PAGES = ["login", "register", "negocio"];
 
+// D33: el aviso a una cuenta de negocio que intentó algo de cliente
+function businessBlock() {
+  return `<div class="authmodal" role="dialog" aria-modal="true" aria-labelledby="amTitle">
+   <div class="am-bg" data-act="bizBlockClose"></div>
+   <div class="am-box"><div class="am-grab" aria-hidden="true"></div>
+    <div class="am-top"><span class="logo am-logo" aria-hidden="true">${LOGO}</span><button type="button" class="am-x" data-act="bizBlockClose" aria-label="Cerrar">✕</button></div>
+    <h1 class="am-h" id="amTitle">Las cuentas de negocio no pueden reservar</h1>
+    <p class="am-sub">Para reservar, seguir o dejar una reseña, ingresá con tu cuenta personal.</p>
+    <button type="button" class="btn btn-pri btn-block" data-act="bizSwitch">Cerrar sesión e ingresar con otra cuenta</button>
+    <div class="am-sec" style="justify-content:center"><button type="button" class="lnk" data-act="bizBlockClose">Volver</button></div>
+   </div></div>`;
+}
 export function authModal() {
+  if (S.bizBlock && S.user) {
+    return businessBlock();
+  }
   // ni encima de una página que ya muestra un ingreso (mismos ids): las de ingreso, y Mi perfil y Mis turnos sin sesión
   if (!S.authModal || S.user || S.role !== "cliente" || AUTH_PAGES.includes(S.view) || ["cuenta", "misturnos"].includes(S.view)) {
     return "";

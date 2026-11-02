@@ -64,9 +64,12 @@ function openBiz(parts, path) {
     S.bizStep = 0;
     return showClient("negocio");
   }
-  // con sesión y todavía sin negocio: el paso 1 (crea el negocio)
+  // con sesión de cliente y todavía sin negocio (D33): primero, si usa esta cuenta o una aparte; con /1, el paso 1
   if (!S.barberAuth) {
-    S.bizStep = 1;
+    S.bizStep = word == null && !S.bizNew ? "cuenta" : 1;
+    if (S.bizStep === "cuenta") {
+      S.clientHist = null;
+    }
     return showClient("negocio");
   }
   if (word == null) {
@@ -289,6 +292,10 @@ export async function applyUrl(href) {
     case "cuenta":
       if (parts.length !== 1) {
         return showNotFound(path);
+      }
+      // D33: una cuenta de negocio no tiene Mis turnos (no reserva)
+      if (first === "mis-turnos" && S.user && S.barberAuth && !S.isAdmin) {
+        return applyUrl("/panel/agenda");
       }
       if (needUser(path)) {
         showClient(first === "cuenta" ? "cuenta" : "misturnos");
