@@ -8,6 +8,7 @@ import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { feeOf } from "../../views/prestador/finanzas.js";
 import { MSG_DEF } from "../../views/prestador/mensajes.js";
+import { medioFromDb } from "../../lib/medios.js";
 
 // C22 (V3b): la consulta de los turnos del panel y cómo se pasan a la agenda. Los usan la carga completa (loadMine) y la
 // que vuelve a pedir solo los turnos cada 30 segundos y al volver a la pestaña (refreshAgenda).
@@ -15,7 +16,7 @@ const bookingsQuery = (pid, from, to) =>
   sb
     .from("bookings")
     .select(
-      "id,service_id,client_id,client_name,client_phone,service_name,source,status,starts_at,ends_at,price,discount_pct,paid_mp,paid_wallet,app_fee,client_fee,paid_mp_fee,series_id,addons,buffer_min,pay_method",
+      "id,service_id,client_id,client_name,client_phone,service_name,source,status,starts_at,ends_at,price,discount_pct,paid_mp,paid_wallet,app_fee,client_fee,paid_mp_fee,series_id,addons,buffer_min,pay_method,rest_method",
     )
     .eq("provider_id", pid)
     .gte("starts_at", localToIso(from, "00:00"))
@@ -50,6 +51,8 @@ const bookingFromDb = (pid) => (row) =>
       // un turno en espera de pago se muestra como confirmado: el horario ya está tomado
       status: statusMap[row.status],
       pay: row.pay_method || "mp",
+      // C25 (V4): cómo se cobró el resto en el local (lo anota el prestador en la Caja del día)
+      restMethod: row.rest_method || null,
       series: row.series_id,
       hold: row.status === "hold",
       buf: row.buffer_min || 0,
@@ -184,7 +187,8 @@ export const livePanel = {
       precio: row.amount,
       propina: row.tip,
       hora: isoToLocal(row.at).time,
-      medio: row.method === "mp" ? "Mercado Pago" : "Efectivo",
+      medio: medioFromDb(row.method) || "Efectivo",
+      pid: row.product_id || null,
       cliente: row.client_name || "",
       kind: row.kind === "product" ? "prod" : "svc",
     }));
@@ -211,6 +215,7 @@ export const livePanel = {
       store.OCCD[row.day + "|" + row.hour] = row.busy_min;
     });
     store.MTOT = {};
+    store.MBRK = {};
     S.mpSt = mpSt || {};
     S.mp = S.mpSt.can_charge ? "ok" : "none";
     S.notices = notices || [];
@@ -240,6 +245,12 @@ export const livePanel = {
       gas: row.expenses,
     }));
     return store.MTOT[year];
+  },
+  // C33 (V4): el año mes por mes, separado por origen y tipo de gasto (provider_month_breakdown)
+  async monthBreakdown(year) {
+    const rows = await call(sb.rpc("provider_month_breakdown", { p_year: year }));
+    store.MBRK[year] = (rows || []).map((row) => ({ app: row.app, man: row.man, walk: row.walk, prod: row.prod, fixed: row.exp_fixed, buys: row.exp_products }));
+    return store.MBRK[year];
   },
   m: {},
 };

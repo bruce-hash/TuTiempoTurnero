@@ -105,7 +105,7 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   await page.evaluate(() => { S.setupBy = {}; });
   // prestador y admin
   await role("barbero");
-  for (const tab of ["agenda", "caja", "finanzas", "clientes", "productos", "horarios", "stats", "comunidad", "perfil"]) {
+  for (const tab of ["agenda", "finanzas", "clientes", "productos", "horarios", "stats", "comunidad", "perfil"]) {
     await page.click(`[data-btab=${tab}]`);
     await check(`panel · ${tab}`);
   }

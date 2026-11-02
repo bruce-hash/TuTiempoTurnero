@@ -227,6 +227,19 @@ body.am-open{overflow:hidden}
   .qrsheet .qs-how{font-size:13pt;margin:8mm 0 2mm}
   .qrsheet .qs-link{font-size:15pt;font-weight:700;margin:0}
 }
+/* V4 (C25, C33): movimientos editables de la Caja del día y el resumen del mes */
+.movs li.on{background:var(--brand-soft)}
+.movs li.movask,.plist .movask{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px;margin:2px 0 6px}
+.movask > div{display:grid;gap:2px;min-width:0}.movask span{font-size:13px;color:var(--muted)}
+.movask .medios{display:flex;flex-wrap:wrap;gap:6px}
+.movs li.movform{display:block;padding:0;border:0}
+.pl-acts{display:flex;gap:6px;align-items:center}
+.msum .mhead{font-weight:700;margin:10px 0 6px;font-size:14px}
+.msum .mrow{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px;margin:4px 0}
+.msum .mbar{display:block;height:10px;border-radius:9px;min-width:2px}
+.msum .mbar.in{background:var(--ok)}.msum .mbar.out{background:var(--bad)}
+.msum .mbal{margin:12px 0 0;font-weight:800;font-size:16px}
+.pos{color:var(--ok)}.neg{color:var(--bad)}
 /* Registrá tu negocio (ingreso y registro, aprobado el 1/11): página completa en 5 pasos */
 .biz{max-width:1040px;margin:20px auto 40px;display:grid;grid-template-columns:250px minmax(0,1fr);gap:24px;align-items:start;text-align:left}
 .biz.biz-one{grid-template-columns:minmax(0,1fr);max-width:560px}

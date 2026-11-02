@@ -48,6 +48,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Sin descanso entre turnos (C39).
   - V8 (C52): `src/lib/precios.js` vuelve a pedir los precios del prestador en el perfil y la confirmación (al volver a la
     pestaña, cada minuto y antes de cobrar): el cliente nunca ve un precio y paga otro.
+  - V4: la Caja es "Caja del día" en Finanzas (C34; `src/views/prestador/caja.js` quedó con los formularios). Medios de
+    lo que se cobra en el local en `src/lib/medios.js` (Efectivo, Transferencia, Mercado Pago ↔ cash, transfer, mp): en
+    `walkins.method` y en `bookings.rest_method` (cómo se cobró el resto, `set_rest_method`); `pay_method` es lo que eligió
+    el cliente y no cambia. Resumen del mes: `provider_month_breakdown` en la base.
   - Ingreso y registro (D32): una sola ventana para todos (`src/ui/ingreso.js`, contenido en `src/views/auth/login.js`
     `authBody()`, lo mismo en `/ingresar`, `/crear-cuenta` y `/registrar-negocio`). La acción que pidió ingresar
     (`S.pending`, `src/lib/pendiente.js`: reservar, seguir, lista, negocio; solo ids, vence a las 2 h) se muestra como

@@ -10,6 +10,7 @@ import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { closeDay, dayLines, finTot, ymk } from "../views/prestador/finanzas.js";
+import { medioToDb } from "../lib/medios.js";
 
 registerClick("reopenDay", (ev, el, act) => {
   delete store.CLOSINGS["day|" + TODAY()];
@@ -45,6 +46,8 @@ registerClick(["closePast", "closeAllPast"], (ev, el, act) => {
 });
 registerClick("walkOpen", (ev, el, act) => {
   S.walkOpen = true;
+  S.movEd = null;
+  S.movDel = null;
   S.walkMedio = "Efectivo";
   render();
   const input = $("#wsv");
@@ -56,10 +59,87 @@ registerClick("walkClose", (ev, el, act) => {
   S.walkOpen = false;
   render();
 });
-registerClick("walkDel", (ev, el, act) => {
-  const walk = S.walk.splice(+el.dataset.i, 1)[0];
+// C25 (V4): editar y borrar cada movimiento de la Caja del día. k: "w<índice>" (lo cargado sin turno o una venta) o
+// "b<id>" (un turno: solo el medio con que se cobró el resto)
+const walkOf = (key) => (String(key).startsWith("w") ? S.walk[+String(key).slice(1)] : null);
+registerClick("movEdit", (ev, el, act) => {
+  S.movEd = el.dataset.k;
+  S.movDel = null;
+  S.walkOpen = false;
+  const walk = walkOf(el.dataset.k);
+  S.walkMedio = walk ? walk.medio : S.walkMedio;
+  render();
+});
+registerClick("movEdClose", (ev, el, act) => {
+  S.movEd = null;
+  render();
+});
+registerClick("movDel", (ev, el, act) => {
+  S.movDel = el.dataset.k;
+  S.movEd = null;
+  render();
+});
+registerClick("movDelNo", (ev, el, act) => {
+  S.movDel = null;
+  render();
+});
+registerClick("movDelYes", (ev, el, act) => {
+  const index = +String(el.dataset.k).slice(1);
+  const walk = S.walk.splice(index, 1)[0];
+  S.movDel = null;
+  if (!walk) {
+    return render();
+  }
   api.m.delWalk(walk);
+  // una venta borrada devuelve la unidad al stock
+  const prod = walk.kind === "prod" && store.PRODS.find((item) => (walk.pid && item.id === walk.pid) || item.n === walk.svc);
+  if (prod) {
+    prod.stock++;
+    api.m.setStock(prod);
+  }
   toast("Borraste " + walk.svc + " de las " + walk.hora);
+  render();
+});
+registerSubmit("fWalkEd", (ev) => {
+  const walk = walkOf(S.movEd);
+  if (!walk) {
+    S.movEd = null;
+    return render();
+  }
+  const label = walk.kind === "prod" ? walk.svc : $("#wed_d").value.trim();
+  const price = parsePesos($("#wed_m").value);
+  const time = $("#wed_h").value;
+  const err = (msg) => {
+    $("#wederr").textContent = msg;
+  };
+  if (!label) {
+    return err("Escribí qué cobraste.");
+  }
+  if (isNaN(price)) {
+    return err(PESOS_ERR);
+  }
+  if (price <= 0) {
+    return err("Ingresá cuánto cobraste.");
+  }
+  if (!time) {
+    return err("Ingresá la hora.");
+  }
+  Object.assign(walk, { svc: label.slice(0, 80), precio: price, hora: time, medio: S.walkMedio || walk.medio, cliente: $("#wed_c").value.trim().slice(0, 80) });
+  api.m.updWalk(walk);
+  S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
+  S.movEd = null;
+  toast("Movimiento actualizado");
+  render();
+});
+registerClick("restMedio", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => String(item.id) === el.dataset.id);
+  if (!booking) {
+    return;
+  }
+  booking.restMethod = medioToDb(el.dataset.m);
+  api.m.setRestMethod(booking, el.dataset.m);
+  S.movEd = null;
+  toast("Anotado: el resto con " + el.dataset.m.toLowerCase());
   render();
 });
 registerChange("wsv", (ev) => {

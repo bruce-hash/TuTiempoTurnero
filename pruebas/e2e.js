@@ -320,17 +320,36 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await wait(700);   // la app ignora un segundo envío del mismo formulario en menos de medio segundo
   await pg.fill("#pnp", "8.000"); await pg.click("#fProd button[type=submit]");
   ok("H08: 8.000 se guarda como $8.000", await until("select price from products where name='Gel caro'", [], (r) => r[0]?.price === 8000));
-  // caja
-  await pg.click("[data-btab=caja]"); await pg.click("[data-act=walkOpen]"); await pg.fill("#wpr", "7000"); await pg.click("#fWalk button[type=submit]"); await wait(600);
-  ok("servicio sin turno guardado", (await q("select count(*)::int c from walkins"))[0].c === 1);
-  // cierre de caja del día
+  // C35 (V4): eliminar un producto, con aviso antes
+  await pg.click('.plist li:has-text("Gel caro") [data-act=prodDel]'); await wait(200);
+  ok("C35: antes de eliminar avisa que las ventas quedan", /Las ventas y compras que ya cargaste quedan/.test(await pg.locator(".plist .movask").innerText()) && (await q("select count(*)::int c from products where name='Gel caro'"))[0].c === 1);
+  await pg.click("[data-act=prodDelYes]"); await wait(700);
+  ok("C35: el producto se elimina", (await q("select count(*)::int c from products where name='Gel caro'"))[0].c === 0 && !(await txt()).includes("Gel caro"));
+  // C34 (V4): la Caja está en Finanzas, como "Caja del día"; la pestaña Caja salió
+  ok("C34: el panel ya no tiene la pestaña Caja", (await pg.locator("[data-btab=caja]").count()) === 0);
   await pg.click("[data-btab=finanzas]"); await wait(300);
+  await pg.click("[data-act=walkOpen]"); await pg.fill("#wpr", "7000"); await pg.click("#fWalk button[type=submit]"); await wait(600);
+  ok("servicio sin turno guardado desde la Caja del día", (await q("select count(*)::int c from walkins"))[0].c === 1);
+  // C25 (V4): Transferencia como medio; editar y borrar un movimiento
+  await wait(300); await pg.click("[data-act=walkOpen]"); await pg.fill("#wpr", "4000"); await pg.click('[data-medio="Transferencia"]'); await pg.click("#fWalk button[type=submit]"); await wait(700);
+  ok("C25: lo cobrado por transferencia queda así en la base y en la caja", (await q("select count(*)::int c from walkins where method='transfer' and amount=4000"))[0].c === 1 && (await txt()).includes("🏦 Transferencia"));
+  await pg.click('.movs li:has-text("$4.000") [data-act=movEdit]'); await wait(200);
+  await pg.fill("#wed_m", "4500"); await pg.click('#fWalkEd [data-medio="Efectivo"]'); await pg.click("#fWalkEd button[type=submit]"); await wait(800);
+  ok("C25: editar un movimiento cambia monto y medio en la base", (await q("select count(*)::int c from walkins where method='cash' and amount=4500"))[0].c === 1 && (await q("select count(*)::int c from walkins where amount=4000"))[0].c === 0);
+  await pg.click('.movs li:has-text("$4.500") [data-act=movDel]'); await wait(200);
+  ok("C25: borrar pide confirmación", (await pg.locator(".movs .movask").innerText()).includes("¿Borrar"));
+  await pg.click("[data-act=movDelYes]"); await wait(800);
+  ok("C25: borrar un movimiento lo saca de la base y de la caja", (await q("select count(*)::int c from walkins where amount=4500"))[0].c === 0 && !(await txt()).includes("$4.500"));
+  // cierre de caja del día
   ok("finanzas: caja del día con lo que entró hoy (sin balance de 7 días)", (await txt()).includes("$7.000") && (await pg.locator("[data-fp=semana]").count()) === 0);
   await pg.fill("#cdCount", "7500"); await pg.click("#fCloseDay button[type=submit]"); await wait(900);
   const cc = await q("select kind, income, cash, counted from cash_closings");
   ok("caja del día cerrada en la base (y te sobran $500)", cc.length === 1 && cc[0].kind === "day" && cc[0].income === 7000 && cc[0].cash === 7000 && cc[0].counted === 7500 && /te sobran \$500/i.test(await txt()));
   await pg.click("[data-fp=mes]"); await wait(300); await pg.fill("#gc", "Alquiler"); await pg.fill("#gm", "150000"); await pg.click("#fGasto button[type=submit]"); await wait(800);
   ok("gasto del mes cargado una vez (sin categoría ni compras de productos)", (await q("select count(*)::int c from expenses where concept='Alquiler' and amount=150000"))[0].c === 1 && (await pg.locator("#gprod").count()) === 0);
+  const msum = await pg.evaluate(() => (document.querySelector(".msum") || {}).textContent || "");
+  ok("C33: el resumen del mes separa ingresos por origen y gastos fijos y de productos", /Resumen de [A-ZÁÉÍÓÚ]/.test(msum) && msum.includes("Sin turno") && msum.includes("Gastos fijos") && msum.includes("$150.000") && /Balance: /.test(msum), msum);
+  ok("C32: los meses van con mayúscula y el balance negativo en rojo", /Balance de [A-ZÁÉÍÓÚ]/.test(await pg.locator(".kpi.big").innerText()) && (await pg.locator(".msum .mbal.neg").count()) === 1);
   await pg.click("[data-act=closeMonth]"); await wait(800);
   ok("mes cerrado en la base", (await q("select count(*)::int c from cash_closings where kind='month'"))[0].c === 1);
   // rubros y servicios: sumar Masajes

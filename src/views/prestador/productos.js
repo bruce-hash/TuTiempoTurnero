@@ -23,7 +23,12 @@ export function vBProductos() {
        index,
      ) => `<li><div class="pl-m"><b>${esc(prod.n)}</b><span>${money(prod.p)} · mínimo ${prod.min} u.${prod.stock <= prod.min ? ' · <em class="lowtag">reponer</em>' : ""}</span></div>
      <div class="pl-s"><button class="xbtn" data-act="stk" data-i="${index}" data-d="-1" aria-label="Restar uno">−</button><b>${prod.stock}</b><button class="xbtn" data-act="stk" data-i="${index}" data-d="1" aria-label="Sumar uno">+</button></div>
-     <button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">🛒 Compré más</button>
+     <span class="pl-acts"><button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">🛒 Compré más</button><button class="xbtn" data-act="prodDel" data-i="${index}" aria-label="Eliminar ${esc(prod.n)}">🗑</button></span>
+     ${
+       S.prodDel === index
+         ? `<div class="movask"><div><b>¿Eliminar ${esc(prod.n)}?</b><span>Sale de tu lista y de la caja. Las ventas y compras que ya cargaste quedan en tus finanzas.</span></div><span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="prodDelNo">No</button><button class="btn btn-pri btn-sm" data-act="prodDelYes" data-i="${index}">Sí, eliminar</button></span></div>`
+         : ""
+     }
      ${
        S.buyI === index
          ? `<form class="buyform" id="fBuy" novalidate><div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="bq">Cantidad</label><input id="bq" inputmode="numeric" placeholder="Ej: 6" autocomplete="off"></div><div class="f"><label for="bc">Cuánto pagaste</label><input id="bc" inputmode="numeric" placeholder="$" autocomplete="off"></div></div>
@@ -40,5 +45,5 @@ export function vBProductos() {
      <div class="err" id="perr2"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="prodClose">Cancelar</button><button class="btn btn-pri" type="submit">Agregar producto</button></div></form>`
        : '<button class="btn btn-pri btn-block" style="margin-top:12px" data-act="prodOpen">+ Agregar producto para vender</button>'
    }</div>
-  <div class="panel"><p class="lbl">Vendidos hoy</p>${sold.length ? `<ul class="ag">${sold.map((item) => `<li><span class="ag-t">${esc(item.hora)}</span><div><b>${esc(item.svc)}</b><span>${esc(item.medio)}</span></div><b class="price" style="font-size:15px">${money(item.precio)}</b></li>`).join("")}</ul>` : '<p class="note">Las ventas se cargan desde la pestaña Caja, y el stock baja solo.</p>'}</div>`;
+  <div class="panel"><p class="lbl">Vendidos hoy</p>${sold.length ? `<ul class="ag">${sold.map((item) => `<li><span class="ag-t">${esc(item.hora)}</span><div><b>${esc(item.svc)}</b><span>${esc(item.medio)}</span></div><b class="price" style="font-size:15px">${money(item.precio)}</b></li>`).join("")}</ul>` : '<p class="note">Las ventas se cargan desde Finanzas → Caja del día, y el stock baja solo.</p>'}</div>`;
 }
