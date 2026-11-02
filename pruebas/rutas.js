@@ -352,6 +352,58 @@ const SOFIA = "sofia-benitez-studio";
   await wait(page, 800);
   ok("link de recuperación (?token_hash=) → /nueva-contrasena", (await st(page)).view === "newpass" && here(page) === "/nueva-contrasena", here(page));
 
+  // ---------- 9. C02: recargar vuelve a la misma pantalla, aunque el hosting mande la recarga al inicio ----------
+  {
+    const p9 = await nueva();
+    await go(p9, "/ingresar");
+    await loginPanel(p9);
+    await go(p9, "/panel/finanzas");
+    await p9.reload(); await ready(p9); await wait(p9, 700);
+    ok("C02: con el .htaccess bien, recargar /panel/finanzas queda en Finanzas", here(p9) === "/panel/finanzas" && (await st(p9)).btab === "finanzas", here(p9));
+    await fetch(BASE + "/__rutas?modo=inicio");
+    const r = await fetch(BASE + "/panel/finanzas", { redirect: "manual" });
+    ok("C02: (el hosting roto de la prueba redirige /panel/finanzas al inicio)", r.status === 302 && r.headers.get("location") === "/");
+    await p9.reload(); await ready(p9); await wait(p9, 900);
+    s = await st(p9);
+    ok("C02: con el hosting roto, recargar /panel/finanzas vuelve a Finanzas (no al inicio)", here(p9) === "/panel/finanzas" && s.role === "barbero" && s.btab === "finanzas", here(p9) + " " + JSON.stringify(s));
+    await fetch(BASE + "/__rutas?modo=ok");
+    await go(p9, "/sofia-benitez-studio");
+    await fetch(BASE + "/__rutas?modo=inicio");
+    await p9.reload(); await ready(p9); await wait(p9, 900);
+    ok("C02: …y recargar un perfil vuelve al perfil", here(p9) === "/sofia-benitez-studio" && (await st(p9)).view === "perfil", here(p9));
+    await p9.goto(BASE + "/"); await ready(p9); await wait(p9, 700);
+    ok("C02: abrir el inicio a propósito (no es una recarga) sigue llevando al inicio", ["/", "/panel/agenda"].includes(here(p9)) && here(p9) !== "/sofia-benitez-studio", here(p9));
+    await p9.context().close();
+    // con el service worker (la app instalada): la navegación pasa por él y igual vuelve a la pantalla
+    await fetch(BASE + "/__rutas?modo=ok");
+    await fetch(BASE + "/__pwa?sw=1");
+    const p10 = await nueva();
+    await go(p10, "/ingresar");
+    await loginPanel(p10);
+    await p10.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 10000 }).catch(() => {});
+    await go(p10, "/panel/clientes");
+    await fetch(BASE + "/__rutas?modo=inicio");
+    await p10.reload(); await ready(p10); await wait(p10, 900);
+    ok("C02: con el service worker y el hosting roto, recargar /panel/clientes vuelve a Clientes",
+       (await p10.evaluate(() => !!navigator.serviceWorker.controller)) && here(p10) === "/panel/clientes" && (await st(p10)).btab === "clientes", here(p10));
+    await p10.evaluate(async () => { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); });
+    await p10.context().close();
+    await fetch(BASE + "/__pwa?sw=0");
+    // el panel de TuTiempo avisa que el sitio no devuelve la app en sus direcciones
+    await fetch(BASE + "/__rutas?modo=ok");
+    const pa = await nueva();
+    await go(pa, "/ingresar");
+    await login(pa, "admin@test.ar", "admin12345");
+    await go(pa, "/admin");
+    await wait(pa, 1500);
+    ok("C02: con el .htaccess bien, el panel de TuTiempo no avisa nada", !/El sitio no devuelve la app en sus direcciones/.test(await text(pa)) && here(pa).startsWith("/admin"), here(pa));
+    await fetch(BASE + "/__rutas?modo=inicio");
+    await pa.reload(); await ready(pa); await wait(pa, 2500);
+    ok("C02: con el hosting roto, el panel de TuTiempo avisa que falta el .htaccess", /El sitio no devuelve la app en sus direcciones/.test(await text(pa)) && /\.htaccess/.test(await text(pa)));
+    await fetch(BASE + "/__rutas?modo=ok");
+    await pa.context().close();
+  }
+
   ok("sin errores de JavaScript", errors.length === 0, errors.join(" | "));
   ok("sin bloqueos de la CSP", csp.length === 0, csp.join(" | "));
   await browser.close();
