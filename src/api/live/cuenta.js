@@ -208,9 +208,11 @@ export const liveCuenta = {
     await sb.functions.invoke("mp-reconcile", { body: { token } }).catch(() => {});
   },
   // Bloque D (D26): "Exigir DNI para aprobar prestadores" (si no se puede leer, se exige, como hasta ahora)
+  // C29: y si las tarjetas de sellos están encendidas en TuTiempo (si no se puede leer, encendidas, como hasta ahora)
   async requireDni() {
-    const row = await call(sb.from("app_settings").select("require_dni").maybeSingle()).catch(() => null);
+    const row = await call(sb.from("app_settings").select("require_dni,stamps_on").maybeSingle()).catch(() => null);
     S.requireDni = !row || row.require_dni !== false;
+    S.stampsOn = !row || row.stamps_on !== false;
     return S.requireDni;
   },
   // D30: comisión de TuTiempo (% de la seña) y % de Mercado Pago por plazo (app_settings, lo puede leer cualquiera)

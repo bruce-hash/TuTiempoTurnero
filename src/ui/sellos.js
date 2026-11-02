@@ -7,6 +7,9 @@ import { P, store } from "../store.js";
 
 // Tarjeta de sellos: cada servicio puede dar un sello por visita; con la meta (15 a 20) el siguiente es gratis.
 // En vivo los sellos vienen de la base; en la demo se guardan en store.DEMO_STAMPS[prestador][cliente][servicio].
+// C29 (V5 resto): interruptor global del panel de TuTiempo (app_settings.stamps_on). Apagado, no se ve nada de sellos en
+// ningún lado (las tarjetas, el premio, la configuración del prestador) y la base no suma ni canjea; los datos quedan.
+export const stampsOn = () => S.stampsOn !== false;
 export const stampCfg = (pid) => {
   const conf = cfg(pid);
   return (conf.stamps ||= {
@@ -16,7 +19,7 @@ export const stampCfg = (pid) => {
 };
 export function stampGoal(pid, svc) {
   const conf = stampCfg(pid);
-  if (!conf.on || !svc) {
+  if (!stampsOn() || !conf.on || !svc) {
     return 0;
   }
   const goal = +((conf.goals || {})[skey(svc)] || 0);
@@ -123,7 +126,7 @@ export function stampBox(prov) {
    ${S.user ? `${stampGrid(Math.min(have, goal), goal, "sm")}<p class="note" style="text-align:left;margin:6px 0 0">${have >= goal ? "🎁 ¡Tarjeta llena! Elegí horario y en el pago tocá “Usar mi premio”." : `Te faltan ${goal - have} para un ${esc(svc[0])} gratis.`}</p>` : '<p class="note" style="text-align:left;margin:6px 0 0">Ingresá para ver tus sellos.</p>'}</div>`;
 }
 export function myCards() {
-  if (!S.user) {
+  if (!S.user || !stampsOn()) {
     return [];
   }
   if (LIVE) {

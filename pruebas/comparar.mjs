@@ -190,6 +190,8 @@ async function normalizar(page) {
       el.textContent = el.textContent.replace(/^Cerrar igual/, "Cerrar la caja");
       if (el.nextElementSibling && el.nextElementSibling.matches("p.note")) el.nextElementSibling.remove();
     });
+    // V5 resto (C29, cambio a propósito): la pestaña Comisión suma «Sellos» (las tarjetas para toda la plataforma)
+    document.querySelectorAll("#app [data-act=admStamps]").forEach((toggle) => toggle.closest(".panel").remove());
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {

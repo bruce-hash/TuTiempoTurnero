@@ -4,6 +4,7 @@ import { money, pctTxt } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { dniRequired } from "../../lib/verificacion.js";
 import { store } from "../../store.js";
+import { stampsOn } from "../../ui/sellos.js";
 
 // D30: comisión de TuTiempo (% de la SEÑA) y % de Mercado Pago por plazo de acreditación. El ejemplo, con un corte de
 // $20.000 y seña del 50%, es solo para mostrar: la base hace la misma cuenta al reservar (charge_parts).
@@ -26,7 +27,7 @@ export function admCom(data) {
       <div class="tot"><span>El cliente paga al reservar</span><span>${money(ex.total)}</span></div></div>
       <p class="note" style="text-align:left;margin:6px 0 0">Total = (seña + comisión) / (1 − % de Mercado Pago), redondeado para arriba. El prestador recibe ${money(ex.deposit)} ahora y ${money(ex.deposit)} en el local; TuTiempo, ${money(ex.fee)}.</p></div>
     <p class="note" style="text-align:left;margin:0 0 10px">Los cambios valen para las reservas nuevas; las ya hechas no cambian.</p>
-    <div class="err" id="comerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar comisiones</button></form>${dniPanel()}${LIVE ? siteForm(data.siteUrl) : ""}`;
+    <div class="err" id="comerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar comisiones</button></form>${dniPanel()}${stampsPanel()}${LIVE ? siteForm(data.siteUrl) : ""}`;
 }
 // H24: dirección del sitio con la que la base arma los links de los avisos a los clientes (recordatorios, cancelaciones)
 function siteForm(url) {
@@ -37,6 +38,13 @@ function siteForm(url) {
 }
 // Bloque D (D26): "Exigir DNI para aprobar prestadores" (hoy activada). Apagada, se aprueba sin DNI y nadie gana el sello
 // "Identidad verificada" sin haberse verificado.
+// C29 (V5 resto): "Tarjetas de sellos" para toda la plataforma. Apagadas, no se ven en ningún lado y no se suman sellos;
+// los datos quedan y al encenderlas vuelven como estaban (los premios ganados se canjean al reactivar).
+function stampsPanel() {
+  const on = stampsOn();
+  return `<div class="panel"><p class="lbl">Sellos</p><div class="swrow"><div><b>🎟️ Tarjetas de sellos</b><div class="hint">${on ? "Los prestadores pueden dar sellos y los clientes canjean su premio" : "Apagadas: no se ven en ningún lado y no se suman sellos"}</div></div><button class="tg" data-act="admStamps" aria-pressed="${on}" aria-label="Tarjetas de sellos"></button></div>
+    <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si las apagás, desaparecen de los perfiles, de Mis turnos y del panel de los prestadores, y no se suman sellos. Las tarjetas, los sellos y los premios ganados quedan guardados." : "Si las volvés a encender, cada cliente vuelve a ver su tarjeta como estaba y los premios ganados se pueden canjear."}</p></div>`;
+}
 function dniPanel() {
   const on = dniRequired();
   return `<div class="panel"><p class="lbl">Verificación</p><div class="swrow"><div><b>🪪 Exigir DNI para aprobar prestadores</b><div class="hint">${on ? "Para aprobar a un prestador hacen falta su número de DNI y las fotos del frente y del dorso" : "Los prestadores nuevos se aprueban sin DNI"}</div></div><button class="tg" data-act="admReqDni" aria-pressed="${on}" aria-label="Exigir DNI para aprobar prestadores"></button></div>

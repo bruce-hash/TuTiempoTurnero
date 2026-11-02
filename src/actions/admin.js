@@ -9,6 +9,7 @@ import { pr } from "../lib/prestadores.js";
 import { SITE_URL_ERR, siteUrl } from "../lib/sitio.js";
 import { dniRequired } from "../lib/verificacion.js";
 import { S } from "../state.js";
+import { stampsOn } from "../ui/sellos.js";
 import { P, store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
@@ -312,6 +313,27 @@ registerClick("admReqDni", (ev, el, act) => {
     return;
   }
   S.requireDni = on;
+  done();
+});
+// C29 (V5 resto): tarjetas de sellos para toda la plataforma
+registerClick("admStamps", (ev, el, act) => {
+  const on = !stampsOn();
+  const done = () => {
+    toast(on ? "Listo: las tarjetas de sellos volvieron, como estaban." : "Listo: las tarjetas de sellos quedan apagadas (los datos se guardan).");
+    render();
+  };
+  if (LIVE) {
+    el.disabled = true;
+    api.m
+      .adminSetStamps(on)
+      .then(() => api.requireDni())
+      .then(done)
+      .catch(() => {
+        el.disabled = false;
+      });
+    return;
+  }
+  S.stampsOn = on;
   done();
 });
 // dirección del sitio (H24): solo en vivo; https:// y el dominio, nada más (la base vuelve a validarla)

@@ -7,7 +7,7 @@ Lo marcado **Tomada** se implementa así. Lo marcado **Abierta** no se programa 
 | D01 | Plataforma | Tomada | Versión 31 del cliente: Supabase + frontend estático en Hostinger. Reemplaza el sitio Laravel actual. |
 | D02 | Comisión | Reemplazada por D30 (V1) | Era un % del precio, configurable desde el panel admin (0 a 30). **Desde V1 (D30) es un % de la seña** (`app_settings.deposit_commission_pct`, 7 por defecto). El % del precio de antes (`commission_pct`) queda solo para las cuentas de los turnos viejos. |
 | D03 | Quién paga la comisión | Abierta | Hoy la paga el cliente aparte, junto con la seña (v30). Confirmar con el cliente. |
-| D04 | Fidelidad | Tomada | Tarjetas de sellos por servicio y por prestador (v28), las paga el prestador. No hay saldo, cashback ni "segundos". |
+| D04 | Fidelidad | Tomada | Tarjetas de sellos por servicio y por prestador (v28), las paga el prestador. No hay saldo, cashback ni "segundos". C29 (2/11): TuTiempo las puede apagar para toda la plataforma desde el panel admin; apagadas no se ven ni se suman sellos, los datos quedan y los premios ganados se canjean al reactivarlas. |
 | D05 | Sellos necesarios | Abierta | Hoy 15 a 20 por servicio. Evaluar bajar el mínimo (15 visitas para un premio es mucho). |
 | D06 | Seña | Tomada | Obligatoria en toda reserva por Mercado Pago (o el total si el prestador lo pide). Resto en efectivo o MP. |
 | D07 | Cancelación del cliente | Tomada (validar con abogado) | Pierde lo pagado; la seña queda para el prestador y la comisión para TuTiempo. |

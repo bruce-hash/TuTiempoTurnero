@@ -105,6 +105,10 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### V5 resto (C29, sellos)
+- Migración nueva: `20261103000000_sellos_global.sql` (`app_settings.stamps_on`, encendido por defecto; `admin_set_stamps`;
+  `stamp_add` no suma ni canjea con los sellos apagados). No cambia datos. Sin Edge Functions ni cambios de `config.js`.
+
 ### V4 resto (C30, C31, C36)
 - Migración nueva: `20261102230000_finanzas_v4_resto.sql` (C31: `fixed_expenses`, `fixed_expenses_sync`,
   `fixed_expense_save`, `fixed_expense_stop`, `expenses.fixed_id`/`fixed_month`; C36: `products.cost`). La primera vez

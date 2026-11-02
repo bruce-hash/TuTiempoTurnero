@@ -155,7 +155,10 @@ async function boot() {
     startPriceRefresh();
     // C22 (V3b): la Agenda del prestador al día cada 30 segundos y al volver a la pestaña
     startAgendaRefresh();
-    api.requireDni().catch(() => {});
+    // D26 y C29: lo que dice TuTiempo (exigir DNI, tarjetas de sellos); al llegar, se vuelve a dibujar
+    api.requireDni()
+      .then(() => render())
+      .catch(() => {});
     // dirección con la que arranca el enrutador: la actual, salvo que el arranque ya decida la pantalla
     // C02: si una recarga cayó en el inicio porque el servidor no devolvió la dirección, la de antes de recargar
     const back = reloadTarget();

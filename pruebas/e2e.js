@@ -605,6 +605,12 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("V7: después de ingresar la capa se cierra y queda la misma página", (await pg.evaluate(() => !!S.user)) && (await pg.locator(".authmodal").count()) === 0 && pg.url() === urlProv && (await pg.isVisible(".pcard")), pg.url() + " vs " + urlProv);
   await menu("[data-go=misturnos]"); await wait(800);
   ok("v31: Mis turnos: el turno cancelado por bloqueo dice que el profesional la va a llamar (sin Reprogramar automático)", /canceló el profesional/i.test(await txt()) && /te va a llamar/i.test(await txt()) && (await pg.locator(".delpanel [data-act=rebook]").count()) === 0);
+  // C29 (V5 resto): con los sellos apagados en TuTiempo, Mis turnos no muestra la tarjeta; encendidos, vuelve como estaba
+  await db.query("update app_settings set stamps_on = false");
+  await pg.reload(); await pg.waitForSelector("#app"); await wait(1500);
+  ok("C29: apagados, Mis turnos no muestra «Mis sellos» ni la tarjeta", (await pg.locator(".stampcard").count()) === 0 && !/mis sellos/i.test(await txt()));
+  await db.query("update app_settings set stamps_on = true");
+  await pg.reload(); await pg.waitForSelector(".stampcard", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("Mis sellos: tarjeta de Esmaltado 16 de 16, premio listo", (await pg.locator(".stampcard").count()) === 1 && (await pg.locator(".stampcard").innerText()).includes("Esmaltado semipermanente") && (await pg.locator(".stampcard").innerText()).includes("16 de 16") && /premio listo/i.test(await pg.locator(".stampcard").innerText()));
   const tt = (await txt()).toLowerCase(); ok("Mis turnos: primero los próximos, después avisos y sellos", tt.indexOf("próximos") >= 0 && tt.indexOf("próximos") < tt.indexOf("avisos y mensajes") && tt.indexOf("avisos y mensajes") < tt.indexOf("mis sellos"));
   await pg.click("[data-act=useReward]"); await pg.waitForSelector(".pcard"); await wait(800);
@@ -961,6 +967,14 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await p2.click(".biz-card [data-act=toPanel]"); await p2.waitForSelector(".btabs"); await wait2(500);
   const todoV = await p2.locator(".todo").innerText().catch(() => "");
   ok("Bloque D: verificado, en la Agenda solo falta Mercado Pago (sin la tarjeta vieja)", (await p2.locator(".setup").count()) === 0 && todoV.includes("○ Conectar Mercado Pago") && !todoV.includes("○ Verificación") && !todoV.includes("○ Aprobación") && (await p2.locator(".todo [data-act=mpConnect]").count()) === 1, todoV);
+  // ---------- C29 (V5 resto): las tarjetas de sellos se apagan y se encienden desde Comisión ----------
+  await p3.goto(BASE + "/admin/comision"); await p3.waitForSelector("[data-act=admStamps]");
+  ok("C29: el interruptor de sellos está encendido", (await p3.getAttribute("[data-act=admStamps]", "aria-pressed")) === "true");
+  await p3.click("[data-act=admStamps]"); await p3.waitForTimeout(1200);
+  ok("C29: el admin apaga las tarjetas de sellos", (await q("select stamps_on from app_settings"))[0].stamps_on === false && (await p3.getAttribute("[data-act=admStamps]", "aria-pressed")) === "false"
+     && /no se ven en ningún lado y no se suman sellos/.test(await p3.locator("#app").innerText()));
+  await p3.click("[data-act=admStamps]"); await p3.waitForTimeout(1200);
+  ok("C29: …y las vuelve a encender", (await q("select stamps_on from app_settings"))[0].stamps_on === true);
   // ---------- Bloque D (D26): "Exigir DNI para aprobar prestadores" apagada desde Comisión ----------
   await p3.goto(BASE + "/admin/comision"); await p3.waitForSelector("[data-act=admReqDni]");
   ok("D26: la opción está activada", (await p3.getAttribute("[data-act=admReqDni]", "aria-pressed")) === "true");
