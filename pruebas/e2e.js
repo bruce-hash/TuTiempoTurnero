@@ -457,6 +457,30 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.click("[data-act=cashToggle]"); await wait(600);
   ok("prestador apaga el efectivo", (await q("select cash_ok from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].cash_ok === false);
   await pg.click("[data-act=cashToggle]"); await wait(600);
+  // C28 (V5): el pedido de reseña ya no está en el panel (sale solo, siempre)
+  ok("C28: los avisos automáticos del panel no tienen el pedido de reseña", !/Pedido de reseña/.test(await txt()) && /El pedido de reseña también sale solo/.test(await txt()));
+  // C26 (V5): ponerle nombre a un trabajo y borrarlo con confirmación
+  {
+    await pg.click("[data-btab=comunidad]"); await wait(300);
+    const before = (await q("select count(*)::int c from media m join providers p on p.id=m.provider_id where p.name like 'Sofía%'"))[0].c;
+    await pg.setInputFiles("#upMedia", PNG);
+    ok("C26: el trabajo se sube sin el nombre del archivo", await until("select label from media m join providers p on p.id=m.provider_id where p.name like 'Sofía%' order by m.id desc limit 1", [],
+       (r) => r.length && r[0].label === null, 8000)
+       && (await q("select count(*)::int c from media m join providers p on p.id=m.provider_id where p.name like 'Sofía%'"))[0].c === before + 1);
+    await wait(600);
+    await pg.click(".gal .gi-ed >> nth=0"); await wait(200);
+    await pg.fill("#mdName", "  Degradé con diseño "); await pg.click("#fMedia button[type=submit]");
+    ok("C26: el nombre queda guardado en la base", await until("select label from media m join providers p on p.id=m.provider_id where p.name like 'Sofía%' order by m.id desc limit 1", [], (r) => r[0]?.label === "Degradé con diseño"));
+    ok("C26: y se ve sobre la foto", /Degradé con diseño/.test(await pg.locator(".gal").innerText()));
+    await pg.click(".gal .gi-ed >> nth=0"); await wait(200);
+    await pg.click("[data-act=mediaDel]"); await wait(200);
+    ok("C26: borrar pide confirmación con el nombre", /¿Borrar «Degradé con diseño»\?/.test(await pg.locator(".mediaed").innerText()));
+    await pg.click("[data-act=mediaDelNo]"); await wait(200);
+    ok("C26: «No» no borra nada", (await q("select count(*)::int c from media where label='Degradé con diseño'"))[0].c === 1);
+    ok("C26: «No» vuelve al editor del trabajo", (await pg.locator("#fMedia").count()) === 1);
+    await pg.click("[data-act=mediaDel]"); await wait(200); await pg.click("[data-act=mediaDelYes]");
+    ok("C26: «Sí, borrar» lo saca de la base", await until("select count(*)::int c from media where label='Degradé con diseño'", [], (r) => r[0].c === 0));
+  }
   // mensaje a clientes
   await pg.click("[data-btab=clientes]"); await wait(300); await pg.click("[data-act=msgOpen]"); await wait(200);
   await pg.fill("#msgTxt", "Hola {nombre}, mañana tengo lugar a las 10 en {negocio}"); await pg.check("#msgAll"); await pg.click("[data-act=msgSend]"); await wait(900);
