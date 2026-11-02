@@ -52,7 +52,7 @@ const ERRS = {
   reward_not_available: "Este servicio no es el premio de la tarjeta.",
   stamp_today: "Ya le sumaste un sello a mano hoy.",
   client_without_app: "Este contacto no tiene la app: los sellos se guardan en su cuenta.",
-  stamps_off: "Activá la tarjeta de sellos en Perfil.",
+  stamps_off: "Las tarjetas de sellos están apagadas.",
   bad_reward: "Elegí servicios tuyos para la tarjeta de sellos.",
   no_stamp_card: "Ese servicio no tiene tarjeta de sellos.",
   bad_stamp_goal: "Cada tarjeta lleva de 15 a 20 sellos.",

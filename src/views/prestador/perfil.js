@@ -9,7 +9,7 @@ import { approved, dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { pushPanel } from "../../ui/avisos.js";
 import { photoPicker } from "../../ui/fotos.js";
-import { stampCfg, stampSvcs } from "../../ui/sellos.js";
+import { stampCfg, stampSvcs, stampsOn } from "../../ui/sellos.js";
 import { delBox } from "../cliente/cuenta.js";
 import { vMensajes } from "./mensajes.js";
 import { setupSteps } from "./verificacion.js";
@@ -187,6 +187,10 @@ export function vBPerfil(prov) {
   <div class="panel"><div class="swrow"><div><b>💵 Aceptar el resto en efectivo</b><div class="hint">${cfg(ME()).cash !== false ? "La seña va por Mercado Pago y el resto lo pueden pagar en efectivo" : "La seña y el resto, con Mercado Pago"}</div></div><button class="tg" data-act="cashToggle" aria-pressed="${cfg(ME()).cash !== false}" aria-label="Aceptar efectivo"></button></div>
    <p class="note" style="text-align:left;margin:8px 0 0">La seña siempre se paga con Mercado Pago al reservar. Si el cliente no viene, la seña queda para vos.</p></div>
   ${(() => {
+    // C29: con los sellos apagados en TuTiempo, la configuración no se muestra (lo guardado queda)
+    if (!stampsOn()) {
+      return "";
+    }
     const conf = stampCfg(ME());
     const noGoals = !Object.keys(conf.goals || {}).length;
     const earning = stampSvcs(prov);
