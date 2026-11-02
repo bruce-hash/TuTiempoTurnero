@@ -22,7 +22,7 @@ export const liveCuenta = {
     }
     const user = session.user;
     const profile = await call(
-      sb.from("profiles").select("full_name,phone,avatar_path,email_notices,push_notices,push_bookings").eq("id", user.id).maybeSingle(),
+      sb.from("profiles").select("full_name,phone,avatar_path,email_notices,push_notices,push_bookings,push_followers").eq("id", user.id).maybeSingle(),
     ).catch(() => null);
     S.user = {
       id: user.id,
@@ -34,6 +34,8 @@ export const liveCuenta = {
       // Bloque C: notificaciones (cliente: recordatorios y novedades; prestador: nuevas reservas y cancelaciones)
       pushNotices: !profile || profile.push_notices !== false,
       pushBookings: !profile || profile.push_bookings !== false,
+      // C06: seguidores nuevos (prestador)
+      pushFollowers: !profile || profile.push_followers !== false,
     };
     S.form.tel = (profile && profile.phone) || "";
     let pid = await call(sb.rpc("my_provider"));

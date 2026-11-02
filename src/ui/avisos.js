@@ -88,6 +88,7 @@ export function pushPanel(scope) {
   const option =
     scope === "prestador"
       ? `<label class="chk pwa-opt"><input type="checkbox" id="bPushBk"${S.user.pushBookings === false ? "" : " checked"}> Nuevas reservas y cancelaciones de clientes</label>
+     <label class="chk pwa-opt"><input type="checkbox" id="bPushFl"${S.user.pushFollowers === false ? "" : " checked"}> Nuevos seguidores</label>
      <p class="note pwa-note">Los avisos de cobros (pagos devueltos, contracargos, reconectar Mercado Pago) te llegan siempre.</p>`
       : `<label class="chk pwa-opt"><input type="checkbox" id="uPush"${S.user.pushNotices === false ? "" : " checked"}> Recordatorios y novedades por notificación</label>
      <p class="note pwa-note">Igual que en email: la confirmación y las cancelaciones llegan siempre. En la notificación no va nada privado: el detalle lo ves al abrir la app.</p>`;

@@ -69,3 +69,10 @@ registerChange("bPushBk", (ev) => {
   api.m.setPushPrefs({ push_bookings: on });
   toast(on ? "Listo: te avisamos cada reserva nueva y cada cancelación." : "Listo: ya no te avisamos las reservas ni las cancelaciones. Los avisos de cobros te siguen llegando.");
 });
+// C06 (V8): "Nuevos seguidores" (aparte de las reservas: apagarlo no las silencia; el aviso en el panel queda)
+registerChange("bPushFl", (ev) => {
+  const on = ev.target.checked;
+  S.user.pushFollowers = on;
+  api.m.setPushPrefs({ push_followers: on });
+  toast(on ? "Listo: te avisamos cuando alguien empiece a seguirte." : "Listo: ya no te avisamos los seguidores nuevos por notificación (los seguís viendo en tu panel).");
+});
