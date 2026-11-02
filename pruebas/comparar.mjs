@@ -180,7 +180,8 @@ async function normalizar(page) {
     document.querySelectorAll("#app .adml li").forEach((li) => { if (li.textContent.startsWith("💳")) li.remove(); });
     document.querySelectorAll("#app [data-act=admNudge], #app [data-act=admF][data-f=nomp]").forEach((el) => el.remove());
     document.querySelectorAll("#app .admact .chip.ok").forEach((el) => { if (/Avisado/.test(el.textContent)) el.remove(); });
-    document.querySelectorAll("#app .ag li span b").forEach((el) => { if (el.textContent === "sin Mercado Pago") el.replaceWith("sin Mercado Pago"); });
+    // (sin la negrita y en un solo texto, como antes: dos textos seguidos se pueden dibujar con un píxel de diferencia)
+    document.querySelectorAll("#app .ag li span b").forEach((el) => { if (el.textContent === "sin Mercado Pago") { const span = el.parentNode; el.replaceWith("sin Mercado Pago"); span.normalize(); } });
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
