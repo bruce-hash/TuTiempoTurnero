@@ -57,7 +57,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     (`S.pending`, `src/lib/pendiente.js`: reservar, seguir, lista, negocio; solo ids, vence a las 2 h) se muestra como
     ticket (`src/ui/ticket.js`) y sigue sola después de ingresar (`src/actions/pendiente.js`, `goAfter` en
     `src/lib/sesion.js`); viaja en sessionStorage (Google) y en la cuenta nueva (`tt_pending`, para el link del email).
-    El prestador va siempre a su Agenda. Registrá tu negocio: `src/views/auth/negocio.js` + `src/actions/negocio.js`
+    El prestador va siempre a su Agenda. D33: una cuenta es de cliente o de negocio (`isBusiness()` en `src/lib/cuentas.js`;
+    la de negocio no reserva, no sigue ni reseña: aviso en `src/actions/cuentas.js`; en la base, triggers `business_account`
+    y `client_history`). Registrá tu negocio: `src/views/auth/negocio.js` + `src/actions/negocio.js`
     (5 pasos, `setup_step`/`my_setup` en la base, `src/lib/alta.js` dice qué falta). El código por email es solo para
     cuentas que existen (`shouldCreateUser: false`).
   - V3b (C22): `src/lib/agenda-al-dia.js` vuelve a pedir los turnos de la Agenda cada 30 s y al volver a la pestaña (sin

@@ -117,6 +117,25 @@ bloque al siguiente en un entorno que ya estaba armado.
 - En Supabase → Auth tiene que seguir permitido crear cuentas ("Allow new users to sign up"): el código por email ya no
   las crea, pero Crear cuenta y Google sí.
 
+### D33 (cuentas separadas)
+- Migración nueva: `20261102150000_cuentas_separadas.sql` (triggers que rechazan que una cuenta de negocio reserve, siga,
+  reseñe o se anote en la lista de espera, y que una cuenta con historial de cliente cree un negocio; `my_client_history`).
+  No borra ni cambia datos. Sin Edge Functions ni cambios de `config.js` o `.htaccess`.
+- Antes o después de aplicarla, para saber si en ese entorno hay cuentas que ya son las dos cosas (siguen andando como
+  negocio, pero ya no pueden reservar, seguir ni reseñar), en el SQL Editor:
+  ```sql
+  select u.email, p.name as negocio,
+         (select count(*) from bookings b where b.client_id = u.id and b.source = 'app' and b.status not in ('hold','expired')) as turnos,
+         (select count(*) from follows f where f.user_id = u.id) as seguidos,
+         (select count(*) from reviews r where r.client_id = u.id) as resenas
+    from providers p join auth.users u on u.id = p.owner_id
+   where p.status <> 'deleted'
+     and not exists (select 1 from app_admins a where a.user_id = u.id)
+     and (exists (select 1 from bookings b where b.client_id = u.id and b.source = 'app' and b.status not in ('hold','expired'))
+          or exists (select 1 from follows f where f.user_id = u.id)
+          or exists (select 1 from reviews r where r.client_id = u.id));
+  ```
+
 ## Etapa A · Entorno de prueba
 
 ### 1. Supabase (proyecto de prueba)
