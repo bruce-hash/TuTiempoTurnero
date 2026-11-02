@@ -930,5 +930,25 @@ q("insert into follows (user_id, provider_id) values (%s, %s)", (adm33, p33), ui
 ok("D33: una cuenta admin sigue como hoy (con historial puede tener un negocio)", not err(q("select register_provider('Negocio Admin', 'x', array['b'], '2284 1', null)", uid=adm33)))
 ok("D33: sin sesión, my_client_history no devuelve nada", q("select my_client_history()", role="anon") == [] or err(q("select my_client_history()", role="anon")))
 
+# ---------- V5 · C26 nombre de los trabajos · C28 pedido de reseña siempre encendido ----------
+own5 = mkuser("trabajos5@test.ar", "Trabajos")
+p5 = q("select register_provider('Trabajos V5', 'Calle 5', array['b'], '2284 5555', null)", uid=own5)[0][0]
+m5 = q("insert into media (provider_id, storage_path, kind, label) values (%s,%s,'image','IMG_2034.jpg') returning id", (p5, f"{p5}/a.jpg"), uid=own5)[0][0]
+ok("C26: el prestador le pone nombre a su trabajo", not err(q("update media set label='  Degradé con diseño ' where id=%s", (m5,), uid=own5))
+   and q("select label from media where id=%s", (m5,))[0][0] == "Degradé con diseño")
+ok("C26: un nombre vacío deja el trabajo sin nombre", not err(q("update media set label='   ' where id=%s", (m5,), uid=own5)) and q("select label from media where id=%s", (m5,))[0][0] is None)
+ok("C26: más de 80 letras se rechaza", err(q("update media set label=%s where id=%s", ("x" * 81, m5), uid=own5)))
+q("update media set label='Mío' where id=%s", (m5,), uid=own5)
+q("update media set label='Ajeno' where id=%s", (m5,), uid=prov)
+ok("C26: otro prestador no puede renombrar un trabajo ajeno", q("select label from media where id=%s", (m5,))[0][0] == "Mío")
+ok("C26: …ni cambiar otra cosa que el nombre (ni su propio prestador)", err(q("update media set storage_path='x/y.jpg' where id=%s", (m5,), uid=own5)))
+ok("C26: sin sesión no se puede renombrar", err(q("update media set label='x' where id=%s", (m5,), role="anon")) or q("select label from media where id=%s", (m5,))[0][0] == "Mío")
+ok("C26: el dueño borra su trabajo", not err(q("delete from media where id=%s", (m5,), uid=own5)) and q("select count(*) from media where id=%s", (m5,))[0][0] == 0)
+ok("C28: el pedido de reseña de un negocio nuevo está encendido", q("select enabled from message_templates where provider_id=%s and key='rev'", (p5,))[0][0] is True)
+q("update message_templates set enabled=false where provider_id=%s and key='rev'", (p5,), uid=own5)
+ok("C28: …y no se puede apagar", q("select enabled from message_templates where provider_id=%s and key='rev'", (p5,))[0][0] is True)
+q("update message_templates set enabled=false where provider_id=%s and key='r24'", (p5,), uid=own5)
+ok("C28: los otros avisos se siguen apagando como siempre", q("select enabled from message_templates where provider_id=%s and key='r24'", (p5,))[0][0] is False)
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
