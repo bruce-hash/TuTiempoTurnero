@@ -42,9 +42,12 @@ export function startPwa(onChange) {
   }
   if (!SW_ON) {
     // freno de emergencia (o demo y pruebas): sin service worker y sin su caché
-    // Primero se desinstala y después se borra la caché. El service worker viejo sigue atendiendo esta página hasta que
-    // se cierra, y una respuesta que estaba guardando (entre su caches.has y su caches.open) puede volver a crear la
-    // caché: por eso se borra otra vez a los 3 segundos.
+    // El service worker viejo sigue atendiendo esta página hasta que se cierra: primero se le avisa que no guarde nada
+    // más (tt-stop, borra él también su caché), después se desinstala y se borra la caché, y otra vez a los 3 segundos
+    // por si una respuesta ya estaba en camino.
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage("tt-stop");
+    }
     const dropCaches = () =>
       typeof caches == "undefined"
         ? Promise.resolve()
