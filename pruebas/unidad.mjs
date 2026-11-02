@@ -12,6 +12,7 @@ import { chargeFor } from "../src/lib/cobro.js";
 import { parsePesos } from "../src/lib/montos.js";
 import { SITE_URL_RE, siteUrl } from "../src/lib/sitio.js";
 import { cleanPending } from "../src/lib/pendiente.js";
+import { checkSplit, restSplit } from "../src/lib/resto.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 let F = 0;
@@ -110,6 +111,19 @@ for (const [why, raw] of [
 ]) {
   ok(`pendiente: se descarta (${why})`, cleanPending(raw) === null);
 }
+
+// V4b · "Cargar diferencia": revisar las dos partes del resto antes de mandarlas (la base vuelve a controlar)
+const E = "Efectivo", T = "Transferencia";
+ok("resto: $3.000 efectivo + $2.000 transferencia de $5.000 está bien", checkSplit(5000, [{ medio: E, m: 3000 }, { medio: T, m: 2000 }]) === null);
+ok("resto: menos que el resto también (lo que falta queda sin cobrar)", checkSplit(5000, [{ medio: E, m: 3000 }, { medio: T, m: 1000 }]) === null);
+ok("resto: pasarse del resto no", /no puede pasar del resto \(\$5\.000\)/.test(checkSplit(5000, [{ medio: E, m: 3000 }, { medio: T, m: 2001 }])));
+ok("resto: dos veces el mismo medio no", checkSplit(5000, [{ medio: E, m: 3000 }, { medio: E, m: 2000 }]) === "Elegí dos medios distintos.");
+ok("resto: un monto vacío o en 0 no", /cuánto te pagó/.test(checkSplit(5000, [{ medio: E, m: 3000 }, { medio: T, m: 0 }])));
+ok("resto: un monto con centavos no", /sin centavos/.test(checkSplit(5000, [{ medio: E, m: NaN }, { medio: T, m: 2000 }])));
+const sp = restSplit({ price: 10000, paid: 5000, restParts: [[E, 3000], [T, 1500]] });
+ok("resto: las partes y lo que quedó sin cobrar", sp.parts.length === 2 && sp.parts[1].m === 1500 && sp.missing === 500);
+ok("resto: sin partes, el resto entero en lo que eligió el cliente", JSON.stringify(restSplit({ price: 10000, paid: 5000, src: "app", pay: "cash" })) === JSON.stringify({ parts: [{ medio: E, m: 5000 }], missing: 0 }));
+ok("resto: sin partes, el medio que anotó el prestador", restSplit({ price: 4000, paid: 0, src: "manual", restMethod: "transfer" }).parts[0].medio === T);
 
 console.log(F ? `${F} FALLAS` : "TODO OK");
 process.exit(F ? 1 : 0);

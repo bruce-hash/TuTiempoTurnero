@@ -4,7 +4,9 @@ import { LIVE } from "../../config.js";
 import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { MESES, NOW, TODAY, capW, dayLabel, longLabel, nowHM, pad } from "../../lib/fechas.js";
-import { MEDIOS, medioFromDb, medioIcon } from "../../lib/medios.js";
+import { MEDIOS, medioIcon } from "../../lib/medios.js";
+import { restMissing, restSplit } from "../../lib/resto.js";
+import { restEditor } from "./resto.js";
 import { ME, pr } from "../../lib/prestadores.js";
 import { walkEditForm, walkForm } from "./caja.js";
 import { S } from "../../state.js";
@@ -37,8 +39,6 @@ export function dayLines(day) {
   store.BOOK.filter((booking) => booking.pid == ME() && booking.date === day && booking.status === "done" && booking.type !== "block")
     .sort((one, other) => one.time.localeCompare(other.time))
     .forEach((booking) => {
-      // C25: cómo se cobró el resto en el local, si el prestador lo anotó (si no, lo que eligió el cliente)
-      const rest = medioFromDb(booking.restMethod);
       if (booking.src === "app") {
         const deposit = (booking.paid || 0) - feeOf(booking);
         if (deposit > 0) {
@@ -51,29 +51,20 @@ export function dayLines(day) {
             b: booking.id,
           });
         }
-        const left = Math.max(0, (booking.price || 0) - (booking.paid || 0));
-        if (left > 0) {
-          lines.push({
-            h: booking.time,
-            t: "Resto · " + booking.cliente,
-            s: booking.svc,
-            m: left,
-            medio: rest || (booking.pay === "cash" ? "Efectivo" : "Mercado Pago"),
-            b: booking.id,
-            rest: true,
-          });
-        }
-      } else {
-        lines.push({
-          h: booking.time,
-          t: booking.cliente || "Cliente",
-          s: booking.svc,
-          m: booking.price || 0,
-          medio: rest || "Efectivo",
-          b: booking.id,
-          rest: true,
-        });
       }
+      // C25: el resto, en el medio con que se cobró en el local (V4b: en uno o dos medios; si no se anotó, lo que
+      // eligió el cliente). Lo que quedó sin cobrar se muestra pero no entra en la caja.
+      const title = booking.src === "app" ? "Resto · " + booking.cliente : booking.cliente || "Cliente";
+      const { parts, missing } = restSplit(booking);
+      const own = parts.map((part) => ({ h: booking.time, t: title, s: booking.svc, m: part.m, medio: part.medio, b: booking.id, rest: true }));
+      if (missing > 0) {
+        own.push({ h: booking.time, t: "Sin cobrar · " + (booking.cliente || "Cliente"), s: booking.svc, m: missing, medio: "Sin cobrar", b: booking.id, rest: true, missing: true });
+      }
+      if (own.length) {
+        // el editor va debajo del último movimiento del turno
+        own[own.length - 1].tail = true;
+      }
+      lines.push(...own);
     });
   if (day === TODAY()) {
     S.walk.forEach((walk, index) =>
@@ -90,6 +81,8 @@ export function dayLines(day) {
   return lines.sort((one, other) => String(one.h).localeCompare(String(other.h)));
 }
 export const finTot = (day) => day.app + day.man + day.walk + day.prod;
+// lo que entró de verdad (V4b: sin lo que quedó sin cobrar del resto)
+export const cashLines = (lines) => lines.filter((line) => !line.missing);
 // cierre de caja de un día; counted = efectivo contado (opcional)
 export function closeDay(day, income, cash, mp, counted) {
   const closing = {
@@ -115,9 +108,9 @@ function todayFin() {
   done.forEach((booking) => {
     if (booking.pid == ME()) {
       if (booking.src === "app") {
-        fin.app += (booking.price || 0) - feeOf(booking);
+        fin.app += (booking.price || 0) - feeOf(booking) - restMissing(booking);
       } else {
-        fin.man += booking.price || 0;
+        fin.man += (booking.price || 0) - restMissing(booking);
       }
     }
   });
@@ -220,15 +213,16 @@ export function vBFinanzas() {
 // y se borra (los de un turno: el medio con que se cobró el resto; la seña entra siempre por Mercado Pago).
 function movLine(line) {
   const key = line.w != null ? "w" + line.w : line.rest ? "b" + line.b : null;
-  const editing = key && S.movEd === key;
+  // V4b: un turno puede tener dos o tres movimientos (dos medios y lo que falta); el editor va una vez, debajo del último
+  const editing = key && S.movEd === key && (line.w != null || line.tail);
   const deleting = key && S.movDel === key;
   const actions =
     line.w != null
       ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Editar">✎</button><button class="xbtn" data-act="movDel" data-k="${key}" aria-label="Borrar">✕</button>`
       : line.rest
-        ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Cambiar el medio de pago">✎</button>`
+        ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Cambiar cómo te pagó el resto">✎</button>`
         : "";
-  const head = `<li class="${editing || deleting ? "on" : ""}"><span class="ag-t">${esc(line.h || "")}</span><div><b>${medioIcon(line.medio)} ${esc(line.t)}</b><span>${esc(line.s || "")} · ${esc(line.medio)}</span></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(line.m)}</b>${actions}</span></li>`;
+  const head = `<li class="${editing || deleting ? "on" : ""}"><span class="ag-t">${esc(line.h || "")}</span><div><b>${line.missing ? "⏳" : medioIcon(line.medio)} ${esc(line.t)}</b><span>${esc(line.s || "")} · ${esc(line.medio)}</span></div><span style="display:flex;gap:6px;align-items:center"><b class="price ${line.missing ? "rs-miss" : ""}" style="font-size:15px">${money(line.m)}</b>${actions}</span></li>`;
   if (deleting) {
     return `${head}<li class="movask"><div><b>¿Borrar ${esc(line.t)} de las ${esc(line.h)}?</b><span>${S.walk[line.w] && S.walk[line.w].kind === "prod" ? "La unidad vuelve al stock." : "Sale de la caja y de tus finanzas."}</span></div><span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="movDelNo">No</button><button class="btn btn-pri btn-sm" data-act="movDelYes" data-k="${key}">Sí, borrar</button></span></li>`;
   }
@@ -236,14 +230,15 @@ function movLine(line) {
     return `${head}<li class="movform">${walkEditForm(S.walk[line.w])}</li>`;
   }
   if (editing) {
-    return `${head}<li class="movask"><div><b>¿Cómo te pagó el resto?</b><span>Un turno atendido queda en la caja; acá cambiás con qué te pagó el resto.</span></div><span class="medios">${MEDIOS.map((medio) => `<button class="btn btn-sm ${line.medio === medio ? "btn-pri" : "btn-ghost"}" data-act="restMedio" data-id="${line.b}" data-m="${medio}" aria-pressed="${line.medio === medio}">${medio}</button>`).join("")}<button class="btn btn-ghost btn-sm" data-act="movEdClose">Listo</button></span></li>`;
+    const booking = store.BOOK.find((item) => item.id === line.b);
+    return booking ? `${head}<li class="movform">${restEditor(booking, "movEdClose")}</li>` : head;
   }
   return head;
 }
 function vCajaDia() {
   const today = TODAY();
   const lines = dayLines(today);
-  const total = lines.reduce((sum, line) => sum + line.m, 0);
+  const total = cashLines(lines).reduce((sum, line) => sum + line.m, 0);
   const byMedio = (medio) => lines.filter((line) => line.medio === medio).reduce((sum, line) => sum + line.m, 0);
   const cash = byMedio("Efectivo");
   const closing = store.CLOSINGS["day|" + today];

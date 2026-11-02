@@ -8,6 +8,21 @@ import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { relBadge } from "../../ui/picker.js";
 import { feeOf } from "./finanzas.js";
+import { restOf } from "../../lib/resto.js";
+import { restEditor, restSummary } from "./resto.js";
+
+// V4b · "Cargar diferencia": al marcar "Asistió", cómo te pagó el resto (uno o dos medios). Si ya lo anotaste, el resumen
+// y "Cambiar"; lo mismo se edita después desde la Caja del día.
+function doneRest(item) {
+  if (item.type === "block" || !restOf(item)) {
+    return "";
+  }
+  const loaded = !!item.restMethod || !!(item.restParts && item.restParts.length);
+  if (!loaded || S.restEd === item.id) {
+    return `<div class="restbox">${restEditor(item, loaded ? "restClose" : null)}</div>`;
+  }
+  return `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span><button type="button" class="lnk" data-act="restOpen" data-id="${item.id}">Cambiar</button></div>`;
+}
 
 // agenda del prestador: semanas de un período de 31 días y la línea de tiempo del día elegido, con turnos,
 // servicios sin turno de hoy, descansos, huecos libres para ofrecer y la hora actual
@@ -204,7 +219,7 @@ function detailCard(item) {
    }
    ${item.cliente && store.CLIENTS[item.cliente] && item.type !== "block" && item.type !== "walk" ? `<button class="lnk" style="font-size:13px;margin-top:6px" data-cli="${esc(item.cliente)}">Ver ficha del cliente →</button>` : ""}
    ${item.price ? `<div class="sum" style="margin-top:10px"><div><span>Precio</span><span>${money(item.price)}</span></div><div><span>Seña pagada (Mercado Pago)</span><span>${money(item.paid || 0)}</span></div>${item.price > (item.paid || 0) ? `<div class="tot"><span>A cobrar en el local${item.pay === "cash" ? " (efectivo)" : item.src === "app" ? " (Mercado Pago)" : ""}</span><span>${money(item.price - (item.paid || 0))}</span></div>` : ""}</div>` : ""}
-   ${isBooking && item.status === "confirmed" && item.type !== "block" ? (S.bAsk === item.id ? `<div class="bacts"><span class="hint">¿Cancelar? Se le devuelve todo al cliente.</span><button class="btn btn-ghost" data-act="bCancelNo">No</button><button class="btn btn-bad" data-act="bCancelYes" data-id="${item.id}">Sí, cancelar</button></div>` : `<div class="bacts" style="margin-top:12px"><button class="btn btn-ok" data-act="bDone" data-id="${item.id}">✓ Asistió</button><button class="btn btn-ghost" data-act="bNoShow" data-id="${item.id}">No vino</button><button class="btn btn-ghost" data-act="bCancel" data-id="${item.id}">Cancelar</button></div>`) : isBooking && item.type === "block" ? `<div class="bacts" style="margin-top:12px"><button class="btn btn-ghost" data-act="bUnblock" data-id="${item.id}">Desbloquear</button></div>` : item.status === "done" ? '<p class="note" style="text-align:left;margin-top:10px">✔ Atendido</p>' : item.status === "noshow" ? '<p class="note" style="text-align:left;margin-top:10px">✕ No vino</p>' : ""}
+   ${isBooking && item.status === "confirmed" && item.type !== "block" ? (S.bAsk === item.id ? `<div class="bacts"><span class="hint">¿Cancelar? Se le devuelve todo al cliente.</span><button class="btn btn-ghost" data-act="bCancelNo">No</button><button class="btn btn-bad" data-act="bCancelYes" data-id="${item.id}">Sí, cancelar</button></div>` : `<div class="bacts" style="margin-top:12px"><button class="btn btn-ok" data-act="bDone" data-id="${item.id}">✓ Asistió</button><button class="btn btn-ghost" data-act="bNoShow" data-id="${item.id}">No vino</button><button class="btn btn-ghost" data-act="bCancel" data-id="${item.id}">Cancelar</button></div>`) : isBooking && item.type === "block" ? `<div class="bacts" style="margin-top:12px"><button class="btn btn-ghost" data-act="bUnblock" data-id="${item.id}">Desbloquear</button></div>` : item.status === "done" ? '<p class="note" style="text-align:left;margin-top:10px">✔ Atendido</p>' + (isBooking ? doneRest(item) : "") : item.status === "noshow" ? '<p class="note" style="text-align:left;margin-top:10px">✕ No vino</p>' : ""}
   </div>`;
 }
 // agendar a mano un turno para un cliente que escribió o llamó (sin comisión)

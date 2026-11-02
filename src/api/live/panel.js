@@ -9,6 +9,7 @@ import { store } from "../../store.js";
 import { feeOf } from "../../views/prestador/finanzas.js";
 import { MSG_DEF } from "../../views/prestador/mensajes.js";
 import { medioFromDb } from "../../lib/medios.js";
+import { restMissing } from "../../lib/resto.js";
 
 // C22 (V3b): la consulta de los turnos del panel y cómo se pasan a la agenda. Los usan la carga completa (loadMine) y la
 // que vuelve a pedir solo los turnos cada 30 segundos y al volver a la pestaña (refreshAgenda).
@@ -16,7 +17,7 @@ const bookingsQuery = (pid, from, to) =>
   sb
     .from("bookings")
     .select(
-      "id,service_id,client_id,client_name,client_phone,service_name,source,status,starts_at,ends_at,price,discount_pct,paid_mp,paid_wallet,app_fee,client_fee,paid_mp_fee,series_id,addons,buffer_min,pay_method,rest_method",
+      "id,service_id,client_id,client_name,client_phone,service_name,source,status,starts_at,ends_at,price,discount_pct,paid_mp,paid_wallet,app_fee,client_fee,paid_mp_fee,series_id,addons,buffer_min,pay_method,rest_method,rest_parts",
     )
     .eq("provider_id", pid)
     .gte("starts_at", localToIso(from, "00:00"))
@@ -53,6 +54,8 @@ const bookingFromDb = (pid) => (row) =>
       pay: row.pay_method || "mp",
       // C25 (V4): cómo se cobró el resto en el local (lo anota el prestador en la Caja del día)
       restMethod: row.rest_method || null,
+      // V4b: el resto en uno o dos medios, si el prestador lo cargó así
+      restParts: row.rest_parts ? row.rest_parts.map((part) => [medioFromDb(part.method), part.amount]) : null,
       series: row.series_id,
       hold: row.status === "hold",
       buf: row.buffer_min || 0,
@@ -230,7 +233,7 @@ export const livePanel = {
     }
     S.jobsToday = store.BOOK.filter((booking) => booking.pid == pid && booking.date === TODAY() && booking.status === "done").length;
     S.earnToday = store.BOOK.filter((booking) => booking.pid == pid && booking.date === TODAY() && booking.status === "done").reduce(
-      (sum, booking) => sum + (booking.price - (booking.src === "app" ? feeOf(booking) : 0)),
+      (sum, booking) => sum + (booking.price - (booking.src === "app" ? feeOf(booking) : 0) - restMissing(booking)),
       0,
     );
   },
