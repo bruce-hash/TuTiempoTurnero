@@ -105,6 +105,11 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### V4b (Cargar diferencia)
+- Migración nueva: `20261102180000_cargar_diferencia.sql` (`bookings.rest_parts`, `set_rest_parts`; `set_rest_method`
+  borra las partes; `provider_finance` no cuenta lo que quedó sin cobrar del resto). No cambia datos: los turnos de antes
+  quedan sin partes, con el resto entero en su medio. Sin Edge Functions ni cambios de `config.js` o `.htaccess`.
+
 ### V4 (Finanzas y productos)
 - Migración nueva: `20261102120000_finanzas_v4.sql` (Transferencia como medio, `bookings.rest_method` y `set_rest_method`,
   arreglo de H36 en `provider_finance` y `provider_month_breakdown`). Sin Edge Functions ni cambios de `config.js` o

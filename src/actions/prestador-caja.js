@@ -1,4 +1,4 @@
-import { registerChange, registerClick, registerSubmit } from "./registro.js";
+import { registerChange, registerClick, registerInput, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { PESOS_ERR, money, parsePesos } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
@@ -9,8 +9,9 @@ import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
-import { closeDay, dayLines, finTot, ymk } from "../views/prestador/finanzas.js";
+import { cashLines, closeDay, dayLines, finTot, ymk } from "../views/prestador/finanzas.js";
 import { medioToDb } from "../lib/medios.js";
+import { checkSplit, restOf } from "../lib/resto.js";
 
 registerClick("reopenDay", (ev, el, act) => {
   delete store.CLOSINGS["day|" + TODAY()];
@@ -72,6 +73,7 @@ registerClick("movEdit", (ev, el, act) => {
 });
 registerClick("movEdClose", (ev, el, act) => {
   S.movEd = null;
+  S.restSplit = null;
   render();
 });
 registerClick("movDel", (ev, el, act) => {
@@ -131,15 +133,91 @@ registerSubmit("fWalkEd", (ev) => {
   toast("Movimiento actualizado");
   render();
 });
+// C25: el resto entero en un solo medio (borra las partes de V4b)
 registerClick("restMedio", (ev, el, act) => {
   const booking = store.BOOK.find((item) => String(item.id) === el.dataset.id);
   if (!booking) {
     return;
   }
   booking.restMethod = medioToDb(el.dataset.m);
+  booking.restParts = null;
   api.m.setRestMethod(booking, el.dataset.m);
   S.movEd = null;
+  S.restSplit = null;
+  S.restEd = null;
   toast("Anotado: el resto con " + el.dataset.m.toLowerCase());
+  render();
+});
+// V4b · "Cargar diferencia": el resto en dos medios
+registerClick("restSplitOn", (ev, el, act) => {
+  S.restSplit = +el.dataset.id;
+  render();
+  const input = $("#rs_a1");
+  if (input) {
+    input.focus();
+  }
+});
+// la Agenda: volver a abrir el editor de un turno que ya tiene el resto anotado, y cerrarlo
+registerClick("restOpen", (ev, el, act) => {
+  S.restEd = +el.dataset.id;
+  S.restSplit = null;
+  render();
+});
+registerClick("restClose", (ev, el, act) => {
+  S.restEd = null;
+  S.restSplit = null;
+  render();
+});
+registerClick("restSplitOff", (ev, el, act) => {
+  S.restSplit = null;
+  render();
+});
+const readPart = (n) => ({ medio: $("#rs_m" + n).value, m: ($("#rs_a" + n).value || "").trim() === "" ? 0 : parsePesos($("#rs_a" + n).value) });
+// lo que llevan sumado los dos montos, contra el resto
+function splitHint() {
+  const box = $("#rs_left");
+  if (!box) {
+    return;
+  }
+  const rest = +box.dataset.rest;
+  const total = [readPart(1), readPart(2)].reduce((sum, part) => sum + (part.m > 0 ? part.m : 0), 0);
+  box.textContent =
+    total === rest
+      ? "Suman justo el resto ✓"
+      : total > rest
+        ? `Se pasa ${money(total - rest)} del resto.`
+        : `Suman ${money(total)}. Faltan ${money(rest - total)}: si lo guardás así, queda sin cobrar.`;
+}
+// al escribir el primer monto, el segundo se completa con lo que falta del resto
+registerInput("rs_a1", (ev) => {
+  const rest = +$("#rs_left").dataset.rest;
+  const one = readPart(1).m;
+  if (one > 0 && one <= rest) {
+    $("#rs_a2").value = String(rest - one);
+  }
+  splitHint();
+});
+registerInput("rs_a2", () => splitHint());
+registerSubmit("fRest", (ev) => {
+  const form = ev.target;
+  const booking = store.BOOK.find((item) => String(item.id) === form.dataset.id);
+  if (!booking) {
+    S.restSplit = null;
+    return render();
+  }
+  const parts = [readPart(1), readPart(2)];
+  const problem = checkSplit(restOf(booking), parts);
+  if (problem) {
+    $("#rserr").textContent = problem;
+    return;
+  }
+  booking.restParts = parts.map((part) => [part.medio, part.m]);
+  booking.restMethod = medioToDb(parts[0].medio);
+  api.m.setRestParts(booking, booking.restParts);
+  S.restSplit = null;
+  S.movEd = null;
+  S.restEd = null;
+  toast(`Anotado: ${parts.map((part) => money(part.m) + " en " + part.medio.toLowerCase()).join(" y ")}`);
   render();
 });
 registerChange("wsv", (ev) => {
@@ -219,7 +297,7 @@ registerSubmit("fWalk", (ev) => {
 // cierre de la caja de hoy; con el efectivo contado, avisa si sobra o falta
 registerSubmit("fCloseDay", (ev) => {
   const today = TODAY();
-  const lines = dayLines(today);
+  const lines = cashLines(dayLines(today));
   const total = lines.reduce((sum, line) => sum + line.m, 0);
   const cash = lines.filter((line) => line.medio === "Efectivo").reduce((sum, line) => sum + line.m, 0);
   const counted = ($("#cdCount").value || "").trim();

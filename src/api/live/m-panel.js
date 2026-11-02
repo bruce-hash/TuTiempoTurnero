@@ -122,6 +122,9 @@ Object.assign(LM, {
       : Promise.resolve(),
   // …y cómo se cobró el resto de un turno
   setRestMethod: (booking, medio) => saved(sb.rpc("set_rest_method", { p_booking: booking.id, p_method: medioToDb(medio) })),
+  // V4b: el resto en uno o dos medios ([[medio, monto], …]); la base controla que no pase del resto
+  setRestParts: (booking, parts) =>
+    saved(sb.rpc("set_rest_parts", { p_booking: booking.id, p_parts: parts.map(([medio, amount]) => ({ method: medioToDb(medio), amount })) })),
   // C35 (V4): borrar un producto (las ventas y compras ya cargadas quedan, sin producto)
   delProduct: (prod) => (prod.id ? saved(sb.from("products").delete().eq("id", prod.id)) : Promise.resolve()),
   setStock: (prod) =>

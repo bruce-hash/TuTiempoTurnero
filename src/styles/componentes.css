@@ -232,6 +232,14 @@ body.am-open{overflow:hidden}
 .movs li.movask,.plist .movask{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px;margin:2px 0 6px}
 .movask > div{display:grid;gap:2px;min-width:0}.movask span{font-size:13px;color:var(--muted)}
 .movask .medios{display:flex;flex-wrap:wrap;gap:6px}
+/* V4b · Cargar diferencia: el resto en uno o dos medios (Caja del día y Agenda) */
+.restask{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;background:var(--bg);border-radius:10px;padding:10px}
+.restask > div{display:grid;gap:2px;min-width:0}.restask > div > span{font-size:13px;color:var(--muted)}
+.restask .medios{display:flex;flex-wrap:wrap;gap:6px}
+.restbox{margin-top:10px}.restbox.rs-done{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;font-size:14px}
+.restsplit{display:grid;gap:8px;background:var(--bg);border-radius:10px;padding:10px}.restsplit .lbl{margin:0}
+.rs-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.rs-row select,.rs-row input{width:100%;min-width:0}
+.rs-btns{display:grid;grid-template-columns:1fr 2fr;gap:8px}.rs-miss{color:var(--bad)}
 .movs li.movform{display:block;padding:0;border:0}
 .pl-acts{display:flex;gap:6px;align-items:center}
 .msum .mhead{font-weight:700;margin:10px 0 6px;font-size:14px}

@@ -24,6 +24,18 @@ self.addEventListener("activate", (ev) => {
   );
 });
 
+// La caché de esta versión se abre una sola vez y se guarda la referencia: si después la borran (una versión nueva o el
+// freno de emergencia), lo que se siga guardando va a esa caché ya borrada y no la vuelve a crear con el mismo nombre.
+// Con el freno, la página además avisa "tt-stop" y no se guarda nada más.
+let cacheRef = null;
+const cacheOf = () => (cacheRef ||= caches.has(CACHE).then((has) => (has ? caches.open(CACHE) : null)));
+self.addEventListener("message", (ev) => {
+  if (ev.data === "tt-stop") {
+    cacheRef = Promise.resolve(null);
+    ev.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith("tt-")).map((key) => caches.delete(key)))));
+  }
+});
+
 // lo único que se puede guardar (siempre de este sitio)
 const cacheable = (url) =>
   /^\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.(js|css)$/.test(url.pathname) ||
@@ -48,10 +60,9 @@ self.addEventListener("fetch", (ev) => {
       hit ||
       fetch(req).then((res) => {
         if (res.ok && res.type === "basic") {
-          // solo si la caché de esta versión sigue existiendo: si una versión nueva o el freno de emergencia la
-          // borraron, no se vuelve a crear
+          // solo en la caché de esta versión mientras exista (cacheOf): si la borraron, no se vuelve a crear
           const copy = res.clone();
-          caches.has(CACHE).then((has) => has && caches.open(CACHE).then((cache) => cache.put(req, copy)));
+          cacheOf().then((cache) => cache && cache.put(req, copy)).catch(() => {});
         }
         return res;
       }),
