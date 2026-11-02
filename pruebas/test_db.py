@@ -1039,5 +1039,20 @@ q("select mark_booking(%s, 'done')", (turno29(3),), uid=own29)
 ok("C29: al encenderlos vuelve todo como estaba y se siguen sumando", card() == 2, str(card()))
 ok("C29: la app no puede llamar stamp_add", err(q("select stamp_add(%s, %s, %s, 1, 'manual', null)", (p29, cl29, s29), uid=own29)))
 
+# ---------- V6 resto · C44 · "Clientes" cuenta solo cuentas de cliente ----------
+adm44 = mkuser("admin44@test.ar", "Admin 44"); q("insert into app_admins (user_id) values (%s)", (adm44,))
+cc = q("select admin_client_counts()", uid=adm44)[0][0]
+esperado = q("""select count(*) from profiles pr where not exists (select 1 from providers p where p.owner_id = pr.id and p.status <> 'deleted')
+                and not exists (select 1 from app_admins a where a.user_id = pr.id)""")[0][0]
+ok("C44: «Clientes» cuenta solo cuentas de cliente (sin negocios ni admins)", cc["clients"] == esperado and cc["clients"] < q("select count(*) from profiles")[0][0], str(cc))
+antes = cc["clients"]
+mkuser("nuevocliente44@test.ar", "Nuevo 44")
+cc2 = q("select admin_client_counts()", uid=adm44)[0][0]
+ok("C44: una cuenta de cliente nueva suma en el total y en las nuevas del mes", cc2["clients"] == antes + 1 and cc2["new_clients_month"] >= 1)
+neg44 = mkuser("negocio44@test.ar", "Negocio 44")
+q("select register_provider('Negocio C44', 'Calle 44', array['b'], '2284 4444', null)", uid=neg44)
+ok("C44: una cuenta de negocio no cuenta como cliente", q("select admin_client_counts()", uid=adm44)[0][0]["clients"] == antes + 1)
+ok("C44: solo el admin lo ve", err(q("select admin_client_counts()", uid=neg44), "forbidden") and err(q("select admin_client_counts()", role="anon")))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

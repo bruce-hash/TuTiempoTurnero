@@ -192,6 +192,10 @@ async function normalizar(page) {
     });
     // V5 resto (C29, cambio a propósito): la pestaña Comisión suma «Sellos» (las tarjetas para toda la plataforma)
     document.querySelectorAll("#app [data-act=admStamps]").forEach((toggle) => toggle.closest(".panel").remove());
+    // V6 resto (C44, cambio a propósito): «Clientes» del Resumen cuenta solo cuentas de cliente y lo dice
+    document.querySelectorAll("#app .kpis.adm .kpi").forEach((kpi) => {
+      if (kpi.querySelector("span")?.textContent.trim() === "Clientes") kpi.querySelectorAll("b, small").forEach((el) => { el.textContent = "CLIENTES"; });
+    });
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {

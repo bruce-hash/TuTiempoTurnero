@@ -774,6 +774,11 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await db.query("update mp_accounts set status='refunds_only' where provider_id=$1 and status='active'", [nomp.id]);
     await db.query("update provider_private set mp_connected=false where provider_id=$1", [nomp.id]);
     await pg.evaluate(async () => { await api.adminLoad(); S.admT = "res"; render() }); await wait(500);
+    // C44 (V6 resto): «Clientes» cuenta solo cuentas de cliente (sin negocios ni admins); los turnos tienen su indicador
+    const nCli = (await q("select count(*)::int c from profiles pr where not exists (select 1 from providers p where p.owner_id=pr.id and p.status<>'deleted') and not exists (select 1 from app_admins a where a.user_id=pr.id)"))[0].c;
+    const kCli = await pg.evaluate(() => [...document.querySelectorAll(".kpis.adm .kpi")].find((k) => k.querySelector("span")?.textContent.trim() === "Clientes")?.textContent || "");
+    ok("C44: «Clientes» cuenta solo las cuentas de cliente, y «Turnos del mes» sigue aparte", kCli.includes(String(nCli)) && /cuentas de cliente/.test(kCli)
+       && (await pg.evaluate(() => [...document.querySelectorAll(".kpis.adm .kpi span")].some((x) => x.textContent.trim() === "Turnos del mes"))), kCli + " vs " + nCli);
     ok("C41: el resumen nombra en negrita a los activos sin Mercado Pago, con «Ver quiénes»", !!nomp && (await pg.locator(`b:text-is("${nomp?.name}")`).count()) >= 1, String(nomp?.name));
     await pg.click("[data-act=admT][data-f=nomp]"); await wait(400);
     ok("C42: «Ver quiénes» abre Prestadores con el filtro «Sin Mercado Pago»", (await pg.locator('[data-act=admF][data-f=nomp][aria-pressed=true]').count()) === 1
