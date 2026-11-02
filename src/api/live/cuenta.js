@@ -25,6 +25,8 @@ export const liveCuenta = {
       sb.from("profiles").select("full_name,phone,avatar_path,email_notices,push_notices,push_bookings,push_followers").eq("id", user.id).maybeSingle(),
     ).catch(() => null);
     S.user = {
+      // D32: cuándo se creó la cuenta (la vuelta de Google con la casilla de negocio va directo al paso 1 si es nueva)
+      createdAt: user.created_at || null,
       id: user.id,
       email: user.email,
       name: (profile && profile.full_name) || (user.user_metadata && user.user_metadata.full_name) || user.email.split("@")[0],

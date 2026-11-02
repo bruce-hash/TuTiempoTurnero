@@ -86,11 +86,14 @@ export function authBody() {
    <p class="note">Mirá también en Spam o Promociones.</p>`;
   }
   if (mode === "up") {
-    return `${tk}${
-      biz
-        ? head("Registrá tu negocio", "Primero tu cuenta personal (con ella entrás siempre). Después cargás tu negocio en 5 pasos, unos 10 minutos.")
-        : head("Creá tu cuenta", "Para reservar turnos y seguir a tus profesionales.")
-    }${google()}
+    // D32 (2/11): un solo "Crear cuenta". La casilla de negocio va arriba de Google y del formulario: marcada, al terminar
+    // la cuenta sigue a "Tu negocio" (la acción pendiente "negocio", que viaja a Google y al link del email como el
+    // ticket). Con un ticket de cliente (reservar, seguir, lista) no se muestra: una cuenta de negocio no reserva (D33).
+    const bizBox =
+      pending && !biz
+        ? ""
+        : `<label class="chk bizchk${biz ? " on" : ""}"><input type="checkbox" id="au_biz" ${biz ? "checked" : ""}> <span><b>Tengo un negocio y quiero recibir reservas</b><small>Después de crear la cuenta cargás tu negocio en 5 pasos, unos 10 minutos.</small></span></label>`;
+    return `${tk}${head("Creá tu cuenta", biz ? "Tu cuenta personal: con ella entrás siempre a tu negocio." : "Para reservar turnos y seguir a tus profesionales.")}${bizBox}${google()}
    <form id="fSignup" novalidate>
     <div class="f"><label for="au_n">${biz ? "Tu nombre y apellido" : "Nombre y apellido"}</label><input id="au_n" autocomplete="name" maxlength="80" value="${esc(login.nombre || "")}"></div>
     <div class="f"><label for="au_e">Email</label><input id="au_e" type="email" inputmode="email" autocomplete="email" maxlength="120" value="${email}"></div>
@@ -102,12 +105,12 @@ export function authBody() {
     ${pwField("au_p", "Contraseña", "new-password", true)}
     <label class="chk"><input type="checkbox" id="au_ok"> <span>Acepto los <u class="lnk" role="link" tabindex="0" data-go="terminos" style="cursor:pointer">términos y la política de privacidad</u>.</span></label>
     <div class="err" id="aerr">${esc(login.err || "")}</div>
-    ${captchaBox("fSignup")}<button class="btn btn-pri btn-block" type="submit">${biz ? "Crear cuenta y seguir" : "Crear cuenta"}</button>
+    ${captchaBox("fSignup")}<button class="btn btn-pri btn-block" type="submit">${biz ? "Crear cuenta y seguir con mi negocio" : "Crear cuenta"}</button>
    </form>
    ${foot(
      biz
        ? '¿Ya tenés cuenta? <button type="button" class="lnk" data-act="authMode" data-m="in">Ingresá</button> y seguís con tu negocio.'
-       : '¿Ya tenés cuenta? <button type="button" class="lnk" data-act="authMode" data-m="in">Ingresá</button> · ¿Tenés un negocio? <button type="button" class="lnk" data-act="bizStart">Registralo</button>',
+       : '¿Ya tenés cuenta? <button type="button" class="lnk" data-act="authMode" data-m="in">Ingresá</button>',
    )}`;
   }
   // ingresar
