@@ -248,12 +248,21 @@ ok("D30: mp-webhook confirma y guarda la comisión de Mercado Pago informada y l
    r.status === 200 && (await st(b30[0])) === "confirmed"
    && JSON.stringify((await q("select outcome, mp_cost, mp_cost_expected from payments where mp_payment_id = '9030'"))[0]) === JSON.stringify({ outcome: "confirmed", mp_cost: 336, mp_cost_expected: 336 }));
 const b31 = await book();
-mp.pago({ id: "9031", collector: "1001", status: "approved", amount: 6337, fee: 1000, mpfee: 482, ref: b31.join(",") });
+mp.pago({ id: "9031", collector: "1001", status: "approved", amount: 6337, fee: 1000, mpfee: 400, ref: b31.join(",") });
 r = await webhook(pid, A.id, "9031");
-ok("D30: si Mercado Pago cobró otro % → turno confirmado, pago para revisar y aviso al prestador con los dos números",
+ok("D30: si Mercado Pago cobró un % que no es de ningún plazo → turno confirmado, pago para revisar y aviso al prestador con los dos números",
    r.status === 200 && (await st(b31[0])) === "confirmed"
    && JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9031'")) === '["mp_cost_mismatch"]'
-   && String(await one("select body from provider_notices where provider_id = $1 and kind = 'mp_cost'", [pid])).includes("($482) en vez de 5,31% ($336)"));
+   && String(await one("select body from provider_notices where provider_id = $1 and kind = 'mp_cost'", [pid])).includes("($400) en vez de 5,31% ($336)"));
+// D30 automático: la comisión es la de «al instante» → el webhook le cambia el plazo al prestador y le avisa
+const b32 = await book();
+mp.pago({ id: "9032", collector: "1001", status: "approved", amount: 6337, fee: 1000, mpfee: 482.25, ref: b32.join(",") });
+r = await webhook(pid, A.id, "9032");
+ok("D30: si la comisión es la de otro plazo (al instante) → confirmado sin revisión, el prestador queda en ese plazo y recibe el aviso",
+   r.status === 200 && (await st(b32[0])) === "confirmed"
+   && JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9032'")) === "[]"
+   && (await one("select payout_term from provider_settings where provider_id = $1", [pid])) === "instant"
+   && String(await one("select body from provider_notices where provider_id = $1 and kind = 'mp_term'", [pid])).includes("acredita al instante"));
 await q("update app_settings set mp_pct_instant = 0, mp_pct_d10 = 0");
 await q("update provider_settings set payout_term = 'instant' where provider_id = $1", [pid]);
 

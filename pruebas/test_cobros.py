@@ -797,13 +797,14 @@ ok("D30: el prestador recibe la seña completa; TuTiempo su comisión; lo de Mer
 ok("D30: Mis turnos muestra lo que se sumó por Mercado Pago", any(x["id"] == b30 and x["mp_fee"] == 337 and x["paid_mp_fee"] == 337 for x in one("select my_bookings()", uid=cli)))
 r31 = book(sv, at(28, 10), cli)[0][0]; b31 = r31["booking_ids"][0]
 pay([b31], "P-D30-MAL", 6337, 1000, pid, acc1, {"id": "P-D30-MAL", "status": "approved",
-    "fee_details": [{"type": "mercadopago_fee", "amount": 482.25}, {"type": "application_fee", "amount": 1000}]})
+    "fee_details": [{"type": "mercadopago_fee", "amount": 400}, {"type": "application_fee", "amount": 1000}]})
 pm31 = q("select outcome, review_reasons, mp_cost, mp_cost_expected from payments where mp_payment_id = 'P-D30-MAL'")[0]
-ok("D30: Mercado Pago cobró otro % (7,61% en vez de 5,31%): el turno se confirma y el pago queda para revisar, con los dos números",
-   bk(b31)[0] == "confirmed" and pm31 == ("review", ["mp_cost_mismatch"], 482, 336))
+ok("D30: Mercado Pago cobró un % que no es el de ningún plazo (6,31%): el turno se confirma y el pago queda para revisar, con los dos números",
+   bk(b31)[0] == "confirmed" and pm31 == ("review", ["mp_cost_mismatch"], 400, 336)
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10")
 nt = one("select body from provider_notices where provider_id = %s and kind = 'mp_cost' and ref = 'costo-P-D30-MAL'", (pid,))
-ok("D30: el prestador recibe el aviso con los dos números", nt is not None and "7,61% ($482)" in nt and "5,31% ($336)" in nt and "plazo" in nt)
-ok("D30: el admin ve los dos números en Para revisar", any(x["mp_payment_id"] == "P-D30-MAL" and x["mp_cost"] == 482 and x["mp_cost_expected"] == 336
+ok("D30: el prestador recibe el aviso con los dos números", nt is not None and "6,31% ($400)" in nt and "5,31% ($336)" in nt and "plazo" in nt)
+ok("D30: el admin ve los dos números en Para revisar", any(x["mp_payment_id"] == "P-D30-MAL" and x["mp_cost"] == 400 and x["mp_cost_expected"] == 336
    for x in one("select admin_review()", uid=adm)["payments"]))
 r32 = book(sv, at(28, 11), cli)[0][0]; b32 = r32["booking_ids"][0]
 pay([b32], "P-D30-MARGEN", 6337, 1000, pid, acc1, {"id": "P-D30-MARGEN", "status": "approved",
@@ -828,7 +829,58 @@ ok("D30: con Mercado Pago en 0% no se suma nada ni se compara (la comisión la a
    r34["amount_due"] == 6000 and bk(b34, "mp_fee, mp_fee_pct::float") == (0, 0)
    and q("select outcome, mp_cost, mp_cost_expected from payments where mp_payment_id = 'P-D30-CERO'")[0] == ("confirmed", 457, None))
 ok("D30: los turnos reservados antes no cambian", viejo is not None and bk(viejo, "mp_fee, paid_mp_fee") == (0, 0))
+ok("D30: con Mercado Pago en 0% tampoco se detecta el plazo (sigue el del prestador)",
+   one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10"
+   and one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_term'", (pid,)) == 0
+   and one("select mp_term_match(6000, 457, 'd10')") is None)
 q("select admin_set_fees(20, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+
+# ---------- D30 · El plazo de Mercado Pago se detecta solo (por la comisión que informa cada pago) ----------
+iva = lambda total, pct: round(total * pct * 1.21 / 100)
+ok("D30 auto: mp_term_match reconoce el plazo del prestador, otro plazo (con y sin IVA) o ninguno",
+   one("select mp_term_match(6337, 336, 'd10')") == "d10" and one("select mp_term_match(6337, 482, 'd10')") == "instant"
+   and one("select mp_term_match(6337, %s, 'd10')", (iva(6337, 7.61),)) == "instant"
+   and one("select mp_term_match(6337, %s, 'instant')", (iva(6337, 1.80),)) == "d35"
+   and one("select mp_term_match(6337, 338, 'd10')") == "d10" and one("select mp_term_match(6337, 339, 'd10')") is None
+   and one("select mp_term_match(6337, 400, 'd10')") is None)
+ok("D30 auto: mp_term_match no se llama desde la app", err(q("select mp_term_match(6337, 336, 'd10')", uid=owner)) and err(q("select mp_term_match(6337, 336, 'd10')", role="anon")))
+q("update provider_settings set payout_term = 'instant' where provider_id = %s", (pid,))
+r40 = book(sv, at(29, 9), cli)[0][0]; b40 = r40["booking_ids"][0]
+tot40 = one("select (charge_parts(5000, 20, 7.61))[3]")
+ok("D30 auto: arranca en «al instante», el % más alto (seña $5.000 + $1.000 + Mercado Pago 7,61%)", r40["amount_due"] == tot40 == 6495)
+res40 = pay([b40], "P-AUTO-35", tot40, 1000, pid, acc1, {"id": "P-AUTO-35", "status": "approved",
+            "fee_details": [{"type": "mercadopago_fee", "amount": round(tot40 * 1.80 / 100, 2)}, {"type": "application_fee", "amount": 1000}]})
+ok("D30 auto: Mercado Pago descontó el % de 35 días: el turno se confirma sin revisión y el prestador queda en 35 días",
+   res40["confirmed"] == 1 and q("select outcome, review_reasons from payments where mp_payment_id = 'P-AUTO-35'")[0] == ("confirmed", [])
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d35")
+n40 = one("select body from provider_notices where provider_id = %s and kind = 'mp_term' and ref = 'plazo-d35-P-AUTO-35'", (pid,))
+ok("D30 auto: el prestador recibe el aviso «Detectamos que tu cuenta acredita a 35 días; desde ahora tus clientes pagan menos»",
+   n40 is not None and "Detectamos que tu cuenta de Mercado Pago acredita a 35 días; desde ahora tus clientes pagan menos." in n40)
+r41 = book(sv, at(29, 10), cli)[0][0]; b41 = r41["booking_ids"][0]
+ok("D30 auto: el turno siguiente ya se cobra con el % de 35 días ($6.110 en vez de $6.495)",
+   r41["amount_due"] == one("select (charge_parts(5000, 20, 1.80))[3]") == 6110 and bk(b41, "mp_fee_pct::float")[0] == 1.8)
+pay([b41], "P-AUTO-IVA", 6110, 1000, pid, acc1, {"id": "P-AUTO-IVA", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": iva(6110, 1.80)}, {"type": "application_fee", "amount": 1000}]})
+ok("D30 auto: con el IVA incluido sigue siendo 35 días: sin revisión, sin otro aviso y sin cambiar el plazo",
+   one("select outcome from payments where mp_payment_id = 'P-AUTO-IVA'") == "confirmed"
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d35"
+   and one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_term'", (pid,)) == 1)
+r42 = book(sv, at(29, 11), cli)[0][0]; b42 = r42["booking_ids"][0]
+pay([b42], "P-AUTO-RARO", 6110, 1000, pid, acc1, {"id": "P-AUTO-RARO", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": 200}, {"type": "application_fee", "amount": 1000}]})
+ok("D30 auto: una comisión que no es la de ningún plazo va a Para revisar (como antes) y el plazo no cambia",
+   q("select outcome, review_reasons from payments where mp_payment_id = 'P-AUTO-RARO'")[0] == ("review", ["mp_cost_mismatch"])
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d35" and bk(b42)[0] == "confirmed")
+r43 = book(sv, at(29, 12), cli)[0][0]; b43 = r43["booking_ids"][0]
+pay([b43], "P-AUTO-SUBE", 6110, 1000, pid, acc1, {"id": "P-AUTO-SUBE", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": round(6110 * 5.31 / 100)}, {"type": "application_fee", "amount": 1000}]})
+n43 = one("select body from provider_notices where provider_id = %s and kind = 'mp_term' and ref = 'plazo-d10-P-AUTO-SUBE'", (pid,))
+ok("D30 auto: si el plazo real es más caro (10 días), se cambia igual y el aviso no dice que pagan menos",
+   one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10" and n43 is not None
+   and "acredita a 10 días" in n43 and "pagan menos" not in n43 and bk(b43)[0] == "confirmed")
+ok("D30 auto: el prestador lo sigue pudiendo cambiar a mano", not err(q("update provider_settings set payout_term = 'd18' where provider_id = %s", (pid,), uid=owner))
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d18")
+q("update provider_settings set payout_term = 'd10' where provider_id = %s", (pid,))
 
 # ---------- La migración completa se puede volver a correr sobre una base con datos ----------
 import os

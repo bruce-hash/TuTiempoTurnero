@@ -11,7 +11,7 @@
 
 alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
 alter table public.provider_notices add constraint provider_notices_kind_check
-  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect'));
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect')) not valid;  -- la migración más nueva la vuelve a crear validada (TODO_EN_UNO.sql se puede volver a correr)
 
 create or replace function public.admin_nudge_mp(p_provider bigint) returns jsonb
 language plpgsql security definer set search_path = public as $$

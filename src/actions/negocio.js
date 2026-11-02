@@ -330,10 +330,6 @@ registerClick("bizPay", (ev, el, act) => {
   S.biz.pay = el.dataset.v;
   render();
 });
-registerClick("bizTerm", (ev, el, act) => {
-  S.biz.term = el.dataset.v;
-  render();
-});
 async function saveStep4() {
   const conf = cfg(ME());
   const pay = S.biz.pay || (conf.pay === "total" ? "total" : String(conf.pct || 50));
@@ -341,7 +337,7 @@ async function saveStep4() {
   if (pay !== "total") {
     conf.pct = +pay;
   }
-  conf.term = S.biz.term || conf.term || "instant";
+  // D30: el plazo de Mercado Pago no se pregunta: arranca en "al instante" y la base lo detecta con el primer cobro
   await api.m.saveSettings(conf);
   await mark(4);
 }

@@ -105,6 +105,13 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### D30 (plazo de Mercado Pago automático)
+- Migración nueva: `20261103030000_plazo_mp_automatico.sql` (`mp_term_match`, `confirm_payment_core` detecta el plazo
+  por la comisión de cada pago, aviso `mp_term`). No cambia el plazo de los prestadores que ya están: lo corrige el
+  próximo cobro si no coincide. Las versiones viejas de `provider_notices_kind_check` pasan a `not valid` en sus
+  archivos (para que `TODO_EN_UNO.sql` se pueda volver a correr); en una base ya migrada no cambia nada. Sin Edge
+  Functions ni cambios de `config.js`.
+
 ### V8 (C06, seguidor nuevo)
 - Migración nueva: `20261103020000_seguidor_nuevo.sql` (`profiles.push_followers`, aviso `new_follower` en
   `provider_notices` con el trigger `follows_notice`, push `new_follower` en `push_enqueue`/`provider_notices_push`/`push_due`).

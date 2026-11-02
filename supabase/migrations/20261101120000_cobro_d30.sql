@@ -38,7 +38,7 @@ alter table public.payments add column if not exists mp_cost_expected integer ch
 -- aviso al prestador si Mercado Pago le cobró otro % que el de su plazo
 alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
 alter table public.provider_notices add constraint provider_notices_kind_check
-  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost'));
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost')) not valid;  -- la migración más nueva la vuelve a crear validada (TODO_EN_UNO.sql se puede volver a correr)
 
 -- ---------- Cuentas ----------
 -- comisión de TuTiempo en % de la seña (7 = 7%)
