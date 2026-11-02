@@ -966,5 +966,48 @@ ok("V6: un segundo aviso el mismo día no se repite", q("select admin_nudge_mp(%
 conectar_mp(p6)
 ok("V6: a uno que ya puede cobrar no se le avisa", err(q("select admin_nudge_mp(%s)", (p6,), uid=adm6), "already_connected"))
 
+# ---------- V4 resto · C31 gastos fijos · C36 precio de compra ----------
+own7 = mkuser("fijos7@test.ar", "Fijos")
+p7 = q("select register_provider('Gastos Fijos V4', 'Calle 7', array['b'], '2284 7777', null)", uid=own7)[0][0]
+m0 = q("select date_trunc('month', now() at time zone 'America/Argentina/Buenos_Aires')::date")[0][0]
+mprev = q("select (%s::date - interval '1 month')::date", (m0,))[0][0]
+q("select fixed_expenses_sync()", uid=own7)
+fx = {r[0]: r for r in q("select concept, category, amount, since from fixed_expenses where provider_id=%s", (p7,))}
+ok("C31: precargados alquiler, luz, gas, internet y monotributo, sin monto", set(fx) == {"Alquiler", "Luz", "Gas", "Internet", "Monotributo"} and all(r[2] == 0 for r in fx.values()))
+ok("C31: sin monto no se cargan en los gastos", q("select count(*) from expenses where provider_id=%s", (p7,))[0][0] == 0)
+q("select fixed_expenses_sync()", uid=own7)
+ok("C31: volver a sincronizar no los repite", q("select count(*) from fixed_expenses where provider_id=%s", (p7,))[0][0] == 5)
+alq = q("select id from fixed_expenses where provider_id=%s and concept='Alquiler'", (p7,))[0][0]
+# el alquiler viene del mes pasado: se carga ese mes y este
+q("update fixed_expenses set since=%s where id=%s", (mprev, alq))
+ok("C31: cargar el monto lo pone en los gastos de este mes", not err(q("select fixed_expense_save(%s, 'Alquiler', 'Alquiler', 150000, %s)", (alq, m0), uid=own7)))
+ex = dict(q("select fixed_month, amount from expenses where fixed_id=%s", (alq,)))
+ok("C31: se repite solo cada mes (el mes pasado y este, una vez cada uno)", ex == {mprev: 150000, m0: 150000}, str(ex))
+q("insert into cash_closings (provider_id, kind, period) values (%s, 'month', %s)", (p7, mprev))
+ok("C31: un aumento desde este mes cambia este mes", not err(q("select fixed_expense_save(%s, 'Alquiler', 'Alquiler', 180000, %s)", (alq, m0), uid=own7))
+   and dict(q("select fixed_month, amount from expenses where fixed_id=%s", (alq,))) == {mprev: 150000, m0: 180000})
+ok("C31: …sin tocar el mes cerrado", q("select amount from expenses where fixed_id=%s and fixed_month=%s", (alq, mprev))[0][0] == 150000)
+ok("C31: no se puede cambiar desde un mes cerrado", err(q("select fixed_expense_save(%s, 'Alquiler', 'Alquiler', 1, %s)", (alq, mprev), uid=own7), "month_closed"))
+ok("C31: ni desde un mes que todavía no llegó", err(q("select fixed_expense_save(%s, 'Alquiler', 'Alquiler', 1, (%s::date + interval '1 month')::date)", (alq, m0), uid=own7), "bad_month"))
+ok("C31: un gasto fijo no se borra suelto desde la app (se deja de repetir desde Gastos fijos)",
+   err(q("delete from expenses where fixed_id=%s and fixed_month=%s", (alq, m0), uid=own7), "fixed_expense"))
+nf = q("select fixed_expense_save(null, 'Seguro del local', 'Otros', 9000, %s)", (m0,), uid=own7)[0][0]
+ok("C31: un gasto fijo nuevo entra este mes", q("select amount, category from expenses where fixed_id=%s and fixed_month=%s", (nf, m0))[0] == (9000, "Otros"))
+ok("C31: dejar de repetirlo desde este mes lo saca de este mes", not err(q("select fixed_expense_stop(%s, %s)", (nf, m0), uid=own7))
+   and q("select count(*) from expenses where fixed_id=%s", (nf,))[0][0] == 0)
+q("select fixed_expenses_sync()", uid=own7)
+ok("C31: …y no vuelve a aparecer", q("select count(*) from expenses where fixed_id=%s", (nf,))[0][0] == 0)
+ok("C31: otro prestador no puede tocar los gastos fijos ajenos", err(q("select fixed_expense_save(%s, 'x', 'Otros', 1, %s)", (alq, m0), uid=own4), "forbidden")
+   and err(q("select fixed_expense_stop(%s, %s)", (alq, m0), uid=own4), "forbidden"))
+ok("C31: ni verlos", q("select count(*) from fixed_expenses where provider_id=%s", (p7,), uid=own4)[0][0] == 0)
+ok("C31: la app no escribe la tabla directo", err(q("insert into fixed_expenses (provider_id, concept, category, since) values (%s,'x','Otros',%s)", (p7, m0), uid=own7)))
+ok("C31: montos negativos o rubros que no existen se rechazan", err(q("select fixed_expense_save(null, 'x', 'Otros', -1, %s)", (m0,), uid=own7), "bad_amount")
+   and err(q("select fixed_expense_save(null, 'x', 'Comida', 1, %s)", (m0,), uid=own7), "bad_category"))
+mb7 = {r[0]: r[1:] for r in q("select * from provider_month_breakdown(%s)", (m0.year,), uid=own7)}
+ok("C31: el resumen del mes suma los gastos fijos", mb7[m0.month][4] == 180000, str(mb7[m0.month]))
+ok("C36: el producto guarda el precio de compra", not err(q("insert into products (provider_id, name, price, cost, stock) values (%s,'Cera',8000,4500,3)", (p7,), uid=own7))
+   and q("select price, cost from products where provider_id=%s and name='Cera'", (p7,))[0] == (8000, 4500))
+ok("C36: un precio de compra negativo se rechaza", err(q("insert into products (provider_id, name, price, cost) values (%s,'Gel',1,-1)", (p7,), uid=own7)))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
