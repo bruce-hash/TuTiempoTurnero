@@ -930,9 +930,10 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await p2b.click("#fBiz3 button[type=submit]"); await p2b.waitForSelector("[data-act=bizNext]", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(300);
   const hrs = await q("select dow, opens::text o, closes::text c from provider_hours where provider_id=$1 order by dow", [np.id]);
   ok("alta paso 3: martes a sábado de 10 a 20 en la base", hrs.length === 5 && hrs.every((h, i) => h.dow === i + 2 && h.o.startsWith("10:00") && h.c.startsWith("20:00")), JSON.stringify(hrs));
-  await p2b.click('[data-act=bizPay][data-v="40"]'); await p2b.click('[data-act=bizTerm][data-v=d10]'); await p2b.click("[data-act=bizNext]"); await p2b.waitForTimeout(800);
+  ok("D30: el alta no pregunta el plazo de Mercado Pago (se detecta solo)", !(await p2b.locator("[data-act=bizTerm]").count()) && !/Plazo de acreditación/i.test(await p2b.locator("#app").innerText()));
+  await p2b.click('[data-act=bizPay][data-v="40"]'); await p2b.click("[data-act=bizNext]"); await p2b.waitForTimeout(800);
   const st2 = (await q("select deposit_pct, pay_mode, payout_term, setup_done from provider_settings where provider_id=$1", [np.id]))[0];
-  ok("alta paso 4: seña del 40% y plazo de 10 días; se puede seguir sin Mercado Pago", st2.deposit_pct === 40 && st2.pay_mode === "deposit" && st2.payout_term === "d10" && JSON.stringify(st2.setup_done) === "[1,2,3,4]" && new URL(p2b.url()).pathname === "/registrar-negocio/5");
+  ok("alta paso 4: seña del 40%, plazo «al instante» (D30) y se puede seguir sin Mercado Pago", st2.deposit_pct === 40 && st2.pay_mode === "deposit" && st2.payout_term === "instant" && JSON.stringify(st2.setup_done) === "[1,2,3,4]" && new URL(p2b.url()).pathname === "/registrar-negocio/5");
   ok("alta paso 5: con «Exigir DNI», pide número, frente y dorso", await p2b.isVisible("#fDni") && await p2b.isVisible("#dniFront") && await p2b.isVisible("#dniBack"));
   ok("D24: el paso avisa cuánto se guardan las fotos", (await p2b.innerText("body")).includes("Guardamos las fotos hasta 30 días después de verificarte"));
   await p2b.click("[data-act=bizFinish]"); await p2b.waitForTimeout(300);

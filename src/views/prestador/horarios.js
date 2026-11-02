@@ -76,7 +76,7 @@ export function vBHorarios() {
         .concat([["total", "El total"]]),
       conf.pay === "total" ? "total" : "sena" + conf.pct,
     )}<span class="hint">Lo pagado no se devuelve. Si el cliente no viene, te queda a vos.</span></div>
-    <div class="f"><label for="hterm">Plazo de acreditación de Mercado Pago</label>${select("hterm", MP_TERMS, conf.term || "instant")}<span class="hint">Tiene que ser el mismo plazo que elegiste en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos). Si no coincide, vas a recibir un poco más o un poco menos que la seña.${mpPctOf(ME()) ? ` Al cliente se le suma ${pctTxt(mpPctOf(ME()))}% por la acreditación.` : ""}</span></div>
+    <div class="f"><label for="hterm">Plazo de acreditación de Mercado Pago</label>${select("hterm", MP_TERMS, conf.term || "instant")}<span class="hint">Lo detectamos solo con cada cobro (por lo que te descuenta Mercado Pago) y te avisamos si cambia. Si querés, cambialo a mano: tiene que ser el mismo plazo de tu cuenta de Mercado Pago (Tu negocio → Costos y plazos).${mpPctOf(ME()) ? ` Al cliente se le suma ${pctTxt(mpPctOf(ME()))}% por la acreditación.` : ""}</span></div>
    </div>
    <div class="panel" style="text-align:center"><p class="lbl">Tu link de turnos</p><p style="margin:0 0 8px;font-weight:700">${esc(profileLinkText(pr(ME())))}</p><p class="note">Ponelo en tu bio de Instagram y compartilo con tus clientes.</p>
     <button type="button" class="btn btn-ghost btn-block" data-act="copiarLink">Copiar link</button></div>

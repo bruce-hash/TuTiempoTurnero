@@ -1,6 +1,5 @@
 import { esc } from "../../lib/dom.js";
 import { STEPS, dniDone, setupTodo, stepDone } from "../../lib/alta.js";
-import { MP_TERMS } from "../../lib/cobro.js";
 import { DOW } from "../../lib/fechas.js";
 import { ME, avatar, pr } from "../../lib/prestadores.js";
 import { CATS, catName } from "../../lib/rubros.js";
@@ -127,13 +126,11 @@ function step3() {
 function step4() {
   const conf = cfg(ME());
   const pay = S.biz.pay || (conf.pay === "total" ? "total" : String(conf.pct || 50));
-  const term = S.biz.term || conf.term || "instant";
   const seg = (act, value, label, on) => `<button type="button" class="${on ? "on" : ""}" aria-pressed="${on}" data-act="${act}" data-v="${value}">${label}</button>`;
   const mpOk = S.mp === "ok";
   return shell(
     4,
     `<div class="f"><label>Seña que paga el cliente al reservar</label><div class="biz-seg">${[["30", "30%"], ["40", "40%"], ["50", "50%"], ["total", "Total"]].map(([value, label]) => seg("bizPay", value, label, pay === value)).join("")}</div><span class="hint">El resto lo cobrás en el local, como prefieras.</span></div>
-   <div class="f"><label>Plazo de acreditación de Mercado Pago</label><div class="biz-seg">${MP_TERMS.map(([value, label]) => seg("bizTerm", value, label, term === value)).join("")}</div><span class="hint">Tiene que ser el mismo plazo que elegiste en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos).</span></div>
    <div class="biz-mp"><div><b>Mercado Pago</b><div class="hint">${mpOk ? "✓ Conectado: las señas entran directo a tu cuenta." : "Las señas entran directo a tu cuenta."}</div></div>${mpOk ? "" : '<button type="button" class="btn btn-pri btn-sm" data-act="bizMp">Conectar Mercado Pago</button>'}</div>
    ${mpOk ? "" : '<p class="note" style="text-align:left;margin-top:12px">Sin Mercado Pago conectado tu perfil no recibe reservas. Si preferís, conectalo después desde Perfil → Cobros.</p>'}`,
     { title: "Seña y cobro", sub: "Cómo cobrás la seña de cada turno." },
