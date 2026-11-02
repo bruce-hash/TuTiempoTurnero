@@ -95,13 +95,14 @@ export function setBtab(tab) {
   S.manOpen = false;
   S.blockOpen = false;
 }
-// avisos de cobros sin leer (Bloque 1): pagos devueltos desde Mercado Pago, contracargos y reclamos
+// avisos sin leer: de cobros (Bloque 1: pagos devueltos desde Mercado Pago, contracargos y reclamos; conectar Mercado
+// Pago) y, desde C06 (V8), los seguidores nuevos
 function noticesPanel() {
   const unread = (S.notices || []).filter((notice) => !notice.read);
   if (!unread.length) {
     return "";
   }
-  return `<div class="panel inbox pb-notices"><p class="lbl">🔔 Avisos de cobros <span class="cnt">${unread.length}</span></p><ul class="ag">${unread
+  return `<div class="panel inbox pb-notices"><p class="lbl">🔔 ${unread.every((notice) => notice.kind === "new_follower") ? "Seguidores nuevos" : "Avisos"} <span class="cnt">${unread.length}</span></p><ul class="ag">${unread
     .slice(0, 5)
     .map((notice) => `<li class="unread"><div><span class="msgb">${esc(notice.body)}</span><span class="hint">${esc(relDate(notice.at))}</span></div></li>`)
     .join("")}</ul><button class="btn btn-ghost btn-sm" data-act="noticesRead">Entendido</button></div>`;

@@ -72,6 +72,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost` y «Vendí uno».
   - V5 resto (C29): interruptor global de sellos (`app_settings.stamps_on`, `stampsOn()` en `src/ui/sellos.js`; todo lo de
     sellos pregunta ahí). En la base, `stamp_add` no suma ni canjea con los sellos apagados (`stamps_off`); los datos quedan.
+  - V8 (C06): seguidor nuevo → `provider_notices` `new_follower` (trigger `follows_notice`, nombre de pila, una vez por
+    persona) y push «Nuevo seguidor» con su interruptor propio (`profiles.push_followers`, «Nuevos seguidores»).
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
