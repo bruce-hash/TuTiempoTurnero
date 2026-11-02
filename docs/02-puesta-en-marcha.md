@@ -105,6 +105,12 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### V4 resto (C30, C31, C36)
+- Migración nueva: `20261102230000_finanzas_v4_resto.sql` (C31: `fixed_expenses`, `fixed_expenses_sync`,
+  `fixed_expense_save`, `fixed_expense_stop`, `expenses.fixed_id`/`fixed_month`; C36: `products.cost`). La primera vez
+  que cada prestador abre su panel se le crean los cinco gastos fijos precargados, sin monto. No cambia datos: los
+  gastos que ya tenían cargados quedan como «Otros gastos del mes». Sin Edge Functions ni cambios de `config.js` o `.htaccess`.
+
 ### C02 (recargar vuelve al inicio)
 - Solo frontend: subir `dist/` completo, **con el `.htaccess`** (archivo oculto). Si en prueba pasa, seguir la sección 3,
   paso 6 (el `curl` dice si el servidor devuelve la app en `/panel/agenda`). Sin migraciones ni Edge Functions.

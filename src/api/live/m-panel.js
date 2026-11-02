@@ -1,4 +1,4 @@
-import { LM } from "./index.js";
+import { LM, liveApi } from "./index.js";
 import { cfgToDb } from "../mapeo.js";
 import { medioToDb } from "../../lib/medios.js";
 import { saved } from "../saved.js";
@@ -146,6 +146,8 @@ Object.assign(LM, {
           price: prod.p,
           stock: prod.stock,
           min_stock: prod.min,
+          // C36: precio de compra (opcional)
+          cost: prod.cost == null ? null : prod.cost,
         })
         .select("id")
         .single(),
@@ -171,6 +173,12 @@ Object.assign(LM, {
       expense.id = row.id;
     }),
   delExpense: (expense) => saved(sb.from("expenses").delete().eq("id", expense.id)),
+  // C31: un gasto fijo nuevo o cambiado desde un mes ("AAAA-MM"), y dejar de repetirlo; después, los gastos de la base
+  saveFixed: (item, fromYm) =>
+    saved(sb.rpc("fixed_expense_save", { p_id: typeof item.id === "number" ? item.id : null, p_concept: item.c, p_category: item.cat, p_amount: item.m, p_from: fromYm + "-01" })).then(() =>
+      liveApi.reloadExpenses(),
+    ),
+  stopFixed: (item, fromYm) => saved(sb.rpc("fixed_expense_stop", { p_id: item.id, p_from: fromYm + "-01" })).then(() => liveApi.reloadExpenses()),
   saveTemplate: (tpl) =>
     saved(
       sb.from("message_templates").upsert({
