@@ -52,6 +52,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     lo que se cobra en el local en `src/lib/medios.js` (Efectivo, Transferencia, Mercado Pago ↔ cash, transfer, mp): en
     `walkins.method` y en `bookings.rest_method` (cómo se cobró el resto, `set_rest_method`); `pay_method` es lo que eligió
     el cliente y no cambia. Resumen del mes: `provider_month_breakdown` en la base.
+  - V4b (C25 "Cargar diferencia"): el resto de un turno en uno o dos medios (`bookings.rest_parts`, `set_rest_parts`; la
+    suma no pasa del resto y lo que falta queda sin cobrar, fuera de la caja y de `provider_finance`). `src/lib/resto.js`
+    (cuentas puras) y `src/views/prestador/resto.js` (el editor, el mismo en la Agenda al marcar "Asistió" y en la Caja del día).
   - Ingreso y registro (D32): una sola ventana para todos (`src/ui/ingreso.js`, contenido en `src/views/auth/login.js`
     `authBody()`, lo mismo en `/ingresar`, `/crear-cuenta` y `/registrar-negocio`). La acción que pidió ingresar
     (`S.pending`, `src/lib/pendiente.js`: reservar, seguir, lista, negocio; solo ids, vence a las 2 h) se muestra como

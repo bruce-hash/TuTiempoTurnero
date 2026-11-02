@@ -352,6 +352,41 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("C32: los meses van con mayúscula y el balance negativo en rojo", /Balance de [A-ZÁÉÍÓÚ]/.test(await pg.locator(".kpi.big").innerText()) && (await pg.locator(".msum .mbal.neg").count()) === 1);
   await pg.click("[data-act=closeMonth]"); await wait(800);
   ok("mes cerrado en la base", (await q("select count(*)::int c from cash_closings where kind='month'"))[0].c === 1);
+  // V4b · C25 "Cargar diferencia": al marcar "Asistió", el resto en dos medios; después se cambia desde la Caja del día
+  {
+    const [sv] = await q("select s.id, s.provider_id from services s join providers p on p.id=s.provider_id where p.name like 'Sofía%' and s.active order by s.id limit 1");
+    const hoyBA = (await q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date::text d"))[0].d;
+    const [bd] = await q("insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1,$2,'Diferencia','Corte','manual','confirmed',($3||' 07:00')::timestamp at time zone 'America/Argentina/Buenos_Aires',($3||' 07:30')::timestamp at time zone 'America/Argentina/Buenos_Aires',5000) returning id", [sv.provider_id, sv.id, hoyBA]);
+    await pg.reload(); await wait(1500);
+    await pg.click("[data-btab=agenda]"); await wait(300);
+    await pg.evaluate((x) => { S.aday = x; S.sel = null; render() }, hoyBA); await wait(300);
+    await pg.click(`.ev[data-sel="${bd.id}"]`); await wait(200);
+    await pg.click(`[data-act=bDone][data-id="${bd.id}"]`); await wait(700);
+    ok("V4b: al marcar «Asistió» pregunta cómo te pagó el resto", /¿Cómo te pagó el resto\? · \$5\.000/.test(await pg.locator(".detail .restbox").innerText()));
+    await pg.click(".restbox [data-act=restSplitOn]"); await wait(200);
+    await pg.fill("#rs_a1", "3000"); await wait(100);
+    ok("V4b: al escribir el primer monto, el segundo se completa con lo que falta", (await pg.inputValue("#rs_a2")) === "2000" && /justo el resto/.test(await pg.locator("#rs_left").innerText()));
+    await pg.fill("#rs_a2", "2500"); await pg.click("#fRest button[type=submit]"); await wait(300);
+    ok("V4b: si suman más que el resto avisa y no guarda", /no puede pasar del resto/.test(await pg.locator("#rserr").innerText()) && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null);
+    await pg.fill("#rs_a2", "2000"); await wait(600); await pg.click("#fRest button[type=submit]");
+    ok("V4b: $3.000 efectivo + $2.000 transferencia quedan en la base", await until("select rest_parts from bookings where id=$1", [bd.id],
+       (r) => JSON.stringify((r[0]?.rest_parts || []).map((x) => [x.method, x.amount])) === JSON.stringify([["cash", 3000], ["transfer", 2000]])));
+    ok("V4b: la Agenda muestra el resto en los dos medios", /Resto: .*\$3\.000 en Efectivo \+ .*\$2\.000 en Transferencia/.test(await pg.locator(".detail .restbox").innerText()));
+    await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
+    const kpiT = async (medio) => pg.evaluate((m) => [...document.querySelectorAll(".kpis .kpi")].find((k) => k.textContent.includes(m))?.querySelector("b")?.textContent, medio);
+    ok("V4b: en la Caja del día cada parte cuenta en su medio", (await pg.locator('.movs li:has-text("Diferencia")').count()) === 2
+       && (await kpiT("Transferencia")) === "$2.000" && (await kpiT("Efectivo")) === "$10.000", `${await kpiT("Transferencia")} · ${await kpiT("Efectivo")}`);
+    await pg.click('.movs li:has-text("Diferencia") >> nth=1 >> [data-act=movEdit]'); await wait(200);
+    await pg.click(".movs [data-act=restSplitOn]"); await wait(200);
+    ok("V4b: desde Finanzas se abre con lo que estaba cargado", (await pg.inputValue("#rs_a1")) === "3000" && (await pg.inputValue("#rs_a2")) === "2000");
+    await pg.fill("#rs_a2", "1000"); await wait(600); await pg.click("#fRest button[type=submit]");
+    ok("V4b: si suman menos, se guarda y lo que falta queda sin cobrar", await until("select rest_parts from bookings where id=$1", [bd.id], (r) => r[0]?.rest_parts?.[1]?.amount === 1000)
+       && /Sin cobrar · Diferencia/.test(await txt()) && (await kpiT("Transferencia")) === "$1.000");
+    await pg.click('.movs li:has-text("Diferencia") >> nth=0 >> [data-act=movEdit]'); await wait(200);
+    await pg.click('.movs [data-act=restMedio][data-m="Transferencia"]'); await wait(800);
+    ok("V4b: un solo medio vuelve al resto entero (sin partes)", (await q("select rest_parts, rest_method from bookings where id=$1", [bd.id]))[0].rest_method === "transfer"
+       && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
+  }
   // rubros y servicios: sumar Masajes
   await pg.click("[data-btab=perfil]"); await wait(300);
   await pg.check("#rc-m", { force: true }); await wait(200); await pg.click("[data-act=svcAdd]"); await wait(200);
