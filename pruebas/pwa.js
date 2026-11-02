@@ -74,7 +74,7 @@ const PUSH_STUB = `(() => {
     page.on("console", (m) => { if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) csp.push(m.text()); });
     return page;
   }
-  const open = async (page, route) => { await page.goto(BASE + route); await page.waitForFunction(() => document.querySelector("#app").children.length); await page.waitForTimeout(500); };
+  const open = async (page, route) => { await page.goto(BASE + route); await page.waitForFunction(() => (document.querySelector("#app").children.length && !document.querySelector("#app .bootload"))); await page.waitForTimeout(500); };
   const login = async (page, email, pass) => {
     await open(page, "/ingresar");
     await page.fill("#ai_e", email); await page.fill("#ai_p", pass); await page.click("#fLogin button[type=submit]");

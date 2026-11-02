@@ -199,3 +199,11 @@ input[type=time]{min-width:0;max-width:100%}
 .chip.bad{background:var(--bad-soft);color:var(--bad)}.chip.gray{background:var(--bg);color:var(--muted)}
 .tag-st{font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;margin-left:4px}.tag-st.ok{background:var(--ok-soft);color:var(--ok)}.tag-st.bad{background:var(--bad-soft);color:var(--bad)}
 .ag.tl li{align-items:start}
+
+/* C02 · arranque: mientras se resuelven la dirección y la sesión, solo una barra fina (nunca el inicio) */
+body.booting footer{display:none}
+.bootload{min-height:60vh;display:flex;align-items:flex-start;justify-content:center;padding-top:28vh}
+.bootbar{display:block;width:120px;height:3px;border-radius:3px;background:var(--line,#e5e5e5);overflow:hidden;position:relative}
+.bootbar::after{content:"";position:absolute;inset:0;width:40%;border-radius:3px;background:var(--fg,#121212);animation:bootbar 1s ease-in-out infinite}
+@keyframes bootbar{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+@media (prefers-reduced-motion:reduce){.bootbar::after{animation:none;width:100%;opacity:.35}}

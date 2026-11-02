@@ -46,7 +46,7 @@ const SOFIA = "sofia-benitez-studio";
   const st = (page) => page.evaluate(() => ({ view: S.view, role: S.role, pid: S.pid, ptab: S.ptab, cat: S.cat, q: S.q, btab: S.btab, admT: S.admT, cli: S.cli, story: !!S.story, user: !!S.user }));
   // abre la dirección y espera a que la app haya arrancado (el enrutador pone el título al primer dibujo)
   const ready = (page) =>
-    page.waitForFunction(() => typeof S !== "undefined" && document.title && document.querySelector("#app").children.length, null, { timeout: 10000 }).catch(async (err) => {
+    page.waitForFunction(() => typeof S !== "undefined" && document.title && (document.querySelector("#app").children.length && !document.querySelector("#app .bootload")), null, { timeout: 10000 }).catch(async (err) => {
       console.log("  (la app no arrancó en " + page.url() + ": " + (await page.content()).slice(0, 300).replace(/\s+/g, " ") + ")");
       throw err;
     });
@@ -402,6 +402,69 @@ const SOFIA = "sofia-benitez-studio";
     ok("C02: con el hosting roto, el panel de TuTiempo avisa que falta el .htaccess", /El sitio no devuelve la app en sus direcciones/.test(await text(pa)) && /\.htaccess/.test(await text(pa)));
     await fetch(BASE + "/__rutas?modo=ok");
     await pa.context().close();
+  }
+
+  // ---------- 10. C02: recargar no muestra el inicio ni un instante (red lenta) ----------
+  // Mientras la app no resolvió la dirección y la sesión, en #app solo está la carga (.bootload). Un observador anota
+  // desde el primer byte cada pantalla que se dibuja; con la red lenta (latencia + API demorada) en ningún momento
+  // tiene que aparecer el inicio del cliente (.hero, .segtile) antes de la pantalla de la dirección.
+  {
+    async function lenta(page) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Network.enable");
+      await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 300, downloadThroughput: 200 * 1024, uploadThroughput: 100 * 1024 });
+      await page.route(/\/(rest|auth)\/v1\//, async (route) => { await new Promise((r) => setTimeout(r, 700)); await route.continue(); });
+      await page.addInitScript(() => {
+        window.__seen = [];
+        const look = () => {
+          const app = document.getElementById("app");
+          if (!app) return;
+          const what = app.querySelector(".hero, .segtile") ? "inicio" : app.querySelector(".bootload") ? "carga" : app.children.length ? "otra" : "vacía";
+          if (window.__seen[window.__seen.length - 1] !== what) window.__seen.push(what);
+        };
+        new MutationObserver(look).observe(document, { childList: true, subtree: true });
+        document.addEventListener("DOMContentLoaded", look);
+      });
+    }
+    // con la red lenta el arranque tarda más que los 10 s de ready(): se espera hasta 40 s y se anota cuánto tardó
+    const listo = (page) => page.waitForFunction(() => typeof S !== "undefined" && !S.booting && !document.querySelector("#app .bootload"), null, { timeout: 40000 });
+    const recargar = async (page) => {
+      const t0 = Date.now();
+      await page.reload();
+      await listo(page);
+      console.log(`  (${here(page)}: ${((Date.now() - t0) / 1000).toFixed(1)} s con la red lenta)`);
+      await wait(page, 600);
+      return page.evaluate(() => window.__seen);
+    };
+    const pc = await nueva();
+    await go(pc, "/ingresar");
+    await login(pc, "ruta@test.ar", "cliente12345");
+    await lenta(pc);
+    for (const [route, view] of [["/mis-turnos", "misturnos"], ["/turno/" + idTurno, "turnoOk"], ["/" + SOFIA, "perfil"]]) {
+      await pc.goto(BASE + route); await listo(pc); await wait(pc, 400);
+      const seen = await recargar(pc);
+      ok(`C02: recargar ${route} con la red lenta: carga y después la pantalla, nunca el inicio`,
+         !seen.includes("inicio") && seen[0] === "carga" && seen[seen.length - 1] === "otra" && here(pc) === route && (await st(pc)).view === view,
+         JSON.stringify(seen) + " " + here(pc) + " " + (await st(pc)).view);
+    }
+    await pc.context().close();
+    const pp = await nueva();
+    await go(pp, "/ingresar");
+    await loginPanel(pp);
+    await lenta(pp);
+    await pp.goto(BASE + "/panel/agenda"); await listo(pp); await wait(pp, 400);
+    const seen = await recargar(pp);
+    ok("C02: recargar /panel/agenda con la red lenta: carga y después la Agenda, nunca el inicio",
+       !seen.includes("inicio") && seen[0] === "carga" && seen[seen.length - 1] === "otra" && here(pp) === "/panel/agenda" && (await st(pp)).role === "barbero",
+       JSON.stringify(seen) + " " + here(pp));
+    // sin sesión, el inicio sí es la pantalla de "/" (después de la carga)
+    const p0 = await nueva();
+    await lenta(p0);
+    await p0.goto(BASE + "/"); await listo(p0); await wait(p0, 600);
+    const seen0 = await p0.evaluate(() => window.__seen);
+    ok("C02: abrir / muestra la carga y después el inicio", seen0[0] === "carga" && seen0[seen0.length - 1] === "inicio", JSON.stringify(seen0));
+    await p0.context().close();
+    await pp.context().close();
   }
 
   ok("sin errores de JavaScript", errors.length === 0, errors.join(" | "));

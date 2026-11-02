@@ -61,7 +61,7 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   };
   const go = async (route) => {
     await page.goto(BASE + route);
-    await page.waitForFunction(() => document.querySelector("#app").children.length);
+    await page.waitForFunction(() => (document.querySelector("#app").children.length && !document.querySelector("#app .bootload")));
     await check(route);
   };
   const role = async (r) => {

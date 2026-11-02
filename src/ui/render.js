@@ -117,7 +117,24 @@ function segNow() {
   }
 }
 // dibuja toda la app desde el estado S; si una vista falla, muestra un aviso en lugar de una página rota
+// C02: mientras arranca (sesión y dirección sin resolver) solo la carga mínima, nunca el inicio ni otra pantalla
+function renderBoot() {
+  const app = document.getElementById("app");
+  if (app && !app.querySelector(".bootload")) {
+    app.innerHTML = BOOT_HTML;
+  }
+  const logo = document.getElementById("logoLink");
+  if (logo && !logo.innerHTML) {
+    logo.innerHTML = LOGO;
+  }
+}
+export const BOOT_HTML = '<div class="bootload" role="status" aria-label="Cargando"><span class="bootbar"></span></div>';
 export function render() {
+  if (S.booting) {
+    renderBoot();
+    return;
+  }
+  document.body.classList.remove("booting");
   try {
     renderInner();
     syncUrl();
