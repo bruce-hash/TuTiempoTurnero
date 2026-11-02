@@ -845,6 +845,33 @@ ok("C35: borrar un producto no borra sus ventas ni sus compras (quedan sin produ
     and not err(q("delete from products where id=%s", (pr_,), uid=own4))
     and q("select count(*), count(product_id) from walkins where provider_id=%s and description='Gel'", (p4,))[0] == (1, 0))(
      q("insert into products (provider_id, name, price, stock) values (%s,'Gel',1500,3) returning id", (p4,), uid=own4)[0][0]))
+# ---------- V4b · C25 "Cargar diferencia": el resto en uno o dos medios ----------
+rp = lambda b, parts, uid=own4: q("select set_rest_parts(%s, %s::jsonb)", (b, parts), uid=uid)
+ok("V4b: resto de $5.000 (turno nuevo: precio 10.000, seña 5.000) → $3.000 efectivo + $2.000 transferencia",
+   rp(b_new, '[{"method":"cash","amount":3000},{"method":"transfer","amount":2000}]')[0][0] == [{"method": "cash", "amount": 3000}, {"method": "transfer", "amount": 2000}]
+   and q("select rest_method from bookings where id=%s", (b_new,))[0][0] == "cash")
+ok("V4b: la suma no puede superar el resto", err(rp(b_new, '[{"method":"cash","amount":3000},{"method":"transfer","amount":2001}]'), "over_rest"))
+ok("V4b: …y lo que estaba cargado no cambia", q("select rest_parts from bookings where id=%s", (b_new,))[0][0][1]["amount"] == 2000)
+ok("V4b: no más de dos medios", err(rp(b_man, '[{"method":"cash","amount":1},{"method":"transfer","amount":1},{"method":"mp","amount":1}]'), "bad_parts"))
+ok("V4b: dos veces el mismo medio se rechaza", err(rp(b_man, '[{"method":"cash","amount":1000},{"method":"cash","amount":1000}]'), "bad_parts"))
+ok("V4b: sin partes se rechaza", err(rp(b_man, '[]'), "bad_parts"))
+ok("V4b: montos con decimales, en 0, negativos, como texto o sin monto se rechazan",
+   all(err(rp(b_man, '[{"method":"cash","amount":%s}]' % a), "bad_amount") for a in ("1500.5", "0", "-100", '"1500"', "null"))
+   and err(rp(b_man, '[{"method":"cash"}]'), "bad_amount"))
+ok("V4b: un medio que no existe se rechaza", err(rp(b_man, '[{"method":"cheque","amount":1000}]'), "bad_method"))
+ok("V4b: un turno que no pasó por la caja no se carga", err(rp(b_conf, '[{"method":"cash","amount":1000}]'), "not_done"))
+ok("V4b: otro prestador no puede cargar un turno ajeno", err(rp(b_man, '[{"method":"cash","amount":1000}]', uid=prov), "forbidden"))
+ok("V4b: sin sesión no se puede llamar", err(q("select set_rest_parts(%s, %s::jsonb)", (b_man, '[{"method":"cash","amount":1}]'), role="anon")))
+# agendado a mano de $5.000: cobra $4.000 (2.500 efectivo + 1.500 Mercado Pago); los $1.000 que faltan no entraron
+rp(b_man, '[{"method":"cash","amount":2500},{"method":"mp","amount":1500}]')
+fin4b = q("select app, man, walk, prod from provider_finance(%s, %s) where day = %s", (hoy4, hoy4, hoy4), uid=own4)[0]
+ok("V4b: en Finanzas lo que no se cobró del resto no entra (el resto completo del turno de la app sí)", fin4b == (10000 + 9000, 4000, 3000, 2000 + 1500), str(fin4b))
+ok("V4b: un solo medio (set_rest_method) vuelve al resto entero y borra las partes",
+   q("select set_rest_method(%s, 'transfer')", (b_man,), uid=own4)[0][0] == "transfer"
+   and q("select rest_parts, rest_method from bookings where id=%s", (b_man,))[0] == (None, "transfer")
+   and q("select man from provider_finance(%s, %s) where day = %s", (hoy4, hoy4, hoy4), uid=own4)[0][0] == 5000)
+ok("V4b: la plata del turno no cambia", q("select price, paid_mp, app_fee from bookings where id=%s", (b_new,))[0] == (10000, 5000, 700))
+ok("V4b: la app no llama las cuentas internas", err(q("select booking_rest(1, 0, 0)", role="authenticated", uid=own4)))
 # ---------- Ingreso y registro: alta del negocio en 5 pasos ----------
 own_s = mkuser("pasos@test.ar", "Pasos")
 p_s = q("select register_provider('Registrar Negocio', 'Calle 1', array['b'], '2284 444', null)", uid=own_s)[0][0]
