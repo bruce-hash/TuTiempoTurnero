@@ -160,12 +160,12 @@ export function fillMsg(text) {
     .replace(/{link}/g, myLink());
 }
 export function vMensajes() {
-  return `<div class="panel"><p class="lbl">🔔 Avisos automáticos en la app</p><p class="note" style="text-align:left;margin:-2px 0 10px">Les llegan solos a tus clientes como notificación en TuTiempo.</p>
+  return `<div class="panel"><p class="lbl">🔔 Avisos automáticos en la app</p><p class="note" style="text-align:left;margin:-2px 0 10px">Les llegan solos a tus clientes como notificación en TuTiempo. El pedido de reseña también sale solo, 2 horas después de cada turno atendido.</p>
    <ul class="mlist">${store.MSGS.map(
      (
        msg,
        index,
-     ) => `<li><div class="m-h"><label class="chk" style="margin:0"><input type="checkbox" data-mon="${index}" ${msg.on ? "checked" : ""}> <b>${msg.t}</b></label><button class="lnk" data-act="mEdit" data-i="${index}">${S.mEdit === index ? "Cerrar" : "Ver / editar"}</button></div><span class="hint">${msg.cuando}</span>
+     ) => msg.k === "rev" ? "" : `<li><div class="m-h"><label class="chk" style="margin:0"><input type="checkbox" data-mon="${index}" ${msg.on ? "checked" : ""}> <b>${msg.t}</b></label><button class="lnk" data-act="mEdit" data-i="${index}">${S.mEdit === index ? "Cerrar" : "Ver / editar"}</button></div><span class="hint">${msg.cuando}</span>
     ${
       S.mEdit === index
         ? `<div class="m-ed"><div class="f"><label for="mtx${index}">Texto</label><textarea id="mtx${index}">${esc(msg.txt)}</textarea><span class="hint">Podés usar {nombre}, {barberia}, {dia}, {hora}, {direccion}, {link}</span></div>

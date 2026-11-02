@@ -23,25 +23,51 @@ registerClick("cashToggle", (ev, el, act) => {
   render();
   return;
 });
-// borrar un trabajo pide un segundo toque en menos de 3 segundos
-registerClick("mediaDel", (ev, el, act) => {
+// C26 (V5): cada trabajo se edita con ✎: nombre y borrar (con confirmación)
+registerClick("mediaEdit", (ev, el, act) => {
   const index = +el.dataset.i;
-  if (S.mDelAsk !== index) {
-    S.mDelAsk = index;
-    toast("Tocá ✕ de nuevo para borrarlo");
-    setTimeout(() => {
-      S.mDelAsk = null;
-    }, 3e3);
-    return;
+  S.mediaEd = S.mediaEd === index ? null : index;
+  S.mediaDelAsk = null;
+  render();
+  const input = $("#mdName");
+  if (input) {
+    input.focus();
   }
-  const media = store.COMM.media.splice(index, 1)[0];
-  S.mDelAsk = null;
+});
+registerClick("mediaEdClose", (ev, el, act) => {
+  S.mediaEd = null;
+  S.mediaDelAsk = null;
+  render();
+});
+registerSubmit("fMedia", (ev) => {
+  const media = store.COMM.media[+ev.target.dataset.i];
+  if (!media) {
+    S.mediaEd = null;
+    return render();
+  }
+  media.label = $("#mdName").value.trim().slice(0, 80);
+  api.m.renameMedia(media);
+  S.mediaEd = null;
+  toast(media.label ? `Nombre guardado: ${media.label}` : "El trabajo quedó sin nombre");
+  render();
+});
+registerClick("mediaDel", (ev, el, act) => {
+  S.mediaDelAsk = +el.dataset.i;
+  render();
+});
+registerClick("mediaDelNo", (ev, el, act) => {
+  S.mediaDelAsk = null;
+  render();
+});
+registerClick("mediaDelYes", (ev, el, act) => {
+  const media = store.COMM.media.splice(+el.dataset.i, 1)[0];
+  S.mediaEd = null;
+  S.mediaDelAsk = null;
   if (media) {
     api.m.delMedia(media).catch(() => {});
   }
   toast("Trabajo borrado");
   render();
-  return;
 });
 registerClick("svcOpts", (ev, el, act) => {
   readSvcEditor();
@@ -215,8 +241,9 @@ registerChange("upMedia", (ev) => {
       toast("Máximo 15 MB por archivo");
       return;
     }
+    // C26 (V5): sin el nombre del archivo ("IMG_2034.jpg"); el nombre se lo pone el prestador con ✎
     const media = {
-      label: file.name.slice(0, 80),
+      label: "",
       url: URL.createObjectURL(file),
       video: file.type.startsWith("video"),
     };
