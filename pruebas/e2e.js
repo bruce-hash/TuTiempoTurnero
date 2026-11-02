@@ -1152,7 +1152,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pgg.waitForTimeout(1200);
     const here = new URL(pgg.url());
     if (box === "vieja") {
-      ok("D32/D33: Google con la casilla y una cuenta de antes: pregunta si usa esta cuenta para el negocio", here.pathname === "/registrar-negocio" && /¿Usás esta cuenta para tu negocio\?/.test(await pgg.locator(".biz-card").innerText().catch(() => "")), pgg.url());
+      ok("D32/D33: Google con la casilla y una cuenta de antes: pregunta si usa esta cuenta para el negocio", here.pathname === "/registrar-negocio/cuenta" && /¿Usás esta cuenta para tu negocio\?/.test(await pgg.locator(".biz-card").innerText().catch(() => "")), pgg.url());
     } else if (box) {
       ok("D32: Google con la casilla marcada: la cuenta nueva sigue a «Tu negocio» (paso 1)", here.pathname === "/registrar-negocio/1" && (await pgg.isVisible("#fBiz1")) && !here.searchParams.get("code"), pgg.url());
     } else {
