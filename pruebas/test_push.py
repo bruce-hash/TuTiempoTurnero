@@ -194,8 +194,9 @@ q("update bookings set status = 'confirmed' where id = %s", (b_n2,))
 q("update bookings set status = 'cancelled_client' where id = %s", (b_n2,))
 ok("con «Nueva reserva y cancelaciones» apagada, al prestador no le llegan", cola(owner2, "new_booking") == [] and cola(owner2, "client_cancel") == [])
 q("insert into provider_notices (provider_id, kind, ref, body) values (%s, 'mp_refunded', 'P-1', 'El pago de Ana María Pérez se devolvió: $ 6.250 desde tu cuenta.'), "
-  "(%s, 'mp_charged_back', 'P-2', 'Contracargo de $ 12.500'), (%s, 'mp_reconnect', 'R-1', 'Volvé a conectar')", (pid2, pid2, pid2))
-ok("los avisos de cobros llegan siempre (aunque apague las reservas)", [r[0] for r in cola(owner2)] == ["cobros", "cobros", "mp_reconnect"])
+  "(%s, 'mp_charged_back', 'P-2', 'Contracargo de $ 12.500'), (%s, 'mp_reconnect', 'R-1', 'Volvé a conectar'), (%s, 'mp_connect', 'aviso-1', 'Conectá')", (pid2, pid2, pid2, pid2))
+ok("los avisos de cobros llegan siempre (aunque apague las reservas); el de conectar Mercado Pago (V6) va como el de reconectar",
+   [r[0] for r in cola(owner2)] == ["cobros", "cobros", "mp_reconnect", "mp_reconnect"])
 
 # ---------- 4. Lo que manda la función: lo mínimo ----------
 D = due()
@@ -220,8 +221,10 @@ cc = by_kind["client_cancel"][0]
 ok("cancelación del cliente: «Se canceló una reserva» · nombre de pila · servicio · día y hora", cc["title"] == "Se canceló una reserva" and cc["body"].startswith("Ana · Corte y barba · "))
 co = by_kind["cobros"]
 ok("cobros: sin montos ni el nombre del cliente («Abrí tu panel para ver el detalle»)", len(co) == 2 and all(x["title"] == "Novedad en tus cobros" and x["body"] == "Abrí tu panel para ver el detalle." for x in co))
-mr = by_kind["mp_reconnect"][0]
-ok("reconectar Mercado Pago: lleva al perfil", mr["title"] == "Volvé a conectar Mercado Pago" and mr["url"] == "/panel/perfil")
+mrs = sorted(by_kind["mp_reconnect"], key=lambda x: x["title"])
+ok("reconectar Mercado Pago: lleva al perfil", mrs[1]["title"] == "Volvé a conectar Mercado Pago" and mrs[1]["url"] == "/panel/perfil")
+ok("V6 · «Avisarle» del admin: «Conectá Mercado Pago», al perfil, urgente", mrs[0]["title"] == "Conectá Mercado Pago" and mrs[0]["url"] == "/panel/perfil"
+   and mrs[0]["urgency"] == "high" and "Conectalo desde tu perfil" in mrs[0]["body"])
 everything = " ".join(d["title"] + " " + d["body"] for d in D.values())
 ok("ninguna notificación lleva montos, DNI, apellido ni teléfono", "$" not in everything and "30111900" not in everything and "Pérez" not in everything and "2284" not in everything)
 ok("cada notificación va al endpoint de su dispositivo", {d["endpoint"] for d in D.values()} >= {ep_ana, ep_ana2, ep_owner, ep_owner2})

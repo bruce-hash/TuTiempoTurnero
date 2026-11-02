@@ -31,7 +31,7 @@ export function admProv(data) {
   const groupBy = S.admG === "act" ? "act" : "rubro";
   const pending = data.pv.filter((prov) => prov.status === "pending");
   const list = data.pv
-    .filter((prov) => prov.status !== "pending" && (filter === "todos" || prov.status === filter))
+    .filter((prov) => prov.status !== "pending" && (filter === "todos" || (filter === "nomp" ? prov.status === "active" && !prov.mp : prov.status === filter)))
     .sort(
       (one, other) =>
         (+other.activity || 0) - (+one.activity || 0) || other.month - one.month || String(one.name).localeCompare(other.name),
@@ -93,6 +93,7 @@ export function admProv(data) {
       ["todos", "Todos"],
       ["active", "Activos"],
       ["suspended", "Suspendidos"],
+      ["nomp", "Sin Mercado Pago"],
     ]
       .map(([key, label]) => `<button data-act="admF" data-f="${key}" aria-pressed="${filter === key}">${label}</button>`)
       .join("")}</div>
