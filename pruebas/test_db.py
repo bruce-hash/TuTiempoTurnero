@@ -950,5 +950,21 @@ ok("C28: …y no se puede apagar", q("select enabled from message_templates wher
 q("update message_templates set enabled=false where provider_id=%s and key='r24'", (p5,), uid=own5)
 ok("C28: los otros avisos se siguen apagando como siempre", q("select enabled from message_templates where provider_id=%s and key='r24'", (p5,))[0][0] is False)
 
+# ---------- V6 · C41/C42 «Avisarle» a un prestador activo sin Mercado Pago ----------
+own6 = mkuser("sinmp6@test.ar", "Sin MP")
+p6 = q("select register_provider('Sin MP V6', 'Calle 6', array['b'], '2284 6666', null)", uid=own6)[0][0]
+adm6 = mkuser("admin6@test.ar", "Admin 6"); q("insert into app_admins (user_id) values (%s)", (adm6,))
+ok("V6: a un prestador que todavía no está activo no se le avisa", err(q("select admin_nudge_mp(%s)", (p6,), uid=adm6), "not_active"))
+q("update providers set status='active' where id=%s", (p6,))
+ok("V6: solo el admin puede avisar", err(q("select admin_nudge_mp(%s)", (p6,), uid=own6), "forbidden") and err(q("select admin_nudge_mp(%s)", (p6,), role="anon")))
+ok("V6: el admin le avisa", q("select admin_nudge_mp(%s)", (p6,), uid=adm6)[0][0] == {"sent": True})
+nt = q("select kind, body from provider_notices where provider_id=%s", (p6,))
+ok("V6: le queda el aviso en la app, con el camino para conectarlo", len(nt) == 1 and nt[0][0] == "mp_connect" and "Perfil → Mercado Pago" in nt[0][1])
+ok("V6: el prestador lo ve entre sus avisos", any(n["kind"] == "mp_connect" for n in (q("select my_provider_notices()", uid=own6)[0][0] or [])))
+ok("V6: un segundo aviso el mismo día no se repite", q("select admin_nudge_mp(%s)", (p6,), uid=adm6)[0][0] == {"sent": False}
+   and q("select count(*) from provider_notices where provider_id=%s", (p6,))[0][0] == 1)
+conectar_mp(p6)
+ok("V6: a uno que ya puede cobrar no se le avisa", err(q("select admin_nudge_mp(%s)", (p6,), uid=adm6), "already_connected"))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

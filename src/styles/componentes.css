@@ -138,6 +138,8 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .pwa-row{display:flex;gap:12px;align-items:flex-start}
 .pwa-ic{font-size:26px;line-height:1}
 .pwa-note{text-align:left;margin:6px 0 0}
+/* vuelta de Mercado Pago sin conectar: por qué (perfil del prestador) */
+.mp-back{text-align:left;margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--warn-soft);border:1px solid var(--warn-line);color:var(--fg);font-size:13px}
 .pwa-acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
 .pwa-acts.one{grid-template-columns:1fr}
 .pwa-steps{margin:10px 0 0;padding-left:20px;font-size:14px;line-height:1.5;text-align:left}

@@ -143,6 +143,20 @@ function verifRow(prov) {
   const [label, state] = prov.verified !== false ? ["DNI", "✓ Verificado"] : dniRequired() ? ["DNI", "En revisión"] : ["Perfil", ok ? "✓ Aprobado" : "En revisión"];
   return `<dt>${label}</dt><dd style="color:${prov.verified !== false || ok ? "var(--ok)" : "var(--warn)"}">${state}</dd>`;
 }
+// vuelta de Mercado Pago sin conectar (mp-oauth → ?mp_connected=0&mp_error=…): por qué no se conectó
+const MP_BACK = {
+  cancelado: "No se conectó: no autorizaste a TuTiempo en Mercado Pago. Tocá Conectar Mercado Pago y elegí Autorizar.",
+  vencido: "No se conectó: pasaron más de 15 minutos desde que tocaste Conectar. Probá de nuevo.",
+  cuenta_tutiempo:
+    "No se conectó: esa cuenta de Mercado Pago es la de TuTiempo. Ingresá en Mercado Pago con la cuenta de tu negocio y volvé a conectar.",
+  error:
+    "No pudimos conectar tu cuenta de Mercado Pago. Probá de nuevo en unos minutos; si sigue pasando, escribinos a contacto@tutiempo.com.ar.",
+};
+const mpBackNote = () =>
+  S.mpBack && S.mpBack !== "ok" && S.mp !== "ok"
+    ? `<p class="note mp-back" role="alert">⚠ ${MP_BACK[S.mpBack] || MP_BACK.error}</p>`
+    : "";
+
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
 // En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
 export function vBPerfil(prov) {
@@ -165,7 +179,7 @@ export function vBPerfil(prov) {
      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-ghost" data-act="mpCancel">Cancelar</button><button class="btn btn-pri" style="background:#009ee3" data-act="mpOk">Autorizar</button></div>
      <p class="note" style="margin-top:8px">Simulación de la pantalla de Mercado Pago.</p></div>`
          : `<div class="paym" style="border-color:var(--warn);background:var(--warn-soft)"><span class="mp">MP</span><span>Mercado Pago sin conectar<br><small class="hint">${LIVE ? "Hoy no podés cobrar señas: nadie puede reservarte online hasta que lo conectes." : "Sin esto tus clientes no pueden pagar la seña al reservar."}</small></span></div>
-     ${st.expired ? '<p class="note" style="text-align:left;margin:8px 0 0">Venció la conexión con tu cuenta de Mercado Pago: volvé a conectarla.</p>' : ""}${mpPaidNote(st, true)}
+     ${mpBackNote()}${st.expired ? '<p class="note" style="text-align:left;margin:8px 0 0">Venció la conexión con tu cuenta de Mercado Pago: volvé a conectarla.</p>' : ""}${mpPaidNote(st, true)}
      <button class="btn btn-pri btn-block" style="margin-top:10px;background:#009ee3" data-act="mpConnect">Conectar Mercado Pago</button>`
    }
   </div>

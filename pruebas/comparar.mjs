@@ -174,6 +174,14 @@ async function normalizar(page) {
     document.querySelectorAll("#app .gi-del, #app .gi-cap").forEach((el) => el.remove());
     document.querySelectorAll("#app .mlist li").forEach((li) => { if (/Pedido de reseña/.test(li.textContent)) li.remove(); });
     document.querySelectorAll("#app .panel p.note").forEach((el) => { el.textContent = el.textContent.replace(" El pedido de reseña también sale solo, 2 horas después de cada turno atendido.", ""); });
+    // V6 (C41, C42, cambios a propósito): el aviso de los activos sin Mercado Pago nombra a quiénes y suma «Ver quiénes»;
+    // Prestadores suma el filtro «Sin Mercado Pago», el texto en negrita y «Avisarle». Se neutraliza en las dos versiones;
+    // lo nuevo lo prueban e2e.js y test_db.py.
+    document.querySelectorAll("#app .adml li").forEach((li) => { if (li.textContent.startsWith("💳")) li.remove(); });
+    document.querySelectorAll("#app [data-act=admNudge], #app [data-act=admF][data-f=nomp]").forEach((el) => el.remove());
+    document.querySelectorAll("#app .admact .chip.ok").forEach((el) => { if (/Avisado/.test(el.textContent)) el.remove(); });
+    // (sin la negrita y en un solo texto, como antes: dos textos seguidos se pueden dibujar con un píxel de diferencia)
+    document.querySelectorAll("#app .ag li span b").forEach((el) => { if (el.textContent === "sin Mercado Pago") { const span = el.parentNode; el.replaceWith("sin Mercado Pago"); span.normalize(); } });
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {

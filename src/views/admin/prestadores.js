@@ -25,13 +25,18 @@ const ACT_LEVELS = [
 ];
 // prestadores para el admin: pendientes de verificar arriba; el resto agrupado por rubro o por actividad,
 // con búsqueda, filtro por estado y la ficha de cada uno
+// C41/C42 (V6): "Avisarle" a un prestador activo que no conectó Mercado Pago (conectarlo lo puede hacer solo él)
+export const nudgeBtn = (prov) =>
+  (S.admNudged || {})[prov.id]
+    ? '<span class="chip ok">Avisado ✓</span>'
+    : `<button class="btn btn-pri btn-sm" data-act="admNudge" data-id="${prov.id}">Avisarle</button>`;
 export function admProv(data) {
   const query = (S.admQ || "").toLowerCase();
   const filter = S.admF || "todos";
   const groupBy = S.admG === "act" ? "act" : "rubro";
   const pending = data.pv.filter((prov) => prov.status === "pending");
   const list = data.pv
-    .filter((prov) => prov.status !== "pending" && (filter === "todos" || prov.status === filter))
+    .filter((prov) => prov.status !== "pending" && (filter === "todos" || (filter === "nomp" ? prov.status === "active" && !prov.mp : prov.status === filter)))
     .sort(
       (one, other) =>
         (+other.activity || 0) - (+one.activity || 0) || other.month - one.month || String(one.name).localeCompare(other.name),
@@ -61,8 +66,8 @@ export function admProv(data) {
   const row = (prov) => {
     const open = S.admOpen === prov.id;
     const nNotes = (prov.notes || []).length;
-    return `<li class="${open ? "open" : ""}">${avatar(prov)}<div><b>${esc(prov.name)}</b><span>${admIc(prov.cats)} ${+prov.activity || 0} servicios en 30 días · ${prov.month} turno${prov.month === 1 ? "" : "s"} este mes · ★ ${(+prov.rating || 0).toFixed(1)}${prov.mp ? "" : " · sin Mercado Pago"}</span>${statusChip(prov)}${nNotes ? ` <span class="chip">📝 ${nNotes}</span>` : ""}</div>
-      <span class="admact"><button class="btn btn-ghost btn-sm" data-act="admOpen" data-id="${prov.id}" aria-expanded="${open}">${open ? "Cerrar" : "Ficha"}</button></span>${open ? admFile(prov) : ""}</li>`;
+    return `<li class="${open ? "open" : ""}">${avatar(prov)}<div><b>${esc(prov.name)}</b><span>${admIc(prov.cats)} ${+prov.activity || 0} servicios en 30 días · ${prov.month} turno${prov.month === 1 ? "" : "s"} este mes · ★ ${(+prov.rating || 0).toFixed(1)}${prov.mp ? "" : " · <b>sin Mercado Pago</b>"}</span>${statusChip(prov)}${nNotes ? ` <span class="chip">📝 ${nNotes}</span>` : ""}</div>
+      <span class="admact">${prov.status === "active" && !prov.mp ? nudgeBtn(prov) : ""}<button class="btn btn-ghost btn-sm" data-act="admOpen" data-id="${prov.id}" aria-expanded="${open}">${open ? "Cerrar" : "Ficha"}</button></span>${open ? admFile(prov) : ""}</li>`;
   };
   return `${
     pending.length
@@ -93,6 +98,7 @@ export function admProv(data) {
       ["todos", "Todos"],
       ["active", "Activos"],
       ["suspended", "Suspendidos"],
+      ["nomp", "Sin Mercado Pago"],
     ]
       .map(([key, label]) => `<button data-act="admF" data-f="${key}" aria-pressed="${filter === key}">${label}</button>`)
       .join("")}</div>

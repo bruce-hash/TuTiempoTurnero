@@ -4,6 +4,10 @@
 // Desplegar con verify_jwt = false: el GET lo abre el navegador al volver de MP; el POST valida el usuario adentro.
 import { admin, caller, cors, encryptToken, env, json, MP_API, must } from "../_shared/util.ts";
 
+// vuelta al sitio: ?mp_connected=1, o 0 con el motivo (mp_error) para que la app le diga al prestador qué pasó
+// (cancelado, vencido, cuenta_tutiempo; el resto, "error": el detalle queda en el log)
+const back = (site: string, motivo?: string) =>
+  Response.redirect(`${site}/?mp_connected=${motivo ? `0&mp_error=${motivo}` : "1"}`, 302);
 const b64url = (a: Uint8Array) => btoa(String.fromCharCode(...a)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 Deno.serve(async (req) => {
@@ -45,7 +49,8 @@ Deno.serve(async (req) => {
     must("borrar el state del OAuth", await db.from("mp_oauth_states").delete().eq("state", state));
     if (!st || !code || Date.now() - new Date(st.created_at).getTime() > 15 * 60 * 1000) {
       console.warn("mp-oauth: vuelta de MP rechazada", JSON.stringify({ motivo: !st ? "state_desconocido" : !code ? "sin_code" : "state_vencido" }));
-      return Response.redirect(`${site}/?mp_connected=0`, 302);
+      // sin code: el prestador no autorizó en Mercado Pago (MP vuelve con error=access_denied)
+      return back(site, !st ? "error" : !code ? "cancelado" : "vencido");
     }
     const r = await fetch(`${MP_API}/oauth/token`, {
       method: "POST",
@@ -54,14 +59,14 @@ Deno.serve(async (req) => {
                              ...(st.code_verifier ? { code_verifier: st.code_verifier } : {}) }),
     });
     const tok = await r.json();
-    if (!r.ok || !tok.access_token) { console.error("MP oauth", r.status, tok); return Response.redirect(`${site}/?mp_connected=0`, 302); }
+    if (!r.ok || !tok.access_token) { console.error("MP oauth", r.status, tok); return back(site, "error"); }
     const mpUser = String(tok.user_id ?? "");
     // H12: la cuenta de Mercado Pago de TuTiempo (la que recibe las comisiones) no puede ser la de un prestador.
     // Sin MP_OWNER_USER_ID configurado no se conecta ninguna cuenta (mejor cerrado que abierto).
     const owner = Deno.env.get("MP_OWNER_USER_ID") ?? "";
     if (!owner || mpUser === owner) {
       console.error("mp-oauth rechazada", owner ? "cuenta de TuTiempo" : "falta MP_OWNER_USER_ID", st.provider_id);
-      return Response.redirect(`${site}/?mp_connected=0`, 302);
+      return back(site, owner ? "cuenta_tutiempo" : "error");
     }
     // Llaves por cuenta (Bloque 1), cifradas (Bloque 2a): la misma cuenta actualiza su llave; otra cuenta crea una fila
     // nueva y la anterior queda para devoluciones y consultas (mp_connect). mp_connected lo actualiza la base.
@@ -71,12 +76,12 @@ Deno.serve(async (req) => {
       p_refresh: tok.refresh_token ? await encryptToken(tok.refresh_token, st.provider_id, mpUser, "refresh_token") : null,
       p_expires_in: Number(tok.expires_in) || 0,
     });
-    if (error) { console.error("mp_connect", error); return Response.redirect(`${site}/?mp_connected=0`, 302); }
-    return Response.redirect(`${site}/?mp_connected=1`, 302);
+    if (error) { console.error("mp_connect", error); return back(site, "error"); }
+    return back(site);
   } catch (e) {
     console.error("mp-oauth", e instanceof Error ? e.message : e);
     // la vuelta de MP la abre el navegador: al sitio con el aviso, no un JSON
-    if (req.method === "GET") return Response.redirect(`${env("SITE_URL")}/?mp_connected=0`, 302);
+    if (req.method === "GET") return back(env("SITE_URL"), "error");
     return json({ error: "server_error" }, 500, h);
   }
 });

@@ -711,6 +711,21 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("Paso 1: …y la lista de avisos dice el detalle y cuántas veces llegó", /la firma no coincide con MP_WEBHOOK_SECRET\) · [^·]+ · 2 veces/.test(await txt()) && /Pago recuperado · pago 1999000111/.test(await txt()));
   await db.query("delete from mp_webhook_events where mp_payment_id = '1999000111'");
   await pg.evaluate(() => { S.admRev = null; render() }); await wait(600);
+  // C41/C42 (V6): los activos sin Mercado Pago, en negrita y con "Ver quiénes"; el filtro y "Avisarle"
+  {
+    const [nomp] = await q("select id, name from providers where status='active' and name not like 'Sofía%' order by id desc limit 1");
+    await db.query("update mp_accounts set status='refunds_only' where provider_id=$1 and status='active'", [nomp.id]);
+    await db.query("update provider_private set mp_connected=false where provider_id=$1", [nomp.id]);
+    await pg.evaluate(async () => { await api.adminLoad(); S.admT = "res"; render() }); await wait(500);
+    ok("C41: el resumen nombra en negrita a los activos sin Mercado Pago, con «Ver quiénes»", !!nomp && (await pg.locator(`b:text-is("${nomp?.name}")`).count()) >= 1, String(nomp?.name));
+    await pg.click("[data-act=admT][data-f=nomp]"); await wait(400);
+    ok("C42: «Ver quiénes» abre Prestadores con el filtro «Sin Mercado Pago»", (await pg.locator('[data-act=admF][data-f=nomp][aria-pressed=true]').count()) === 1
+       && (await pg.locator(".admgrp li").count()) >= 1 && !(await pg.locator(".admgrp").innerText()).includes("Sofía"));
+    await pg.click(`[data-act=admNudge][data-id="${nomp.id}"]`);
+    ok("C41/C42: «Avisarle» le deja el aviso para conectar Mercado Pago", await until("select count(*)::int c from provider_notices where provider_id=$1 and kind='mp_connect'", [nomp.id], (r) => r[0].c === 1)
+       && (await pg.locator(`li:has([data-act=admOpen][data-id="${nomp.id}"]) .chip:text("Avisado")`).count()) === 1);
+    await pg.evaluate(() => { S.admF = "todos"; render() }); await wait(300);
+  }
   // v30: prestadores por rubro, notas privadas, eliminar
   await pg.click("[data-act=admT][data-t=prov]"); await wait(400);
   ok("v30: prestadores divididos por rubro", (await pg.locator(".admgrp").count()) >= 1 && (await pg.locator(".admgh").first().innerText()).length > 2);
@@ -748,7 +763,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector(".bhead"); await wait(800);
   ok("Bloque 1: el panel muestra el aviso del reclamo", /Avisos de cobros/i.test(await txt()) && /reclamo en Mercado Pago/.test(await txt()));
   await pg.click("[data-act=noticesRead]"); await wait(800);
-  ok("Bloque 1: Entendido marca el aviso leído", !/Avisos de cobros/i.test(await txt()) && (await q("select count(*)::int c from provider_notices where read_at is null"))[0].c === 0);
+  ok("Bloque 1: Entendido marca el aviso leído", !/Avisos de cobros/i.test(await txt()) && (await q("select count(*)::int c from provider_notices n join providers p on p.id=n.provider_id where p.name like 'Sofía%' and n.read_at is null"))[0].c === 0);
   const accBefore = (await q("select id, mp_user_id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   await pg.click("[data-btab=perfil]"); await wait(300);
   ok("Bloque 1: Mercado Pago conectado, con el número de cuenta (no el texto de la demo)", (await txt()).includes("Mercado Pago conectado") && (await txt()).includes("Cuenta n° " + accBefore.mp_user_id) && !(await txt()).includes("hidro.style.mp"));
@@ -787,9 +802,17 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.goto(BASE + "/panel/perfil"); await pg.waitForSelector("#fLogin", { timeout: 8000 }).catch(() => {}); await wait(400);
   ok("ingreso: una dirección del panel sin sesión lleva al mismo ingreso, con ?volver=", new URL(pg.url()).pathname === "/ingresar" && new URL(pg.url()).searchParams.get("volver") === "/panel/perfil");
   await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector("[data-act=mpConnect]", { timeout: 8000 }).catch(() => {}); await wait(400);
+  // vuelta de Mercado Pago sin conectar (mp-oauth → ?mp_connected=0&mp_error=…): al Perfil, con el motivo a la vista
+  await pg.goto(BASE + "/?mp_connected=0&mp_error=cuenta_tutiempo"); await pg.waitForSelector(".mp-back", { timeout: 8000 }).catch(() => {}); await wait(400);
+  ok("MP: si no se conectó, vuelve al Perfil del panel y dice por qué (la cuenta es la de TuTiempo)", new URL(pg.url()).pathname === "/panel/perfil" && !pg.url().includes("mp_connected")
+     && /esa cuenta de Mercado Pago es la de TuTiempo/.test(await txt()) && /Mercado Pago sin conectar/.test(await txt()));
+  await pg.goto(BASE + "/?mp_connected=0&mp_error=cualquiera"); await pg.waitForSelector(".mp-back", { timeout: 8000 }).catch(() => {}); await wait(400);
+  ok("MP: un motivo desconocido muestra el aviso general (no el texto de la dirección)", /No pudimos conectar tu cuenta de Mercado Pago/.test(await txt()) && !/cualquiera/.test(await txt()));
   await Promise.all([pg.waitForURL(/mp_connected=1/, { timeout: 8000 }).catch(() => {}), pg.click("[data-act=mpConnect]")]); await wait(1500);
   const accRe = (await q("select id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   ok("H23: reconectar la misma cuenta vuelve a cobrar con la misma fila", accRe && accRe.id === accBefore.id);
+  ok("MP: al conectar vuelve al Perfil con Mercado Pago conectado y sin el aviso de error", new URL(pg.url()).pathname === "/panel/perfil"
+     && /Mercado Pago conectado/.test(await txt()) && (await pg.locator(".mp-back").count()) === 0);
 
   // H21: en vivo no se descarta a nadie por cómo se llama (antes "Bruno F." quedaba afuera por parecer relleno de la demo)
   await db.query("insert into provider_clients (provider_id, name) values ($1, 'Bruno F.')", [sofi]);
