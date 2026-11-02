@@ -514,11 +514,13 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.fill("#dbf", d); await pg.fill("#dbt", d); await pg.click("#fDayBlock button[type=submit]"); await wait(400);
   ok("antes de bloquear, la lista de turnos que se cancelan", (await pg.locator("[data-act=dbConfirm]").count()) === 1 && /esos días tenés/i.test(await txt()));
   await pg.click("[data-act=dbConfirm]"); await wait(1500);
-  const bc = await q("select status, refund_pending, settle_by_provider from bookings where source='app' and pay_method='mp'");
+  const bc = await q("select id, status, refund_pending, settle_by_provider from bookings where source='app' and pay_method='mp'");
   ok("v31: el turno de Ana se canceló sin devolución automática (la arregla el prestador)", bc[0].status === "cancelled_provider" && bc[0].refund_pending === 0 && bc[0].settle_by_provider === true);
   ok("v31: la lista le dice al prestador que llame, con la seña ($6.000)", /TuTiempo no devuelve la seña/i.test(await pg.locator(".dbdone").innerText()) && (await pg.locator(".dbdone").innerText()).includes("$6.000"));
   ok("al prestador le queda la lista de cancelados", (await pg.locator(".dbdone li").count()) >= 1 && /ana/i.test(await pg.locator(".dbdone").innerText()));
-  const cn = await q("select m.body from client_messages m join auth.users u on u.id=m.user_id where u.email='ana@test.ar' and m.kind='cancel'");
+  // Ana tiene dos turnos ese día (el pagado por Mercado Pago y el de resto en efectivo): se cancelan los dos y le llega
+  // un aviso por cada uno. Se mira el de este turno (ref = id del turno), no el primero que devuelva la base.
+  const cn = await q("select m.body from client_messages m join auth.users u on u.id=m.user_id where u.email='ana@test.ar' and m.kind='cancel' and m.ref=$1", [String(bc[0].id)]);
   ok("a Ana le llegó el aviso para reprogramar", cn.length >= 1 && cn[0].body.includes("tuvo que cancelar") && cn[0].body.includes("se va a comunicar con vos") && cn[0].body.includes("$6.000"));
   const dayBlk = await q("select count(*)::int c from provider_busy((select id from providers where name like 'Sofía%'), $1::date, $1::date) where day_block", [d]);
   ok("ese día queda Cerrado para los clientes", dayBlk[0].c === 1);
