@@ -1009,5 +1009,35 @@ ok("C36: el producto guarda el precio de compra", not err(q("insert into product
    and q("select price, cost from products where provider_id=%s and name='Cera'", (p7,))[0] == (8000, 4500))
 ok("C36: un precio de compra negativo se rechaza", err(q("insert into products (provider_id, name, price, cost) values (%s,'Gel',1,-1)", (p7,), uid=own7)))
 
+# ---------- V5 resto · C29 interruptor global de los sellos ----------
+own29 = mkuser("sellos29@test.ar", "Sellos")
+p29 = q("select register_provider('Sellos C29', 'Calle 29', array['b'], '2284 2929', null)", uid=own29)[0][0]
+q("update providers set status='active' where id=%s", (p29,))
+s29 = q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Corte C29',30,5000) returning id", (p29,), uid=own29)[0][0]
+q("update provider_settings set stamps_on=true where provider_id=%s", (p29,), uid=own29)
+q("update services set stamp_goal=15 where id=%s", (s29,), uid=own29)
+cl29 = mkuser("clisellos29@test.ar", "Cliente Sellos")
+adm29 = mkuser("admsellos29@test.ar", "Admin Sellos"); q("insert into app_admins (user_id) values (%s)", (adm29,))
+def turno29(h):
+    t = dt.datetime.now(tz).replace(minute=0, second=0, microsecond=0) - dt.timedelta(hours=h)
+    return q("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,%s,%s,'Cliente Sellos','Corte C29','app','confirmed',%s,%s,5000) returning id",
+             (p29, s29, cl29, t, t + dt.timedelta(minutes=30)))[0][0]
+card = lambda: (q("select stamps from loyalty_cards where provider_id=%s and user_id=%s and service_id=%s", (p29, cl29, s29)) or [[0]])[0][0]
+ok("C29: por defecto los sellos están encendidos", q("select stamps_enabled()", role="anon")[0][0] is True)
+q("select mark_booking(%s, 'done')", (turno29(5),), uid=own29)
+ok("C29: encendidos, el turno atendido suma un sello", card() == 1, str(card()))
+ok("C29: solo el admin los apaga", err(q("select admin_set_stamps(false)", uid=own29), "forbidden") and err(q("select admin_set_stamps(false)", role="anon")))
+ok("C29: el admin los apaga", q("select admin_set_stamps(false)", uid=adm29)[0][0] is False and q("select stamps_enabled()", role="anon")[0][0] is False)
+r29 = q("select mark_booking(%s, 'done')", (turno29(4),), uid=own29)
+ok("C29: apagados, el turno se marca igual pero no suma sello", not err(r29) and card() == 1, str(r29))
+pc29 = q("select id from provider_clients where provider_id=%s and user_id=%s", (p29, cl29))[0][0]
+ok("C29: apagados, tampoco se dan sellos a mano", err(q("select give_stamp(%s, %s)", (pc29, s29), uid=own29), "stamps_off"))
+ok("C29: apagados, no se canjea el premio", err(q("select stamp_add(%s, %s, %s, -15, 'redeem', null)", (p29, cl29, s29)), "stamps_off"))
+ok("C29: los datos quedan (tarjeta y sellos)", q("select count(*) from loyalty_events where provider_id=%s", (p29,))[0][0] == 1 and card() == 1)
+q("select admin_set_stamps(true)", uid=adm29)
+q("select mark_booking(%s, 'done')", (turno29(3),), uid=own29)
+ok("C29: al encenderlos vuelve todo como estaba y se siguen sumando", card() == 2, str(card()))
+ok("C29: la app no puede llamar stamp_add", err(q("select stamp_add(%s, %s, %s, 1, 'manual', null)", (p29, cl29, s29), uid=own29)))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
