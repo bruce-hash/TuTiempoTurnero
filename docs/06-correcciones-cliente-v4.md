@@ -27,8 +27,8 @@ Paso 2: solo organizada, sin programar. Cada bloque se programa recién con el O
 | C10 | Pagos | Volver a la misma página después de pagar | Paso 1 | Hecho (Paso 1) | La vuelta va a la pantalla del turno (`/turno/<id>`), también sin sesión. |
 | C11 | Pagos | Revisar el dinero a liquidar de Mercado Pago | V1 | Verificar | ¿En qué pantalla? ¿Es "cuándo se acredita cada seña" en Finanzas del prestador? Mercado Pago informa la fecha de liberación de cada pago (`money_release_date`); el saldo de la cuenta no lo vemos. |
 | C12 | Pagos | Liquidar la seña al prestador apenas se paga (liquidación instantánea) | V1 | Hecho en parte (V1) | El prestador elige su plazo (al instante, 10, 18 o 35 días) en Horarios, junto a la seña, con el aviso de que tiene que ser el mismo que en su cuenta de Mercado Pago. Liquidar "al instante" lo decide cada prestador en Mercado Pago; la app no puede elegirlo por él. |
-| C13 | Prestador | Sin pantalla principal para el prestador: entra directo a su panel | Ingreso | Hecho (D32) | Una cuenta = una persona: la misma cuenta es cliente y prestador. El prestador entra siempre a su Agenda (al ingresar, al tocar el logo y al abrir la app instalada) y desde el menú de cuenta pasa a "Reservar como cliente", con una barra para volver a su agenda. |
-| C14 | Prestador | Sacar la solapa "Mis turnos" al prestador | Ingreso | Hecho (D32) | "Mis turnos (como cliente)" queda en el menú de cuenta del prestador, del lado cliente. |
+| C13 | Prestador | Sin pantalla principal para el prestador: entra directo a su panel | Ingreso | Hecho (D32, D33) | El prestador entra siempre a su Agenda (al ingresar, al tocar el logo y al abrir la app instalada). **D33:** una cuenta es de cliente o de negocio: la de negocio no reserva ni sigue (si lo intenta, aviso y "Cerrar sesión e ingresar con otra cuenta"). |
+| C14 | Prestador | Sacar la solapa "Mis turnos" al prestador | Ingreso | Hecho (D33) | La cuenta de negocio no tiene "Mis turnos" ni "Reservar como cliente" (sus turnos como cliente van en su cuenta personal). |
 | C15 | Prestador | "Mi perfil" pasa a "Ajustes": nombre y celular, notificaciones, profesionales que seguís, seguridad, ir al panel, cerrar sesión y eliminar la cuenta | V2 | Pendiente | Entra el control de notificaciones push y emails de hoy (D25, D27). |
 | C16 | Prestador | Mover la ubicación del perfil a la sección del prestador | V2 | Verificar | ¿"Ubicación" es la dirección del local, o dónde está el acceso al perfil en el menú? |
 | C17 | Prestador | Orden del menú: Agenda, Horarios, Finanzas, Productos, Estadísticas, Clientes, Trabajos y Perfil, con scroll; Caja pasa a Finanzas | V2 | Pendiente | ¿Qué significa que "Ver mi perfil" se desplace hacia la izquierda? ¿Que el botón quede al principio del menú? |
@@ -99,7 +99,7 @@ plata → **V1**, apenas esté D30 → **V3** → **V4** → **V2** → **V5** �
 - **C29 · eliminar la tarjeta de sellos**: choca con D04 (fidelidad con sellos), D05 y D22. Propuesta: ocultarla con una
   opción del admin, sin borrar datos; definir qué pasa con los sellos y premios pendientes.
 - **C03 contra C13**: si el prestador no tiene pantalla principal, el logo no puede llevarlo "al inicio general".
-- **C13 y C14 · roles**: decidido con D32 (1/11): una cuenta = una persona, cliente y prestador a la vez.
+- **C13 y C14 · roles**: decidido con D33 (2/11): una cuenta es de cliente o de negocio, nunca las dos (reemplaza lo de D32).
 - **C39 · descanso entre turnos**: decidido con D31 (se saca del todo), programado en V3.
 - **C06 · aviso de seguidor nuevo**: un aviso nuevo para el prestador. Entra en D27 (contenido mínimo), pero hay que elegir los canales.
 - **D29 · tomada (31/10)**: un pago que llega cuando la hora del turno ya pasó se devuelve (`booking_past`).

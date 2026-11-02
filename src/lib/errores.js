@@ -36,6 +36,9 @@ const ERRS = {
   "Unable to validate email address": "Ese email no es válido.",
   "Email link is invalid or has expired": "El link venció o ya se usó. Pedí uno nuevo.",
   cash_not_allowed: "Para este turno hay que pagar con Mercado Pago.",
+  // D33: cuentas separadas
+  business_account: "Las cuentas de negocio no pueden reservar. Para reservar, ingresá con tu cuenta personal.",
+  client_history: "Esta cuenta ya se usó como cliente: el negocio va en una cuenta aparte.",
   provider_mp_not_connected: "Este profesional todavía no toma turnos online.",
   mp_not_connected: "Tu cuenta de Mercado Pago ya estaba desconectada.",
   note_required: "Escribí una nota que explique cómo se resolvió.",

@@ -292,8 +292,6 @@ body.am-open{overflow:hidden}
 /* inicio: la puerta "Registrá tu negocio" */
 .bizcta{display:flex;gap:16px;align-items:center;justify-content:space-between;text-align:left;margin:18px 0}
 .bizcta b{font-size:18px}.bizcta p{margin:4px 0 0;color:var(--muted);font-size:14px}
-/* el prestador reservando como cliente */
-.asclient{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--brand-soft);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin:12px 0 0;font-size:14px}
 @media (max-width:899px){
  .biz{grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px}
  .biz-steps{display:none}

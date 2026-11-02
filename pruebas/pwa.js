@@ -272,7 +272,7 @@ const PUSH_STUB = `(() => {
   await page.reload(); await page.waitForTimeout(500);
   const killState = () => page.evaluate(async () => ({ regs: (await navigator.serviceWorker.getRegistrations()).length, keys: await caches.keys() }));
   let kill = await killState();
-  for (let i = 0; i < 25 && (kill.regs || kill.keys.length); i++) { await page.waitForTimeout(200); kill = await killState(); }
+  for (let i = 0; i < 40 && (kill.regs || kill.keys.length); i++) { await page.waitForTimeout(200); kill = await killState(); }
   ok("con serviceWorker: false en config.js, la app desinstala el service worker y borra su caché", kill.regs === 0 && kill.keys.length === 0, JSON.stringify(kill));
   await page.context().close();
 

@@ -1,4 +1,6 @@
 import { openAuth } from "./auth.js";
+import { blockBusiness } from "./cuentas.js";
+import { isBusiness } from "../lib/cuentas.js";
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
@@ -155,6 +157,11 @@ registerClick("reservarT", (ev, el, act) => {
   if (!S.slot) {
     return;
   }
+  // D33: una cuenta de negocio no reserva
+  if (isBusiness()) {
+    const svc = (pr(S.pid).svcs || [])[S.svc];
+    return blockBusiness(el, { a: "reservar", pid: S.pid, svc: String(skey(svc)), day: S.slot.date, time: S.slot.time });
+  }
   S.rep = 0;
   if (S.user) {
     go("checkoutT");
@@ -179,6 +186,9 @@ export function joinWaitlist(pid, day) {
   toast("Listo. Si se libera un turno ese día, te avisamos con una notificación.");
 }
 registerClick("waitlist", (ev, el, act) => {
+  if (isBusiness()) {
+    return blockBusiness(el, { a: "lista", pid: S.pid, day: S.day });
+  }
   if (!S.user) {
     openAuth(el, { pending: { a: "lista", pid: S.pid, day: S.day } });
     return;

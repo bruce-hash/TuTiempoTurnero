@@ -903,16 +903,44 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
      && /ya no está libre/i.test(await p6.locator("#toast").innerText().catch(() => "")) && (await q("select count(*)::int c from bookings where status='hold'"))[0].c === holdsBefore,
      JSON.stringify([await p6.evaluate(() => [S.view, S.day, location.pathname]), pick2, await p6.locator("#toast").innerText().catch(() => "")]));
   await ctx6.close();
-  // ---------- C13/C14: la misma cuenta es prestadora y clienta ----------
+  // ---------- D33: una cuenta es de cliente o de negocio ----------
   const ctx8 = await b.newContext({ viewport: { width: 1366, height: 900 } }); const p8 = await ctx8.newPage(); p8.on("pageerror", (e) => errs.push(e.message));
   await p8.goto(BASE + "/ingresar"); await p8.waitForSelector("#fLogin");
   await p8.fill("#ai_e", "sofia@test.ar"); await p8.fill("#ai_p", "prestador123"); await p8.click("#fLogin button[type=submit]"); await p8.waitForSelector(".bhead", { timeout: 8000 }).catch(() => {}); await p8.waitForTimeout(400);
   ok("C13: desde /ingresar, el prestador entra a su Agenda", new URL(p8.url()).pathname === "/panel/agenda", p8.url() + " " + (await p8.locator("#app").innerText().catch(() => "")).slice(0, 300));
   await p8.click("nav .acct-btn"); await p8.waitForSelector("#acctMenu:not([hidden])");
   const menu8 = await p8.locator("#acctMenu").innerText();
-  ok("C14: el menú del prestador tiene Mi agenda, Ver mi perfil público, Reservar como cliente y Mis turnos (como cliente)", ["Mi agenda", "Ver mi perfil público", "Reservar como cliente", "Mis turnos (como cliente)"].every((x) => menu8.includes(x)), menu8);
-  await p8.click("#acctMenu [data-act=asClient][data-to=home]"); await p8.waitForTimeout(500);
-  ok("C13: reservando como cliente, la barra para volver a su agenda", new URL(p8.url()).pathname === "/" && (await p8.locator(".asclient").innerText()).includes("Estás reservando como cliente"));
+  ok("D33: el menú de la cuenta de negocio no tiene Mis turnos ni Reservar como cliente", menu8.includes("Mi agenda") && menu8.includes("Ver mi perfil público") && !/Reservar como cliente|Mis turnos/.test(menu8), menu8);
+  await p8.keyboard.press("Escape");
+  await p8.goto(BASE + "/mis-turnos"); await p8.waitForTimeout(900);
+  ok("D33: /mis-turnos con una cuenta de negocio lleva a su Agenda", new URL(p8.url()).pathname === "/panel/agenda");
+  // en un perfil: Reservar y Seguir avisan que una cuenta de negocio no puede
+  await p8.goto(BASE + sofiaPath); await p8.waitForSelector(".sgroup"); await p8.waitForTimeout(300);
+  ok("D33: navegando el sitio, la cuenta de negocio tiene el mismo menú (sin la barra «reservando como cliente»)", (await p8.locator(".asclient").count()) === 0);
+  await p8.click(".sgroup.seg-u .svci"); await p8.waitForTimeout(200); await p8.click("[data-quick]"); await p8.waitForTimeout(200);
+  const pick8 = await p8.evaluate(() => S.slot && { day: S.slot.date, time: S.slot.time });
+  await p8.click("[data-act=reservarT]"); await p8.waitForTimeout(300);
+  ok("D33: Reservar con una cuenta de negocio: el aviso y la salida a la cuenta personal", (await p8.locator("#amTitle").innerText()).includes("Las cuentas de negocio no pueden reservar")
+     && (await p8.locator(".authmodal [data-act=bizSwitch]").innerText()).includes("Cerrar sesión e ingresar con otra cuenta") && !(await p8.isVisible("#fTurno")));
+  await p8.click(".authmodal .am-sec [data-act=bizBlockClose]"); await p8.waitForTimeout(200);
+  await p8.click("[data-act=seguir]"); await p8.waitForTimeout(300);
+  ok("D33: Seguir con una cuenta de negocio: el mismo aviso, y no sigue", (await p8.locator("#amTitle").innerText()).includes("Las cuentas de negocio no pueden reservar")
+     && (await q("select count(*)::int c from follows f join auth.users u on u.id=f.user_id where u.email='sofia@test.ar'"))[0].c === 0);
+  ok("D33: la base lo rechaza igual (business_account)", /business_account/.test(await p8.evaluate(async () => { const r = await sb.from("follows").insert({ user_id: S.user.id, provider_id: S.pid }); return (r.error && r.error.message) || ""; })));
+  await p8.click(".authmodal .am-sec [data-act=bizBlockClose]"); await p8.waitForTimeout(200);
+  await p8.click("[data-act=reservarT]"); await p8.waitForTimeout(300);
+  await p8.click(".authmodal [data-act=bizSwitch]"); await p8.waitForTimeout(900);
+  ok("D33: «Cerrar sesión e ingresar con otra cuenta» cierra la sesión y abre el ingreso con el ticket del turno", (await p8.evaluate(() => !S.user)) && (await p8.locator(".authmodal .tk[data-ticket=reservar]").count()) === 1);
+  await p8.fill("#ai_e", "luz@test.ar"); await p8.fill("#ai_p", "Luz2026clave"); await p8.click("#fLogin button[type=submit]"); await p8.waitForSelector("#fTurno", { timeout: 8000 }).catch(() => {}); await p8.waitForTimeout(300);
+  ok("D33: con la cuenta personal, la reserva sigue al pago con ese horario", (await p8.isVisible("#fTurno")) && new URL(p8.url()).searchParams.get("hora") === pick8.time);
+  // con un ticket pendiente, ingresar con la cuenta de negocio muestra el aviso (la acción no sigue)
+  await p8.evaluate(() => document.querySelector("[data-act=logout]").click()); await p8.waitForTimeout(800);
+  await p8.goto(BASE + sofiaPath); await p8.waitForSelector(".sgroup"); await p8.waitForTimeout(300);
+  await p8.click("[data-act=seguir]"); await p8.waitForTimeout(300);
+  await p8.fill("#ai_e", "sofia@test.ar"); await p8.fill("#ai_p", "prestador123"); await p8.click("#fLogin button[type=submit]"); await p8.waitForTimeout(1800);
+  ok("D33: ingresar con una cuenta de negocio teniendo un ticket: el aviso y la acción no sigue", (await p8.locator("#amTitle").innerText().catch(() => "")).includes("Las cuentas de negocio no pueden reservar")
+     && (await q("select count(*)::int c from follows f join auth.users u on u.id=f.user_id where u.email='sofia@test.ar'"))[0].c === 0);
+  await p8.click(".authmodal .am-sec [data-act=bizBlockClose]"); await p8.waitForTimeout(200);
   await p8.click("#logoLink"); await p8.waitForTimeout(400);
   ok("C13: el logo lo lleva a su Agenda", new URL(p8.url()).pathname === "/panel/agenda");
   await p8.goto(BASE + "/"); await p8.waitForSelector(".btabs", { timeout: 8000 }).catch(() => {}); await p8.waitForTimeout(300);
@@ -921,6 +949,27 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await p8.goto(BASE + "/sumate"); await p8.waitForTimeout(600);
   ok("alta: /sumate (el alta de antes) a Registrá tu negocio, y con todo hecho a la Agenda", new URL(p8.url()).pathname === "/panel/agenda");
   await ctx8.close();
+  // D33: Registrá tu negocio con sesión de cliente: con historial, el negocio va en otra cuenta; sin historial, puede usar esta
+  const ctx9 = await b.newContext({ viewport: { width: 1366, height: 900 } }); const p9 = await ctx9.newPage(); p9.on("pageerror", (e) => errs.push(e.message));
+  await p9.goto(BASE + "/ingresar"); await p9.waitForSelector("#fLogin");
+  await p9.fill("#ai_e", "luz@test.ar"); await p9.fill("#ai_p", "Luz2026clave"); await p9.click("#fLogin button[type=submit]"); await p9.waitForTimeout(1200);
+  await p9.click("nav .acct-btn"); await p9.click("#acctMenu [data-act=bizStart]"); await p9.waitForTimeout(1200);
+  const choice9 = await p9.locator(".biz-card").innerText().catch(() => "");
+  ok("D33: una cuenta que ya se usó como cliente: el negocio va en una cuenta aparte", choice9.includes("Tu negocio va en una cuenta aparte") && choice9.includes("+negocio") && (await p9.locator("[data-act=bizUseThis]").count()) === 0, choice9 + " " + p9.url());
+  await p9.click("[data-act=bizNewAccount]"); await p9.waitForSelector("#fSignup", { timeout: 8000 }).catch(() => {}); await p9.waitForTimeout(300);
+  ok("D33: «Cerrar sesión y crear la cuenta del negocio» lleva al paso 0 sin sesión", (await p9.evaluate(() => !S.user)) && (await p9.locator("#amTitle").innerText()).includes("Registrá tu negocio"));
+  ok("D33: la base no deja registrar un negocio con historial de cliente", /client_history/.test(await p9.evaluate(async () => {
+    await sb.auth.signInWithPassword({ email: "luz@test.ar", password: "Luz2026clave" });
+    const r = await sb.rpc("register_provider", { p_name: "Luz Negocio", p_address: "x", p_categories: ["u"], p_phone: "2284 1", p_dni: null, p_instagram: null, p_city: "olavarria" });
+    await sb.auth.signOut(); return (r.error && r.error.message) || ""; })));
+  await db.query("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ('sinhistorial@test.ar', 'Clave2026hh', '{\"full_name\":\"Sin Historial\"}')");
+  await p9.goto(BASE + "/ingresar"); await p9.waitForSelector("#fLogin");
+  await p9.fill("#ai_e", "sinhistorial@test.ar"); await p9.fill("#ai_p", "Clave2026hh"); await p9.click("#fLogin button[type=submit]"); await p9.waitForTimeout(1200);
+  await p9.click("#app .bizcta [data-act=bizStart]"); await p9.waitForTimeout(1200);
+  ok("D33: una cuenta sin historial puede usarse para el negocio", (await p9.locator(".biz-card").innerText().catch(() => "")).includes("¿Usás esta cuenta para tu negocio?"));
+  await p9.click("[data-act=bizUseThis]"); await p9.waitForSelector("#fBiz1", { timeout: 8000 }).catch(() => {});
+  ok("D33: «Usar esta cuenta para mi negocio» abre el paso 1", new URL(p9.url()).pathname === "/registrar-negocio/1");
+  await ctx9.close();
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));
   await b.close(); await db.end();

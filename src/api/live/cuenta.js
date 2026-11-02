@@ -44,6 +44,8 @@ export const liveCuenta = {
       if (!S.pending) {
         S.pending = cleanPending(meta.tt_pending);
       }
+      // la cuenta se creó desde "Registrá tu negocio" (paso 0): es la del negocio
+      S.bizNew = !!S.pending && S.pending.a === "negocio";
       sb.auth.updateUser({ data: { tt_pending: null } }).catch(() => {});
     }
     // Alta de antes del rediseño (los datos del negocio viajaban en los metadatos de la cuenta y el perfil se creaba al
@@ -80,6 +82,10 @@ export const liveCuenta = {
     }
     await Promise.all([liveApi.myBookings(), liveApi.myMessages(), liveApi.myStamps(), liveApi.adminCheck()]);
     return S.user;
+  },
+  // D33: ¿la cuenta ya se usó como cliente? (turnos, seguidos, reseñas)
+  async clientHistory() {
+    return await call(sb.rpc("my_client_history"));
   },
   // Registrá tu negocio: qué pasos guardó y qué le falta para recibir reservas (lib/alta.js)
   async mySetup() {

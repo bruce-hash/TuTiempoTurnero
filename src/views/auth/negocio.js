@@ -9,6 +9,8 @@ import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { dniForm } from "../prestador/verificacion.js";
 import { vLogin } from "./login.js";
+import { api } from "../../api/index.js";
+import { render } from "../../ui/render.js";
 
 // Registrá tu negocio (ingreso y registro, aprobado el 1/11): página completa en 5 pasos, después de la cuenta (paso 0,
 // la misma ventana de ingreso). Se guarda en cada paso ("Guardar y seguir"): si sale y vuelve, sigue donde quedó.
@@ -201,10 +203,56 @@ function prepareStep(step) {
   }
 }
 
+// D33: con sesión de cliente, antes del paso 1: ¿usa esta cuenta para el negocio o una aparte? Una cuenta es de cliente o
+// de negocio; si esta ya reservó, sigue a alguien o dejó reseñas, el negocio va en otra.
+function accountChoice() {
+  const hist = S.clientHist;
+  const email = esc((S.user && S.user.email) || "");
+  if (!hist) {
+    loadHistory();
+    return '<div class="biz biz-one"><section class="biz-card"><p class="note">Cargando…</p></section></div>';
+  }
+  const local = email.split("@")[0];
+  const tip = /@gmail\.com$/i.test((S.user && S.user.email) || "")
+    ? `<p class="note" style="text-align:left">¿Usás Gmail? Podés usar el mismo correo agregando <b>+negocio</b> antes de la arroba (<b>${local}+negocio</b> y tu @gmail.com de siempre): te llega a la misma casilla.</p>`
+    : '<p class="note" style="text-align:left">Podés usar otro email tuyo. Si tenés Gmail, el mismo correo con <b>+negocio</b> antes de la arroba te llega a la misma casilla.</p>';
+  if (!hist.any) {
+    return `<div class="biz biz-one"><section class="biz-card"><h1 class="biz-h">¿Usás esta cuenta para tu negocio?</h1>
+     <p class="am-sub">Con <b>${email}</b> todavía no reservaste, no seguís a nadie ni dejaste reseñas: la podés usar para tu negocio. Una cuenta de negocio no reserva como cliente.</p>
+     <button class="btn btn-pri btn-block" data-act="bizUseThis">Usar esta cuenta para mi negocio</button>
+     <div class="am-sec" style="justify-content:center"><button type="button" class="lnk" data-act="bizNewAccount">Prefiero una cuenta aparte</button></div></section></div>`;
+  }
+  return `<div class="biz biz-one"><section class="biz-card"><h1 class="biz-h">Tu negocio va en una cuenta aparte</h1>
+   <p class="am-sub">Con <b>${email}</b> ya reservaste, seguís a profesionales o dejaste reseñas. Una cuenta es de cliente o de negocio, nunca las dos: creá una cuenta nueva para tu negocio, con otro email. Esta queda como está.</p>
+   ${tip}
+   <button class="btn btn-pri btn-block" data-act="bizNewAccount">Cerrar sesión y crear la cuenta del negocio</button></section></div>`;
+}
+let loadingHist = false;
+function loadHistory() {
+  if (loadingHist) {
+    return;
+  }
+  loadingHist = true;
+  api
+    .clientHistory()
+    .then((hist) => {
+      S.clientHist = hist || { any: false };
+    })
+    .catch(() => {
+      S.clientHist = { any: true };
+    })
+    .finally(() => {
+      loadingHist = false;
+      render();
+    });
+}
 export function vNegocio() {
   const step = S.bizStep;
   if (!step) {
     return vLogin();
+  }
+  if (step === "cuenta") {
+    return accountChoice();
   }
   if (step === "listo") {
     return done();

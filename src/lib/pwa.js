@@ -42,10 +42,19 @@ export function startPwa(onChange) {
   }
   if (!SW_ON) {
     // freno de emergencia (o demo y pruebas): sin service worker y sin su caché
-    navigator.serviceWorker.getRegistrations().then((list) => list.forEach((reg) => reg.unregister())).catch(() => {});
-    if (typeof caches != "undefined") {
-      caches.keys().then((keys) => keys.filter((key) => key.startsWith("tt-")).forEach((key) => caches.delete(key))).catch(() => {});
-    }
+    // Primero se desinstala y después se borra la caché. El service worker viejo sigue atendiendo esta página hasta que
+    // se cierra, y una respuesta que estaba guardando (entre su caches.has y su caches.open) puede volver a crear la
+    // caché: por eso se borra otra vez a los 3 segundos.
+    const dropCaches = () =>
+      typeof caches == "undefined"
+        ? Promise.resolve()
+        : caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith("tt-")).map((key) => caches.delete(key))));
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((list) => Promise.all(list.map((reg) => reg.unregister())))
+      .then(dropCaches)
+      .then(() => setTimeout(() => dropCaches().catch(() => {}), 3000))
+      .catch(() => {});
     return;
   }
   let controlled = !!navigator.serviceWorker.controller;
