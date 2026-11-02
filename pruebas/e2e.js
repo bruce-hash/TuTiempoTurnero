@@ -39,7 +39,12 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   for (let i = 0; i < 30; i++) await pg.keyboard.press("Tab");
   ok("ingreso: Tab da la vuelta adentro de la ventana", await pg.evaluate(() => !!document.activeElement.closest(".am-box")));
   await pg.click(".authmodal [data-act=authMode][data-m=up]"); await wait(200);
-  ok("ingreso: Crear cuenta adentro de la ventana, con el pie para registrar un negocio", (await pg.isVisible(".authmodal #fSignup")) && pg.url() === urlHome && (await pg.locator(".authmodal .am-foot [data-act=bizStart]").count()) === 1 && (await pg.locator(".authmodal .gterms").count()) === 1);
+  const bizBox = await pg.locator(".authmodal #au_biz").boundingBox().catch(() => null); const gBox = await pg.locator(".authmodal [data-act=google]").boundingBox().catch(() => null);
+  ok("D32: Crear cuenta adentro de la ventana, con la casilla «Tengo un negocio» sin marcar, ARRIBA de Google y del formulario (sin otra puerta de negocio)",
+     (await pg.isVisible(".authmodal #fSignup")) && pg.url() === urlHome && (await pg.locator(".authmodal .gterms").count()) === 1
+     && /Tengo un negocio y quiero recibir reservas/.test(await pg.locator(".authmodal .bizchk").innerText()) && !(await pg.isChecked("#au_biz"))
+     && bizBox && gBox && bizBox.y < gBox.y && (await pg.locator(".authmodal .am-foot [data-act=bizStart]").count()) === 0
+     && (await pg.locator("#amTitle").innerText()) === "Creá tu cuenta");
   await pg.keyboard.press("Escape"); await wait(200);
   ok("ingreso: Escape cierra la ventana y el foco vuelve a Ingresar", (await pg.locator(".authmodal").count()) === 0 && !(await pg.evaluate(() => document.body.classList.contains("am-open")))
      && (await pg.evaluate(() => document.activeElement && document.activeElement.matches("nav [data-act=authOpen]"))));
@@ -48,7 +53,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.click(".authmodal .am-x"); await wait(200);
   ok("ingreso: la cruz cierra la ventana", (await pg.locator(".authmodal").count()) === 0);
   await pg.click("footer [data-act=bizStart]"); await wait();
-  ok("ingreso: Registrá tu negocio del footer abre el paso 0 (la cuenta) en la ventana", (await pg.isVisible(".authmodal #fSignup")) && (await pg.locator("#amTitle").innerText()).includes("Registrá tu negocio") && (await pg.locator("#au_t").count()) === 0);
+  ok("D32: Registrá tu negocio del footer abre Crear cuenta con la casilla ya marcada", (await pg.isVisible(".authmodal #fSignup")) && (await pg.isChecked("#au_biz")) && (await pg.locator("#amTitle").innerText()) === "Creá tu cuenta" && (await pg.locator("#au_t").count()) === 0 && (await pg.evaluate(() => S.pending && S.pending.a)) === "negocio");
   await pg.mouse.click(5, 5); await wait(200);
   ok("ingreso: tocar afuera cierra la ventana", (await pg.locator(".authmodal").count()) === 0);
   ok("ingreso: el footer dice Ingresar y Registrá tu negocio (sin Acceso prestadores ni Sumate)", /Registrá tu negocio/.test(await pg.locator("footer").innerText()) && !/Acceso prestadores|Sumate/.test(await pg.locator("footer").innerText()));
@@ -889,7 +894,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   const wait2 = (ms = 400) => p2.waitForTimeout(ms); const txt2 = () => p2.locator("#app").innerText();
   // Registrá tu negocio (aprobado el 1/11): paso 0 la cuenta, después los 5 pasos; la intención viaja en la cuenta
   await p2.goto(BASE + "/registrar-negocio"); await p2.waitForSelector("#fSignup");
-  ok("alta: /registrar-negocio sin sesión es el paso 0 (la cuenta personal), sin celular ni DNI", (await p2.locator("#amTitle").innerText()).includes("Registrá tu negocio") && (await p2.locator("#au_t, #dniN").count()) === 0);
+  ok("alta: /registrar-negocio sin sesión es Crear cuenta con la casilla de negocio marcada, sin celular ni DNI", (await p2.isChecked("#au_biz")) && (await p2.locator("#au_t, #dniN").count()) === 0);
   await p2.fill("#au_n", "Nora Nuevas"); await p2.fill("#au_e", "nuevas@test.ar"); await p2.fill("#au_p", "Clave2026xy"); await p2.check("#au_ok", { force: true });
   await p2.click("#fSignup button[type=submit]"); await p2.waitForSelector(".am-mail"); await wait2(300);
   const conf2 = await txt2();
@@ -990,10 +995,16 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("D26: el admin la apaga", (await q("select require_dni from app_settings"))[0].require_dni === false && (await p3.getAttribute("[data-act=admReqDni]", "aria-pressed")) === "false");
   const ctx4 = await b.newContext({ viewport: { width: 400, height: 900 } }); const p4 = await ctx4.newPage();
   p4.on("pageerror", (e) => errs.push(e.message));
-  // el alta desde el pie de Crear cuenta ("¿Tenés un negocio? Registralo") y sin DNI exigido
-  await p4.goto(BASE + "/crear-cuenta"); await p4.waitForSelector("#fSignup"); await p4.click(".am-foot [data-act=bizStart]"); await p4.waitForTimeout(300);
-  ok("alta: «¿Tenés un negocio? Registralo» pasa al paso 0 sin salir de la página", (await p4.locator("#amTitle").innerText()).includes("Registrá tu negocio"));
-  await p4.fill("#au_n", "Mara Sin DNI"); await p4.fill("#au_e", "sindni@test.ar"); await p4.fill("#au_p", "Clave2026zz"); await p4.check("#au_ok", { force: true });
+  // D32: el alta desde Crear cuenta marcando la casilla (después de escribir: no se pierde nada) y sin DNI exigido
+  await p4.goto(BASE + "/crear-cuenta"); await p4.waitForSelector("#fSignup");
+  await p4.fill("#au_n", "Mara Sin DNI"); await p4.fill("#au_e", "sindni@test.ar"); await p4.fill("#au_p", "Clave2026zz");
+  await p4.check("#au_biz"); await p4.waitForTimeout(300);
+  ok("D32: marcar la casilla en /crear-cuenta deja lo escrito (nombre, email y contraseña) y prepara el negocio",
+     (await p4.inputValue("#au_n")) === "Mara Sin DNI" && (await p4.inputValue("#au_e")) === "sindni@test.ar" && (await p4.inputValue("#au_p")) === "Clave2026zz"
+     && (await p4.evaluate(() => S.pending && S.pending.a)) === "negocio" && /seguir con mi negocio/i.test(await p4.locator("#fSignup button[type=submit]").innerText()) && (await p4.locator("#au_t").count()) === 0);
+  await p4.uncheck("#au_biz"); await p4.waitForTimeout(300);
+  ok("D32: desmarcarla vuelve a la cuenta de cliente (con el celular opcional)", !(await p4.evaluate(() => S.pending)) && (await p4.locator("#au_t").count()) === 1 && (await p4.inputValue("#au_n")) === "Mara Sin DNI");
+  await p4.check("#au_biz"); await p4.waitForTimeout(300); await p4.check("#au_ok", { force: true });
   await p4.click("#fSignup button[type=submit]"); await p4.waitForTimeout(1200);
   await p4.goto(BASE + "/?token_hash=" + (await mailOf("sindni@test.ar")).signup + "&type=signup"); await p4.waitForSelector("#fBiz1", { timeout: 8000 }).catch(() => {}); await p4.waitForTimeout(400);
   await p4.fill("#bn", "Masajes Sin DNI"); await p4.check("#bc-m", { force: true }); await p4.fill("#bt", "2284 555777"); await p4.click("#fBiz1 button[type=submit]"); await p4.waitForSelector("#fBiz2", { timeout: 8000 }).catch(() => {});
@@ -1112,7 +1123,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   const choice9 = await p9.locator(".biz-card").innerText().catch(() => "");
   ok("D33: una cuenta que ya se usó como cliente: el negocio va en una cuenta aparte", choice9.includes("Tu negocio va en una cuenta aparte") && choice9.includes("+negocio") && (await p9.locator("[data-act=bizUseThis]").count()) === 0, choice9 + " " + p9.url());
   await p9.click("[data-act=bizNewAccount]"); await p9.waitForSelector("#fSignup", { timeout: 8000 }).catch(() => {}); await p9.waitForTimeout(300);
-  ok("D33: «Cerrar sesión y crear la cuenta del negocio» lleva al paso 0 sin sesión", (await p9.evaluate(() => !S.user)) && (await p9.locator("#amTitle").innerText()).includes("Registrá tu negocio"));
+  ok("D33: «Cerrar sesión y crear la cuenta del negocio» lleva a Crear cuenta sin sesión, con la casilla de negocio marcada", (await p9.evaluate(() => !S.user)) && (await p9.isChecked("#au_biz")));
   ok("D33: la base no deja registrar un negocio con historial de cliente", /client_history/.test(await p9.evaluate(async () => {
     await sb.auth.signInWithPassword({ email: "luz@test.ar", password: "Luz2026clave" });
     const r = await sb.rpc("register_provider", { p_name: "Luz Negocio", p_address: "x", p_categories: ["u"], p_phone: "2284 1", p_dni: null, p_instagram: null, p_city: "olavarria" });
@@ -1120,11 +1131,36 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await db.query("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ('sinhistorial@test.ar', 'Clave2026hh', '{\"full_name\":\"Sin Historial\"}')");
   await p9.goto(BASE + "/ingresar"); await p9.waitForSelector("#fLogin");
   await p9.fill("#ai_e", "sinhistorial@test.ar"); await p9.fill("#ai_p", "Clave2026hh"); await p9.click("#fLogin button[type=submit]"); await p9.waitForTimeout(1200);
-  await p9.click("#app .bizcta [data-act=bizStart]"); await p9.waitForTimeout(1200);
-  ok("D33: una cuenta sin historial puede usarse para el negocio", (await p9.locator(".biz-card").innerText().catch(() => "")).includes("¿Usás esta cuenta para tu negocio?"));
+  await p9.click("nav .acct-btn"); await p9.click("#acctMenu [data-act=bizStart]"); await p9.waitForTimeout(1200);
+  ok("D32/D33: quien no marcó la casilla, desde el menú: una cuenta sin historial puede usarse para el negocio", (await p9.locator(".biz-card").innerText().catch(() => "")).includes("¿Usás esta cuenta para tu negocio?"));
   await p9.click("[data-act=bizUseThis]"); await p9.waitForSelector("#fBiz1", { timeout: 8000 }).catch(() => {});
   ok("D33: «Usar esta cuenta para mi negocio» abre el paso 1", new URL(p9.url()).pathname === "/registrar-negocio/1");
   await ctx9.close();
+  // D32: "Continuar con Google" con la casilla marcada: la elección viaja a Google (como el ticket) y la cuenta nueva
+  // sigue a "Tu negocio"; sin la casilla, una cuenta de cliente que se queda donde estaba
+  // una cuenta de Google de antes (sin historial) con la casilla: pasa por la pregunta de D33, no saltea al paso 1
+  await db.query("insert into auth.users (email, email_confirmed_at, created_at, raw_user_meta_data) values ('gvieja@test.ar', now(), now() - interval '3 days', '{\"full_name\":\"Vera Vieja\"}')");
+  for (const [box, email, name] of [[true, "gnegocio@test.ar", "Gina Negocio"], [false, "gcliente@test.ar", "Gael Cliente"], ["vieja", "gvieja@test.ar", "Vera Vieja"]]) {
+    const cg = await b.newContext({ viewport: { width: 400, height: 900 } }); const pgg = await cg.newPage(); pgg.on("pageerror", (e) => errs.push(e.message));
+    await fetch(BASE + "/__google?email=" + encodeURIComponent(email) + "&name=" + encodeURIComponent(name));
+    await pgg.goto(BASE + "/"); await pgg.waitForSelector(".hero");
+    await pgg.click("nav [data-act=authOpen]"); await pgg.waitForSelector(".authmodal #fLogin");
+    await pgg.click(".authmodal [data-act=authMode][data-m=up]"); await pgg.waitForSelector(".authmodal #fSignup");
+    if (box) await pgg.check("#au_biz");
+    await Promise.all([pgg.waitForURL(/\/auth\/v1\/authorize|code=|registrar-negocio|\/$/, { timeout: 8000 }).catch(() => {}), pgg.click(".authmodal [data-act=google]")]);
+    await pgg.waitForFunction(() => typeof S !== "undefined" && S.user && !S.booting, null, { timeout: 10000 }).catch(() => {});
+    await pgg.waitForTimeout(1200);
+    const here = new URL(pgg.url());
+    if (box === "vieja") {
+      ok("D32/D33: Google con la casilla y una cuenta de antes: pregunta si usa esta cuenta para el negocio", here.pathname === "/registrar-negocio" && /¿Usás esta cuenta para tu negocio\?/.test(await pgg.locator(".biz-card").innerText().catch(() => "")), pgg.url());
+    } else if (box) {
+      ok("D32: Google con la casilla marcada: la cuenta nueva sigue a «Tu negocio» (paso 1)", here.pathname === "/registrar-negocio/1" && (await pgg.isVisible("#fBiz1")) && !here.searchParams.get("code"), pgg.url());
+    } else {
+      ok("D32: Google sin la casilla: cuenta de cliente, de vuelta en el inicio (sin alta de negocio)", here.pathname === "/" && (await pgg.evaluate(() => !!S.user && !S.pending && !S.barberAuth)) && !(await pgg.locator("#fBiz1").count()), pgg.url());
+    }
+    ok(`D32: (la vuelta de Google entró con la cuenta ${email})`, (await pgg.evaluate(() => S.user && S.user.email)) === email && JSON.stringify(await (await fetch(BASE + "/__log")).json()).includes(email));
+    await cg.close();
+  }
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));
   await b.close(); await db.end();

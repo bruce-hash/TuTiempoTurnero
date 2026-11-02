@@ -7,6 +7,9 @@
 //  /__captcha?key= → H30: prende (con la clave del sitio) o apaga (vacía) el CAPTCHA: config.js trae turnstileSiteKey y
 //                    Auth pide un token en signup, token (contraseña), otp, recover y resend, como Supabase con
 //                    Turnstile: válido si empieza con "ok-" y una sola vez (lo emite el Turnstile falso de captcha.js)
+//  /__google?email=&name= → D32: la cuenta que "elige" el usuario en la ventana de Google (la próxima vez que la app
+//                       abra /auth/v1/authorize): crea la cuenta si no existe (como Google con un email nuevo) y vuelve
+//                       a la app con ?code=, que se cambia por la sesión en /token?grant_type=pkce
 //  /__rutas?modo=inicio → C02: imita un hosting sin el .htaccess (cada dirección de la app redirige a "/"); modo=ok vuelve
 //  /__pwa?sw=1&vapid= → Bloque C: con sw=1 la app registra el service worker (por defecto no, para que las demás pruebas
 //                    corran igual que siempre) y con vapid= ofrece notificaciones (config.js trae vapidPublicKey)
@@ -36,11 +39,12 @@ function verify(tok) {
 }
 const ANON = sign({ role: "anon", iss: "supabase", exp: Math.floor(Date.now() / 1000) + 86400 * 30 });
 const OTP = {}; // email → código
+const GOOGLE = { email: "", name: "" }, CODES = {}; // D32: la cuenta de Google elegida y los ?code= de la vuelta (code → email)
 const HASH = {}, MAIL = {}; // links de email simulados: token_hash → {email, type}; último link por email
 const mail = (email, type) => { const h = crypto.randomBytes(16).toString("hex"); HASH[h] = { email, type }; MAIL[email] = Object.assign(MAIL[email] || {}, { [type]: h }); return h };
 
-async function userRow(where, val) { const r = await db.query(`select id, email, encrypted_password, raw_user_meta_data from auth.users where ${where} = $1`, [val]); return r.rows[0] }
-function userObj(u) { return { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, email_confirmed_at: new Date().toISOString(), user_metadata: u.raw_user_meta_data || {}, app_metadata: { provider: "email" }, created_at: new Date().toISOString() } }
+async function userRow(where, val) { const r = await db.query(`select id, email, encrypted_password, raw_user_meta_data, created_at from auth.users where ${where} = $1`, [val]); return r.rows[0] }
+function userObj(u) { return { id: u.id, aud: "authenticated", role: "authenticated", email: u.email, email_confirmed_at: new Date().toISOString(), user_metadata: u.raw_user_meta_data || {}, app_metadata: { provider: "email" }, created_at: new Date(u.created_at || Date.now()).toISOString() } }
 function session(u) {
   const exp = Math.floor(Date.now() / 1000) + 3600;
   return { access_token: sign({ sub: u.id, role: "authenticated", aud: "authenticated", email: u.email, exp }), token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: "r-" + u.id, user: userObj(u) };
@@ -80,8 +84,21 @@ async function auth(req, res, url) {
     await db.query("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ($1,$2,$3)", [j.email, j.password, JSON.stringify(j.data || {})]);
     if (CONFIRM) { mail(j.email, "signup"); return send(res, 200, userObj(await userRow("email", j.email))) }  // como Supabase con "Confirm email": sin sesión hasta tocar el link
     return send(res, 200, session(await userRow("email", j.email))) }
+  // D32: "Continuar con Google" (flujo PKCE de supabase-js): la ventana de Google elige la cuenta de /__google y
+  // vuelve a redirect_to con ?code=; la app lo cambia por la sesión (grant_type=pkce)
+  if (p === "/authorize" && req.method === "GET") {
+    if (url.searchParams.get("provider") !== "google" || !GOOGLE.email) return send(res, 400, { msg: "google no preparado (/__google)" });
+    if (!(await userRow("email", GOOGLE.email))) {
+      await db.query("insert into auth.users (email, email_confirmed_at, raw_user_meta_data) values ($1, now(), $2)", [GOOGLE.email, JSON.stringify({ full_name: GOOGLE.name, provider: "google" })]);
+    }
+    const code = "g" + crypto.randomBytes(8).toString("hex"); CODES[code] = GOOGLE.email;
+    LOG.push({ google: GOOGLE.email });
+    const back = new URL(url.searchParams.get("redirect_to") || "http://localhost:" + PORT + "/"); back.searchParams.set("code", code);
+    res.writeHead(302, { Location: back.toString() }); return res.end();
+  }
   if (p === "/token") {
     const gt = url.searchParams.get("grant_type");
+    if (gt === "pkce") { const email = CODES[j.auth_code]; delete CODES[j.auth_code]; const u = email && (await userRow("email", email)); return u ? send(res, 200, session(u)) : send(res, 400, { error: "invalid_grant", message: "invalid flow state" }) }
     if (gt === "password") { const u = await userRow("email", j.email); if (!u || u.encrypted_password !== j.password) return send(res, 400, { error: "invalid_grant", error_description: "Invalid login credentials", message: "Invalid login credentials" }); return send(res, 200, session(u)) }
     if (gt === "refresh_token") { const u = await userRow("id", (j.refresh_token || "").slice(2)); return u ? send(res, 200, session(u)) : send(res, 400, { error: "invalid_grant" }) }
   }
@@ -198,6 +215,7 @@ http.createServer(async (req, res) => {
     if (url.pathname === "/__down") { DOWN = url.searchParams.get("on") === "1"; return send(res, 200, { down: DOWN }) }
     if (DOWN) return req.socket.destroy();
     if (url.pathname === "/__pwa") { PWA.sw = url.searchParams.get("sw") === "1"; PWA.vapid = url.searchParams.get("vapid") || ""; return send(res, 200, PWA) }
+    if (url.pathname === "/__google") { GOOGLE.email = url.searchParams.get("email") || ""; GOOGLE.name = url.searchParams.get("name") || ""; return send(res, 200, GOOGLE) }
     if (url.pathname === "/__rutas") { ROUTES = url.searchParams.get("modo") === "inicio" ? "inicio" : "ok"; return send(res, 200, { rutas: ROUTES }) }
     if (url.pathname === "/__captcha") { CAPTCHA = url.searchParams.get("key") || ""; return send(res, 200, { captcha: CAPTCHA }) }
     // ¿existe el archivo del bucket dni? (las pruebas miran el disco, no solo storage.objects)
