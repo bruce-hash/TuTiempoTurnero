@@ -1,4 +1,4 @@
-import { registerSubmit } from "./registro.js";
+import { registerChange, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
 import { demoSignIn } from "../demo/usuarios.js";
@@ -7,10 +7,35 @@ import { $ } from "../lib/dom.js";
 import { errMsg } from "../lib/errores.js";
 import { RESEND_WAIT_MS, afterLogin, authErr, showFieldErrors, tickResend } from "../lib/sesion.js";
 import { EMAIL, PWRULE, pwOk } from "../lib/validar.js";
+import { clearPending, setPending } from "../lib/pendiente.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
 
+// D32 (2/11): "Tengo un negocio y quiero recibir reservas". Prende o apaga la acción pendiente "negocio" (la misma que
+// abre "Registrá tu negocio"): viaja a Google (sessionStorage) y al link del email (tt_pending) y, al terminar la
+// cuenta, sigue a "Tu negocio". Lo ya escrito no se pierde (la contraseña tampoco, sin guardarla en S).
+registerChange("au_biz", (ev) => {
+  const pass = $("#au_p") ? $("#au_p").value : "";
+  Object.assign(S.login, {
+    nombre: $("#au_n") ? $("#au_n").value : S.login.nombre,
+    email: $("#au_e") ? $("#au_e").value : S.login.email,
+    tel: $("#au_t") ? $("#au_t").value : S.login.tel,
+  });
+  if (ev.target.checked) {
+    setPending({ a: "negocio" });
+  } else {
+    clearPending();
+  }
+  render();
+  if ($("#au_p")) {
+    $("#au_p").value = pass;
+  }
+  const box = $("#au_biz");
+  if (box) {
+    box.focus();
+  }
+});
 // crear cuenta de cliente: valida y, en vivo, la crea en Supabase Auth (si pide confirmar el email, muestra
 // ese paso); en la demo entra directo
 registerSubmit("fSignup", (ev) => {

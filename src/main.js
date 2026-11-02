@@ -184,6 +184,12 @@ async function boot() {
       const stashed = unstashPending();
       if (S.user && stashed && !S.pending) {
         S.pending = stashed;
+        // D32: "Continuar con Google" con la casilla de negocio y una cuenta recién creada: es la del negocio (como el link
+        // del email, directo al paso 1). Una cuenta de antes pasa por la pregunta de D33.
+        const created = Date.parse((S.user && S.user.createdAt) || "");
+        if (stashed.a === "negocio" && created && Date.now() - created < 10 * 60 * 1000) {
+          S.bizNew = true;
+        }
       }
       // el prestador entra siempre a su Agenda (también al abrir la app instalada, que arranca en "/")
       const startUrl = new URL(start, location.origin);
