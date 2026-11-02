@@ -105,6 +105,13 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### V6 (Admin: prestadores sin Mercado Pago)
+- Migración nueva: `20261102220000_admin_mp.sql` («Avisarle»: `admin_nudge_mp`, aviso `mp_connect` y el texto de su push
+  en `push_due`).
+- **Volver a desplegar `mp-oauth`**: ahora vuelve al sitio con el motivo cuando no se conecta
+  (`?mp_connected=0&mp_error=cancelado|vencido|cuenta_tutiempo|error`) y la app lo muestra en el Perfil del prestador.
+  Sin secretos nuevos ni cambios de `config.js` o `.htaccess`.
+
 ### V5 (Trabajos y reseñas)
 - Migración nueva: `20261102200000_trabajos_resenas.sql` (C26: el prestador renombra sus trabajos, `update (label)` con
   su política; C28: el pedido de reseña queda siempre encendido, también para los que lo habían apagado). Sin Edge
