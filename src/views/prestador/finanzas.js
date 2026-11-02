@@ -5,7 +5,8 @@ import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { MESES, NOW, TODAY, capW, dayLabel, longLabel, nowHM, pad } from "../../lib/fechas.js";
 import { MEDIOS, medioIcon } from "../../lib/medios.js";
-import { restMissing, restSplit } from "../../lib/resto.js";
+import { restMissing, restOf, restSplit } from "../../lib/resto.js";
+import { FIXED_CATS, demoSyncFixed, fixedFor, fixedRow } from "../../lib/fijos.js";
 import { restEditor } from "./resto.js";
 import { ME, pr } from "../../lib/prestadores.js";
 import { walkEditForm, walkForm } from "./caja.js";
@@ -235,6 +236,29 @@ function movLine(line) {
   }
   return head;
 }
+// C30 (V4 resto): lo que falta antes de cerrar el día: los turnos de hoy que ya empezaron y no están marcados (vino o no
+// vino) y los cobros del resto sin medio de pago anotado
+function dayPending(today) {
+  const now = nowHM();
+  const mine = store.BOOK.filter((booking) => booking.pid == ME() && booking.date === today && booking.type !== "block");
+  return {
+    unmarked: mine.filter((booking) => booking.status === "confirmed" && booking.time <= now).sort((one, other) => one.time.localeCompare(other.time)),
+    noMedio: mine.filter((booking) => booking.status === "done" && restOf(booking) > 0 && !booking.restMethod && !(booking.restParts && booking.restParts.length)),
+  };
+}
+function pendingPanel(pending) {
+  if (!pending.unmarked.length && !pending.noMedio.length) {
+    return "";
+  }
+  const who = (booking) => `<span class="ag-t">${esc(booking.time)}</span><div><b>${esc(booking.cliente || "Cliente")}</b><span>${esc(booking.svc || "")}</span></div>`;
+  return `<div class="panel pendday"><p class="lbl">Antes de cerrar · ${pending.unmarked.length + pending.noMedio.length} pendiente${pending.unmarked.length + pending.noMedio.length === 1 ? "" : "s"}</p>
+   <ul class="ag movs">${pending.unmarked
+     .map((booking) => `<li>${who(booking)}<span class="medios"><button type="button" class="btn btn-ok btn-sm" data-act="bDone" data-id="${booking.id}">✓ Vino</button><button type="button" class="btn btn-ghost btn-sm" data-act="bNoShow" data-id="${booking.id}">No vino</button></span></li>`)
+     .join("")}${pending.noMedio
+     .map((booking) => `<li>${who(booking)}<span class="medios"><span class="hint">¿Cómo te pagó ${money(restOf(booking))}?</span>${MEDIOS.map((medio) => `<button type="button" class="btn btn-ghost btn-sm" data-act="restMedio" data-id="${booking.id}" data-m="${medio}">${medio}</button>`).join("")}<button type="button" class="btn btn-ghost btn-sm" data-act="movEdit" data-k="b${booking.id}">En dos medios</button></span></li>`)
+     .join("")}</ul>
+   <p class="note" style="text-align:left;margin:6px 0 0">${pending.unmarked.length ? "Marcá si vinieron: los que vinieron suman a la caja. " : ""}${pending.noMedio.length ? "Anotá con qué te pagaron el resto, así la caja da justo por medio." : ""}</p></div>`;
+}
 function vCajaDia() {
   const today = TODAY();
   const lines = dayLines(today);
@@ -246,16 +270,19 @@ function vCajaDia() {
   const open = store.FIN.filter(
     (day) => ymk(day.date) === ymk(today) && day.date < today && finTot(day) > 0 && !store.CLOSINGS["day|" + day.date],
   );
+  const pending = dayPending(today);
+  const nPending = pending.unmarked.length + pending.noMedio.length;
   return `<div class="kpis"><div class="kpi big"><span>${esc(longLabel(today))}</span><b>${money(total)}</b><small>Lo que entró hoy (las señas te llegan completas)</small></div>${MEDIOS.map((medio) => `<div class="kpi"><span>${medioIcon(medio)} ${medio}</span><b>${money(byMedio(medio))}</b></div>`).join("")}</div>
   <div class="panel"><p class="lbl">Movimientos de hoy · ${lines.length}</p>${lines.length ? `<ul class="ag movs">${lines.map(movLine).join("")}</ul>` : '<p class="note">Todavía no entró nada hoy. Se suma solo cuando marcás “Asistió” en la agenda o cargás algo acá.</p>'}
    ${walkForm(pr(ME()))}</div>
+  ${closing ? "" : pendingPanel(pending)}
   ${
     closing
       ? `<div class="panel cclosed"><b>✓ Caja de hoy cerrada a las ${esc(closing.at || "")}</b><p class="note" style="text-align:left;margin:4px 0 0">Total ${money(closing.income)} · efectivo ${money(closing.cash)} · transferencias y Mercado Pago ${money(closing.mp)}${diff != null ? ` · contaste ${money(closing.counted)} en efectivo: ${diff === 0 ? "justo ✓" : diff > 0 ? "te sobran " + money(diff) : "te faltan " + money(-diff)}` : ""}</p>
      ${closing.income !== total ? `<p class="alert">Después del cierre cambió la caja (${money(total - closing.income)}). Volvé a cerrarla para que quede exacta.</p>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="reopenDay">Volver a cerrar la caja</button></div>`
       : `<form class="panel" id="fCloseDay" novalidate><p class="lbl">Cerrar la caja de hoy</p>
      <div class="f"><label for="cdCount">Efectivo que contaste en la caja (opcional)</label><input id="cdCount" inputmode="numeric" placeholder="${money(cash)}" autocomplete="off"><span class="hint">Si lo cargás, te decimos si te sobra o te falta plata.</span></div>
-     <div class="err" id="cderr"></div><button class="btn btn-pri btn-block" type="submit">Cerrar la caja · ${money(total)}</button></form>`
+     <div class="err" id="cderr"></div><button class="btn btn-pri btn-block" type="submit">${nPending ? "Cerrar igual" : "Cerrar la caja"} · ${money(total)}</button>${nPending ? `<p class="note" style="margin-top:6px">Te ${nPending === 1 ? "queda 1 pendiente" : `quedan ${nPending} pendientes`} arriba: si cerrás igual, lo que cambie después te avisa que la caja cambió.</p>` : ""}</form>`
   }
   ${
     open.length
@@ -264,9 +291,39 @@ function vCajaDia() {
       : ""
   }`;
 }
+// C31 (V4 resto): los gastos fijos del mes. Se repiten solos; ✎ cambia el monto "desde este mes en adelante" (los meses
+// cerrados no cambian) y "Dejar de repetirlo" lo saca desde este mes. Los precargados empiezan sin monto.
+function fixedPanel(ym, current, closing) {
+  const items = fixedFor(ym);
+  const editable = !closing && ym <= current;
+  const line = (item) => {
+    const row = fixedRow(item, ym);
+    const amount = row ? row.m : 0;
+    const editing = editable && S.fxEd === item.id;
+    const head = `<li class="${editing ? "on" : ""}"><span class="ag-t">${esc(item.cat)}</span><div><b>${esc(item.c)}</b>${row ? "" : '<span class="hint">Sin monto: tocá ✎ para cargarlo</span>'}</div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${row ? money(amount) : "—"}</b>${editable ? `<button class="xbtn" data-act="fxEdit" data-id="${item.id}" aria-label="Cambiar ${esc(item.c)}">✎</button>` : ""}</span></li>`;
+    return editing ? head + `<li class="movform">${fixedForm(item, ym, amount)}</li>` : head;
+  };
+  const total = items.reduce((sum, item) => sum + ((fixedRow(item, ym) || {}).m || 0), 0);
+  return `<div class="panel"><p class="lbl">Gastos fijos · ${money(total)}</p>
+   <p class="note" style="text-align:left;margin:-2px 0 10px">Se repiten solos todos los meses. Si aumentan, cambialos con ✎: vale desde ${esc(mes(+ym.slice(5) - 1))} en adelante y los meses cerrados quedan como estaban.</p>
+   ${items.length ? `<ul class="ag movs">${items.map(line).join("")}</ul>` : '<p class="note" style="text-align:left">No tenés gastos fijos este mes.</p>'}
+   ${editable ? (S.fxEd === "new" ? fixedForm(null, ym, "") : '<button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="fxNew">+ Otro gasto fijo</button>') : closing ? '<p class="note" style="text-align:left;margin:8px 0 0">🔒 Mes cerrado: los gastos fijos de este mes quedan como están.</p>' : ""}</div>`;
+}
+function fixedForm(item, ym, amount) {
+  return `<form id="fFixed" class="mediaed" data-id="${item ? item.id : ""}" data-ym="${ym}" novalidate>
+   <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="fxc">Concepto</label><input id="fxc" maxlength="80" autocomplete="off" value="${esc(item ? item.c : "")}" placeholder="Ej: Seguro del local"></div>
+   <div class="f"><label for="fxm">Monto por mes</label><input id="fxm" inputmode="numeric" autocomplete="off" placeholder="$" value="${amount || ""}"></div></div>
+   <div class="f"><label for="fxk">Rubro</label><select id="fxk">${FIXED_CATS.map((cat) => `<option ${item && item.cat === cat ? "selected" : ""}>${cat}</option>`).join("")}</select></div>
+   <p class="hint">Vale desde ${esc(mes(+ym.slice(5) - 1))} ${ym.slice(0, 4)} en adelante. Los meses cerrados no cambian.</p>
+   <div class="err" id="fxerr"></div>
+   <div class="rs-btns"><button type="button" class="btn btn-ghost" data-act="fxClose">Cancelar</button><button class="btn btn-pri" type="submit">Guardar</button></div>
+   ${item ? `<button type="button" class="btn btn-ghost btn-block mediadel" data-act="fxStop" data-id="${item.id}" data-ym="${ym}">Dejar de repetirlo desde este mes</button>` : ""}</form>`;
+}
 // balance del mes: ingresos, gastos (fijos y compras de productos), ingresos por día y cierre del mes
 function vFinMes() {
   const current = ymk(TODAY());
+  // demo: los gastos fijos precargados y los de cada mes (en vivo los carga la base al abrir el panel)
+  demoSyncFixed(current);
   const ym = S.fm && S.fm <= current ? S.fm : current;
   const [year, month] = ym.split("-").map(Number);
   const totals = monthTotals(year, month - 1) || {
@@ -275,10 +332,8 @@ function vFinMes() {
   };
   const balance = totals.ing - totals.gas;
   const expenses = store.GASTOS.filter((exp) => exp.d.slice(0, 7) === ym).sort((one, other) => one.d.localeCompare(other.d));
-  const prev = new Date(year, month - 2, 1);
-  const prevYm = prev.getFullYear() + "-" + pad(prev.getMonth() + 1);
-  const prevFixed = store.GASTOS.filter((exp) => exp.d.slice(0, 7) === prevYm && exp.cat !== "Productos");
-  const fixed = expenses.filter((exp) => exp.cat !== "Productos");
+  // C31: los gastos fijos tienen su propio panel; acá van los otros gastos del mes (sin las compras de productos)
+  const fixed = expenses.filter((exp) => exp.cat !== "Productos" && !exp.fixed);
   const prodBuys = expenses.filter((exp) => exp.cat === "Productos");
   const days = ym === current ? [...store.FIN.filter((day) => ymk(day.date) === ym && day.date < TODAY()), todayFin()] : [];
   const maxDay = Math.max(1, ...days.map(finTot));
@@ -288,9 +343,10 @@ function vFinMes() {
   return `<div class="wnav"><button class="pk-nav" data-fm="-1" aria-label="Mes anterior">‹</button><div><b style="text-transform:capitalize">${mes(month - 1)} ${year}</b><span>${ym === current ? "Mes en curso" : closing ? "✓ Mes cerrado" : "Mes terminado"}</span></div><button class="pk-nav" data-fm="1" ${ym >= current ? "disabled" : ""} aria-label="Mes siguiente">›</button></div>
   <div class="kpis"><div class="kpi big"><span>Balance de ${mes(month - 1)}</span><b style="color:${balance >= 0 ? "var(--ok)" : "var(--bad)"}">${money(balance)}</b><small>Ingresos − gastos${ym === current ? " (hasta hoy)" : ""}</small></div><div class="kpi"><span>Ingresos</span><b>${money(totals.ing)}</b></div><div class="kpi"><span>Gastos</span><b>${money(totals.gas)}</b></div></div>
   ${monthSummary(year, month - 1, totals)}
-  <div class="panel"><p class="lbl">Gastos del mes</p>
-   <p class="note" style="text-align:left;margin:-2px 0 10px">Cargá acá los gastos fijos del mes una sola vez (alquiler, luz, internet…). Las compras de productos se cargan solas desde Productos → “Compré más”.</p>
-   ${fixed.length ? `<ul class="ag">${fixed.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c)}</b></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(exp.m)}</b>${closing ? "" : `<button class="xbtn" data-act="gDel" data-id="${exp.id}" aria-label="Borrar gasto">✕</button>`}</span></li>`).join("")}</ul>` : `<p class="note" style="text-align:left">Todavía no cargaste gastos este mes.</p>${prevFixed.length && !closing ? `<button class="btn btn-ghost btn-block" data-act="copyPrevG">📋 Copiar los ${prevFixed.length} gastos de ${mes(prev.getMonth())} (${money(prevFixed.reduce((sum, exp) => sum + exp.m, 0))})</button>` : ""}`}
+  ${fixedPanel(ym, current, closing)}
+  <div class="panel"><p class="lbl">Otros gastos del mes</p>
+   <p class="note" style="text-align:left;margin:-2px 0 10px">Lo que no se repite todos los meses. Las compras de productos se cargan solas desde Productos → “Compré más”.</p>
+   ${fixed.length ? `<ul class="ag">${fixed.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c)}</b></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(exp.m)}</b>${closing ? "" : `<button class="xbtn" data-act="gDel" data-id="${exp.id}" aria-label="Borrar gasto">✕</button>`}</span></li>`).join("")}</ul>` : `<p class="note" style="text-align:left">Todavía no cargaste otros gastos este mes.</p>`}
    ${prodBuys.length ? `<p class="lbl" style="margin:12px 0 6px">🧴 Compras de productos</p><ul class="ag">${prodBuys.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c.replace(/^Compra: /, ""))}</b><span>Desde Productos</span></div><b class="price" style="font-size:15px">${money(exp.m)}</b></li>`).join("")}</ul>` : ""}
    ${
      closing

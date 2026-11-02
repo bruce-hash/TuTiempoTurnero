@@ -3,6 +3,8 @@ import { api } from "../api/index.js";
 import { PESOS_ERR, money, parsePesos } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { MESES, TODAY, nowHM, pad } from "../lib/fechas.js";
+import { LIVE } from "../config.js";
+import { demoSaveFixed, demoStopFixed } from "../lib/fijos.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -50,32 +52,81 @@ registerClick("goMonth", (ev, el, act) => {
   return;
 });
 // copia los gastos fijos del mes anterior (no las compras de productos) al mes que se está viendo
-registerClick("copyPrevG", (ev, el, act) => {
-  const current = ymk(TODAY());
-  const ym = S.fm && S.fm <= current ? S.fm : current;
+// C31 (V4 resto): gastos fijos. ✎ abre el editor; guardar vale desde el mes que se está mirando en adelante (los meses
+// cerrados no cambian); "Dejar de repetirlo" lo saca desde ese mes. En vivo lo hace la base y vuelven los gastos.
+const fixedById = (id) => store.FIXED.find((item) => String(item.id) === String(id));
+registerClick("fxEdit", (ev, el, act) => {
+  S.fxEd = S.fxEd === fixedById(el.dataset.id)?.id ? null : fixedById(el.dataset.id)?.id;
+  render();
+  const input = $("#fxm");
+  if (input) {
+    input.focus();
+  }
+});
+registerClick("fxNew", (ev, el, act) => {
+  S.fxEd = "new";
+  render();
+  $("#fxc") && $("#fxc").focus();
+});
+registerClick("fxClose", (ev, el, act) => {
+  S.fxEd = null;
+  render();
+});
+registerSubmit("fFixed", (ev) => {
+  const form = ev.target;
+  const ym = form.dataset.ym;
+  const item = form.dataset.id ? fixedById(form.dataset.id) : null;
+  const concept = $("#fxc").value.trim();
+  const amountTxt = ($("#fxm").value || "").trim();
+  const amount = amountTxt === "" ? 0 : parsePesos(amountTxt);
+  const err = (msg) => {
+    $("#fxerr").textContent = msg;
+  };
+  if (!concept) {
+    return err("Escribí qué gasto es.");
+  }
+  if (isNaN(amount) || amount < 0) {
+    return err(PESOS_ERR);
+  }
+  if (!item && amount <= 0) {
+    return err("Ingresá cuánto pagás por mes.");
+  }
   if (store.CLOSINGS["month|" + ym]) {
-    toast("El mes está cerrado: desbloquealo para editar.");
+    return err("El mes está cerrado: sus gastos quedan como están.");
+  }
+  const fields = { c: concept.slice(0, 80), cat: $("#fxk").value, m: amount };
+  S.fxEd = null;
+  if (LIVE) {
+    api.m
+      .saveFixed(Object.assign({ id: item ? item.id : null }, fields), ym)
+      .then(() => {
+        toast(amount ? `Guardado: ${fields.c} · ${money(amount)} por mes, desde ${MESES[+ym.slice(5) - 1]}.` : `${fields.c} quedó sin monto desde ${MESES[+ym.slice(5) - 1]}.`);
+        render();
+      })
+      .catch(() => {});
     return;
   }
-  const [year, month] = ym.split("-").map(Number);
-  const prev = new Date(year, month - 2, 1);
-  const prevYm = prev.getFullYear() + "-" + pad(prev.getMonth() + 1);
-  const prevFixed = store.GASTOS.filter((exp) => exp.d.slice(0, 7) === prevYm && exp.cat !== "Productos");
-  const day = ym === current ? TODAY() : ym + "-01";
-  prevFixed.forEach((exp) => {
-    const copy = {
-      id: store.GID++,
-      c: exp.c,
-      m: exp.m,
-      cat: exp.cat === "Productos" ? "Otros" : exp.cat,
-      d: day,
-    };
-    store.GASTOS.push(copy);
-    api.m.addExpense(copy);
-  });
-  toast(`Copiamos ${prevFixed.length} gastos. Revisá los montos si cambiaron.`);
+  demoSaveFixed(item, fields, ym, ymk(TODAY()));
+  toast(amount ? `Guardado: ${fields.c} · ${money(amount)} por mes, desde ${MESES[+ym.slice(5) - 1]}.` : `${fields.c} quedó sin monto desde ${MESES[+ym.slice(5) - 1]}.`);
   render();
-  return;
+});
+registerClick("fxStop", (ev, el, act) => {
+  const item = fixedById(el.dataset.id);
+  const ym = el.dataset.ym;
+  if (!item) {
+    return;
+  }
+  S.fxEd = null;
+  const done = () => {
+    toast(`${item.c} deja de repetirse desde ${MESES[+ym.slice(5) - 1]}.`);
+    render();
+  };
+  if (LIVE) {
+    api.m.stopFixed(item, ym).then(done).catch(() => {});
+    return;
+  }
+  demoStopFixed(item, ym);
+  done();
 });
 registerClick("gOpen", (ev, el, act) => {
   S.gOpen = true;

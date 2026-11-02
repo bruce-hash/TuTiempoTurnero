@@ -66,7 +66,28 @@ const bookingFromDb = (pid) => (row) =>
     isoToLocal(row.starts_at),
   );
 
+const expenseFromDb = (row) => ({
+  id: row.id,
+  c: row.concept,
+  m: row.amount,
+  cat: row.category,
+  d: row.spent_on,
+  // C31: viene de un gasto fijo (se cambia desde Gastos fijos, no se borra suelto)
+  fixed: row.fixed_id || null,
+});
+const ym = (date) => (date ? String(date).slice(0, 7) : null);
+
 export const livePanel = {
+  // C31: los gastos fijos del prestador y, después de un cambio, los gastos otra vez (las filas de cada mes)
+  async loadFixed(pid) {
+    const rows = await call(sb.from("fixed_expenses").select("*").eq("provider_id", pid || S.me).order("id")).catch(() => []);
+    store.FIXED = (rows || []).map((row) => ({ id: row.id, c: row.concept, cat: row.category, m: row.amount, since: ym(row.since), until: ym(row.until_month) }));
+  },
+  async reloadExpenses() {
+    const rows = await call(sb.from("expenses").select("*").eq("provider_id", S.me).gte("spent_on", dkey(addDays(-400))).order("spent_on"));
+    store.GASTOS = (rows || []).map(expenseFromDb);
+    await livePanel.loadFixed(S.me);
+  },
   // C22 (V3b): vuelve a pedir solo los turnos del panel (60 días atrás, 120 adelante). true si cambió algo.
   async refreshAgenda() {
     const pid = S.me;
@@ -86,6 +107,9 @@ export const livePanel = {
     await liveApi.loadProvider(pid, true);
     const from = dkey(addDays(-60));
     const to = dkey(addDays(120));
+    // C31: los gastos fijos que falten hasta este mes (y los precargados la primera vez), antes de leer los gastos
+    await call(sb.rpc("fixed_expenses_sync")).catch(() => null);
+    await liveApi.loadFixed(pid);
     const [bookings, clients, products, expenses, walkins, templates, finance, priv, occupancy, cards, closings, mpSt, notices] = await Promise.all([
       call(bookingsQuery(pid, from, to)),
       call(sb.from("provider_clients").select("*").eq("provider_id", pid).limit(5e3)),
@@ -165,14 +189,10 @@ export const livePanel = {
       p: row.price,
       stock: row.stock,
       min: row.min_stock,
+      // C36: precio de compra (opcional)
+      cost: row.cost == null ? null : row.cost,
     }));
-    store.GASTOS = (expenses || []).map((row) => ({
-      id: row.id,
-      c: row.concept,
-      m: row.amount,
-      cat: row.category,
-      d: row.spent_on,
-    }));
+    store.GASTOS = (expenses || []).map(expenseFromDb);
     store.CLOSINGS = {};
     (closings || []).forEach((row) => {
       store.CLOSINGS[row.kind + "|" + (row.kind === "month" ? String(row.period).slice(0, 7) : row.period)] = {
