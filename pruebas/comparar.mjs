@@ -168,6 +168,12 @@ async function normalizar(page) {
     // "Activá tu perfil", muestra "Te falta poco" (los prestadores de la comparación ya están dados de alta: no aparece).
     // Se neutraliza en las dos versiones; lo nuevo lo prueban e2e.js y rutas.js.
     document.querySelectorAll("#app .bizcta, #app .asclient, #app .panel.setup, #app .panel.todo").forEach((el) => el.remove());
+    // V5 (C26, C28, cambios a propósito): cada trabajo se edita con ✎ (antes ✕) y muestra su nombre sobre la foto; el
+    // pedido de reseña salió de los avisos automáticos del panel (sale solo) y la nota lo explica. Se neutraliza en las
+    // dos versiones; lo nuevo lo prueban e2e.js y test_db.py.
+    document.querySelectorAll("#app .gi-del, #app .gi-cap").forEach((el) => el.remove());
+    document.querySelectorAll("#app .mlist li").forEach((li) => { if (/Pedido de reseña/.test(li.textContent)) li.remove(); });
+    document.querySelectorAll("#app .panel p.note").forEach((el) => { el.textContent = el.textContent.replace(" El pedido de reseña también sale solo, 2 horas después de cada turno atendido.", ""); });
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
