@@ -7,6 +7,7 @@
 //  /__captcha?key= → H30: prende (con la clave del sitio) o apaga (vacía) el CAPTCHA: config.js trae turnstileSiteKey y
 //                    Auth pide un token en signup, token (contraseña), otp, recover y resend, como Supabase con
 //                    Turnstile: válido si empieza con "ok-" y una sola vez (lo emite el Turnstile falso de captcha.js)
+//  /__rutas?modo=inicio → C02: imita un hosting sin el .htaccess (cada dirección de la app redirige a "/"); modo=ok vuelve
 //  /__pwa?sw=1&vapid= → Bloque C: con sw=1 la app registra el service worker (por defecto no, para que las demás pruebas
 //                    corran igual que siempre) y con vapid= ofrece notificaciones (config.js trae vapidPublicKey)
 //  /__down?on=1    → Bloque C: el sitio "se cae" (corta cada conexión) para probar la pantalla sin conexión
@@ -50,6 +51,7 @@ const LOG = [];
 const CONFIRM = true; // igual que Supabase con "Confirm email" activado
 let CAPTCHA = ""; // H30: clave del sitio de Turnstile ("" = sin CAPTCHA)
 const PWA = { sw: false, vapid: "" }; // Bloque C
+let ROUTES = "ok"; // C02: "inicio" imita un hosting sin el .htaccess, que manda al inicio cada dirección de la app
 let DOWN = false; // Bloque C: /__down?on=1 simula el sitio caído (sin conexión): cierra toda conexión salvo /__down
 let LAST_CHECKOUT = null; // Paso 1: el último cobro abierto ({ token, booking }), para probar la vuelta sin sesión (/__checkout)
 const USED = new Set(); // tokens ya usados (Cloudflare acepta cada uno una sola vez)
@@ -196,6 +198,7 @@ http.createServer(async (req, res) => {
     if (url.pathname === "/__down") { DOWN = url.searchParams.get("on") === "1"; return send(res, 200, { down: DOWN }) }
     if (DOWN) return req.socket.destroy();
     if (url.pathname === "/__pwa") { PWA.sw = url.searchParams.get("sw") === "1"; PWA.vapid = url.searchParams.get("vapid") || ""; return send(res, 200, PWA) }
+    if (url.pathname === "/__rutas") { ROUTES = url.searchParams.get("modo") === "inicio" ? "inicio" : "ok"; return send(res, 200, { rutas: ROUTES }) }
     if (url.pathname === "/__captcha") { CAPTCHA = url.searchParams.get("key") || ""; return send(res, 200, { captcha: CAPTCHA }) }
     // ¿existe el archivo del bucket dni? (las pruebas miran el disco, no solo storage.objects)
     if (url.pathname === "/__dni") { const name = url.searchParams.get("name") || ""; return send(res, 200, { exists: !!name && fs.statSync(fileOf(name), { throwIfNoEntry: false })?.isFile() === true }) }
@@ -207,6 +210,10 @@ http.createServer(async (req, res) => {
     const f = url.pathname;
     if (f === "/config.js" || f === "/config.cjs") { res.writeHead(200, { "Content-Type": "application/javascript" }); return res.end(`window.TT_CONFIG={supabaseUrl:"http://localhost:${PORT}",supabaseAnonKey:"${ANON}",city:"olavarria"${CAPTCHA ? `,turnstileSiteKey:${JSON.stringify(CAPTCHA)}` : ""},serviceWorker:${PWA.sw}${PWA.vapid ? `,vapidPublicKey:${JSON.stringify(PWA.vapid)}` : ""}};`) }
     const { status, file: fp } = resolver(WEB, f);
+    // C02: el hosting roto redirige a "/" toda dirección de la app que no es un archivo (lo que el .htaccess resuelve)
+    if (ROUTES === "inicio" && fp && f !== "/" && f !== "/index.html" && fp.endsWith("index.html") && !fs.existsSync(path.join(WEB, f))) {
+      res.writeHead(302, { Location: "/" }); return res.end();
+    }
     if (!fp) { res.writeHead(status, { "Content-Security-Policy": CSP }); return res.end("no") }
     res.writeHead(200, { "Content-Type": TYPES[path.extname(fp)] || "application/octet-stream", "Content-Security-Policy": CSP });
     fs.createReadStream(fp).pipe(res);

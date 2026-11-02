@@ -6,7 +6,9 @@ import { safeRedirect } from "../../lib/dom.js";
 import { isoToLocal, localToIso, relDate } from "../../lib/fechas.js";
 import { pr } from "../../lib/prestadores.js";
 import { selAdds } from "../../lib/servicios.js";
+import { checkRoutes } from "../../lib/recarga.js";
 import { S } from "../../state.js";
+import { render } from "../../ui/render.js";
 import { store } from "../../store.js";
 import { avatarUrl } from "../../ui/fotos.js";
 
@@ -17,6 +19,15 @@ export const liveAdmin = {
     return S.isAdmin;
   },
   async adminLoad() {
+    // C02: una vez por carga, si el servidor devuelve la app en las direcciones internas (el .htaccess)
+    if (S.routesOk == null) {
+      checkRoutes().then((routesOk) => {
+        S.routesOk = routesOk;
+        if (routesOk === false) {
+          render();
+        }
+      });
+    }
     const [stats, providers, settings] = await Promise.all([
       call(sb.rpc("admin_stats")),
       call(

@@ -67,6 +67,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     cuentas que existen (`shouldCreateUser: false`).
   - V3b (C22): `src/lib/agenda-al-dia.js` vuelve a pedir los turnos de la Agenda cada 30 s y al volver a la pestaña (sin
     Realtime) y solo dibuja si cambió algo; no toca la pantalla con un guardado pendiente, un formulario abierto o alguien escribiendo.
+  - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
+    vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en
@@ -135,8 +137,8 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
   `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py`, `pruebas/test_push.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` y `npm run test:webpush` si tocás las
   Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:unidad`, `npm run test:crawl`,
   `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:pwa` y `npm run test:comparar` (navegador
-  real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` si tocás el `.htaccess` (Apache local; en
-  el CI corre en un contenedor `httpd:2.4`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
+  real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` y `npm run test:litespeed` si tocás el
+  `.htaccess` (Apache local y OpenLiteSpeed en docker; en el CI, contenedores `httpd:2.4` y `openlitespeed`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
   fecha (la agenda de la demo sale de "hoy"). Lo que importa es 0 errores y 0 destinos equivocados.
 - Las pruebas usan el mismo "hoy" que la base: el de Buenos Aires (`(now() at time zone 'America/Argentina/Buenos_Aires')::date`
@@ -182,5 +184,6 @@ npm run test:rutas      # direcciones: cada ruta, recarga, atrás/adelante, sesi
 npm run test:captcha    # H30: Turnstile (falso) en cada llamada a Auth, sin clave no carga nada (mismo entorno)
 npm run test:pwa        # Bloque C: manifest, service worker (sin Supabase en la caché), sin conexión, versión nueva, push (mismo entorno)
 npm run test:htaccess   # el .htaccess real con el apache2 local (apt install apache2): fallback, 404, HTTPS, CSP
+npm run test:litespeed  # C02: el mismo .htaccess con OpenLiteSpeed en docker (el servidor de Hostinger): direcciones, 404, HTTPS
 npm run test:comparar   # versión anterior al Bloque A vs. la actual: demo y en vivo, texto y capturas
 ```

@@ -6,6 +6,7 @@
 // - Las historias y la ficha de un cliente abren una entrada propia: "atrás" las cierra. Las confirmaciones no.
 import { applyUrl } from "./router/pantallas.js";
 import { META, describe } from "./router/direcciones.js";
+import { rememberHere } from "./lib/recarga.js";
 import { S } from "./state.js";
 import { render } from "./ui/render.js";
 
@@ -39,6 +40,7 @@ export function syncUrl() {
   if (replace || target.key === state.k) {
     if (target.url !== current || target.key !== state.k) {
       history.replaceState({ k: target.key, prev: state.prev, overlay: target.overlay }, "", target.url);
+      rememberHere();
     }
     return;
   }
@@ -49,6 +51,7 @@ export function syncUrl() {
     return;
   }
   history.pushState({ k: target.key, prev: state.k, overlay: target.overlay }, "", target.url);
+  rememberHere();
 }
 
 // ---------- Arranque, atrás/adelante y navegación desde el código ----------

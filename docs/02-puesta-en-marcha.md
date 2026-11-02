@@ -105,6 +105,10 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### C02 (recargar vuelve al inicio)
+- Solo frontend: subir `dist/` completo, **con el `.htaccess`** (archivo oculto). Si en prueba pasa, seguir la sección 3,
+  paso 6 (el `curl` dice si el servidor devuelve la app en `/panel/agenda`). Sin migraciones ni Edge Functions.
+
 ### V6 (Admin: prestadores sin Mercado Pago)
 - Migración nueva: `20261102220000_admin_mp.sql` («Avisarle»: `admin_nudge_mp`, aviso `mp_connect` y el texto de su push
   en `push_due`).
@@ -512,9 +516,27 @@ el aviso, mirá Supabase → Edge Functions → **mp-webhook → Invocations / L
    subcarpeta: desde el Bloque B cada pantalla tiene su dirección (`/panel/agenda`, `/<slug>`…) y el `.htaccess` manda a
    `index.html` todo pedido sin extensión que no sea un archivo. Los archivos con extensión que no existen dan 404.
 5. Para que Google no indexe la prueba: en ese subdominio, `robots.txt` con `Disallow: /`.
+6. **Si al recargar vuelve al inicio (C02)**: casi siempre es el `.htaccess`. Desde la compu, en una terminal:
+   ```bash
+   curl -sI https://prueba.tutiempo.com.ar/panel/agenda | head -5
+   ```
+   Tiene que decir `HTTP/2 200` (o `HTTP/1.1 200`), `content-type: text/html` y **ninguna** línea `location:`. Si dice
+   301, 302 o 404:
+   - En el Administrador de archivos de Hostinger, en la carpeta del subdominio, activá "Mostrar archivos ocultos" y
+     fijate que esté `.htaccess` (el de `dist/`). Muchos programas de FTP y el "subir carpeta" del navegador se saltean
+     los archivos que empiezan con punto: subilo aparte.
+   - Que la carpeta del subdominio no tenga otro `.htaccess` (de una versión vieja o del sitio Laravel) ni un
+     `index.php`, y que en hPanel → Dominios → Redirecciones no haya una redirección del subdominio.
+   - Si el subdominio vive dentro de `public_html` del sitio principal, el `.htaccess` de `public_html` (Laravel) no
+     debería meterse: el de la carpeta del subdominio tiene `RewriteEngine On` propio y manda él. Si igual se mete,
+     movelo a una carpeta propia en hPanel → Subdominios → "Carpeta personalizada".
+   - Después de cambiarlo, en LiteSpeed puede hacer falta vaciar la caché (hPanel → Rendimiento → Caché → Vaciar).
+   La app igual vuelve a la pantalla en la que estaba al recargar (desde C02 guarda la dirección en la pestaña), pero un
+   link o el QR de un perfil abierto desde afuera siguen necesitando el `.htaccess`. El panel de TuTiempo (Resumen →
+   Para revisar) avisa con «El sitio no devuelve la app en sus direcciones» cuando el servidor no las devuelve.
 
 ### 4. Prueba de punta a punta (checklist)
-- [ ] Direcciones en Hostinger (LiteSpeed lee el `.htaccess`, pero el CI lo prueba con Apache): abrir
+- [ ] Direcciones en Hostinger (LiteSpeed lee el `.htaccess`; el CI lo prueba con Apache y con OpenLiteSpeed): abrir
       `https://prueba.tutiempo.com.ar/panel/agenda` directo (pide ingresar y vuelve a la agenda), recargar el perfil de
       un prestador (`/<slug>`), abrir un `.js` que no existe (`/assets/no-existe.js` tiene que dar 404, no la app) y
       verificar que en Supabase → Auth → URL Configuration → Redirect URLs esté la raíz del subdominio
