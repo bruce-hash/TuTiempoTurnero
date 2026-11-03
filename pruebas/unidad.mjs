@@ -91,6 +91,23 @@ const migD30 = fs.readFileSync(path.join(ROOT, "supabase/migrations/202611011200
 ok("D30: charge_parts de la base usa la misma cuenta (comisión al peso, total redondeado para arriba)",
   migD30.includes("fee := (dep * c100 + 5000) / 10000;") && migD30.includes("total := ((dep + fee) * 10000 + d - 1) / d;"));
 
+// ---------- D34 · la comisión de TuTiempo es un % del PRECIO del turno (no de la seña) ----------
+const d34 = chargeFor(5000, 7, 0, 10000);
+ok("D34: corte $10.000, seña 50% ($5.000), 7% del total = $700 → con Mercado Pago en 0% el cliente paga $5.700",
+  JSON.stringify(d34) === JSON.stringify({ deposit: 5000, fee: 700, mp: 0, total: 5700 }));
+const d34mp = chargeFor(5000, 7, 7.61, 10000);
+ok("D34: con Mercado Pago al instante (7,61%): ⌈5.700 / 0,9239⌉ = $6.170 ($470 de Mercado Pago)", d34mp.fee === 700 && d34mp.total === 6170 && d34mp.mp === 470);
+const D34 = { "3000|7.61": 4005, "3000|5.31": 3908, "3000|4.1": 3859, "3000|1.8": 3768, "4000|7.61": 5088, "4000|5.31": 4964,
+  "4000|4.1": 4901, "4000|1.8": 4787, "5000|7.61": 6170, "5000|5.31": 6020, "5000|4.1": 5944, "5000|1.8": 5805 };
+const d34bad = Object.entries(D34).filter(([k, want]) => { const [dep, mp] = k.split("|").map(Number); return chargeFor(dep, 7, mp, 10000).total !== want; });
+ok("D34: los 12 ejemplos de docs/06 (servicio de $10.000, 7% del total) dan el total de la tabla", !d34bad.length, d34bad.map(([k]) => k).join(", "));
+ok("D34: el premio (sin seña) no paga comisión", chargeFor(0, 7, 0, 10000).total === 0);
+ok("D34: pagando el total, la comisión es la misma que sobre el precio", chargeFor(10000, 7, 0).fee === 700 && chargeFor(10000, 7, 0, 10000).fee === 700);
+const migD34 = fs.readFileSync(path.join(ROOT, "supabase/migrations/20261103040000_comision_total.sql"), "utf8");
+ok("D34: charge_parts(seña, precio, …) de la base hace la misma cuenta y book_slot le pasa el precio final",
+  migD34.includes("fee := (base * c100 + 5000) / 10000;") && migD34.includes("total := ((dep + fee) * 10000 + d - 1) / d;")
+  && migD34.includes("public.charge_parts(dep, v_price, v_cpct, v_mpct)"));
+
 // ---------- Ingreso y registro · la acción pendiente ----------
 const now = Date.now();
 const res = { a: "reservar", pid: 7, svc: "12", day: "2026-11-03", time: "09:30", at: now };

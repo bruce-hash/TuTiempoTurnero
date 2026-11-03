@@ -154,7 +154,28 @@ Perfil → Cobros.
   enteros. Así el prestador recibe la seña completa y TuTiempo su comisión completa.
 - **Redondeo de la comisión de TuTiempo:** propongo redondearla al peso más cercano, como hoy.
 
-**Ejemplos (servicio de $10.000, comisión de TuTiempo 7% de la seña).** "MP se queda" es el % de MP sobre el total;
+**D34 (3/11): la comisión de TuTiempo vuelve a ser un % del PRECIO del turno** (con happy hour y adicionales), cobrada al
+reservar junto con la seña; la fórmula de Mercado Pago no cambia. Ejemplos con un servicio de $10.000 y 7% del total
+($700), que reemplazan a los de abajo:
+
+| Seña | Plazo (% MP con IVA) | Seña | TuTiempo (7% de $10.000) | Se suma por MP | **Paga el cliente** | MP se queda | El prestador recibe |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 30% | Al instante (7,61%) | $3.000 | $700 | $305 | **$4.005** | $304,78 | $3.000,22 |
+| 30% | 10 días (5,31%) | $3.000 | $700 | $208 | **$3.908** | $207,51 | $3.000,49 |
+| 30% | 18 días (4,1%) | $3.000 | $700 | $159 | **$3.859** | $158,22 | $3.000,78 |
+| 30% | 35 días (1,8%) | $3.000 | $700 | $68 | **$3.768** | $67,82 | $3.000,18 |
+| 40% | Al instante (7,61%) | $4.000 | $700 | $388 | **$5.088** | $387,20 | $4.000,80 |
+| 40% | 10 días (5,31%) | $4.000 | $700 | $264 | **$4.964** | $263,59 | $4.000,41 |
+| 40% | 18 días (4,1%) | $4.000 | $700 | $201 | **$4.901** | $200,94 | $4.000,06 |
+| 40% | 35 días (1,8%) | $4.000 | $700 | $87 | **$4.787** | $86,17 | $4.000,83 |
+| 50% | Al instante (7,61%) | $5.000 | $700 | $470 | **$6.170** | $469,54 | $5.000,46 |
+| 50% | 10 días (5,31%) | $5.000 | $700 | $320 | **$6.020** | $319,66 | $5.000,34 |
+| 50% | 18 días (4,1%) | $5.000 | $700 | $244 | **$5.944** | $243,70 | $5.000,30 |
+| 50% | 35 días (1,8%) | $5.000 | $700 | $105 | **$5.805** | $104,49 | $5.000,51 |
+
+Con Mercado Pago en 0%: seña 50% ($5.000) + $700 = **$5.700**.
+
+**Ejemplos de D30 (comisión 7% de la seña; reemplazados por D34).** "MP se queda" es el % de MP sobre el total;
 "el prestador recibe" es total − MP − TuTiempo. El último es el que pusiste vos: $5.791.
 
 | Seña | Plazo (% MP con IVA) | Seña | TuTiempo (7%) | Se suma por MP | **Paga el cliente** | MP se queda | El prestador recibe |

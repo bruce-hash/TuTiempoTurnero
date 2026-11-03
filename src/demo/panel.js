@@ -137,14 +137,14 @@ export function seedStore(pid) {
   };
 }
 
-// D30: comisiones de la demo. TuTiempo 7% de la seña y Mercado Pago con los % de referencia (con IVA) para que se vean
+// D30/D34: comisiones de la demo. TuTiempo 7% del precio del turno y Mercado Pago con los % de referencia (con IVA) para que se vean
 // los tres conceptos; en vivo arrancan en 0 hasta la aprobación legal.
 export const DEMO_FEES = () => ({ commission: 7, mp: { instant: 7.61, d10: 5.31, d18: 4.1, d35: 1.8 } });
-// comisión de los turnos de ejemplo pagados por la app (% de la seña), para que las finanzas y el admin la descuenten
+// comisión de los turnos de ejemplo pagados por la app (% del precio, D34), para que las finanzas y el admin la descuenten
 export function seedFees() {
   store.BOOK.forEach((booking) => {
     if (booking.src === "app" && booking.type !== "block" && booking.fee == null && (booking.paid || 0) > 0) {
-      booking.fee = chargeAt(booking.pid, booking.paid).fee;
+      booking.fee = chargeAt(booking.pid, booking.paid, booking.price).fee;
     }
   });
 }

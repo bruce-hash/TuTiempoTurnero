@@ -102,7 +102,7 @@ def expire(bid):
     q("select expire_holds(null)")
 
 
-# ---------- Datos: un prestador conectado, dos clientes, servicio de $10.000 (seña 50% = $5.000 + comisión 20% de la seña = $1.000) ----------
+# ---------- Datos: un prestador conectado, dos clientes, servicio de $10.000 (seña 50% = $5.000 + comisión 10% del precio = $1.000, D34) ----------
 owner = mkuser("prov@cobros.ar", "Prov Cobros")
 cli = mkuser("ana@cobros.ar", "Ana Cobros")
 cli2 = mkuser("beto@cobros.ar", "Beto Cobros")
@@ -114,9 +114,9 @@ q("update provider_settings set online = true, notice_min = 0, step_min = 30, de
 q("delete from provider_hours where provider_id = %s", (pid,))
 q("insert into provider_hours select %s, g, 1, '08:00', '21:00' from generate_series(0, 6) g", (pid,))
 q("select admin_set_commission(10)", uid=adm)
-# D30: la comisión de TuTiempo es un % de la SEÑA. 20% de la seña de $5.000 = $1.000, lo mismo que el 10% del precio de
-# antes: los montos de las pruebas no cambian. Mercado Pago en 0% (por defecto): no se suma nada.
-q("update app_settings set deposit_commission_pct = 20")
+# D34: la comisión de TuTiempo es un % del PRECIO del turno: 10% de $10.000 = $1.000 (con D30 era el 20% de la seña de
+# $5.000, el mismo monto). Mercado Pago en 0% (por defecto): no se suma nada.
+q("update app_settings set deposit_commission_pct = 10")
 sv = one("insert into services (provider_id, category_id, name, duration_min, price) values (%s, 'b', 'Corte', 30, 10000) returning id", (pid,), uid=owner)
 
 # ---------- H23 previo: sin cuenta de Mercado Pago no se reserva con seña ----------
@@ -770,7 +770,7 @@ got = {k: one("select (charge_parts(%s::int, 7, %s::numeric))[3]", (k[0], str(k[
 ok("D30: los 12 ejemplos de la propuesta (seña 30/40/50% de $10.000, 7% de TuTiempo, los 4 plazos) dan el total aprobado", got == ex)
 ok("D30: con Mercado Pago en 0%, seña + comisión (50%: $5.000 + $350 = $5.350)", one("select charge_parts(5000, 7, 0)", role="anon") == [350, 0, 5350])
 ok("D30: sin seña (premio) no se cobra nada", one("select charge_parts(0, 7, 7.61)", role="anon") == [0, 0, 0])
-ok("D30: por defecto, comisión 7% de la seña y Mercado Pago en 0% en los cuatro plazos (hasta la aprobación legal)",
+ok("D30/D34: por defecto, comisión 7% (del precio del turno) y Mercado Pago en 0% en los cuatro plazos (hasta la aprobación legal)",
    one("select row(mp_pct_instant, mp_pct_d10, mp_pct_d18, mp_pct_d35)::text from app_settings") == "(0.00,0.00,0.00,0.00)"
    and one("select column_default from information_schema.columns where table_name = 'app_settings' and column_name = 'deposit_commission_pct'") == "7")
 ok("D30: los prestadores arrancan con el plazo 'al instante'", one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "instant")
@@ -778,8 +778,8 @@ ok("D30: solo el admin cambia las comisiones", err(q("select admin_set_fees(5, 1
    and err(q("select admin_set_fees(5, 1, 1, 1, 1)", role="anon")) and err(q("update app_settings set mp_pct_d10 = 1", uid=adm)))
 ok("D30: fuera de rango se rechaza (comisión 0 a 30, Mercado Pago 0 a 15)", err(q("select admin_set_fees(31, 0, 0, 0, 0)", uid=adm), "bad_commission")
    and err(q("select admin_set_fees(7, 16, 0, 0, 0)", uid=adm), "bad_mp_pct") and err(q("select admin_set_fees(7, -1, 0, 0, 0)", uid=adm), "bad_mp_pct"))
-fs = one("select admin_set_fees(20, 7.61, 5.31, 4.10, 1.80)", uid=adm)
-ok("D30: el admin carga la comisión y la tabla de Mercado Pago", float(fs["commission"]) == 20 and float(fs["d10"]) == 5.31 and float(fs["d35"]) == 1.8)
+fs = one("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+ok("D30: el admin carga la comisión y la tabla de Mercado Pago", float(fs["commission"]) == 10 and float(fs["d10"]) == 5.31 and float(fs["d35"]) == 1.8)
 ok("D30: el prestador elige su plazo (y solo el suyo)", not err(q("update provider_settings set payout_term = 'd10' where provider_id = %s", (pid,), uid=owner))
    and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10"
    and err(q("update provider_settings set payout_term = 'd7' where provider_id = %s", (pid,), uid=owner))
@@ -821,7 +821,7 @@ pay(r33["booking_ids"], "P-D30-SERIE", 12674, 2000, pid, acc1, {"id": "P-D30-SER
     "fee_details": [{"type": "mercadopago_fee", "amount": 673}, {"type": "application_fee", "amount": 2000}]})
 ok("D30: serie: la comisión esperada sale del total del pago (5,31% de $12.674 = $673)",
    q("select outcome, mp_cost_expected from payments where mp_payment_id = 'P-D30-SERIE'")[0] == ("confirmed", 673))
-q("select admin_set_fees(20, 0, 0, 0, 0)", uid=adm)
+q("select admin_set_fees(10, 0, 0, 0, 0)", uid=adm)
 r34 = book(sv, at(28, 15), cli)[0][0]; b34 = r34["booking_ids"][0]
 pay([b34], "P-D30-CERO", 6000, 1000, pid, acc1, {"id": "P-D30-CERO", "status": "approved",
     "fee_details": [{"type": "mercadopago_fee", "amount": 457}, {"type": "application_fee", "amount": 1000}]})
@@ -833,7 +833,7 @@ ok("D30: con Mercado Pago en 0% tampoco se detecta el plazo (sigue el del presta
    one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10"
    and one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_term'", (pid,)) == 0
    and one("select mp_term_match(6000, 457, 'd10')") is None)
-q("select admin_set_fees(20, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+q("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
 
 # ---------- D30 · El plazo de Mercado Pago se detecta solo (por la comisión que informa cada pago) ----------
 iva = lambda total, pct: round(total * pct * 1.21 / 100)
@@ -846,7 +846,7 @@ ok("D30 auto: mp_term_match reconoce el plazo del prestador, otro plazo (con y s
 ok("D30 auto: mp_term_match no se llama desde la app", err(q("select mp_term_match(6337, 336, 'd10')", uid=owner)) and err(q("select mp_term_match(6337, 336, 'd10')", role="anon")))
 q("update provider_settings set payout_term = 'instant' where provider_id = %s", (pid,))
 r40 = book(sv, at(29, 9), cli)[0][0]; b40 = r40["booking_ids"][0]
-tot40 = one("select (charge_parts(5000, 20, 7.61))[3]")
+tot40 = one("select (charge_parts(5000, 10000, 10, 7.61))[3]")
 ok("D30 auto: arranca en «al instante», el % más alto (seña $5.000 + $1.000 + Mercado Pago 7,61%)", r40["amount_due"] == tot40 == 6495)
 res40 = pay([b40], "P-AUTO-35", tot40, 1000, pid, acc1, {"id": "P-AUTO-35", "status": "approved",
             "fee_details": [{"type": "mercadopago_fee", "amount": round(tot40 * 1.80 / 100, 2)}, {"type": "application_fee", "amount": 1000}]})
@@ -858,7 +858,7 @@ ok("D30 auto: el prestador recibe el aviso «Detectamos que tu cuenta acredita a
    n40 is not None and "Detectamos que tu cuenta de Mercado Pago acredita a 35 días; desde ahora tus clientes pagan menos." in n40)
 r41 = book(sv, at(29, 10), cli)[0][0]; b41 = r41["booking_ids"][0]
 ok("D30 auto: el turno siguiente ya se cobra con el % de 35 días ($6.110 en vez de $6.495)",
-   r41["amount_due"] == one("select (charge_parts(5000, 20, 1.80))[3]") == 6110 and bk(b41, "mp_fee_pct::float")[0] == 1.8)
+   r41["amount_due"] == one("select (charge_parts(5000, 10000, 10, 1.80))[3]") == 6110 and bk(b41, "mp_fee_pct::float")[0] == 1.8)
 pay([b41], "P-AUTO-IVA", 6110, 1000, pid, acc1, {"id": "P-AUTO-IVA", "status": "approved",
     "fee_details": [{"type": "mercadopago_fee", "amount": iva(6110, 1.80)}, {"type": "application_fee", "amount": 1000}]})
 ok("D30 auto: con el IVA incluido sigue siendo 35 días: sin revisión, sin otro aviso y sin cambiar el plazo",
@@ -882,6 +882,19 @@ ok("D30 auto: el prestador lo sigue pudiendo cambiar a mano", not err(q("update 
    and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d18")
 q("update provider_settings set payout_term = 'd10' where provider_id = %s", (pid,))
 
+# ---------- D34 · la comisión de TuTiempo sale del PRECIO del turno, no de la seña ----------
+q("select admin_set_fees(10, 0, 0, 0, 0)", uid=adm)
+q("update provider_settings set deposit_pct = 30 where provider_id = %s", (pid,))
+r50 = book(sv, at(30, 9), cli)[0][0]; b50 = r50["booking_ids"][0]
+ok("D34: seña 30% ($3.000) + 10% del precio ($1.000, no $300 de la seña) = $4.000",
+   r50["amount_due"] == 4000 and bk(b50, "deposit, client_fee, price") == (3000, 1000, 10000))
+ok("D34: charge_parts(seña, precio, %, %MP) es la cuenta de la base (corte $10.000, seña $5.000, 7%: $5.700; con 7,61%: $6.170)",
+   one("select charge_parts(5000, 10000, 7, 0)", role="anon") == [700, 0, 5700] and one("select charge_parts(5000, 10000, 7, 7.61)", role="anon") == [700, 470, 6170]
+   and one("select charge_parts(0, 10000, 7, 0)", role="anon") == [0, 0, 0])
+q("select cancel_by_client(%s)", (b50,), uid=cli)
+q("update provider_settings set deposit_pct = 50 where provider_id = %s", (pid,))
+q("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+
 # ---------- La migración completa se puede volver a correr sobre una base con datos ----------
 import os
 todo = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "supabase", "TODO_EN_UNO.sql"), encoding="utf8").read()
@@ -890,7 +903,7 @@ for vez in (1, 2):
         c.execute(todo)
 ok("TODO_EN_UNO.sql se puede volver a correr 2 veces sobre esta base", one("select to_regclass('public.provider_secrets')") is None)
 ok("D30: volver a correr la migración no cambia las comisiones cargadas ni el plazo del prestador",
-   one("select row(deposit_commission_pct, mp_pct_d10)::text from app_settings") == "(20.00,5.31)"
+   one("select row(deposit_commission_pct, mp_pct_d10)::text from app_settings") == "(10.00,5.31)"
    and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10")
 ok("…y los datos siguen igual", one("select count(*) from payments") > 10 and one("select status from mp_accounts where id = %s", (acc1,)) == "active"
    and one("select count(*) from mp_accounts where access_token !~ '^v[0-9]+:'") == 0)

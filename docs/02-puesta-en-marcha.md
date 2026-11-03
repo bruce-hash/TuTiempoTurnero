@@ -110,6 +110,11 @@ bloque al siguiente en un entorno que ya estaba armado.
   `admin_alert_marks_get`/`admin_alert_mark`; `admin_nudge_mp(profesional, texto)` con el mensaje editable). Sin Edge
   Functions ni cambios de `config.js`.
 
+### D34 (comisión de TuTiempo sobre el precio del turno)
+- Migración nueva: `20261103040000_comision_total.sql` (`charge_parts(seña, precio, %, %MP)` y `book_slot` con la comisión
+  sobre el precio final). Las reservas ya hechas no cambian. El valor del admin (Comisión de TuTiempo) ahora es un % del
+  precio del turno: revisá que sea el que querés (7% por defecto). Sin Edge Functions ni cambios de `config.js`.
+
 ### D30 (plazo de Mercado Pago automático)
 - Migración nueva: `20261103030000_plazo_mp_automatico.sql` (`mp_term_match`, `confirm_payment_core` detecta el plazo
   por la comisión de cada pago, aviso `mp_term`). No cambia el plazo de los prestadores que ya están: lo corrige el

@@ -299,7 +299,7 @@ registerInput("admQ", (ev) => {
   });
   return;
 });
-// D30: comisión de TuTiempo (% de la seña, de 0 a 30) y % de Mercado Pago por plazo (de 0 a 15), con hasta dos decimales
+// D34: comisión de TuTiempo (% del precio del turno, de 0 a 30) y % de Mercado Pago por plazo (de 0 a 15), con hasta dos decimales
 registerSubmit("fCom", (ev) => {
   const read = (id, max) => {
     const text = String(($("#" + id) || {}).value || "").trim().replace("%", "").replace(",", ".");
@@ -325,14 +325,14 @@ registerSubmit("fCom", (ev) => {
       .adminSetFees(pct, mp)
       .then(() => api.adminLoad())
       .then(() => {
-        toast(`Comisiones guardadas: TuTiempo ${pctTxt(pct)}% de la seña. Se aplican a las reservas nuevas.`);
+        toast(`Comisiones guardadas: TuTiempo ${pctTxt(pct)}% del servicio. Se aplican a las reservas nuevas.`);
         render();
       })
       .catch(() => {});
     return;
   }
   store.FEES = { commission: pct, mp: mp };
-  toast(`Comisiones guardadas: TuTiempo ${pctTxt(pct)}% de la seña. Se aplican a las reservas nuevas.`);
+  toast(`Comisiones guardadas: TuTiempo ${pctTxt(pct)}% del servicio. Se aplican a las reservas nuevas.`);
   render();
   return;
 });

@@ -116,7 +116,7 @@ export function cfgToDb(pid, conf) {
   };
 }
 
-// D30: fila de app_settings → store.FEES (comisión de TuTiempo en % de la seña y % de Mercado Pago por plazo)
+// D30: fila de app_settings → store.FEES (comisión de TuTiempo en % del precio del turno, D34, y % de Mercado Pago por plazo)
 export function feesFromDb(row) {
   const num = (value, def) => (isFinite(parseFloat(value)) ? parseFloat(value) : def);
   return {

@@ -1,6 +1,6 @@
 -- Datos para la prueba end-to-end: 2 prestadores (uno multirrubro), activos y con Mercado Pago conectado.
--- D30: comisión de TuTiempo 20% de la seña (con seña del 50% da lo mismo que el 10% del precio de antes); Mercado Pago en 0%.
-update public.app_settings set deposit_commission_pct = 20;
+-- D34: comisión de TuTiempo 10% del precio del turno (la misma que daba el 20% de la seña del 50% con D30); Mercado Pago en 0%.
+update public.app_settings set deposit_commission_pct = 10;  -- D34: 10% del precio (corte de $12.000 → $1.200)
 insert into auth.users (id, email, encrypted_password, raw_user_meta_data) values
  ('11111111-1111-1111-1111-111111111111','sofia@test.ar','prestador123','{"full_name":"Sofía"}'),
  ('22222222-2222-2222-2222-222222222222','max@test.ar','prestador123','{"full_name":"Max"}');
