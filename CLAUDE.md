@@ -112,6 +112,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   devoluciones, cuentas de MP) y `test_emails.py` (avisos por email: cola, reintentos, opción del cliente);
   `test_mudanza.py` (una base de la versión 31 con llaves en texto plano, migrada hasta la última; base limpia aparte);
   `funciones/` (las Edge Functions reales con Deno contra un Mercado Pago falso, `npm run test:funciones`).
+  Auditoría de seguridad (docs/05): `auditoria_seguridad.py` (base: controles `OK`/`FAIL` y `HALLAZGO Sxx` mientras un
+  hallazgo siga abierto; `--estricto` falla si queda alguno) y `auditoria_xss.js` (navegador: textos con HTML en todo lo que
+  escribe un usuario). No corren en el CI: se corren al cerrar un bloque que arregle hallazgos.
 
 ## Arquitectura del frontend (respetarla)
 
