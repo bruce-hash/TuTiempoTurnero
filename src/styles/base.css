@@ -126,6 +126,7 @@ main{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
 .tg[aria-pressed="true"]::after{left:25px}
 .err{color:var(--bad);font-size:13px;text-align:center;min-height:18px}
 .stats2{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.stats2.s4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .stats2 div{background:var(--bg);border-radius:12px;padding:10px 6px;min-width:0}
 .stats2 b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
 .stats2 span{font-size:11px;color:var(--muted)}

@@ -191,7 +191,7 @@ export function vBAgendaT() {
 `;
   // C21 (V3): "Cargar servicio sin turno" salió de la Agenda: queda en Finanzas → Caja del día
 }
-// detalle de lo elegido en la agenda: cliente, historial, ficha, montos y acciones
+// detalle de lo elegido en la agenda: cliente, historial, montos y acciones
 function detailCard(item) {
   const isBooking = typeof item.id == "number";
   const stats = item.cliente ? cli(item.cliente) : null;
@@ -206,18 +206,7 @@ function detailCard(item) {
   return `<div class="panel detail"><div style="display:flex;justify-content:space-between;gap:8px;align-items:start"><div><b style="font-size:17px">${esc(item.time)} · ${esc(item.cliente || "Horario bloqueado")}</b><div class="hint">${esc(item.svc || "")}${(item.addons || []).length ? " + " + (item.addons || []).map((addon) => esc(addon[0])).join(" + ") : ""}</div></div><button class="xbtn" data-act="selClose" aria-label="Cerrar">✕</button></div>
    <div class="chips" style="justify-content:flex-start;margin-top:8px"><span class="chip gray">${origin}</span>${item.cliente && item.type !== "block" && item.type !== "walk" ? relBadge(item.cliente) : ""}${item.type === "local" && item.status === "confirmed" ? '<span class="chip ok">✓ Confirmado</span>' : ""}${item.pay === "cash" ? '<span class="chip">💵 Resto en efectivo</span>' : item.pay === "reward" ? '<span class="chip ok">🎁 Premio de sellos (gratis)</span>' : ""}${item.late ? `<span class="chip">⏱ Llega ${item.late} min tarde</span>` : ""}${item.disc ? `<span class="chip ok">Happy hour −${item.disc}%</span>` : ""}</div>
    ${stats && item.type !== "block" && item.type !== "walk" ? `<p class="note" style="text-align:left;margin:8px 0 0">Historial: ${stats.v} turno${stats.v === 1 ? "" : "s"} · ${stats.n} falta${stats.n === 1 ? "" : "s"}</p>` : ""}
-   ${
-     item.cliente &&
-     store.CLIENTS[item.cliente] &&
-     (store.CLIENTS[item.cliente].notes || Object.values(store.CLIENTS[item.cliente].profile || {}).some(Boolean))
-       ? `<div class="notebox">📝 ${[store.CLIENTS[item.cliente].notes]
-           .concat(Object.values(store.CLIENTS[item.cliente].profile || {}))
-           .filter(Boolean)
-           .map(esc)
-           .join(" · ")}</div>`
-       : ""
-   }
-   ${item.cliente && store.CLIENTS[item.cliente] && item.type !== "block" && item.type !== "walk" ? `<button class="lnk" style="font-size:13px;margin-top:6px" data-cli="${esc(item.cliente)}">Ver ficha del cliente →</button>` : ""}
+   ${item.cliente && store.CLIENTS[item.cliente] && item.type !== "block" && item.type !== "walk" ? `<button class="lnk" style="font-size:13px;margin-top:6px" data-cli="${esc(item.cliente)}">Ver cliente →</button>` : ""}
    ${item.price ? `<div class="sum" style="margin-top:10px"><div><span>Precio</span><span>${money(item.price)}</span></div><div><span>Seña pagada (Mercado Pago)</span><span>${money(item.paid || 0)}</span></div>${item.price > (item.paid || 0) ? `<div class="tot"><span>A cobrar en el local${item.pay === "cash" ? " (efectivo)" : item.src === "app" ? " (Mercado Pago)" : ""}</span><span>${money(item.price - (item.paid || 0))}</span></div>` : ""}</div>` : ""}
    ${isBooking && item.status === "confirmed" && item.type !== "block" ? (S.bAsk === item.id ? `<div class="bacts"><span class="hint">¿Cancelar? Se le devuelve todo al cliente.</span><button class="btn btn-ghost" data-act="bCancelNo">No</button><button class="btn btn-bad" data-act="bCancelYes" data-id="${item.id}">Sí, cancelar</button></div>` : `<div class="bacts" style="margin-top:12px"><button class="btn btn-ok" data-act="bDone" data-id="${item.id}">✓ Asistió</button><button class="btn btn-ghost" data-act="bNoShow" data-id="${item.id}">No vino</button><button class="btn btn-ghost" data-act="bCancel" data-id="${item.id}">Cancelar</button></div>`) : isBooking && item.type === "block" ? `<div class="bacts" style="margin-top:12px"><button class="btn btn-ghost" data-act="bUnblock" data-id="${item.id}">Desbloquear</button></div>` : item.status === "done" ? '<p class="note" style="text-align:left;margin-top:10px">✔ Atendido</p>' + (isBooking ? doneRest(item) : "") : item.status === "noshow" ? '<p class="note" style="text-align:left;margin-top:10px">✕ No vino</p>' : ""}
   </div>`;
