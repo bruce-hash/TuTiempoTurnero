@@ -98,6 +98,23 @@ async function normalizar(page) {
       if (/restador/.test(node.nodeValue)) node.nodeValue = TERM.reduce((txt, [re, to]) => txt.replace(re, to), node.nodeValue);
     }
     document.querySelectorAll("input[placeholder]").forEach((el) => { el.placeholder = TERM.reduce((txt, [re, to]) => txt.replace(re, to), el.placeholder); });
+    // v2 (3/11, a propósito): los avisos del admin se pueden borrar (✕, «Nuevo», «Borrar los leídos») y el panel se llama
+    // «Avisos»: se vuelven a la forma de antes («Para revisar», sin botones)
+    document.querySelectorAll("#app .admal-h").forEach((head) => {
+      const label = head.querySelector(".lbl");
+      if (label && label.textContent.trim() === "Avisos") head.replaceWith(Object.assign(document.createElement("p"), { className: "lbl", textContent: "Para revisar" }));
+      else head.querySelectorAll("[data-act=admAlertsClear]").forEach((btn) => btn.remove());
+    });
+    document.querySelectorAll("#app li.admal").forEach((li) => {
+      li.querySelectorAll("[data-act=admAlertDel], .chip.warn").forEach((el) => el.remove());
+      const inner = li.firstElementChild;
+      if (inner && inner.tagName === "DIV" && li.closest(".adm-res > .panel.admalert, .admalert") && !li.closest("details")) {
+        while (inner.firstChild) li.insertBefore(inner.firstChild, inner);
+        inner.remove();
+      }
+      li.className = "";
+      li.removeAttribute("data-k");
+    });
     // D31 (a propósito): el «primer turno libre» de hoy sale de la duración del servicio (antes, de otra grilla): según
     // la hora del CI la referencia ofrece 15:30 y la versión de hoy 16:00. El botón queda con un texto fijo.
     document.querySelectorAll("#app [data-quick]").forEach((btn) => { btn.textContent = "⚡ Primer turno: HORARIO"; });
@@ -189,7 +206,7 @@ async function normalizar(page) {
     // V6 (C41, C42, cambios a propósito): el aviso de los activos sin Mercado Pago nombra a quiénes y suma «Ver quiénes»;
     // Prestadores suma el filtro «Sin Mercado Pago», el texto en negrita y «Avisarle». Se neutraliza en las dos versiones;
     // lo nuevo lo prueban e2e.js y test_db.py.
-    document.querySelectorAll("#app .adml li").forEach((li) => { if (li.textContent.startsWith("💳")) li.remove(); });
+    document.querySelectorAll("#app .adml li").forEach((li) => { if (li.textContent.trim().startsWith("💳")) li.remove(); });
     document.querySelectorAll("#app [data-act=admNudge], #app [data-act=admF][data-f=nomp]").forEach((el) => el.remove());
     document.querySelectorAll("#app .admact .chip.ok").forEach((el) => { if (/Avisado/.test(el.textContent)) el.remove(); });
     // (sin la negrita y en un solo texto, como antes: dos textos seguidos se pueden dibujar con un píxel de diferencia)

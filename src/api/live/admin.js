@@ -38,6 +38,8 @@ export const liveAdmin = {
       call(sb.from("app_settings").select("site_url,require_dni,deposit_commission_pct,mp_pct_instant,mp_pct_d10,mp_pct_d18,mp_pct_d35").maybeSingle()).catch(() => null),
       // C44: "Clientes" cuenta solo las cuentas de cliente (admin_stats cuenta todas, también las de negocio)
       call(sb.rpc("admin_client_counts")).catch(() => null),
+      // v2 (3/11): los avisos que este admin ya vio o borró
+      call(sb.rpc("admin_alert_marks_get")).then((marks) => (store.ADM_MARKS = marks || {})).catch(() => null),
     ]);
     if (stats && clientCounts) {
       stats.clients = clientCounts.clients;

@@ -105,6 +105,11 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### v2 · Admin (3/11)
+- Migración nueva: `20261103050000_admin_avisos.sql` (tabla `admin_alert_marks` con RLS y sin permisos directos:
+  `admin_alert_marks_get`/`admin_alert_mark`; `admin_nudge_mp(profesional, texto)` con el mensaje editable). Sin Edge
+  Functions ni cambios de `config.js`.
+
 ### D34 (comisión de TuTiempo sobre el precio del turno)
 - Migración nueva: `20261103040000_comision_total.sql` (`charge_parts(seña, precio, %, %MP)` y `book_slot` con la comisión
   sobre el precio final). Las reservas ya hechas no cambian. El valor del admin (Comisión de TuTiempo) ahora es un % del

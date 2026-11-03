@@ -1,3 +1,4 @@
+import { alertDismissed, alertItems } from "../../lib/avisos-admin.js";
 import { api } from "../../api/index.js";
 import { LIVE } from "../../config.js";
 import { admReviewDemo } from "../../demo/admin.js";
@@ -106,7 +107,9 @@ export function admReview() {
   }
   const refunds = data.refunds || [];
   const payments = data.payments || [];
-  const events = data.webhook_events || [];
+  // v2 (3/11): los avisos de Mercado Pago descartados o recuperados son informativos: se pueden borrar (los borrados no
+  // vuelven); los pagos y devoluciones para resolver salen solos al resolverlos
+  const events = (data.webhook_events || []).filter((event) => !alertDismissed("mpev:" + event.id));
   const accounts = data.accounts || [];
   const alert = data.webhook_alert || {};
   if (!refunds.length && !payments.length && !events.length && !accounts.length) {
@@ -126,7 +129,7 @@ export function admReview() {
      <span>Cuenta n° ${esc(account.mp_user_id || "?")} · ${account.status === "active" ? "cobra las reservas" : `solo devoluciones (${account.refunds_pending} pendiente${account.refunds_pending === 1 ? "" : "s"})`}</span>
      <span class="hint">❌ ${esc(account.last_error)} · desde ${esc(dmyIso(account.error_at))}. Si sigue, el profesional tiene que volver a conectarla (Perfil → Cobros).</span></div></li>`;
   const eventLi = (event) =>
-    `<li><div><span>${event.reason === "recovered" ? "Pago recuperado" : "Aviso descartado"} · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)}${event.detail ? " (" + esc(event.detail) + ")" : ""} · ${esc(dmyIso(event.last_at || event.created_at))}${+event.hits > 1 ? ` · ${+event.hits} veces` : ""}</span></div></li>`;
+    `<li class="admal" data-k="mpev:${esc(String(event.id))}"><div><span>${event.reason === "recovered" ? "Pago recuperado" : "Aviso descartado"} · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)}${event.detail ? " (" + esc(event.detail) + ")" : ""} · ${esc(dmyIso(event.last_at || event.created_at))}${+event.hits > 1 ? ` · ${+event.hits} veces` : ""}</span></div><button type="button" class="xbtn" data-act="admAlertDel" data-k="mpev:${esc(String(event.id))}" aria-label="Borrar este aviso" title="Borrar">✕</button></li>`;
   // Paso 1 (v4): Mercado Pago manda avisos que la app rechaza, o hubo pagos que se registraron sin aviso: arriba de todo,
   // porque mientras siga así los pagos se confirman con demora (los encuentra la consulta automática)
   const webhookLi =
@@ -135,8 +138,10 @@ export function admReview() {
      <span>${+alert.rejected ? `${+alert.rejected} aviso${+alert.rejected === 1 ? "" : "s"} rechazado${+alert.rejected === 1 ? "" : "s"} en 7 días${alert.rejected_reason ? " (" + esc(EVENT_WHY[alert.rejected_reason] || alert.rejected_reason) + ")" : ""}${alert.rejected_last ? ", el último el " + esc(dmyIso(alert.rejected_last)) : ""}. ` : ""}${+alert.recovered ? `${+alert.recovered} pago${+alert.recovered === 1 ? "" : "s"} registrado${+alert.recovered === 1 ? "" : "s"} sin aviso por la consulta automática.` : ""}</span>
      <span class="hint">Los pagos igual se registran (la app le pregunta a Mercado Pago cada 2 minutos), pero con demora. Revisá el webhook y MP_WEBHOOK_SECRET: docs/02 → "Si los pagos no se registran".</span></div></li>`
       : "";
-  const nAlert = webhookLi ? 1 : 0;
+  const whKey = `mpwh:${alert.rejected_last || ""}|${alert.recovered_last || ""}`;
+  const wh = alertItems([webhookLi ? { key: whKey, html: webhookLi.replace(/^<li><div>/, "").replace(/<\/div><\/li>$/, "") } : null]);
+  const nAlert = wh.count;
   return `<div class="panel admalert"><p class="lbl">Para revisar · cobros <span class="cnt">${refunds.length + payments.length + accounts.length + nAlert}</span></p>
-   <ul class="adml">${webhookLi}${accounts.map(accountLi).join("")}${refunds.map(refundLi).join("")}${payments.map(paymentLi).join("")}</ul>
-   ${events.length ? `<details${webhookLi || REJECTED.includes((events[0] || {}).reason) ? " open" : ""}><summary class="hint">Avisos de Mercado Pago descartados o recuperados (últimos 30 días): ${events.length}</summary><ul class="adml">${events.map(eventLi).join("")}</ul></details>` : ""}</div>`;
+   <ul class="adml">${wh.html}${accounts.map(accountLi).join("")}${refunds.map(refundLi).join("")}${payments.map(paymentLi).join("")}</ul>
+   ${events.length ? `<details${wh.count || REJECTED.includes((events[0] || {}).reason) ? " open" : ""}><summary class="hint">Avisos de Mercado Pago descartados o recuperados (últimos 30 días): ${events.length}</summary><div class="admal-h"><span></span><button type="button" class="lnk" data-act="admAlertsClear">Borrar los leídos</button></div><ul class="adml">${events.map(eventLi).join("")}</ul></details>` : ""}</div>`;
 }

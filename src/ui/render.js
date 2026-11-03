@@ -77,7 +77,7 @@ function nav() {
           ...(S.barberAuth ? [["📅", "Mi agenda", 'data-act="toPanel"']] : []),
           ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
           ...installItem(),
-          ...(S.barberAuth ? [] : [["🏪", "Registrá tu negocio", 'data-act="bizStart"']]),
+          ...(S.barberAuth || S.isAdmin ? [] : [["🏪", "Registrá tu negocio", 'data-act="bizStart"']]),
           ["↪", "Cerrar sesión", 'data-act="logout"'],
         ],
       })

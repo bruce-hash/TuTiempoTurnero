@@ -1,3 +1,5 @@
+import { dismissAlerts, readShownKeys } from "../lib/avisos-admin.js";
+import { NUDGE_TEXT } from "../views/admin/prestadores.js";
 import { registerClick, registerInput, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
@@ -172,11 +174,37 @@ registerClick("admDni", (ev, el, act) => {
 // activar o suspender (suspender pide un segundo toque); en la demo, activar una solicitud la convierte en prestador
 // C41/C42 (V6): "Avisarle" a un prestador activo sin Mercado Pago: le llega un aviso en la app y por push con el camino
 // para conectarlo (uno por día; en la demo solo se marca)
+// v2 (3/11): «Avisarle» abre un cuadro con el mensaje (editable) y por dónde le llega, con Enviar y Cancelar
 registerClick("admNudge", (ev, el, act) => {
-  const id = +el.dataset.id;
+  S.admNudgeAsk = { id: +el.dataset.id, body: NUDGE_TEXT };
+  render();
+  const box = $("#admNudgeTxt");
+  if (box) {
+    box.focus();
+  }
+});
+registerClick("admNudgeCancel", (ev, el, act) => {
+  S.admNudgeAsk = null;
+  render();
+});
+registerClick("admNudgeSend", (ev, el, act) => {
+  const ask = S.admNudgeAsk;
+  if (!ask) {
+    return;
+  }
+  const body = (($("#admNudgeTxt") || {}).value || "").trim();
+  if (body.length < 10 || body.length > 500) {
+    const err = $("#admNudgeErr");
+    if (err) {
+      err.textContent = "El mensaje tiene que tener entre 10 y 500 letras.";
+    }
+    return;
+  }
+  const id = ask.id;
   const done = (sent) => {
+    S.admNudgeAsk = null;
     S.admNudged = { ...(S.admNudged || {}), [id]: true };
-    toast(sent ? "Listo: le avisamos que conecte Mercado Pago (en la app y en el celular)." : "Ya le avisamos hoy: mañana le podés volver a avisar.");
+    toast(sent ? "Listo: le llegó el aviso en su panel y una notificación al celular." : "Ya le avisamos hoy: mañana le podés volver a avisar.");
     render();
   };
   if (!LIVE) {
@@ -184,11 +212,25 @@ registerClick("admNudge", (ev, el, act) => {
   }
   el.disabled = true;
   api.m
-    .adminNudgeMp({ id })
+    .adminNudgeMp({ id, body: body === NUDGE_TEXT ? null : body })
     .then((res) => done(!res || res.sent !== false))
     .catch(() => {
       el.disabled = false;
     });
+});
+// v2 (3/11): borrar avisos del panel de TuTiempo (uno, o todos los que ya estaban leídos)
+registerClick("admAlertDel", (ev, el, act) => {
+  dismissAlerts([el.dataset.k]).then(() => render()).catch(() => {});
+});
+registerClick("admAlertsClear", (ev, el, act) => {
+  const keys = readShownKeys();
+  if (!keys.length) {
+    return toast("No hay avisos leídos para borrar.");
+  }
+  dismissAlerts(keys).then(() => {
+    toast(keys.length === 1 ? "Borramos 1 aviso." : `Borramos ${keys.length} avisos.`);
+    render();
+  }).catch(() => {});
 });
 registerClick("admSet", (ev, el, act) => {
   const id = +el.dataset.id;

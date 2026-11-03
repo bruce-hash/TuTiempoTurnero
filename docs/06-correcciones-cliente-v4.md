@@ -250,3 +250,6 @@ Reemplaza la lista "por rol" del 2/11. Un PR por bloque.
 | 1 · D34 | Comisión de TuTiempo sobre el precio del turno | Hecho (D34) | Ver D34 en docs/01 y la tabla de ejemplos de D30/D34 en esta página. |
 | 2 · General | "prestador" → "profesional" y "usuario" → "cliente" | Hecho | Solo textos visibles de la app (código, tablas y rutas sin cambios). Los emails y push no decían "prestador". El crawl revisa en cada pantalla que no aparezcan las palabras viejas. |
 | 2 · General | Footer: contacto como link y sin @tutiempo.arg | Hecho | `mailto:contacto@tutiempo.com.ar`. |
+| 3 · Admin | Borrar avisos una vez leídos | Hecho | Los avisos del Resumen (profesionales sin Mercado Pago, pendientes, suspendidos, faltas, el sitio sin .htaccess) y los informativos de Para revisar (avisos de Mercado Pago descartados o recuperados) tienen ✕ y «Borrar los leídos». Cada aviso tiene una clave que cambia con lo que dice: uno borrado no vuelve, salvo que haya algo nuevo (por ejemplo, otro profesional sin Mercado Pago). Los pagos y devoluciones para resolver no se borran: salen solos al resolverlos. |
+| 3 · Admin | «Avisarle»: cuadro antes de mandar | Hecho | Mensaje predeterminado y editable (10 a 500 letras), con el medio (aviso en su panel y push) y Enviar/Cancelar. |
+| 3 · Admin | Header sin «Registrá tu negocio» para el admin | Hecho | |

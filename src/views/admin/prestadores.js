@@ -29,7 +29,17 @@ const ACT_LEVELS = [
 export const nudgeBtn = (prov) =>
   (S.admNudged || {})[prov.id]
     ? '<span class="chip ok">Avisado ✓</span>'
-    : `<button class="btn btn-pri btn-sm" data-act="admNudge" data-id="${prov.id}">Avisarle</button>`;
+    : `<button class="btn btn-pri btn-sm" data-act="admNudge" data-id="${prov.id}" ${S.admNudgeAsk && S.admNudgeAsk.id === prov.id ? "disabled" : ""}>Avisarle</button>`;
+// v2 (3/11): el mensaje que se manda (el mismo que la base usa si no se cambia)
+export const NUDGE_TEXT =
+  "TuTiempo te recuerda: conectá tu cuenta de Mercado Pago para cobrar las señas y recibir reservas online. Entrá a Perfil → Mercado Pago → Conectar.";
+// el cuadro antes de mandar: el mensaje (se puede cambiar) y por dónde le llega
+const nudgeBox = (prov) =>
+  `<div class="panel nudgebox" role="group" aria-label="Avisarle a ${esc(prov.name)}"><p class="lbl" style="margin:0 0 6px">Aviso para ${esc(prov.name)}</p>
+   <label class="hint" for="admNudgeTxt">Mensaje</label><textarea id="admNudgeTxt" maxlength="500" rows="4">${esc(S.admNudgeAsk.body || NUDGE_TEXT)}</textarea>
+   <p class="note" style="text-align:left;margin:6px 0 8px">📲 Le llega como <b>aviso en su panel</b> y como <b>notificación push</b> en su celular (si las activó). Un aviso por día.</p>
+   <div class="err" id="admNudgeErr"></div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn btn-ghost btn-sm" data-act="admNudgeCancel">Cancelar</button><button type="button" class="btn btn-pri btn-sm" data-act="admNudgeSend">Enviar</button></div></div>`;
 export function admProv(data) {
   const query = (S.admQ || "").toLowerCase();
   const filter = S.admF || "todos";
@@ -67,7 +77,7 @@ export function admProv(data) {
     const open = S.admOpen === prov.id;
     const nNotes = (prov.notes || []).length;
     return `<li class="${open ? "open" : ""}">${avatar(prov)}<div><b>${esc(prov.name)}</b><span>${admIc(prov.cats)} ${+prov.activity || 0} servicios en 30 días · ${prov.month} turno${prov.month === 1 ? "" : "s"} este mes · ★ ${(+prov.rating || 0).toFixed(1)}${prov.mp ? "" : " · <b>sin Mercado Pago</b>"}</span>${statusChip(prov)}${nNotes ? ` <span class="chip">📝 ${nNotes}</span>` : ""}</div>
-      <span class="admact">${prov.status === "active" && !prov.mp ? nudgeBtn(prov) : ""}<button class="btn btn-ghost btn-sm" data-act="admOpen" data-id="${prov.id}" aria-expanded="${open}">${open ? "Cerrar" : "Ficha"}</button></span>${open ? admFile(prov) : ""}</li>`;
+      <span class="admact">${prov.status === "active" && !prov.mp ? nudgeBtn(prov) : ""}<button class="btn btn-ghost btn-sm" data-act="admOpen" data-id="${prov.id}" aria-expanded="${open}">${open ? "Cerrar" : "Ficha"}</button></span>${S.admNudgeAsk && S.admNudgeAsk.id === prov.id ? nudgeBox(prov) : ""}${open ? admFile(prov) : ""}</li>`;
   };
   return `${
     pending.length
