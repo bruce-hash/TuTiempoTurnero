@@ -13,7 +13,7 @@ export function bookBar(prov) {
   const price = S.slot ? priceAt(prov.id, base, S.slot.date, S.slot.time) : base;
   const happy = S.slot ? happyAt(prov.id, S.slot.date, toMin(S.slot.time)) : 0;
   const deposit = payNow(prov.id, price, uname());
-  const charge = chargeAt(prov.id, deposit);
+  const charge = chargeAt(prov.id, deposit, price);
   const fee = charge.fee + charge.mp;
   return `<div class="bookbar">
    <div class="bb-info">${S.slot ? `<b>${esc(dayLabel(S.slot.date, true))} · ${S.slot.time}</b><span>${esc(svc[0])}${selAdds(prov).length ? " + " + selAdds(prov).length : ""} · ${happy ? `<s>${money(base)}</s> ` : ""}${money(price)}${S.reprog ? "" : (deposit < price ? ` · seña ${money(deposit)}` : "") + (fee ? ` + ${money(fee)} ${charge.mp ? "de comisiones" : "comisión"}` : "")}</span>` : `<b>Elegí un horario</b><span>${esc(svc[0])} · ${money(base)}</span>`}</div>
