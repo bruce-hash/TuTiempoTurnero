@@ -57,6 +57,8 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.mouse.click(5, 5); await wait(200);
   ok("ingreso: tocar afuera cierra la ventana", (await pg.locator(".authmodal").count()) === 0);
   ok("ingreso: el footer dice Ingresar y Registrá tu negocio (sin Acceso prestadores ni Sumate)", /Registrá tu negocio/.test(await pg.locator("footer").innerText()) && !/Acceso prestadores|Sumate/.test(await pg.locator("footer").innerText()));
+  ok("General: el footer tiene contacto@tutiempo.com.ar como link mailto y sin @tutiempo.arg",
+     (await pg.locator('footer a[href="mailto:contacto@tutiempo.com.ar"]').count()) === 1 && !/@tutiempo\.arg/.test(await pg.locator("footer").innerText()));
   ok("ingreso: el inicio tiene la puerta Registrá tu negocio debajo del listado", (await pg.locator("#app .bizcta [data-act=bizStart]").count()) === 1);
   const foot = await pg.locator("footer").innerText();
   const socials = await pg.evaluate(() => [...document.querySelectorAll("footer a[target=_blank]")].map((a) => [a.href, a.rel]));
