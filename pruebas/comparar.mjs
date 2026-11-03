@@ -89,6 +89,15 @@ async function pagina(browser, { relojFijo }) {
 // recuadro fijos; el resto de la pantalla se compara igual, texto y píxeles.
 async function normalizar(page) {
   await page.evaluate(() => {
+    // v2 (3/11, a propósito): «prestador» → «profesional» y «usuario» → «cliente» en los textos; la referencia dice lo de
+    // antes. Se pasa a la palabra nueva en las dos (en la versión de hoy no cambia nada).
+    const TERM = [[/Prestadoras/g, "Profesionales"], [/prestadoras/g, "profesionales"], [/Prestadores/g, "Profesionales"], [/prestadores/g, "profesionales"],
+      [/Prestadora/g, "Profesional"], [/prestadora/g, "profesional"], [/Prestador/g, "Profesional"], [/prestador/g, "profesional"]];
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      if (/restador/.test(node.nodeValue)) node.nodeValue = TERM.reduce((txt, [re, to]) => txt.replace(re, to), node.nodeValue);
+    }
+    document.querySelectorAll("input[placeholder]").forEach((el) => { el.placeholder = TERM.reduce((txt, [re, to]) => txt.replace(re, to), el.placeholder); });
     // D31 (a propósito): el «primer turno libre» de hoy sale de la duración del servicio (antes, de otra grilla): según
     // la hora del CI la referencia ofrece 15:30 y la versión de hoy 16:00. El botón queda con un texto fijo.
     document.querySelectorAll("#app [data-quick]").forEach((btn) => { btn.textContent = "⚡ Primer turno: HORARIO"; });

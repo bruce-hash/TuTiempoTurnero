@@ -111,6 +111,6 @@ export function admRes(data) {
     <p class="note" style="text-align:left;margin:8px 0 0">Así se ordenan en la app: primero los que más servicios hacen.</p></div>
    <div class="panel"><p class="lbl">Rubros · turnos del mes</p>${CATS.map(([cat, plural, one, icon]) => {
      const count = +byCatMonth[cat] || 0;
-     return `<div class="srow"><div class="srow-h"><span>${icon} ${plural} <span class="hint">· ${+byCat[cat] || 0} prestador${+byCat[cat] == 1 ? "" : "es"}</span></span><b>${count}</b></div><div class="sbar"><i style="width:${Math.round((count / maxCat) * 100)}%;background:var(--brand)"></i></div></div>`;
+     return `<div class="srow"><div class="srow-h"><span>${icon} ${plural} <span class="hint">· ${+byCat[cat] || 0} profesional${+byCat[cat] == 1 ? "" : "es"}</span></span><b>${count}</b></div><div class="sbar"><i style="width:${Math.round((count / maxCat) * 100)}%;background:var(--brand)"></i></div></div>`;
    }).join("")}</div>`;
 }
