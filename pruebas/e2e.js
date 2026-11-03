@@ -440,6 +440,15 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("C36: el producto guarda el precio de compra y muestra lo que ganás", await until("select cost from products where name='Cera C36'", [], (r) => r[0]?.cost === 4500) && /compra \$4\.500 · ganás \$3\.500/.test(await txt()));
     await wait(500);
     await pg.click('.plist li:has-text("Cera C36") [data-act=prodSell]'); await wait(200);
+    {
+      // v2 · Profesional: con «Vendí uno» abierto, el nombre no queda apretado ni debajo de los controles de cantidad
+      const r = await pg.locator('.plist li:has-text("Cera C36")').evaluate((li) => {
+        const box = (sel) => li.querySelector(sel).getBoundingClientRect();
+        const m = box(".pl-m"), s = box(".pl-s"), a = box(".movask"), l = li.getBoundingClientRect();
+        return { name: m.width, overlap: m.right > s.left && m.bottom > s.top && m.top < s.bottom, ask: a.width / l.width };
+      });
+      ok("v2: Productos con «Vendí uno» abierto: nombre a lo ancho, sin pisarse con la cantidad, y el cuadro de la venta debajo", r.name > 150 && !r.overlap && r.ask > 0.95, JSON.stringify(r));
+    }
     await pg.click('.plist li:has-text("Cera C36") [data-act=prodSellMedio][data-m="Transferencia"]');
     ok("C36: «Vendí uno» la carga en la Caja del día con su medio y descuenta el stock", await until("select amount, method from walkins where kind='product' and description='Cera C36'", [], (r) => r.length === 1 && r[0].amount === 8000 && r[0].method === "transfer")
        && (await q("select stock from products where name='Cera C36'"))[0].stock === 1);
@@ -558,6 +567,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("tarjeta solo en Esmaltado, con 16 sellos", sg.length === 1 && sg[0].name === "Esmaltado semipermanente" && sg[0].stamp_goal === 16);
   ok("tarjetas activadas en la base", (await q("select stamps_on from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].stamps_on === true);
   await pg.click("[data-btab=clientes]"); await wait(300); await pg.click(".clist [data-cli]"); await wait(300);
+  ok("v2: el cliente se ve sin la ficha (números y teléfono)", (await pg.locator("#fNotas").count()) === 0 && /Visitas[\s\S]*Faltas[\s\S]*Gastó en total[\s\S]*Última visita/.test(await txt()) && /📞/.test(await txt()));
   await pg.click(`[data-act=stampAdd][data-sk="${esm}"]`); await wait(800);
   const anaStamps = async () => ((await q("select stamps from loyalty_cards lc join auth.users u on u.id=lc.user_id where u.email='ana@test.ar' and lc.service_id=$1", [esm]))[0] || {}).stamps || 0;
   ok("sello a mano guardado en la tarjeta de Esmaltado de Ana", (await anaStamps()) === 1 && (await pg.locator(".stampcard").innerText()).includes("1 / 16"));
@@ -857,7 +867,39 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.click("footer [data-act=authOpen]"); await wait();
   await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector(".bhead"); await wait(800);
   ok("Bloque 1: el panel muestra el aviso del reclamo", /🔔 Avisos/i.test(await txt()) && /Ana empezó a seguirte/.test(await txt()) && /reclamo en Mercado Pago/.test(await txt()));
+  {
+    // v2 · Profesional: el texto del aviso usa el ancho de la caja (antes, una columna de 52 px, palabra por palabra)
+    const w = await pg.locator(".pb-notices .msgb").first().evaluate((el) => [el.getBoundingClientRect().width, el.closest(".panel").getBoundingClientRect().width]);
+    ok("v2: el texto del aviso se lee a lo ancho de la caja (390/400 px)", w[0] > w[1] * 0.75, JSON.stringify(w));
+  }
   await pg.click("[data-act=noticesRead]"); await wait(800);
+  {
+    // v2 · Profesional: menú en el orden nuevo, todo a la vista y sin flechas; "Ver mi perfil como cliente" en la Agenda
+    const tabs = await pg.locator(".btabs [data-btab]").evaluateAll((els) => els.map((el) => [el.dataset.btab, el.querySelector(".bt-l").innerText.trim(), (() => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.width > 40; })()]));
+    ok("v2: menú del panel en el orden Agenda, Horarios, Finanzas, Productos, Estadísticas, Clientes, Trabajos, Perfil",
+       tabs.map((x) => x[1]).join(",") === "Agenda,Horarios,Finanzas,Productos,Estadísticas,Clientes,Trabajos,Perfil", JSON.stringify(tabs));
+    ok("v2: las 8 secciones se ven de entrada, sin desplazar ni flechas", tabs.every((x) => x[2]) && (await pg.locator(".tabarr").count()) === 0
+       && (await pg.locator(".btabs").evaluate((el) => el.scrollWidth <= el.clientWidth)));
+    await pg.click("[data-btab=agenda]"); await wait(300);
+    ok("v2: «Ver mi perfil como cliente» está en la Agenda y no en la cabecera del panel", (await pg.locator(".pb-main [data-act=preview]").count()) === 1 && (await pg.locator(".bhead [data-act=preview], .pb-side > [data-act=preview]").count()) === 0);
+    await pg.click("nav .acct-btn"); await pg.waitForSelector("#acctMenu:not([hidden])");
+    const m = await pg.locator("#acctMenu").innerText();
+    ok("v2: en el menú de cuenta del profesional, «Ajustes» en lugar de «Mi perfil» y sin «Ver mi perfil público»", /Ajustes/.test(m) && !/Mi perfil|Ver mi perfil público/.test(m), m);
+    await pg.keyboard.press("Escape"); await wait(200);
+    await pg.click("[data-btab=horarios]"); await wait(300);
+    ok("v2: Horarios ya no tiene «Copiar link» (queda en Trabajos)", (await pg.locator(".pb-main [data-act=copiarLink]").count()) === 0);
+    await pg.click("[data-btab=comunidad]"); await wait(300);
+    ok("v2: …y Trabajos sí", (await pg.locator(".pb-main [data-act=copiarLink]").count()) === 1);
+    for (const [sec, label] of [["hhpanel", "Armar happy hour"], ["avisarpanel", "Avisar a seguidores"]]) {
+      await pg.click("[data-btab=stats]"); await wait(400);
+      const b = pg.locator(`[data-sec=${sec}]`); await b.scrollIntoViewIfNeeded(); await b.click(); await wait(400);
+      const pos = await pg.evaluate((s) => [document.querySelector(".top").getBoundingClientRect().bottom, document.querySelector("." + s).getBoundingClientRect().top], sec);
+      ok(`v2: «${label}» deja su sección justo debajo de la cabecera fija`, pos[1] >= pos[0] && pos[1] - pos[0] <= 30, JSON.stringify(pos));
+    }
+    await pg.click("[data-btab=perfil]"); await wait(300);
+    ok("v2: Perfil explica de dónde sale el plazo de acreditación", /se elige en tu cuenta de Mercado Pago[\s\S]*detecta sola con tu primer cobro[\s\S]*Sin Mercado Pago conectado no recibís reservas/.test(await txt()));
+    await pg.click("[data-btab=agenda]"); await wait(300);
+  }
   ok("Bloque 1: Entendido marca el aviso leído", (await pg.locator(".pb-notices").count()) === 0 && (await q("select count(*)::int c from provider_notices n join providers p on p.id=n.provider_id where p.name like 'Sofía%' and n.read_at is null"))[0].c === 0);
   const accBefore = (await q("select id, mp_user_id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   await pg.click("[data-btab=perfil]"); await wait(300);
@@ -960,7 +1002,9 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await p2b.click("#fBiz3 button[type=submit]"); await p2b.waitForSelector("[data-act=bizNext]", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(300);
   const hrs = await q("select dow, opens::text o, closes::text c from provider_hours where provider_id=$1 order by dow", [np.id]);
   ok("alta paso 3: martes a sábado de 10 a 20 en la base", hrs.length === 5 && hrs.every((h, i) => h.dow === i + 2 && h.o.startsWith("10:00") && h.c.startsWith("20:00")), JSON.stringify(hrs));
-  ok("D30: el alta no pregunta el plazo de Mercado Pago (se detecta solo)", !(await p2b.locator("[data-act=bizTerm]").count()) && !/Plazo de acreditación/i.test(await p2b.locator("#app").innerText()));
+  ok("D30: el alta no pregunta el plazo de Mercado Pago (se detecta solo)", !(await p2b.locator("[data-act=bizTerm], #hterm").count()));
+  ok("v2: «Seña y cobro» explica que el plazo se elige en Mercado Pago, que se detecta con el primer cobro y que sin MP no hay reservas",
+     /se elige en tu cuenta de Mercado Pago[\s\S]*detecta sola con tu primer cobro[\s\S]*Sin Mercado Pago conectado no recibís reservas/.test(await p2b.locator("#app").innerText()));
   await p2b.click('[data-act=bizPay][data-v="40"]'); await p2b.click("[data-act=bizNext]"); await p2b.waitForTimeout(800);
   const st2 = (await q("select deposit_pct, pay_mode, payout_term, setup_done from provider_settings where provider_id=$1", [np.id]))[0];
   ok("alta paso 4: seña del 40%, plazo «al instante» (D30) y se puede seguir sin Mercado Pago", st2.deposit_pct === 40 && st2.pay_mode === "deposit" && st2.payout_term === "instant" && JSON.stringify(st2.setup_done) === "[1,2,3,4]" && new URL(p2b.url()).pathname === "/registrar-negocio/5");
@@ -1102,7 +1146,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("C13: desde /ingresar, el prestador entra a su Agenda", new URL(p8.url()).pathname === "/panel/agenda", p8.url() + " " + (await p8.locator("#app").innerText().catch(() => "")).slice(0, 300));
   await p8.click("nav .acct-btn"); await p8.waitForSelector("#acctMenu:not([hidden])");
   const menu8 = await p8.locator("#acctMenu").innerText();
-  ok("D33: el menú de la cuenta de negocio no tiene Mis turnos ni Reservar como cliente", menu8.includes("Mi agenda") && menu8.includes("Ver mi perfil público") && !/Reservar como cliente|Mis turnos/.test(menu8), menu8);
+  ok("D33: el menú de la cuenta de negocio no tiene Mis turnos ni Reservar como cliente", menu8.includes("Mi agenda") && menu8.includes("Ajustes") && !/Reservar como cliente|Mis turnos|Ver mi perfil público/.test(menu8), menu8);
   await p8.keyboard.press("Escape");
   await p8.goto(BASE + "/mis-turnos"); await p8.waitForTimeout(900);
   ok("D33: /mis-turnos con una cuenta de negocio lleva a su Agenda", new URL(p8.url()).pathname === "/panel/agenda");
