@@ -115,8 +115,8 @@ await q("update providers set status = 'active' where id = $1", [pid]);
 await q("update provider_settings set online = true, notice_min = 0, deposit_pct = 50, pay_mode = 'deposit' where provider_id = $1", [pid]);
 await q("delete from provider_hours where provider_id = $1", [pid]);
 await q("insert into provider_hours select $1, g, 1, '08:00', '21:00' from generate_series(0, 6) g", [pid]);
-// D30: la comisión de TuTiempo es un % de la seña: 20% de una seña del 50% = el 10% del precio de antes (mismos montos)
-await q("update app_settings set commission_pct = 10, deposit_commission_pct = 20");
+// D34: 10% del precio del turno ($10.000 → $1.000, lo mismo que el 20% de la seña de $5.000 con D30)
+await q("update app_settings set commission_pct = 10, deposit_commission_pct = 10");
 const sv = Number(await one("insert into services (provider_id, category_id, name, duration_min, price) values ($1, 'b', 'Corte', 30, 10000) returning id", [pid]));
 let slotN = 0;
 async function book(): Promise<number[]> {
