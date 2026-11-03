@@ -196,7 +196,7 @@ export function vBPerfil(prov) {
     const earning = stampSvcs(prov);
     return `<form class="panel" id="fStamps" novalidate><div class="swrow"><div><b>🎟️ Tarjetas de sellos</b><div class="hint">${conf.on && earning.length ? `Activas en ${earning.length} servicio${earning.length > 1 ? "s" : ""}` : "Premiá a tus clientes que vuelven"}</div></div>
       <label class="tgl2"><input type="checkbox" id="stOn" ${conf.on ? "checked" : ""}><span>Activa</span></label></div>
-     <p class="note" style="text-align:left;margin:8px 0 10px">Cada servicio tiene su propia tarjeta. Marcá los que suman sello y cuántos sellos necesita cada uno (de 15 a 20). Con la tarjeta llena, ese mismo servicio sale gratis. Los sellos son solo tuyos: no sirven con otros prestadores.</p>
+     <p class="note" style="text-align:left;margin:8px 0 10px">Cada servicio tiene su propia tarjeta. Marcá los que suman sello y cuántos sellos necesita cada uno (de 15 a 20). Con la tarjeta llena, ese mismo servicio sale gratis. Los sellos son solo tuyos: no sirven con otros profesionales.</p>
      <div class="stlist">${prov.svcs
        .map((svc, index) => {
          const goal = +((conf.goals || {})[skey(svc)] || 0);

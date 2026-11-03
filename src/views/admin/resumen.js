@@ -68,10 +68,10 @@ export function admRes(data) {
   };
   const alerts = [
     pending.length
-      ? `🪪 <b>${pending.length}</b> prestador${pending.length > 1 ? "es esperan" : " espera"} ${dniRequired() ? "la verificación del DNI" : "aprobación"}. <button class="lnk" data-act="admT" data-t="prov">Revisar</button>`
+      ? `🪪 <b>${pending.length}</b> profesional${pending.length > 1 ? "es esperan" : " espera"} ${dniRequired() ? "la verificación del DNI" : "aprobación"}. <button class="lnk" data-act="admT" data-t="prov">Revisar</button>`
       : "",
     nNoMp
-      ? `💳 <b>${nNoMp}</b> prestador${nNoMp > 1 ? "es activos no conectaron" : " activo no conectó"} Mercado Pago: no ${nNoMp > 1 ? "pueden" : "puede"} cobrar señas${noMp.length ? ` (${noMpNames})` : ""}. <button class="lnk" data-act="admT" data-t="prov" data-f="nomp">Ver quiénes</button>`
+      ? `💳 <b>${nNoMp}</b> profesional${nNoMp > 1 ? "es activos no conectaron" : " activo no conectó"} Mercado Pago: no ${nNoMp > 1 ? "pueden" : "puede"} cobrar señas${noMp.length ? ` (${noMpNames})` : ""}. <button class="lnk" data-act="admT" data-t="prov" data-f="nomp">Ver quiénes</button>`
       : "",
     +st.providers_suspended
       ? `⛔ <b>${st.providers_suspended}</b> suspendido${+st.providers_suspended > 1 ? "s" : ""}.`
@@ -104,13 +104,13 @@ export function admRes(data) {
       .join("")}</div>
     ${trend != null ? `<p class="note wknote">${trend >= 0 ? "📈" : "📉"} En los últimos 7 días hubo <b>${Math.abs(trend)}% ${trend >= 0 ? "más" : "menos"}</b> turnos que la semana anterior.</p>` : ""}</div>
    <div class="kpis adm">${kpi("Facturado por la app", money(+st.gross_month || 0), "este mes", delta(st.gross_month, st.gross_prev))}${kpi("Turnos del mes", nMonth, "", delta(nMonth, st.bookings_prev))}
-    ${kpi("Ticket promedio", money(ticket), "por turno")}${kpi("Señas cobradas", money(+st.deposits_month || 0), "para los prestadores")}
-    ${kpi("Prestadores activos", st.providers_active, `+${st.new_providers_month || 0} nuevos este mes`)}${kpi("Clientes", st.clients, `+${st.new_clients_month || 0} nuevos este mes · cuentas de cliente`)}
+    ${kpi("Ticket promedio", money(ticket), "por turno")}${kpi("Señas cobradas", money(+st.deposits_month || 0), "para los profesionales")}
+    ${kpi("Profesionales activos", st.providers_active, `+${st.new_providers_month || 0} nuevos este mes`)}${kpi("Clientes", st.clients, `+${st.new_clients_month || 0} nuevos este mes · cuentas de cliente`)}
     ${kpi("Faltas", nsPct + "%", `${st.no_show_month || 0} turno${+st.no_show_month == 1 ? "" : "s"} sin aviso`)}${kpi("Cancelaciones", +st.cancelled_month || 0, "avisaron que no iban")}</div>
    <div class="panel"><p class="lbl">Los más activos · últimos 30 días</p><ol class="ag admtop">${(st.top || []).map((prov, index) => `<li><span class="rankn">${index + 1}</span><div><b>${esc(prov.name)}</b><span>${admIc(prov.cats)} ${prov.activity} servicio${+prov.activity == 1 ? "" : "s"} hechos</span></div><b>${prov.activity}</b></li>`).join("") || "<li><span></span><div><span>Todavía no hay servicios hechos.</span></div></li>"}</ol>
     <p class="note" style="text-align:left;margin:8px 0 0">Así se ordenan en la app: primero los que más servicios hacen.</p></div>
    <div class="panel"><p class="lbl">Rubros · turnos del mes</p>${CATS.map(([cat, plural, one, icon]) => {
      const count = +byCatMonth[cat] || 0;
-     return `<div class="srow"><div class="srow-h"><span>${icon} ${plural} <span class="hint">· ${+byCat[cat] || 0} prestador${+byCat[cat] == 1 ? "" : "es"}</span></span><b>${count}</b></div><div class="sbar"><i style="width:${Math.round((count / maxCat) * 100)}%;background:var(--brand)"></i></div></div>`;
+     return `<div class="srow"><div class="srow-h"><span>${icon} ${plural} <span class="hint">· ${+byCat[cat] || 0} profesional${+byCat[cat] == 1 ? "" : "es"}</span></span><b>${count}</b></div><div class="sbar"><i style="width:${Math.round((count / maxCat) * 100)}%;background:var(--brand)"></i></div></div>`;
    }).join("")}</div>`;
 }

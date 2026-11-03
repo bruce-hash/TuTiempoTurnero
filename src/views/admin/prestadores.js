@@ -83,7 +83,7 @@ export function admProv(data) {
           .join("")}</ul></div>`
       : ""
   }
-   <div class="panel"><p class="lbl">Prestadores · ${list.length}</p>
+   <div class="panel"><p class="lbl">Profesionales · ${list.length}</p>
     <div class="seg3 admg" role="group" aria-label="Dividir">${[
       ["rubro", "Por rubro"],
       ["act", "Por actividad"],
@@ -93,7 +93,7 @@ export function admProv(data) {
           `<button type="button" data-act="admG" data-g="${key}" aria-pressed="${groupBy === key}">${label}</button>`,
       )
       .join("")}</div>
-    <input id="admQ" class="search" placeholder="🔍 Buscar prestador" value="${esc(S.admQ || "")}" autocomplete="off">
+    <input id="admQ" class="search" placeholder="🔍 Buscar profesional" value="${esc(S.admQ || "")}" autocomplete="off">
     <div class="fchips">${[
       ["todos", "Todos"],
       ["active", "Activos"],
@@ -112,7 +112,7 @@ export function admProv(data) {
               .map(row)
               .join("")}</ul></div>`,
         )
-        .join("") || '<p class="note">No hay prestadores con ese filtro.</p>'
+        .join("") || '<p class="note">No hay profesionales con ese filtro.</p>'
     }
-    <p class="note" style="text-align:left;margin:10px 0 0">${groupBy === "rubro" ? "Cada prestador va en su rubro principal. Dentro de cada rubro, primero los más activos." : "Actividad = servicios hechos por la app en los últimos 30 días."}</p></div>`;
+    <p class="note" style="text-align:left;margin:10px 0 0">${groupBy === "rubro" ? "Cada profesional va en su rubro principal. Dentro de cada rubro, primero los más activos." : "Actividad = servicios hechos por la app en los últimos 30 días."}</p></div>`;
 }

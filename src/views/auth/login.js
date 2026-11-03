@@ -29,8 +29,8 @@ const foot = (html) => `<div class="am-foot">${html}</div>`;
 const demoHint = () =>
   LIVE
     ? ""
-    : `<div class="demohint">Demo: cliente <b>juan.perez@tutiempo.demo</b> · <b>cliente123</b>; prestador <b>filo@tutiempo.demo</b> · <b>barbero123</b>.
-   <details class="demoprov"><summary>Entrar como un prestador de ejemplo</summary><div class="demologins">${P.filter((prov) => !prov.deleted)
+    : `<div class="demohint">Demo: cliente <b>juan.perez@tutiempo.demo</b> · <b>cliente123</b>; profesional <b>filo@tutiempo.demo</b> · <b>barbero123</b>.
+   <details class="demoprov"><summary>Entrar como un profesional de ejemplo</summary><div class="demologins">${P.filter((prov) => !prov.deleted)
      .map((prov) => `<button type="button" class="cchip seg-${prov.cats[0]}" data-act="demoLogin" data-id="${prov.id}">${(CAT[prov.cats[0]] || CAT.n).ic} ${esc(prov.name)}</button>`)
      .join("")}</div></details></div>`;
 
@@ -119,7 +119,7 @@ export function authBody() {
   return `${tk}${
     biz
       ? head("Registrá tu negocio", "Ingresá con tu cuenta y seguís con tu negocio.")
-      : head(TITLE[pending && pending.a] || "Ingresá a TuTiempo", pending ? "" : "Clientes y prestadores entran por acá.")
+      : head(TITLE[pending && pending.a] || "Ingresá a TuTiempo", pending ? "" : "Clientes y profesionales entran por acá.")
   }${google()}${demoHint()}
    <form id="fLogin" novalidate>
     <div class="f"><label for="ai_e">Email</label><input id="ai_e" type="email" inputmode="email" autocomplete="email" maxlength="120" value="${esc(login.email || rememberedEmail())}"></div>

@@ -240,3 +240,13 @@ con la comisión sobre la seña. Ejemplo: seña 50% = $5.000 + $350 = $5.350.
 - **Hasta saberlo, la app no cambia nada:** devuelve el total que pagó el cliente, como hoy.
 - **Si Mercado Pago no la reintegra, hay que decidir el caso de la segunda fila:** que la pierda el prestador, o que
   TuTiempo se la compense (habría que llevar la cuenta aparte, porque la devolución sale de la cuenta del prestador).
+
+## Revisión v2 del cliente (3/11)
+
+Reemplaza la lista "por rol" del 2/11. Un PR por bloque.
+
+| Bloque | Punto | Estado | Qué se hizo |
+| --- | --- | --- | --- |
+| 1 · D34 | Comisión de TuTiempo sobre el precio del turno | Hecho (D34) | Ver D34 en docs/01 y la tabla de ejemplos de D30/D34 en esta página. |
+| 2 · General | "prestador" → "profesional" y "usuario" → "cliente" | Hecho | Solo textos visibles de la app (código, tablas y rutas sin cambios). Los emails y push no decían "prestador". El crawl revisa en cada pantalla que no aparezcan las palabras viejas. |
+| 2 · General | Footer: contacto como link y sin @tutiempo.arg | Hecho | `mailto:contacto@tutiempo.com.ar`. |

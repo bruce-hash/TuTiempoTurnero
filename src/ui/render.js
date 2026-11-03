@@ -41,7 +41,7 @@ function nav() {
       items: [
         ["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"'],
         ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"'], ["📅", "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
-        ...(S.barberAuth ? [["🏪", "Panel de prestador", 'data-act="toPanel"']] : []),
+        ...(S.barberAuth ? [["🏪", "Panel de profesional", 'data-act="toPanel"']] : []),
         ...installItem(),
         ...(S.user ? [["↪", "Cerrar sesión", 'data-act="logout"']] : [["↪", "Salir del panel", 'data-act="salirAdmin"']]),
       ],

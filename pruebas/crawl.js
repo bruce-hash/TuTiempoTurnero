@@ -60,8 +60,11 @@ const sig=el=>el.tagName+'|'+[...el.attributes].filter(a=>a.name.startsWith('dat
 const snap=()=>{const t=d.getElementById('toast');return d.getElementById('app').innerHTML+'§'+(d.getElementById('nav')||{}).innerHTML+'§'+(t&&!t.hidden?t.textContent:'')+'§'+[...d.querySelectorAll('.notif,.sheet,.modal')].map(x=>x.outerHTML).join('')+'§'+w.eval('JSON.stringify(Object.assign({},S,{list:null}))')};
 const sel='#app button:not([disabled]),#app [data-go],#app [data-act],#app [data-btab],#app input[type=checkbox],#app input[type=radio],#nav button,#nav [data-go]';
 (async()=>{await tick(40);let total=0;const dead=[],wrong=[],broken=[];
+ const terms=[];
  for(const [name,setup] of SCREENS){
   w.eval(setup);await tick();
+  // terminología (v2, 3/11): en lo que se ve no queda "prestador" ni "usuario" (son "profesional" y "cliente")
+  {const txt=[d.getElementById('app'),d.getElementById('nav'),d.querySelector('footer'),d.querySelector('.demo')].filter(Boolean).map(x=>x.textContent).join(' ');const m=txt.match(/[^.]{0,30}\b(prestador\w*|usuari[oa]s?)\b[^.]{0,30}/i);if(m)terms.push(name+' · "'+m[0].trim()+'"')}
   const list=[...d.querySelectorAll(sel)].filter(x=>!x.closest('a[target]')&&!SKIP.has(x.dataset.act)).map(sig);
   const uniq=[...new Set(list)];
   for(const s0 of uniq){
@@ -83,4 +86,5 @@ const sel='#app button:not([disabled]),#app [data-go],#app [data-act],#app [data
  console.log('toques',total);console.log('ERRORES',broken.length);broken.forEach(x=>console.log('  ✗ '+x));
  console.log('DESTINO EQUIVOCADO',wrong.length);wrong.forEach(x=>console.log('  ✗ '+x));
  console.log('SIN EFECTO',dead.length);dead.forEach(x=>console.log('  · '+x));
- process.exit(broken.length||wrong.length?1:0)})();
+ console.log('TERMINOLOGÍA',terms.length);terms.forEach(x=>console.log('  ✗ '+x));
+ process.exit(broken.length||wrong.length||terms.length?1:0)})();

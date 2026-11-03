@@ -32,7 +32,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await opener.click(); await wait();
   ok("ingreso: abre una ventana sobre la misma página (role=dialog con título)", (await pg.isVisible(".authmodal #fLogin")) && pg.url() === urlHome && (await pg.locator(".grid .card").count()) === 2
      && (await pg.evaluate(() => document.body.classList.contains("am-open"))) && (await pg.getAttribute(".authmodal", "role")) === "dialog" && (await pg.locator("#amTitle").innerText()).length > 0);
-  ok("ingreso: sin elegir cliente o prestador (una cuenta = una persona)", (await pg.locator(".am-tabs, [data-act=authSide], #fBarb").count()) === 0 && (await pg.locator(".am-sub").innerText()).includes("Clientes y prestadores entran por acá"));
+  ok("ingreso: sin elegir cliente o profesional (una cuenta = una persona)", (await pg.locator(".am-tabs, [data-act=authSide], #fBarb").count()) === 0 && (await pg.locator(".am-sub").innerText()).includes("Clientes y profesionales entran por acá"));
   ok("ingreso: en el celular no enfoca un campo (no abre el teclado tapando la ventana)", await pg.evaluate(() => document.activeElement && document.activeElement.classList.contains("am-box")));
   ok("ingreso: debajo de Google, la aceptación de los Términos y la Política de privacidad", /Al continuar, aceptás los Términos y la Política de privacidad/.test(await pg.locator(".authmodal .gterms").innerText()) && (await pg.locator(".authmodal .gterms [data-go=terminos]").count()) === 2);
   // el foco no se escapa de la ventana
@@ -57,6 +57,8 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.mouse.click(5, 5); await wait(200);
   ok("ingreso: tocar afuera cierra la ventana", (await pg.locator(".authmodal").count()) === 0);
   ok("ingreso: el footer dice Ingresar y Registrá tu negocio (sin Acceso prestadores ni Sumate)", /Registrá tu negocio/.test(await pg.locator("footer").innerText()) && !/Acceso prestadores|Sumate/.test(await pg.locator("footer").innerText()));
+  ok("General: el footer tiene contacto@tutiempo.com.ar como link mailto y sin @tutiempo.arg",
+     (await pg.locator('footer a[href="mailto:contacto@tutiempo.com.ar"]').count()) === 1 && !/@tutiempo\.arg/.test(await pg.locator("footer").innerText()));
   ok("ingreso: el inicio tiene la puerta Registrá tu negocio debajo del listado", (await pg.locator("#app .bizcta [data-act=bizStart]").count()) === 1);
   const foot = await pg.locator("footer").innerText();
   const socials = await pg.evaluate(() => [...document.querySelectorAll("footer a[target=_blank]")].map((a) => [a.href, a.rel]));
@@ -140,10 +142,15 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pv.waitForFunction(() => document.querySelector("#app")?.innerText.includes("$13.500"), null, { timeout: 8000 }).catch(() => {});
     ok("C52: el perfil abierto muestra el precio nuevo al volver a la pestaña (sin recargar)", antes && (await pv.locator("#app").innerText()).includes("$13.500"));
     // D31 (V3): la app muestra los mismos horarios que la base acepta (slot_starts), contando el turno de Ana
-    const d31 = (await q("select to_char(starts_at at time zone 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD') d from bookings where client_id = (select id from auth.users where email='ana@test.ar') order by id desc limit 1"))[0].d;
+    let d31 = (await q("select to_char(starts_at at time zone 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD') d from bookings where client_id = (select id from auth.users where email='ana@test.ar') order by id desc limit 1"))[0].d;
     const hoy31 = (await q("select to_char(now() at time zone 'America/Argentina/Buenos_Aires' + interval '61 minutes', 'YYYY-MM-DD HH24:MI') h"))[0].h;
-    const desde31 = d31 === hoy31.slice(0, 10) ? hoy31.slice(11) : "00:00";
-    const srv31 = (await q("select to_char(s, 'HH24:MI') t from slot_starts($1, $2::date, 60) s order by s", [sid, d31])).map((r) => r.t).filter((t) => t >= desde31);
+    let desde31 = d31 === hoy31.slice(0, 10) ? hoy31.slice(11) : "00:00";
+    const base31 = async () => (await q("select to_char(s, 'HH24:MI') t from slot_starts($1, $2::date, 60) s order by s", [sid, d31])).map((r) => r.t).filter((t) => t >= desde31);
+    let srv31 = await base31();
+    // si el turno de Ana es hoy y ya no quedan horarios (de tarde-noche en Argentina), el próximo día con horarios
+    for (let i = 0; !srv31.length && i < 7; i++) {
+      d31 = (await q("select to_char($1::date + 1, 'YYYY-MM-DD') d", [d31]))[0].d; desde31 = "00:00"; srv31 = await base31();
+    }
     const cli31 = (await pv.evaluate(([pid, d]) => slotsFor(pid, d, 60, null, true).list.filter((x) => x.free).map((x) => x.time), [sid, d31])).filter((t) => t >= desde31);
     ok("D31: la app y la base calculan los mismos horarios (servicio de 60 min, el día del turno de Ana)", srv31.length > 0 && JSON.stringify(srv31) === JSON.stringify(cli31), JSON.stringify([srv31, cli31]));
     await db.query("update services set price = 12000 where name = 'Esmaltado semipermanente'");

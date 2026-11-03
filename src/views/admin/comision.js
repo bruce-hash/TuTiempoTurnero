@@ -19,13 +19,13 @@ export function admCom(data) {
     <p class="note" style="text-align:left;margin:8px 0 10px">Entre 0 y 30, con decimales si querés (por ejemplo 7 u 8,5). Es un % del <b>precio del turno</b> (con descuentos y adicionales), se cobra al reservar junto con la seña y la paga el cliente aparte: el profesional recibe su seña completa.</p>
     <p class="lbl" style="margin-top:14px">Comisión de Mercado Pago por plazo de acreditación</p>
     <table class="mptab"><thead><tr><th>Plazo</th><th>% que se suma</th><th>Referencia (con IVA)</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="note" style="text-align:left;margin:8px 0 10px">De 0 a 15. Cada prestador elige su plazo en Horarios (el mismo que en su cuenta de Mercado Pago). Con 0, al cliente no se le suma nada y el costo de Mercado Pago lo absorbe el prestador, como hasta ahora. Las referencias cambian según la provincia y Mercado Pago las actualiza.</p>
+    <p class="note" style="text-align:left;margin:8px 0 10px">De 0 a 15. Cada profesional elige su plazo en Horarios (el mismo que en su cuenta de Mercado Pago). Con 0, al cliente no se le suma nada y el costo de Mercado Pago lo absorbe el profesional, como hasta ahora. Las referencias cambian según la provincia y Mercado Pago las actualiza.</p>
     <div class="panel comex"><p class="lbl" style="margin:0 0 6px">Ejemplo: corte de ${money(2e4)}, seña del 50%, acreditación al instante</p><div class="sum">
-      <div><span>Seña para el prestador</span><span>${money(ex.deposit)}</span></div>
+      <div><span>Seña para el profesional</span><span>${money(ex.deposit)}</span></div>
       <div><span>Comisión TuTiempo (${pctTxt(pct)}% del servicio)</span><span>${money(ex.fee)}</span></div>
       <div><span>Costo de Mercado Pago (${pctTxt(fees.mp.instant)}% del total)</span><span>${money(ex.mp)}</span></div>
       <div class="tot"><span>El cliente paga al reservar</span><span>${money(ex.total)}</span></div></div>
-      <p class="note" style="text-align:left;margin:6px 0 0">Total = (seña + comisión) / (1 − % de Mercado Pago), redondeado para arriba. El prestador recibe ${money(ex.deposit)} ahora y ${money(ex.deposit)} en el local; TuTiempo, ${money(ex.fee)}.</p></div>
+      <p class="note" style="text-align:left;margin:6px 0 0">Total = (seña + comisión) / (1 − % de Mercado Pago), redondeado para arriba. El profesional recibe ${money(ex.deposit)} ahora y ${money(ex.deposit)} en el local; TuTiempo, ${money(ex.fee)}.</p></div>
     <p class="note" style="text-align:left;margin:0 0 10px">Los cambios valen para las reservas nuevas; las ya hechas no cambian.</p>
     <div class="err" id="comerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar comisiones</button></form>${dniPanel()}${stampsPanel()}${LIVE ? siteForm(data.siteUrl) : ""}`;
 }
@@ -42,11 +42,11 @@ function siteForm(url) {
 // los datos quedan y al encenderlas vuelven como estaban (los premios ganados se canjean al reactivar).
 function stampsPanel() {
   const on = stampsOn();
-  return `<div class="panel"><p class="lbl">Sellos</p><div class="swrow"><div><b>🎟️ Tarjetas de sellos</b><div class="hint">${on ? "Los prestadores pueden dar sellos y los clientes canjean su premio" : "Apagadas: no se ven en ningún lado y no se suman sellos"}</div></div><button class="tg" data-act="admStamps" aria-pressed="${on}" aria-label="Tarjetas de sellos"></button></div>
-    <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si las apagás, desaparecen de los perfiles, de Mis turnos y del panel de los prestadores, y no se suman sellos. Las tarjetas, los sellos y los premios ganados quedan guardados." : "Si las volvés a encender, cada cliente vuelve a ver su tarjeta como estaba y los premios ganados se pueden canjear."}</p></div>`;
+  return `<div class="panel"><p class="lbl">Sellos</p><div class="swrow"><div><b>🎟️ Tarjetas de sellos</b><div class="hint">${on ? "Los profesionales pueden dar sellos y los clientes canjean su premio" : "Apagadas: no se ven en ningún lado y no se suman sellos"}</div></div><button class="tg" data-act="admStamps" aria-pressed="${on}" aria-label="Tarjetas de sellos"></button></div>
+    <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si las apagás, desaparecen de los perfiles, de Mis turnos y del panel de los profesionales, y no se suman sellos. Las tarjetas, los sellos y los premios ganados quedan guardados." : "Si las volvés a encender, cada cliente vuelve a ver su tarjeta como estaba y los premios ganados se pueden canjear."}</p></div>`;
 }
 function dniPanel() {
   const on = dniRequired();
-  return `<div class="panel"><p class="lbl">Verificación</p><div class="swrow"><div><b>🪪 Exigir DNI para aprobar prestadores</b><div class="hint">${on ? "Para aprobar a un prestador hacen falta su número de DNI y las fotos del frente y del dorso" : "Los prestadores nuevos se aprueban sin DNI"}</div></div><button class="tg" data-act="admReqDni" aria-pressed="${on}" aria-label="Exigir DNI para aprobar prestadores"></button></div>
-    <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si la apagás, el alta y el panel dejan de pedir el DNI y aprobás a los prestadores nuevos solo con sus datos." : "Si la volvés a activar, los prestadores pendientes tienen que cargar su DNI antes de que los apruebes."} Los que ya tienen el DNI verificado siguen mostrando “Identidad verificada”.</p></div>`;
+  return `<div class="panel"><p class="lbl">Verificación</p><div class="swrow"><div><b>🪪 Exigir DNI para aprobar profesionales</b><div class="hint">${on ? "Para aprobar a un profesional hacen falta su número de DNI y las fotos del frente y del dorso" : "Los profesionales nuevos se aprueban sin DNI"}</div></div><button class="tg" data-act="admReqDni" aria-pressed="${on}" aria-label="Exigir DNI para aprobar profesionales"></button></div>
+    <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si la apagás, el alta y el panel dejan de pedir el DNI y aprobás a los profesionales nuevos solo con sus datos." : "Si la volvés a activar, los profesionales pendientes tienen que cargar su DNI antes de que los apruebes."} Los que ya tienen el DNI verificado siguen mostrando “Identidad verificada”.</p></div>`;
 }
