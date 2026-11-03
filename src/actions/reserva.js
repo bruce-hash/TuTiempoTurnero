@@ -311,8 +311,8 @@ registerSubmit("fTurno", (ev) => {
         late: 0,
         series: series,
       };
-      // D30: comisión de TuTiempo sobre la seña y costo de Mercado Pago del plazo (demo; en vivo los calcula la base)
-      const charge = chargeAt(prov.id, paid);
+      // D34: comisión de TuTiempo sobre el precio y costo de Mercado Pago del plazo (demo; en vivo los calcula la base)
+      const charge = chargeAt(prov.id, paid, booking.price);
       booking.fee = paid > 0 ? charge.fee : 0;
       booking.mpFee = paid > 0 ? charge.mp : 0;
       store.BOOK.push(booking);
