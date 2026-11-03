@@ -10,6 +10,25 @@ import { myCards, stampCard } from "../../ui/sellos.js";
 import { myUpcoming } from "./home.js";
 import { rateForm } from "./perfil.js";
 
+// v2: la acción de cada aviso según lo que dice (nunca "Reservar": desde los avisos no se reserva). Confirmación,
+// recordatorios y cancelación → ver ese turno; pedido de reseña → dejarla (o "Ya calificaste"); los mensajes del
+// profesional y el saludo de cumpleaños → ver su perfil. Si el turno ya no está en la lista, también su perfil.
+function msgAction(msg) {
+  const booking = msg.ref && ["conf", "r24", "r2", "rev", "cancel"].includes(msg.kind) ? store.BOOK.find((item) => item.mine && String(item.id) === String(msg.ref)) : null;
+  const btn = (attrs, label) => `<button class="btn btn-ghost btn-sm msg-act" ${attrs}>${label}</button>`;
+  if (booking && msg.kind === "rev") {
+    if (booking.reviewed) {
+      return '<span class="hint">✓ Ya calificaste</span>';
+    }
+    if (booking.status === "done") {
+      return btn(`data-act="inboxRate" data-id="${booking.id}"`, "★ Dejar reseña");
+    }
+  }
+  if (booking && msg.kind !== "rev") {
+    return btn(`data-act="verTurno" data-id="${booking.id}"`, "Ver turno");
+  }
+  return msg.pid ? btn(`data-go="perfil" data-id="${esc(String(msg.pid))}"`, "Ver perfil") : "";
+}
 // Mis turnos: próximos, avisos de los profesionales (se marcan leídos a los 1,5 s), tarjetas de sellos y anteriores
 function vMisTurnosBase() {
   const upcoming = myUpcoming();
@@ -90,15 +109,15 @@ function vMisTurnosBase() {
    <div class="mt-b">
    ${
      inbox.length
-       ? `<div class="panel inbox"><p class="lbl">🔔 Avisos y mensajes de tus profesionales${unread ? ` <span class="cnt">${unread}</span>` : ""}</p><ul class="ag">${inbox
+       ? `<div class="panel inbox"><div class="inbox-h"><p class="lbl">🔔 Avisos y mensajes de tus profesionales${unread ? ` <span class="cnt">${unread}</span>` : ""}</p><button class="lnk" data-act="inboxClear">Borrar los leídos</button></div><ul class="ag">${inbox
            .slice(0, S.inboxAll ? 50 : 3)
            .map(
              (msg) =>
-               `<li class="${msg.read ? "" : "unread"}">${avatar({
+               `<li class="${msg.read ? "" : "unread"}" data-msg="${esc(String(msg.id))}">${avatar({
                  photo: msg.photo,
                  name: msg.name,
                  hue: msg.hue,
-               })}<div><b>${esc(msg.name)}</b><span class="msgb">${esc(msg.body)}</span><span class="hint">${esc(msg.d)}</span></div><button class="btn btn-ghost btn-sm" data-go="perfil" data-id="${msg.pid}">Reservar</button></li>`,
+               })}<div><b>${esc(msg.name)}</b><span class="msgb">${esc(msg.body)}</span><span class="hint">${esc(msg.d)}</span>${msgAction(msg)}</div><button class="xbtn" data-act="inboxDel" data-id="${esc(String(msg.id))}" aria-label="Borrar este aviso">✕</button></li>`,
            )
            .join(
              "",
@@ -108,7 +127,7 @@ function vMisTurnosBase() {
    </div>
    <div class="mt-s"><!--SELLOS--></div>
    <div class="mt-c">
-   ${past.length ? `<p class="lbl" style="margin:8px 0 0">Anteriores</p><div class="panel"><ul class="ag">${past.map((booking) => `<li><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(pr(booking.pid).name)} · ${booking.time}</b><span>${esc(booking.svc)} · ${money(booking.price)}</span>${booking.stamped ? '<span class="hint">🎟️ +1 sello</span>' : ""}${booking.status === "done" && !booking.reviewed ? (S.rateFor === booking.id ? rateForm(booking) : `<button class="lnk" data-act="rateOpen" data-id="${booking.id}">★ Calificar</button>`) : booking.reviewed ? '<span class="hint">✓ Calificaste</span>' : ""}</div>${chipOf(booking)}</li>`).join("")}</ul></div>` : ""}
+   ${past.length ? `<p class="lbl" style="margin:8px 0 0">Anteriores</p><div class="panel"><ul class="ag">${past.map((booking) => `<li data-bk="${booking.id}"><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(pr(booking.pid).name)} · ${booking.time}</b><span>${esc(booking.svc)} · ${money(booking.price)}</span>${booking.stamped ? '<span class="hint">🎟️ +1 sello</span>' : ""}${booking.status === "done" && !booking.reviewed ? (S.rateFor === booking.id ? rateForm(booking) : `<button class="lnk" data-act="rateOpen" data-id="${booking.id}">★ Calificar</button>`) : booking.reviewed ? '<span class="hint">✓ Calificaste</span>' : ""}</div>${chipOf(booking)}</li>`).join("")}</ul></div>` : ""}
    </div>
   </div>`;
 }

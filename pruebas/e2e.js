@@ -633,6 +633,48 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.reload(); await pg.waitForSelector(".stampcard", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("Mis sellos: tarjeta de Esmaltado 16 de 16, premio listo", (await pg.locator(".stampcard").count()) === 1 && (await pg.locator(".stampcard").innerText()).includes("Esmaltado semipermanente") && (await pg.locator(".stampcard").innerText()).includes("16 de 16") && /premio listo/i.test(await pg.locator(".stampcard").innerText()));
   const tt = (await txt()).toLowerCase(); ok("Mis turnos: primero los próximos, después avisos y sellos", tt.indexOf("próximos") >= 0 && tt.indexOf("próximos") < tt.indexOf("avisos y mensajes") && tt.indexOf("avisos y mensajes") < tt.indexOf("mis sellos"));
+  {
+    // v2 · Cliente: cada aviso con la acción que corresponde (nunca «Reservar»), ✕ por aviso y «Borrar los leídos»
+    const ana = (await q("select id from auth.users where email='ana@test.ar'"))[0].id;
+    if (await pg.locator("[data-act=inboxAll]").count()) { await pg.click("[data-act=inboxAll]"); await wait(300); }
+    const rows = await pg.locator(".inbox li").evaluateAll((lis) => lis.map((li) => ({ id: li.dataset.msg, acts: [...li.querySelectorAll(".msg-act")].map((b) => b.dataset.act || "go:" + b.dataset.go), txt: li.innerText })));
+    const kinds = Object.fromEntries((await q("select id::text, kind from client_messages where user_id=$1", [ana])).map((r) => [r.id, r.kind]));
+    ok("v2: ningún aviso de Mis turnos tiene «Reservar»", rows.length >= 2 && !rows.some((r) => /Reservar/.test(r.txt)), JSON.stringify(rows));
+    ok("v2: los de un turno llevan «Ver turno» y los mensajes «Ver perfil»",
+       rows.every((r) => (["conf", "r24", "r2", "cancel"].includes(kinds[r.id]) ? r.acts.join() === "verTurno" || r.acts.join() === "go:perfil" : kinds[r.id] === "rev" ? true : r.acts.join() === "go:perfil"))
+       && rows.some((r) => kinds[r.id] === "msg" && r.acts.join() === "go:perfil") && rows.some((r) => ["conf", "cancel"].includes(kinds[r.id]) && r.acts.join() === "verTurno"),
+       JSON.stringify(rows.map((r) => [kinds[r.id], r.acts])));
+    const turno = rows.find((r) => r.acts.join() === "verTurno");
+    await pg.click(`.inbox li[data-msg="${turno.id}"] [data-act=verTurno]`); await wait(500);
+    ok("v2: «Ver turno» abre ese turno", await pg.evaluate(() => S.view === "turnoOk" && !!S.turnoId));
+    await menu("[data-go=misturnos]"); await wait(800);
+    // pedido de reseña de un turno atendido y sin reseña: «Dejar reseña» abre la reseña de ese turno en Anteriores
+    // (si Ana no tiene ninguno, se le carga uno atendido hace 40 días, copia de uno suyo)
+    if (!(await q("select 1 from bookings b where b.client_id = $1 and b.status = 'done' and not exists (select 1 from reviews r where r.booking_id = b.id)", [ana])).length) {
+      await q(`insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, busy_until, price)
+        select provider_id, service_id, client_id, client_name, service_name, source, 'done', starts_at - interval '40 days', ends_at - interval '40 days', busy_until - interval '40 days', price
+          from bookings where client_id = $1 order by id limit 1`, [ana]);
+    }
+    const rv = await q(`insert into client_messages (provider_id, user_id, body, kind, ref)
+       select b.provider_id, b.client_id, 'Contanos cómo te fue', 'rev', b.id::text from bookings b
+        where b.client_id = $1 and b.status = 'done' and not exists (select 1 from reviews r where r.booking_id = b.id)
+        order by b.id limit 1 on conflict do nothing returning id, ref`, [ana]);
+    if (rv.length) {
+      await pg.reload(); await pg.waitForSelector(".inbox"); await wait(1200);
+      await pg.click(`.inbox li[data-msg="${rv[0].id}"] [data-act=inboxRate]`); await wait(500);
+      const pos = await pg.evaluate((ref) => { const row = document.querySelector(`[data-bk="${ref}"]`); return row && [!!row.querySelector(".rateform"), document.querySelector(".top").getBoundingClientRect().bottom, row.getBoundingClientRect().top]; }, rv[0].ref);
+      ok("v2: «Dejar reseña» abre la reseña de ese turno y lleva hasta ahí", pos && pos[0] && pos[2] >= pos[1] && pos[2] - pos[1] <= 30, JSON.stringify(pos));
+    } else ok("v2: hay un turno atendido de Ana para probar «Dejar reseña»", false);
+    const first = await pg.locator(".inbox li").first().getAttribute("data-msg");
+    await pg.click(`.inbox li[data-msg="${first}"] [data-act=inboxDel]`); await wait(800);
+    ok("v2: el ✕ borra ese aviso de la lista (y queda guardado en la base, fuera de la lista)", (await pg.locator(`.inbox li[data-msg="${first}"]`).count()) === 0
+       && (await q("select dismissed_at is not null d from client_messages where id=$1", [first]))[0].d);
+    await pg.click("[data-act=inboxClear]"); await wait(1000);
+    ok("v2: «Borrar los leídos» vacía la lista", (await pg.locator(".inbox").count()) === 0
+       && (await q("select count(*)::int c from client_messages where user_id=$1 and dismissed_at is null", [ana]))[0].c === 0);
+    await pg.reload(); await pg.waitForSelector("#app"); await wait(1500);
+    ok("v2: …y al volver a entrar siguen borrados", (await pg.locator(".inbox").count()) === 0);
+  }
   await pg.click("[data-act=useReward]"); await pg.waitForSelector(".pcard"); await wait(800);
   await pg.click("[data-quick]"); await wait(200); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno"); await wait(300);
   ok("checkout con “Usar mi premio”, gratis", (await pg.locator("[data-paym=reward][aria-checked=true]").count()) === 1 && /canjear premio/i.test(await pg.locator("#fTurno button[type=submit]").innerText()));

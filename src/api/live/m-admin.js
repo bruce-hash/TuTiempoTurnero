@@ -143,6 +143,8 @@ Object.assign(LM, {
         p_body: body,
       }),
     ),
+  // v2: borrar avisos de Mis turnos (los ids, o null = todos los leídos); quedan en la base, fuera de la lista
+  dismissMessages: (ids) => saved(sb.rpc("dismiss_messages", { p_ids: ids })),
   // marcar como leídos no es importante: si falla no se avisa
   readMessages: () =>
     sb.rpc("mark_messages_read").then(

@@ -153,6 +153,23 @@ ok("un cliente no puede mandar mensajes masivos", err(q("select send_client_mess
 ok("mensaje vacío o larguísimo rechazado", err(q("select send_client_messages(array[%s]::bigint[], %s)", (pcid, " x "), uid=prov), "bad_message") and err(q("select send_client_messages(array[%s]::bigint[], %s)", (pcid, "x" * 501), uid=prov), "bad_message"))
 q("select mark_messages_read()", uid=cli1)
 ok("marcar como leídos", all(m["read"] for m in q("select my_messages()", uid=cli1)[0][0]))
+# v2 · Cliente: cada aviso trae su turno (ref) y el cliente los borra (quedan en la base, fuera de su lista)
+ok("v2: el aviso de confirmación trae el turno (ref) para «Ver turno»", conf[0]["ref"] == str(b1))
+mid = mm[0]["id"]
+ok("v2: otro cliente no borra avisos ajenos", q("select dismiss_messages(array[%s]::bigint[])", (mid,), uid=cli2)[0][0] == 0
+   and any(m["id"] == mid for m in q("select my_messages()", uid=cli1)[0][0]))
+ok("v2: sin sesión no se borra nada", err(q("select dismiss_messages(array[%s]::bigint[])", (mid,), role="anon")))
+ok("v2: más de 100 de una vez, rechazado", err(q("select dismiss_messages(%s::bigint[])", (list(range(1, 102)),), uid=cli1), "too_many"))
+ok("v2: el cliente borra un aviso: sale de su lista pero queda en la base",
+   q("select dismiss_messages(array[%s]::bigint[])", (mid,), uid=cli1)[0][0] == 1
+   and not any(m["id"] == mid for m in q("select my_messages()", uid=cli1)[0][0])
+   and q("select dismissed_at is not null from client_messages where id=%s", (mid,))[0][0])
+q("select send_client_messages(array[%s]::bigint[], 'Hola {nombre}, mañana abro temprano')", (pcid,), uid=prov)
+left = q("select dismiss_messages()", uid=cli1)[0][0]
+mine = q("select my_messages()", uid=cli1)[0][0]
+ok("v2: «Borrar los leídos» borra los leídos y deja el que no leyó", left >= 1 and len(mine) == 1 and not mine[0]["read"] and mine[0]["body"] == "Hola Ana, mañana abro temprano")
+ok("v2: …y borrar no le devuelve al profesional su cupo de mensajes del día", q("select count(*) from client_messages where provider_id=%s and created_at > now() - interval '24 hours' and kind='msg'", (pid,))[0][0] == 2)
+q("select mark_messages_read()", uid=cli1)
 
 # fotos de perfil
 ok("cliente pone su foto (solo de su carpeta)", not err(q("update profiles set avatar_path=%s where id=%s", (f"{cli1}/a-1.jpg", cli1), uid=cli1))

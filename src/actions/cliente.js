@@ -18,6 +18,39 @@ registerClick("inboxAll", (ev, el, act) => {
   render();
   return;
 });
+// v2: borrar avisos de Mis turnos (uno, o todos los leídos). En la base quedan guardados, fuera de la lista
+const dropMessages = (keep) => {
+  const inbox = S.inbox || [];
+  const kept = inbox.filter(keep);
+  inbox.splice(0, inbox.length, ...kept);
+};
+registerClick("inboxDel", (ev, el, act) => {
+  const id = el.dataset.id;
+  dropMessages((msg) => String(msg.id) !== id);
+  api.m.dismissMessages([+id]).catch(() => {});
+  render();
+});
+// los que están en pantalla ya se vieron (Mis turnos los marca leídos al abrir): primero se marcan, después se borran
+registerClick("inboxClear", (ev, el, act) => {
+  (S.inbox || []).forEach((msg) => (msg.read = true));
+  dropMessages((msg) => !msg.read);
+  Promise.resolve(api.m.readMessages())
+    .then(() => api.m.dismissMessages(null))
+    .catch(() => {});
+  toast("Borramos los avisos leídos");
+  render();
+});
+// "Dejar reseña" desde el aviso: abre la reseña de ese turno en Anteriores y lleva hasta ahí (debajo de la cabecera fija)
+registerClick("inboxRate", (ev, el, act) => {
+  S.rateFor = +el.dataset.id;
+  S.rateN = 0;
+  render();
+  const row = $(`[data-bk="${S.rateFor}"]`);
+  if (row) {
+    const header = $(".top");
+    window.scrollTo(0, Math.max(0, row.getBoundingClientRect().top + window.scrollY - (header ? header.getBoundingClientRect().bottom : 0) - 12));
+  }
+});
 registerClick("ptab", (ev, el, act) => {
   S.ptab = el.dataset.t;
   S.rateFor = null;
