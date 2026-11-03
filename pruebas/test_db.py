@@ -101,11 +101,11 @@ svc_u = q("select id from services where provider_id=%s and category_id='u'", (p
 svc_l = q("select id from services where provider_id=%s and category_id='l'", (pid,))[0][0]
 ok("anon no puede reservar", err(q("select book_slot(%s, %s)", (svc_u, start), role="anon")))
 ok("cliente no puede insertar turnos directo", err(q("insert into bookings (provider_id, service_id, source, status, starts_at, ends_at, price) values (%s,%s,'app','confirmed',%s,%s,1)", (pid, svc_u, start, start + dt.timedelta(hours=1)), uid=cli1)))
-# D30: la comisión de TuTiempo es un % de la SEÑA. Con 20% de la seña (seña 50%), los ejemplos dan lo mismo que con el
-# 10% del precio de antes: seña $6.000 de $12.000 → comisión $1.200. (Mercado Pago en 0%: no se suma nada.)
-q("update app_settings set deposit_commission_pct = 20")
+# D34: la comisión de TuTiempo es un % del PRECIO del turno (D30 la había pasado a la seña): 10% de $12.000 → $1.200.
+# (Mercado Pago en 0%: no se suma nada.)
+q("update app_settings set deposit_commission_pct = 10")  # D34: 10% del precio ($12.000 → $1.200)
 r = q("select book_slot(%s, %s)", (svc_u, start), uid=cli1)
-ok("reserva crea hold: seña 50% + comisión 20% de la seña aparte ($6.000 + $1.200)", not err(r) and r[0][0]["status"] == "pending_payment" and r[0][0]["amount_due"] == 7200)
+ok("reserva crea hold: seña 50% + comisión 10% del precio aparte ($6.000 + $1.200)", not err(r) and r[0][0]["status"] == "pending_payment" and r[0][0]["amount_due"] == 7200)
 ok("en la base: seña completa del prestador y comisión aparte", q("select deposit, client_fee from bookings where id=%s", (r[0][0]["booking_ids"][0],))[0] == (6000, 1200))
 b1 = r[0][0]["booking_ids"][0]
 r2 = q("select book_slot(%s, %s)", (svc_u, start), uid=cli2)
@@ -545,12 +545,12 @@ ok("D24: las funciones del borrado son internas (ni el admin)", all(err(q(sql, u
 q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) in (%s, %s, %s)", (str(pend), str(baja), str(huerfana)))
 
 # ---------- versión 29 ----------
-# la comisión va aparte de la seña (D30: % de la seña, no del precio)
+# la comisión va aparte de la seña y sale del precio del turno, no de la seña (D34)
 q("update provider_settings set deposit_pct=10, strict_no_show=true where provider_id=%s", (pid3,))
 d29 = next_weekday(5)
 rg = q("select book_slot(%s, %s)", (sv, dt.datetime.combine(d29, dt.time(9, 0), tz)), uid=c3)
-ok("la seña es la que puso el prestador y la comisión va aparte (seña 10% $1.200 + comisión 20% de la seña $240)", not err(rg) and rg[0][0]["amount_due"] == 1440
-   and q("select deposit, client_fee from bookings where id=%s", (rg[0][0]["booking_ids"][0],))[0] == (1200, 240))
+ok("D34: la seña es la que puso el prestador y la comisión va aparte, sobre el precio (seña 10% $1.200 + 10% de $12.000 = $1.200)", not err(rg) and rg[0][0]["amount_due"] == 2400
+   and q("select deposit, client_fee from bookings where id=%s", (rg[0][0]["booking_ids"][0],))[0] == (1200, 1200))
 q("select cancel_by_client(%s)", (rg[0][0]["booking_ids"][0],), uid=c3)
 q("update provider_settings set deposit_pct=50 where provider_id=%s", (pid3,))
 r3 = q("select book_slot(%s, %s, 2, 2, 'mp')", (sv, dt.datetime.combine(d29, dt.time(10, 0), tz)), uid=c3)
