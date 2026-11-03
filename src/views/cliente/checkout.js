@@ -64,9 +64,9 @@ export function vCheckoutTurno() {
   const depositTotal = deposit + seriesOk.reduce((sum, item) => sum + item.now, 0);
   const priceTotal = price + seriesOk.reduce((sum, item) => sum + item.price, 0);
   const count = 1 + seriesOk.length;
-  // D30: por cada turno, comisión de TuTiempo (% de su seña) y costo de Mercado Pago del plazo del prestador (la base hace
+  // D34: por cada turno, comisión de TuTiempo (% de su precio) y costo de Mercado Pago del plazo del prestador (la base hace
   // la misma cuenta al reservar)
-  const charges = [deposit].concat(seriesOk.map((item) => item.now)).map((amount) => chargeAt(prov.id, amount));
+  const charges = [[deposit, price]].concat(seriesOk.map((item) => [item.now, item.price])).map(([amount, itemPrice]) => chargeAt(prov.id, amount, itemPrice));
   const feeTotal = charges.reduce((sum, item) => sum + item.fee, 0);
   const mpTotal = charges.reduce((sum, item) => sum + item.mp, 0);
   const mpPct = mpPctOf(prov.id);
@@ -114,7 +114,7 @@ export function vCheckoutTurno() {
            })()})`
          : ""
      }</span><span>${money(depositTotal)}</span></div>
-     <div class="feerow"><span>Comisión TuTiempo (${pctTxt()}% de la seña)</span><span>${money(feeTotal)}</span></div>
+     <div class="feerow"><span>Comisión TuTiempo (${pctTxt()}% del servicio)</span><span>${money(feeTotal)}</span></div>
      ${mpTotal ? `<div class="feerow"><span>Costo de Mercado Pago (acreditación ${!conf.term || conf.term === "instant" ? "al instante" : "en " + termName(conf.term)}, ${pctTxt(mpPct)}% del total)</span><span>${money(mpTotal)}</span></div>` : ""}
      <div class="tot"><span>Pagás ahora</span><span>${money(payNowTotal)}</span></div>
      ${rest > 0 ? `<div class="feeline"><span>Después, en el local${count > 1 ? ` (los ${count} turnos)` : ""} · ${method === "cash" ? "efectivo" : "Mercado Pago"}</span><span>${money(rest)}</span></div>` : ""}</div>

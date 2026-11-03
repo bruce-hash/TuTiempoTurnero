@@ -88,7 +88,7 @@ export function admRes(data) {
   const thisWeek = weeks[0];
   const lastWeek = weeks[1];
   const trend = thisWeek && lastWeek && lastWeek.n ? Math.round(((thisWeek.n - lastWeek.n) / lastWeek.n) * 100) : null;
-  return `<div class="kpi big admhero"><span>Comisión de TuTiempo este mes (${pctTxt(store.FEES.commission)}% de la seña)</span><b>${money(+st.commission_month || 0)}</b>${delta(st.commission_month, st.commission_prev)}</div>
+  return `<div class="kpi big admhero"><span>Comisión de TuTiempo este mes (${pctTxt(store.FEES.commission)}% del servicio)</span><b>${money(+st.commission_month || 0)}</b>${delta(st.commission_month, st.commission_prev)}</div>
    ${alerts.length ? `<div class="panel admalert"><p class="lbl">Para revisar</p><ul class="adml">${alerts.map((alert) => `<li>${alert}</li>`).join("")}</ul></div>` : ""}
    ${admReview()}
    <div class="admday"><div><span>Hoy</span><b>${today.n} turno${today.n === 1 ? "" : "s"}</b><small>Comisión ${money(today.fee)}</small></div><div><span>Ayer</span><b>${yesterday.n} turno${yesterday.n === 1 ? "" : "s"}</b><small>Comisión ${money(yesterday.fee)}</small></div></div>

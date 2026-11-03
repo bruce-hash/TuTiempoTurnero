@@ -219,7 +219,7 @@ export const liveCuenta = {
     S.stampsOn = !row || row.stamps_on !== false;
     return S.requireDni;
   },
-  // D30: comisión de TuTiempo (% de la seña) y % de Mercado Pago por plazo (app_settings, lo puede leer cualquiera)
+  // D34: comisión de TuTiempo (% del precio del turno) y % de Mercado Pago por plazo (app_settings, lo puede leer cualquiera)
   async fees() {
     const row = await call(
       sb.from("app_settings").select("deposit_commission_pct,mp_pct_instant,mp_pct_d10,mp_pct_d18,mp_pct_d35").maybeSingle(),
