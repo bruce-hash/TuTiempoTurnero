@@ -131,8 +131,11 @@ main{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
 .stats2 b{display:block;font-size:17px;font-variant-numeric:tabular-nums}
 .stats2 span{font-size:11px;color:var(--muted)}
 
-.btabs{display:flex;gap:4px;overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px;scrollbar-width:none}
-.btabs button{flex:1 0 auto;border:0;background:transparent;color:var(--muted);padding:9px 12px;border-radius:10px;font-weight:600;font-size:13px;white-space:nowrap}
+/* v2: las 8 secciones del panel a la vista, sin desplazar: 4 × 2 con ícono y etiqueta chica (en la compu, compu.css) */
+.btabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px}
+.btabs button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;border:0;background:transparent;color:var(--muted);padding:8px 2px 7px;border-radius:10px;font-weight:600;font-size:11px;line-height:1.15;white-space:nowrap}
+.btabs .bt-i{font-size:18px;line-height:1}.btabs .bt-l{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.btabs .dotn{position:absolute;top:6px;right:calc(50% - 18px)}
 .btabs button[aria-selected="true"]{background:var(--brand);color:var(--on-brand)}
 .dotn{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);vertical-align:middle}
 .ag{list-style:none;margin:0;padding:0;display:grid}

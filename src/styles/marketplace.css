@@ -123,7 +123,6 @@ footer .legal{grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px
 .bk-svc{margin:0;font-weight:800;font-size:16px}
 .tacts{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tacts .btn{min-height:48px}
 .btabw{display:flex;gap:6px;align-items:center}.btabw .btabs{flex:1;min-width:0;position:relative}
-.tabarr{flex:none;width:36px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:22px;line-height:1;padding:0}.tabarr[disabled]{opacity:.35;cursor:default}
 .agnav{padding:0 2px 6px}.agnav b{font-size:14px;text-transform:none}
 .hday-h{display:flex;justify-content:space-between;align-items:center;gap:8px}.dclosed{font-size:12px;font-weight:700;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:99px;padding:2px 9px}.hday:not(.off) .dclosed{display:none}
 .svcrow3{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 28px;align-items:end}

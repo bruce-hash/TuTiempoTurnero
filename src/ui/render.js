@@ -57,8 +57,8 @@ function nav() {
       items: [
         // D33: una cuenta de negocio no reserva (sin Mis turnos ni "Reservar como cliente")
         ["📅", "Mi agenda", 'data-act="toPanel"'],
-        ["👁", "Ver mi perfil público", 'data-act="preview"'],
-        ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"']] : []),
+        // v2: "Mi perfil" se llama "Ajustes" y "Ver mi perfil público" pasó a la Agenda
+        ...(S.user ? [["⚙️", "Ajustes", 'data-act="asClient" data-to="cuenta"']] : []),
         ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
         ...installItem(),
         ["↪", "Cerrar sesión", 'data-act="salirBarbero"'],

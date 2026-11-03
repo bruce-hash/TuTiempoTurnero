@@ -157,6 +157,9 @@ const mpBackNote = () =>
     ? `<p class="note mp-back" role="alert">⚠ ${MP_BACK[S.mpBack] || MP_BACK.error}</p>`
     : "";
 
+// v2: de dónde sale el plazo de acreditación (lo mismo en el paso "Seña y cobro" del alta y en Perfil → Cobros)
+export const mpTermNote = (style = "") =>
+  `<p class="note mpterm" style="text-align:left;${style}">📆 <b>Plazo de acreditación:</b> se elige en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos), no en TuTiempo. La app lo detecta sola con tu primer cobro. <b>Sin Mercado Pago conectado no recibís reservas.</b></p>`;
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
 // En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
 export function vBPerfil(prov) {
@@ -182,6 +185,7 @@ export function vBPerfil(prov) {
      ${mpBackNote()}${st.expired ? '<p class="note" style="text-align:left;margin:8px 0 0">Venció la conexión con tu cuenta de Mercado Pago: volvé a conectarla.</p>' : ""}${mpPaidNote(st, true)}
      <button class="btn btn-pri btn-block" style="margin-top:10px;background:#009ee3" data-act="mpConnect">Conectar Mercado Pago</button>`
    }
+   ${mpTermNote("margin:10px 0 0")}
   </div>
   <div class="panel"><p class="lbl">Foto de perfil</p><div class="contact" style="gap:14px">${photoPicker(prov, "upPhoto")}<div><b>${esc(prov.name)}</b><p class="note" style="text-align:left;margin:2px 0 0">Aparece en tu perfil, en el listado y en tus historias.</p><label class="btn btn-ghost btn-sm" for="upPhoto" style="margin-top:6px;cursor:pointer">📷 ${prov.photo ? "Cambiar foto" : "Subir foto"}</label></div></div></div>
   <div class="panel"><div class="swrow"><div><b>💵 Aceptar el resto en efectivo</b><div class="hint">${cfg(ME()).cash !== false ? "La seña va por Mercado Pago y el resto lo pueden pagar en efectivo" : "La seña y el resto, con Mercado Pago"}</div></div><button class="tg" data-act="cashToggle" aria-pressed="${cfg(ME()).cash !== false}" aria-label="Aceptar efectivo"></button></div>
@@ -218,5 +222,5 @@ export function vBPerfil(prov) {
   ${pushPanel("prestador")}
   <div class="panel"><p class="lbl">Verificación</p><dl class="kv">${verifRow(prov)}<dt>Email</dt><dd>${esc(LIVE ? (S.user ? S.user.email : "") : prov.id === 21 ? "sofia@tutiempo.demo" : "filo@tutiempo.demo")}</dd></dl></div>
   ${delBox("pro")}
-  <button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
+  <button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como cliente</button>`;
 }

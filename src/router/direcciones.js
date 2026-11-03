@@ -1,5 +1,6 @@
 // Enrutador (Bloque B) · del estado a la dirección: qué URL, qué título y qué descripción corresponden a la pantalla
 // que muestra S. La usan syncUrl() (src/router.js) y los links para compartir.
+import { isBusiness } from "../lib/cuentas.js";
 import { LIVE } from "../config.js";
 import { pr } from "../lib/prestadores.js";
 import { CAT_SLUGS, catInfo, pcat } from "../lib/rubros.js";
@@ -103,7 +104,8 @@ function describeClient(view) {
     case "misturnos":
       return { url: "/mis-turnos", key: "mis-turnos", title: `Mis turnos · ${SITE}` };
     case "cuenta":
-      return { url: "/cuenta", key: "cuenta", title: `Mi perfil · ${SITE}` };
+      // v2: para una cuenta de negocio, "Ajustes" (como en su menú)
+      return { url: "/cuenta", key: "cuenta", title: `${isBusiness() ? "Ajustes" : "Mi perfil"} · ${SITE}` };
     case "login":
     case "register": {
       const up = S.login && S.login.mode === "up";
