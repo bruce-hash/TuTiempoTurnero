@@ -74,7 +74,7 @@ registerClick("admDelYes", (ev, el, act) => {
         S.list = null;
         S.counts = null;
         toast(
-          `Prestador eliminado.${cancelled ? ` Cancelamos ${cancelled} turno${cancelled > 1 ? "s" : ""} y les devolvemos todo a los clientes.` : ""}`,
+          `Profesional eliminado.${cancelled ? ` Cancelamos ${cancelled} turno${cancelled > 1 ? "s" : ""} y les devolvemos todo a los clientes.` : ""}`,
         );
         return api.adminLoad();
       })
@@ -208,7 +208,7 @@ registerClick("admSet", (ev, el, act) => {
       .adminSetProvider(id, status, status === "active" ? true : null)
       .then(() => api.adminLoad())
       .then(() => {
-        toast(status === "active" ? "Prestador activo." : "Prestador suspendido.");
+        toast(status === "active" ? "Profesional activo." : "Profesional suspendido.");
         render();
       })
       .catch(() => {
@@ -242,8 +242,8 @@ registerClick("admSet", (ev, el, act) => {
   }
   toast(
     status === "active"
-      ? "Prestador activo: ya aparece en TuTiempo."
-      : "Prestador suspendido: ya no aparece ni se le puede reservar.",
+      ? "Profesional activo: ya aparece en TuTiempo."
+      : "Profesional suspendido: ya no aparece ni se le puede reservar.",
   );
   render();
   return;
@@ -298,7 +298,7 @@ registerSubmit("fCom", (ev) => {
 registerClick("admReqDni", (ev, el, act) => {
   const on = !dniRequired();
   const done = () => {
-    toast(on ? "Listo: para aprobar a un prestador hace falta su DNI." : "Listo: los prestadores nuevos se aprueban sin DNI.");
+    toast(on ? "Listo: para aprobar a un profesional hace falta su DNI." : "Listo: los profesionales nuevos se aprueban sin DNI.");
     render();
   };
   if (LIVE) {

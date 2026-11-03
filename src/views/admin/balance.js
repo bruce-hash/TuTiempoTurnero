@@ -81,7 +81,7 @@ function admBalMonth(fin, ym) {
   <div class="panel"><p class="lbl">Cuentas del mes</p><div class="sum">
     <div><span>Reservas pagadas por la app</span><span>${(+month.bookings || 0).toLocaleString("es-AR")}</span></div>
     <div><span>Cobrado a clientes por Mercado Pago</span><span>${money(+month.charged || 0)}</span></div>
-    <div><span>Señas para los prestadores</span><span>−${money(+month.deposits || 0)}</span></div>
+    <div><span>Señas para los profesionales</span><span>−${money(+month.deposits || 0)}</span></div>
     <div class="tot"><span>Comisión de TuTiempo</span><span>${money(+month.commission || 0)}</span></div></div>
    <p class="note" style="text-align:left;margin:6px 0 0">No cuenta los turnos que canceló el profesional: esa plata se devolvió.</p></div>
   <div class="panel"><p class="lbl">Gastos de TuTiempo</p>

@@ -25,7 +25,7 @@ export const PANEL_TABS = {
   perfil: "perfil",
 };
 export const ADMIN_TABS = { res: "resumen", prov: "prestadores", bal: "balance", com: "comision" };
-export const ADMIN_LABELS = { res: "Resumen", prov: "Prestadores", bal: "Balance", com: "Comisión" };
+export const ADMIN_LABELS = { res: "Resumen", prov: "Profesionales", bal: "Balance", com: "Comisión" };
 export const PROFILE_TABS = { works: "trabajos", reviews: "resenas" };
 export const keyOf = (map, word) => Object.keys(map).find((key) => map[key] === word);
 // descripción de la página de inicio (la del index.html), para las pantallas que no tienen una propia

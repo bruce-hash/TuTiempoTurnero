@@ -21,7 +21,7 @@ export function vAdmin() {
    <div><h1 class="h1" style="margin:0">Panel de TuTiempo</h1><p class="note" style="text-align:left;margin:4px 0 0">Olavarría · ${esc(MESES[now.getMonth()])} ${now.getFullYear()}${data.st.demo ? " · datos de ejemplo" : ""}</p></div>
    <div class="ptabs admtabs" role="tablist" aria-label="Secciones del panel">${[
      ["res", "Resumen"],
-     ["prov", "Prestadores"],
+     ["prov", "Profesionales"],
      ["bal", "Balance"],
      ["com", "Comisión"],
    ]

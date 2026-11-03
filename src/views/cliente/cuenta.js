@@ -11,7 +11,7 @@ import { myUpcoming } from "./home.js";
 // eliminar cuenta (who "cli") o perfil de prestador ("pro"): primero el botón, después la confirmación
 export function delBox(who, upcoming) {
   if (S.delAsk !== who) {
-    return `<button class="lnk delbtn" data-act="delAsk" data-who="${who}">${who === "cli" ? "Eliminar mi cuenta" : "Eliminar mi perfil de prestador"}</button>`;
+    return `<button class="lnk delbtn" data-act="delAsk" data-who="${who}">${who === "cli" ? "Eliminar mi cuenta" : "Eliminar mi perfil de profesional"}</button>`;
   }
   const count =
     who === "pro"
@@ -23,7 +23,7 @@ export function delBox(who, upcoming) {
             booking.date + booking.time >= TODAY() + nowHM(),
         ).length
       : upcoming;
-  return `<div class="panel delpanel"><b>${who === "cli" ? "Eliminar mi cuenta" : "Eliminar mi perfil de prestador"}</b>
+  return `<div class="panel delpanel"><b>${who === "cli" ? "Eliminar mi cuenta" : "Eliminar mi perfil de profesional"}</b>
    <ul class="dl">${who === "cli" ? `<li>Se borran tus datos, tu historial y los profesionales que seguís.</li><li>${count ? `Tenés <b>${count}</b> turno${count > 1 ? "s" : ""} reservado${count > 1 ? "s" : ""}: se cancela${count > 1 ? "n" : ""} y lo pagado no se devuelve.` : "No tenés turnos reservados."}</li>` : `<li>Tu perfil deja de aparecer en TuTiempo y nadie más puede reservarte.</li><li>${count ? `Tenés <b>${count}</b> turno${count > 1 ? "s" : ""} futuro${count > 1 ? "s" : ""}: se cancela${count > 1 ? "n" : ""} y a cada cliente se le devuelve todo lo que pagó.` : "No tenés turnos futuros."}</li><li>Tus fichas de clientes, finanzas y fotos se borran. Desconectamos tu Mercado Pago.</li>`}<li>No se puede deshacer.</li></ul>
    <label class="chk" style="justify-content:flex-start;margin:8px 0 12px"><input type="checkbox" id="delOk"> Entiendo que no se puede deshacer</label>
    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-ghost" data-act="delNo">Cancelar</button><button class="btn btn-bad" data-act="delYes" data-who="${who}" id="delBtn" disabled>Eliminar definitivamente</button></div></div>`;
@@ -54,7 +54,7 @@ export function vCuenta() {
    <div class="panel"><p class="lbl">Seguridad</p><dl class="kv"><dt>Email</dt><dd>${esc(user.email)}</dd></dl>
     <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="changePass">🔒 Cambiar contraseña</button></div>
    ${S.isAdmin ? '<button class="btn btn-ghost btn-block" data-act="toAdmin">🛠️ Panel de TuTiempo (admin)</button>' : ""}
-   ${S.barberAuth ? '<button class="btn btn-pri btn-block" data-act="toPanel">Ir a mi panel de prestador</button>' : '<p class="note">¿Tenés un negocio? <button class="lnk" data-act="bizStart">Registralo en TuTiempo</button></p>'}
+   ${S.barberAuth ? '<button class="btn btn-pri btn-block" data-act="toPanel">Ir a mi panel de profesional</button>' : '<p class="note">¿Tenés un negocio? <button class="lnk" data-act="bizStart">Registralo en TuTiempo</button></p>'}
    <button class="btn btn-ghost btn-block" data-act="logout">Cerrar sesión</button>
    ${delBox("cli", upcoming)}
   </div>`;

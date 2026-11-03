@@ -354,7 +354,7 @@ registerSubmit("fTurno", (ev) => {
     }
     pushNotice(prov.id, "conf", first);
     notif(
-      `<span class="mp" style="background:var(--brand)">🔔</span><div><b>${esc(prov.name)}</b> ya tiene tu turno en su agenda.<br><span class="hint">En la demo, entrá como Prestador y abrí Agenda para verlo.</span></div>`,
+      `<span class="mp" style="background:var(--brand)">🔔</span><div><b>${esc(prov.name)}</b> ya tiene tu turno en su agenda.<br><span class="hint">En la demo, entrá como Profesional y abrí Agenda para verlo.</span></div>`,
     );
   }
   S.slot = null;
