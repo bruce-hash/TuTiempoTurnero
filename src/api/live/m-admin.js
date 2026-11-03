@@ -21,7 +21,10 @@ Object.assign(LM, {
   // C29: tarjetas de sellos para toda la plataforma
   adminSetStamps: (on) => saved(sb.rpc("admin_set_stamps", { p_on: on })),
   // C41/C42 (V6): "Avisarle" a un prestador activo sin Mercado Pago (aviso en la app y push; uno por día)
-  adminNudgeMp: (prov) => saved(sb.rpc("admin_nudge_mp", { p_provider: prov.id })),
+  // v2 (3/11): con el texto que eligió el admin (si no, el de siempre)
+  adminNudgeMp: (prov) => saved(sb.rpc("admin_nudge_mp", { p_provider: prov.id, p_body: prov.body || null })),
+  // v2 (3/11): avisos del panel de TuTiempo vistos o borrados (admin_alert_marks)
+  adminAlertMark: ({ keys, dismiss }) => saved(sb.rpc("admin_alert_mark", { p_keys: keys, p_dismiss: !!dismiss })),
   adminSetProvider: (providerId, status, verified) =>
     saved(
       sb.rpc("admin_set_provider", {

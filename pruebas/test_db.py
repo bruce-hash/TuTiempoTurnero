@@ -963,8 +963,27 @@ ok("V6: le queda el aviso en la app, con el camino para conectarlo", len(nt) == 
 ok("V6: el prestador lo ve entre sus avisos", any(n["kind"] == "mp_connect" for n in (q("select my_provider_notices()", uid=own6)[0][0] or [])))
 ok("V6: un segundo aviso el mismo día no se repite", q("select admin_nudge_mp(%s)", (p6,), uid=adm6)[0][0] == {"sent": False}
    and q("select count(*) from provider_notices where provider_id=%s", (p6,))[0][0] == 1)
+# v2 (3/11): «Avisarle» con el mensaje que eligió el admin (entre 10 y 500 letras)
+q("delete from provider_notices where provider_id=%s", (p6,))
+ok("v2: un mensaje demasiado corto se rechaza", err(q("select admin_nudge_mp(%s, %s)", (p6, "Hola"), uid=adm6), "bad_body"))
+ok("v2: el admin le manda su propio mensaje", q("select admin_nudge_mp(%s, %s)", (p6, "Hola Sin MP: conectá Mercado Pago así te reservan online."), uid=adm6)[0][0] == {"sent": True}
+   and q("select body from provider_notices where provider_id=%s and kind='mp_connect'", (p6,))[0][0] == "Hola Sin MP: conectá Mercado Pago así te reservan online.")
+ok("v2: el mensaje personalizado también es solo del admin", err(q("select admin_nudge_mp(%s, %s)", (p6, "Un mensaje cualquiera"), uid=own6), "forbidden"))
 conectar_mp(p6)
 ok("V6: a uno que ya puede cobrar no se le avisa", err(q("select admin_nudge_mp(%s)", (p6,), uid=adm6), "already_connected"))
+
+# ---------- v2 (3/11) · avisos del panel de TuTiempo que se pueden borrar ----------
+ok("v2: el admin arranca sin avisos vistos", q("select admin_alert_marks_get()", uid=adm6)[0][0] == {})
+ok("v2: marca dos avisos como vistos", q("select admin_alert_mark(%s, false)", (["nomp:1,2", "pend:5"],), uid=adm6)[0][0] == 2)
+mk = q("select admin_alert_marks_get()", uid=adm6)[0][0]
+ok("v2: …quedan vistos y sin borrar", set(mk) == {"nomp:1,2", "pend:5"} and mk["nomp:1,2"]["seen"] and mk["nomp:1,2"]["dismissed"] is None)
+q("select admin_alert_mark(%s, true)", (["nomp:1,2"],), uid=adm6)
+mk = q("select admin_alert_marks_get()", uid=adm6)[0][0]
+ok("v2: borrar uno lo deja borrado (el otro sigue)", mk["nomp:1,2"]["dismissed"] is not None and mk["pend:5"]["dismissed"] is None)
+ok("v2: las marcas son de cada admin", q("select admin_alert_marks_get()", uid=adm)[0][0] == {})
+ok("v2: nadie más las lee ni las escribe", err(q("select admin_alert_marks_get()", uid=own6), "forbidden") and err(q("select admin_alert_mark(%s, true)", (["x"],), uid=own6), "forbidden")
+   and err(q("select * from admin_alert_marks", uid=adm6)) and err(q("select admin_alert_marks_get()", role="anon")))
+ok("v2: hasta 100 claves por vez", err(q("select admin_alert_mark(%s, true)", ([f"k{i}" for i in range(101)],), uid=adm6), "too_many"))
 
 # ---------- V4 resto · C31 gastos fijos · C36 precio de compra ----------
 own7 = mkuser("fijos7@test.ar", "Fijos")

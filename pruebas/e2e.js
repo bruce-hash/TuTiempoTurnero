@@ -684,6 +684,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.goto(BASE); await wait(1500); await menu("[data-go=cuenta]");
   ok("admin: botón del panel en Mi perfil", (await pg.locator("#app [data-act=toAdmin]").count()) === 1);
   ok("Bloque D: y en el menú de cuenta", (await pg.locator("#acctMenu [data-act=toAdmin]").count()) === 1);
+  ok("v2: la cuenta admin no tiene «Registrá tu negocio» en el menú de cuenta", (await pg.locator("#acctMenu [data-act=bizStart]").count()) === 0);
   await pg.click("#app [data-act=toAdmin]"); await pg.waitForSelector(".kpis.adm", { timeout: 8000 }).catch(() => {}); await wait(500);
   ok("admin: tablero con datos reales", (await pg.locator(".kpis.adm .kpi").count()) === 8 && (await pg.locator(".admtop li").count()) >= 2);
   ok("v30: sin la proyección y con el tablero simple (hoy/ayer + 4 semanas)", !(await txt()).includes("cerrás el mes") && (await pg.locator(".admday>div").count()) === 2 && (await pg.locator(".wkrow").count()) === 4 && (await pg.locator(".admbars").count()) === 0);
@@ -793,10 +794,32 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pg.click("[data-act=admT][data-f=nomp]"); await wait(400);
     ok("C42: «Ver quiénes» abre Prestadores con el filtro «Sin Mercado Pago»", (await pg.locator('[data-act=admF][data-f=nomp][aria-pressed=true]').count()) === 1
        && (await pg.locator(".admgrp li").count()) >= 1 && !(await pg.locator(".admgrp").innerText()).includes("Sofía"));
-    await pg.click(`[data-act=admNudge][data-id="${nomp.id}"]`);
+    // v2 (3/11): antes de mandar, el cuadro con el mensaje (editable) y por dónde le llega; Cancelar no manda nada
+    await pg.click(`[data-act=admNudge][data-id="${nomp.id}"]`); await wait(300);
+    ok("v2: «Avisarle» muestra el mensaje que se va a mandar, editable, y que llega como aviso en la app y push, con Enviar y Cancelar",
+       /conectá tu cuenta de Mercado Pago/.test(await pg.inputValue("#admNudgeTxt")) && /aviso en su panel/.test(await pg.locator(".nudgebox").innerText()) && /notificación push/.test(await pg.locator(".nudgebox").innerText())
+       && (await pg.locator(".nudgebox [data-act=admNudgeSend]").count()) === 1 && (await pg.locator(".nudgebox [data-act=admNudgeCancel]").count()) === 1);
+    await pg.click("[data-act=admNudgeCancel]"); await wait(300);
+    ok("v2: Cancelar cierra el cuadro y no manda nada", (await pg.locator(".nudgebox").count()) === 0
+       && (await q("select count(*)::int c from provider_notices where provider_id=$1 and kind='mp_connect'", [nomp.id]))[0].c === 0);
+    await pg.click(`[data-act=admNudge][data-id="${nomp.id}"]`); await wait(300);
+    await pg.fill("#admNudgeTxt", "Hola: conectá Mercado Pago así tus clientes reservan online.");
+    await pg.click("[data-act=admNudgeSend]");
+    ok("v2: Enviar manda el mensaje editado", await until("select body from provider_notices where provider_id=$1 and kind='mp_connect'", [nomp.id], (r) => r.length === 1 && r[0].body === "Hola: conectá Mercado Pago así tus clientes reservan online."));
     ok("C41/C42: «Avisarle» le deja el aviso para conectar Mercado Pago", await until("select count(*)::int c from provider_notices where provider_id=$1 and kind='mp_connect'", [nomp.id], (r) => r[0].c === 1)
        && (await pg.locator(`li:has([data-act=admOpen][data-id="${nomp.id}"]) .chip:text("Avisado")`).count()) === 1);
     await pg.evaluate(() => { S.admF = "todos"; render() }); await wait(300);
+    // v2 (3/11): los avisos del Resumen se pueden borrar (uno, o «Borrar los leídos»), y uno borrado no vuelve
+    await pg.evaluate(() => { S.admT = "res"; render() }); await wait(600);
+    const keyNomp = await pg.evaluate(() => document.querySelector("li.admal[data-k^='nomp:']")?.dataset.k || "");
+    ok("v2: el aviso de los que no conectaron Mercado Pago se puede borrar (✕) y aparece como nuevo la primera vez",
+       !!keyNomp && (await pg.locator(`li.admal[data-k="${keyNomp}"] [data-act=admAlertDel]`).count()) === 1 && (await pg.locator(`li.admal.new[data-k="${keyNomp}"]`).count()) === 1);
+    ok("v2: al verlo queda marcado como visto en la base", await until("select count(*)::int c from admin_alert_marks where key=$1 and dismissed_at is null", [keyNomp], (r) => r[0].c === 1));
+    await pg.click(`li.admal[data-k="${keyNomp}"] [data-act=admAlertDel]`); await wait(500);
+    ok("v2: borrado: sale de la lista y queda borrado en la base", (await pg.locator(`li.admal[data-k="${keyNomp}"]`).count()) === 0
+       && (await q("select count(*)::int c from admin_alert_marks where key=$1 and dismissed_at is not null", [keyNomp]))[0].c === 1);
+    await pg.evaluate(async () => { await api.adminLoad(); render() }); await wait(500);
+    ok("v2: al volver a cargar el panel, el aviso borrado no vuelve", (await pg.locator(`li.admal[data-k="${keyNomp}"]`).count()) === 0);
   }
   // v30: prestadores por rubro, notas privadas, eliminar
   await pg.click("[data-act=admT][data-t=prov]"); await wait(400);

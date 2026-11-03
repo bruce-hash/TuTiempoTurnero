@@ -320,3 +320,12 @@ body.am-open{overflow:hidden}
  .biz-acts{flex-direction:column-reverse;align-items:stretch}.biz-acts .btn-pri{min-width:0}
  .bizcta{flex-direction:column;align-items:stretch}
 }
+
+/* v2 (3/11): avisos del panel de TuTiempo que se pueden borrar y el cuadro de «Avisarle» */
+.adml li.admal{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.adml li.admal > div{flex:1;min-width:0}
+.adml li.admal.new{background:var(--warn-soft);border-radius:8px}
+.admal-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.admal-h .lbl{margin:0}
+.nudgebox{margin-top:8px;flex-basis:100%;text-align:left}
+.nudgebox textarea{width:100%;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--fg);resize:vertical}
