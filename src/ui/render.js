@@ -120,15 +120,26 @@ function segNow() {
 // C02: mientras arranca (sesión y dirección sin resolver) solo la carga mínima, nunca el inicio ni otra pantalla
 function renderBoot() {
   const app = document.getElementById("app");
-  if (app && !app.querySelector(".bootload")) {
-    app.innerHTML = BOOT_HTML;
+  const kind = bootKind();
+  if (app && !app.querySelector(`.bootload[data-sk="${kind}"]`)) {
+    app.innerHTML = bootHtml(kind);
   }
   const logo = document.getElementById("logoLink");
   if (logo && !logo.innerHTML) {
     logo.innerHTML = LOGO;
   }
 }
-export const BOOT_HTML = '<div class="bootload" role="status" aria-label="Cargando"><span class="bootbar"></span></div>';
+// v2 (opcional del cliente): la carga es un esqueleto (bloques grises con la forma de la página) en lugar de una barra.
+// El del panel imita la cabecera, el menú de 4 × 2 y la Agenda; el general, el inicio (el mismo que trae index.html).
+const bootKind = () => (/^\/panel(\/|$)/.test(location.pathname) ? "panel" : "inicio");
+const sk = (cls, n = 1) => Array.from({ length: n }, () => `<i class="sk ${cls}"></i>`).join("");
+export const bootHtml = (kind = "inicio") =>
+  `<div class="bootload" data-sk="${kind}" role="status" aria-label="Cargando"><span class="vh">Cargando…</span>` +
+  (kind === "panel"
+    ? `<div class="sk-col sk-pb"><div class="sk-side">${sk("sk-card sk-h")}<div class="sk-tabs">${sk("sk-tab", 8)}</div></div><div class="sk-main">${sk("sk-line w60")}<div class="sk-row">${sk("sk-stat", 3)}</div>${sk("sk-card sk-tall")}</div></div>`
+    : `<div class="sk-col sk-center">${sk("sk-pill")}${sk("sk-title")}${sk("sk-title w60")}${sk("sk-line")}${sk("sk-line w80")}${sk("sk-search")}<div class="sk-grid">${sk("sk-tile", 6)}</div></div>`) +
+  "</div>";
+export const BOOT_HTML = bootHtml("inicio");
 export function render() {
   if (S.booting) {
     renderBoot();
