@@ -76,6 +76,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     persona) y push «Nuevo seguidor» con su interruptor propio (`profiles.push_followers`, «Nuevos seguidores»).
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
+  - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma
+    (`LOGO`, `ISO`, `IMAGO`) y `tools/iconos.mjs` saca de ahí los íconos de la app, el favicon y el logo de los emails
+    (PNG en `public/icons/`). La paleta del manual está en el segmento TuTiempo de `src/styles/tokens.css`; el texto verde es #07774F.
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en

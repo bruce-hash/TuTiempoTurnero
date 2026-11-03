@@ -28,7 +28,8 @@ export function qrSheet(prov, logo) {
   return `<section class="qrsheet" aria-hidden="true"><div class="qs-logo">${logo}</div>
    <h1>${esc(prov.name)}</h1><p class="qs-lead">Reservá tu turno online</p>
    <div class="qs-qr">${qr(profileUrl(prov), 340)}</div>
-   <p class="qs-how">Escaneá el código con la cámara del celular</p><p class="qs-link">${esc(profileLinkText(prov))}</p></section>`;
+   <p class="qs-how">Escaneá el código con la cámara del celular</p><p class="qs-link">${esc(profileLinkText(prov))}</p>
+   <p class="qs-claim">TU TIEMPO. SU SOLUCIÓN. AL INSTANTE.</p></section>`;
 }
 // QR con la dirección del perfil (Bloque B), con qrcode-generator 2.0.4 (MIT, ver docs/licencias.md): corrección de
 // errores media y 4 módulos de margen blanco, como pide el estándar para que lo lean todas las cámaras

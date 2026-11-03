@@ -92,7 +92,7 @@ const PUSH_STUB = `(() => {
   const mres = await fetch(BASE + "/manifest.webmanifest");
   const man = await mres.json();
   ok("manifest: nombre, nombre corto, inicio, standalone, colores y es-AR", man.name === "TuTiempo · Turnos en Olavarría" && man.short_name === "TuTiempo" && man.start_url === "/"
-     && man.scope === "/" && man.display === "standalone" && man.theme_color === "#121212" && man.background_color === "#fafaf9" && man.lang === "es-AR");
+     && man.scope === "/" && man.display === "standalone" && man.theme_color === "#04122E" && man.background_color === "#F8F5F1" && man.lang === "es-AR");
   const sizes = {};
   for (const icon of man.icons) {
     const r = await fetch(BASE + icon.src);

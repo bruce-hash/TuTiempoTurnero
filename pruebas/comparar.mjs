@@ -145,6 +145,15 @@ async function normalizar(page) {
     // V7 (C50, C51, cambio a propósito): el footer suma el teléfono y las redes y saca "Prototipo"; se esconde igual que la
     // cabecera (su contenido lo prueba pruebas/e2e.js)
     document.querySelectorAll("footer").forEach((el) => Object.assign(el.style, { visibility: "hidden", height: "360px", overflow: "hidden", boxSizing: "border-box" }));
+    // C04 (cambio a propósito): la paleta y la tipografía del manual de marca en el segmento TuTiempo (inicio, admin). En
+    // las dos versiones vuelven los colores y la letra de antes, para comparar todo lo demás; la marca nueva la prueban
+    // e2e.js (logo, lema) y pwa.js (íconos y colores del manifest), y las capturas del PR.
+    if (!document.getElementById("cmp-c04")) {
+      document.head.insertAdjacentHTML("beforeend", `<style id="cmp-c04">:root,body[data-seg="n"],.seg-n{--bg:#fafaf9;--fg:#121212;--muted:#4d4c48;--line:#e7e5e4;
+        --brand:#121212;--brand-dark:#000;--brand-soft:#f5f5f4;--brand-line:#d6d3d1;--ok:#15803d;--ok-soft:#e7f5ec;--ok-line:#b5e0c3;
+        --font-d:var(--font);--d-ls:-.02em;--hero-bg:linear-gradient(180deg,#ffffff,#f3f2ee);--hero-fg:#121212;--hero-muted:#5b5b57;--hero-em:#121212;
+        --hero-chip:rgba(0,0,0,.06);--hero-bd:#e5e4df;--bar-bg:#121212;--bar-muted:#b5b5b0;--bar-btn-fg:#121212;--glow:rgba(18,18,18,0.4)}</style>`);
+    }
     // V1 (D30, cambio a propósito): la comisión de TuTiempo pasa a ser un % de la seña y se suma el costo de Mercado Pago:
     // cambian los montos y los textos de la comisión (barra de reserva, política del turnero, confirmación, turno pagado),
     // Horarios suma el plazo de acreditación, la pestaña Comisión es otra y las comisiones de la demo cambian (Resumen y
