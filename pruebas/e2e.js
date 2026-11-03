@@ -142,10 +142,15 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pv.waitForFunction(() => document.querySelector("#app")?.innerText.includes("$13.500"), null, { timeout: 8000 }).catch(() => {});
     ok("C52: el perfil abierto muestra el precio nuevo al volver a la pestaña (sin recargar)", antes && (await pv.locator("#app").innerText()).includes("$13.500"));
     // D31 (V3): la app muestra los mismos horarios que la base acepta (slot_starts), contando el turno de Ana
-    const d31 = (await q("select to_char(starts_at at time zone 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD') d from bookings where client_id = (select id from auth.users where email='ana@test.ar') order by id desc limit 1"))[0].d;
+    let d31 = (await q("select to_char(starts_at at time zone 'America/Argentina/Buenos_Aires', 'YYYY-MM-DD') d from bookings where client_id = (select id from auth.users where email='ana@test.ar') order by id desc limit 1"))[0].d;
     const hoy31 = (await q("select to_char(now() at time zone 'America/Argentina/Buenos_Aires' + interval '61 minutes', 'YYYY-MM-DD HH24:MI') h"))[0].h;
-    const desde31 = d31 === hoy31.slice(0, 10) ? hoy31.slice(11) : "00:00";
-    const srv31 = (await q("select to_char(s, 'HH24:MI') t from slot_starts($1, $2::date, 60) s order by s", [sid, d31])).map((r) => r.t).filter((t) => t >= desde31);
+    let desde31 = d31 === hoy31.slice(0, 10) ? hoy31.slice(11) : "00:00";
+    const base31 = async () => (await q("select to_char(s, 'HH24:MI') t from slot_starts($1, $2::date, 60) s order by s", [sid, d31])).map((r) => r.t).filter((t) => t >= desde31);
+    let srv31 = await base31();
+    // si el turno de Ana es hoy y ya no quedan horarios (de tarde-noche en Argentina), el próximo día con horarios
+    for (let i = 0; !srv31.length && i < 7; i++) {
+      d31 = (await q("select to_char($1::date + 1, 'YYYY-MM-DD') d", [d31]))[0].d; desde31 = "00:00"; srv31 = await base31();
+    }
     const cli31 = (await pv.evaluate(([pid, d]) => slotsFor(pid, d, 60, null, true).list.filter((x) => x.free).map((x) => x.time), [sid, d31])).filter((t) => t >= desde31);
     ok("D31: la app y la base calculan los mismos horarios (servicio de 60 min, el día del turno de Ana)", srv31.length > 0 && JSON.stringify(srv31) === JSON.stringify(cli31), JSON.stringify([srv31, cli31]));
     await db.query("update services set price = 12000 where name = 'Esmaltado semipermanente'");
