@@ -32,7 +32,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await opener.click(); await wait();
   ok("ingreso: abre una ventana sobre la misma página (role=dialog con título)", (await pg.isVisible(".authmodal #fLogin")) && pg.url() === urlHome && (await pg.locator(".grid .card").count()) === 2
      && (await pg.evaluate(() => document.body.classList.contains("am-open"))) && (await pg.getAttribute(".authmodal", "role")) === "dialog" && (await pg.locator("#amTitle").innerText()).length > 0);
-  ok("ingreso: sin elegir cliente o prestador (una cuenta = una persona)", (await pg.locator(".am-tabs, [data-act=authSide], #fBarb").count()) === 0 && (await pg.locator(".am-sub").innerText()).includes("Clientes y prestadores entran por acá"));
+  ok("ingreso: sin elegir cliente o profesional (una cuenta = una persona)", (await pg.locator(".am-tabs, [data-act=authSide], #fBarb").count()) === 0 && (await pg.locator(".am-sub").innerText()).includes("Clientes y profesionales entran por acá"));
   ok("ingreso: en el celular no enfoca un campo (no abre el teclado tapando la ventana)", await pg.evaluate(() => document.activeElement && document.activeElement.classList.contains("am-box")));
   ok("ingreso: debajo de Google, la aceptación de los Términos y la Política de privacidad", /Al continuar, aceptás los Términos y la Política de privacidad/.test(await pg.locator(".authmodal .gterms").innerText()) && (await pg.locator(".authmodal .gterms [data-go=terminos]").count()) === 2);
   // el foco no se escapa de la ventana
