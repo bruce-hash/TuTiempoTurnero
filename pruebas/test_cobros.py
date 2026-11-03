@@ -803,7 +803,9 @@ ok("D30: Mercado Pago cobró un % que no es el de ningún plazo (6,31%): el turn
    bk(b31)[0] == "confirmed" and pm31 == ("review", ["mp_cost_mismatch"], 400, 336)
    and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10")
 nt = one("select body from provider_notices where provider_id = %s and kind = 'mp_cost' and ref = 'costo-P-D30-MAL'", (pid,))
-ok("D30: el prestador recibe el aviso con los dos números", nt is not None and "6,31% ($400)" in nt and "5,31% ($336)" in nt and "plazo" in nt)
+ok("D30: el prestador recibe el aviso con los dos números", nt is not None and "6,31% ($400)" in nt and "5,31% ($336)" in nt)
+ok("v2: el aviso ya no manda a «tu perfil (Cobros)»: «Si tu cuenta tiene otras tasas, avisanos.»",
+   nt.endswith("en el pago n° P-D30-MAL. Si tu cuenta tiene otras tasas, avisanos.") and "Cobros" not in nt)
 ok("D30: el admin ve los dos números en Para revisar", any(x["mp_payment_id"] == "P-D30-MAL" and x["mp_cost"] == 400 and x["mp_cost_expected"] == 336
    for x in one("select admin_review()", uid=adm)["payments"]))
 r32 = book(sv, at(28, 11), cli)[0][0]; b32 = r32["booking_ids"][0]
@@ -898,6 +900,9 @@ q("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
 # ---------- La migración completa se puede volver a correr sobre una base con datos ----------
 import os
 todo = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "supabase", "TODO_EN_UNO.sql"), encoding="utf8").read()
+# v2: un aviso de D30 con el texto viejo (de antes de la migración) se reescribe al correrla
+q("""insert into provider_notices (provider_id, kind, ref, body) values (%s, 'mp_cost', 'costo-VIEJO',
+     'Mercado Pago te cobró 6,31%% ($400) en vez de 5,31%% ($336) en el pago n° VIEJO: revisá que el plazo de acreditación de tu perfil (Cobros) sea el mismo que el de tu cuenta de Mercado Pago.')""", (pid,))
 for vez in (1, 2):
     with conn.cursor() as c:
         c.execute(todo)
@@ -905,6 +910,8 @@ ok("TODO_EN_UNO.sql se puede volver a correr 2 veces sobre esta base", one("sele
 ok("D30: volver a correr la migración no cambia las comisiones cargadas ni el plazo del prestador",
    one("select row(deposit_commission_pct, mp_pct_d10)::text from app_settings") == "(10.00,5.31)"
    and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10")
+ok("v2: el aviso de D30 que tenía el texto viejo queda con el nuevo (no se borra)",
+   one("select body from provider_notices where ref = 'costo-VIEJO'") == "Mercado Pago te cobró 6,31% ($400) en vez de 5,31% ($336) en el pago n° VIEJO. Si tu cuenta tiene otras tasas, avisanos.")
 ok("…y los datos siguen igual", one("select count(*) from payments") > 10 and one("select status from mp_accounts where id = %s", (acc1,)) == "active"
    and one("select count(*) from mp_accounts where access_token !~ '^v[0-9]+:'") == 0)
 
