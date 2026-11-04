@@ -74,6 +74,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     sellos pregunta ahí). En la base, `stamp_add` no suma ni canjea con los sellos apagados (`stamps_off`); los datos quedan.
   - V8 (C06): seguidor nuevo → `provider_notices` `new_follower` (trigger `follows_notice`, nombre de pila, una vez por
     persona) y push «Nuevo seguidor» con su interruptor propio (`profiles.push_followers`, «Nuevos seguidores»).
+  - 4/11 B1 (`docs/08-pago-app-instalada.md`): `src/lib/cobro-pendiente.js` guarda el cobro abierto antes de ir a Mercado
+    Pago (turno y token, `tt_cobro`) y al abrir o volver a la app lo confirma sola (no depende de la vuelta, que en iPhone se
+    abre en Safari; la vuelta lleva `app=1` y dice «Volvé a la app»). `src/lib/actualizar.js`: datos de la pantalla al
+    volver a primer plano y, en la app instalada, deslizar para actualizar y «Actualizar» en el menú.
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma
