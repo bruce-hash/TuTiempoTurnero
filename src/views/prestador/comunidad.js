@@ -16,7 +16,7 @@ export function vBComunidad(prov) {
   <div class="panel avisarpanel"><p class="lbl">Avisar a tus seguidores</p>
    <div class="f" style="margin-bottom:10px"><label for="postTxt">Mensaje</label><textarea id="postTxt" placeholder="Ej: Hoy me quedan lugares de 15 a 17 h"></textarea></div>
    <button class="btn btn-pri btn-block" data-act="publicar">Enviar a ${store.COMM.followers} seguidores</button>
-   <p class="note" style="margin-top:6px">Les llega una notificación con link para reservar.</p></div>
+   <p class="note" style="margin-top:6px">A cada uno le llega un aviso en la app y una notificación con el link a tu perfil. Hasta 5 avisos por día, contando los huecos que ofrecés desde la Agenda.</p></div>
   <div class="panel"><p class="lbl">Reseñas de clientes</p>${reviewsHtml(true)}</div>
   <div class="panel" style="text-align:center"><p class="lbl">Sumá seguidores</p><div class="qr" aria-hidden="true">${qr(profileUrl(prov))}</div><p style="margin:8px 0 2px;font-weight:700">${esc(profileLinkText(prov))}</p><p class="note">Imprimí el QR para el espejo y poné el link en tu bio de Instagram.</p>
    <button class="btn btn-pri btn-block" data-act="qrPrint">🖨 Imprimir o guardar el QR en PDF</button>

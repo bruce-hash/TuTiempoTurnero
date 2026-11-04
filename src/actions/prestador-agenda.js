@@ -14,21 +14,23 @@ import { toast } from "../ui/toast.js";
 import { pushCancel } from "../views/prestador/bloqueo-dias.js";
 import { feeOf } from "../views/prestador/finanzas.js";
 import { pushNotice } from "../views/prestador/mensajes.js";
+import { sendOffer } from "./ofrecer.js";
 
 registerClick("selClose", (ev, el, act) => {
   S.sel = null;
   S.bAsk = null;
   render();
 });
-// “Ofrecer” un hueco libre: se publica como aviso a los seguidores
+// “Ofrecer” un hueco libre: a cada seguidor le llega un aviso en la app y un push para reservarlo (4/11; antes se
+// guardaba como publicación y no le llegaba a nadie)
 registerClick("offerGap", (ev, el, act) => {
-  S.offered[el.dataset.g] = true;
   const [day, from] = el.dataset.g.split("|");
-  api.m.post(`Tengo lugar ${dayLabel(day).toLowerCase()} de ${from} a ${el.dataset.z}. Reservá en TuTiempo.`);
-  toast(
-    `Avisamos a ${store.COMM.followers} seguidores: “Tengo lugar ${dayLabel(day).toLowerCase()} de ${from} a ${el.dataset.z}”`,
-  );
-  render();
+  el.disabled = true;
+  sendOffer(day, from, el.dataset.z).then((done) => {
+    if (!done) {
+      el.disabled = false;
+    }
+  });
 });
 // el cliente vino: suma la visita y, si el servicio da sellos y reservó por la app, un sello
 registerClick("bDone", (ev, el, act) => {

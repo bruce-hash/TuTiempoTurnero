@@ -121,13 +121,9 @@ Object.assign(LM, {
       }
     }
   },
-  post: (body) =>
-    saved(
-      sb.from("posts").insert({
-        provider_id: S.me,
-        body: body,
-      }),
-    ),
+  // 4/11 · Bloque 3: "Avisar a tus seguidores" llega de verdad: aviso en la app y push a cada seguidor (notify_followers,
+  // con el tope de 5 por día compartido con "Ofrecer"). Devuelve {id, sent}.
+  post: (body) => saved(sb.rpc("notify_followers", { p_body: body })),
   reply: (review) =>
     saved(
       sb

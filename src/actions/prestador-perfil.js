@@ -121,9 +121,25 @@ registerClick("publicar", (ev, el, act) => {
     toast("Escribí un mensaje primero");
     return;
   }
-  api.m.post(text.trim().slice(0, 400));
-  toast(`Aviso enviado a ${store.COMM.followers} seguidores`);
-  render();
+  if (!(store.COMM.followers > 0)) {
+    toast("Todavía no tenés seguidores: compartí tu perfil para que te sigan.");
+    return;
+  }
+  el.disabled = true;
+  api.m
+    .post(text.trim().slice(0, 400))
+    .then((res) => {
+      const sent = LIVE ? (res && res.sent) || 0 : store.COMM.followers;
+      toast(sent ? `Listo: les avisamos a ${sent} seguidor${sent === 1 ? "" : "es"}.` : "No le llegó a nadie: ya no tenés seguidores.");
+      const box = $("#postTxt");
+      if (box) {
+        box.value = "";
+      }
+      render();
+    })
+    .catch(() => {
+      el.disabled = false;
+    });
 });
 registerClick("responder", (ev, el, act) => {
   const index = +el.dataset.i;
