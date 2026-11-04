@@ -96,6 +96,13 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   await check("mis turnos");
   await page.evaluate(() => go("cuenta"));
   await check("mi perfil");
+  // 4/11: la campanita abierta (en el celular, a lo ancho de la pantalla: sin pasarse del borde)
+  await page.click("nav [data-act=bellToggle]");
+  await page.waitForSelector(".bellpanel");
+  await check("campanita (cliente)");
+  const bellBox = await page.evaluate(() => { const r = document.querySelector(".bellpanel").getBoundingClientRect(); return [r.left, r.right, document.documentElement.clientWidth]; });
+  ok(`${name} · campanita (cliente): la lista entra en la pantalla`, bellBox[0] >= 0 && bellBox[1] <= bellBox[2], JSON.stringify(bellBox));
+  await page.keyboard.press("Escape");
   // Registrá tu negocio: los 5 pasos y el final (como un prestador con el alta a medias)
   for (const step of [1, 2, 3, 4, 5, "listo"]) {
     await page.evaluate((n) => { S.role = "cliente"; S.barberAuth = true; S.setupBy = { [S.me || 7]: { steps: [1, 2], status: "pending" } }; S.biz = {}; S.bizStep = n; go("negocio"); }, step);
@@ -105,6 +112,10 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   await page.evaluate(() => { S.setupBy = {}; });
   // prestador y admin
   await role("barbero");
+  await page.click("nav [data-act=bellToggle]");
+  await page.waitForSelector(".bellpanel");
+  await check("campanita (profesional)");
+  await page.keyboard.press("Escape");
   for (const tab of ["agenda", "finanzas", "clientes", "productos", "horarios", "stats", "comunidad", "perfil"]) {
     await page.click(`[data-btab=${tab}]`);
     await check(`panel · ${tab}`);
