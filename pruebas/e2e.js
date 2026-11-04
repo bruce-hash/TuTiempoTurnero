@@ -557,19 +557,25 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("V4b: un solo medio vuelve al resto entero (sin partes)", (await q("select rest_parts, rest_method from bookings where id=$1", [bd.id]))[0].rest_method === "transfer"
        && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
     // C30 (V4 resto): antes de cerrar el día, lo pendiente: turnos de hoy sin marcar y cobros sin medio de pago (el
-    // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba)
+    // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba). Se cuentan los pendientes
+    // que ya había: de noche en Argentina, otro turno de hoy de esta prueba ya empezó y también figura (falló a las 20 h)
+    await pg.reload(); await wait(1500);
+    await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
+    if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(600); }
+    const pend0 = +((await pg.locator(".pendday .lbl").innerText().catch(() => "")).match(/(\d+) pendiente/) || [0, 0])[1];
     await q("insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1,$2,'Pendiente C30','Corte','manual','confirmed',($3||' 00:00')::timestamp at time zone 'America/Argentina/Buenos_Aires',($3||' 00:30')::timestamp at time zone 'America/Argentina/Buenos_Aires',4000)", [sv.provider_id, sv.id, hoyBA]);
     await pg.reload(); await wait(1500);
     await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
     if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(600); }
-    ok("C30: antes de cerrar avisa el turno de hoy sin marcar", /Antes de cerrar · 1 pendiente/i.test(await txt()) && (await pg.locator('.pendday li:has-text("Pendiente C30") [data-act=bDone]').count()) === 1
+    ok("C30: antes de cerrar avisa el turno de hoy sin marcar", new RegExp(`Antes de cerrar · ${pend0 + 1} pendiente`, "i").test(await txt()) && (await pg.locator('.pendday li:has-text("Pendiente C30") [data-act=bDone]').count()) === 1
        && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText()));
     await pg.click('.pendday li:has-text("Pendiente C30") [data-act=bDone]'); await wait(900);
     ok("C30: «Vino» lo marca y pasa a pedir con qué pagó", (await q("select status from bookings where client_name='Pendiente C30'"))[0].status === "done"
        && /¿Cómo te pagó \$4\.000\?/.test(await pg.locator(".pendday").innerText()));
     await pg.click('.pendday li:has-text("Pendiente C30") [data-act=restMedio][data-m="Efectivo"]'); await wait(800);
     ok("C30: con el medio anotado no queda nada pendiente y el botón vuelve a «Cerrar la caja»", (await q("select rest_method from bookings where client_name='Pendiente C30'"))[0].rest_method === "cash"
-       && (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText()));
+       && (pend0 ? (await pg.locator('.pendday li:has-text("Pendiente C30")').count()) === 0 && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText())
+                 : (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText())));
     // C36 (V4 resto): precio de compra y "Vendí uno" desde Productos, que entra en la Caja del día
     await pg.click("[data-btab=productos]"); await wait(300);
     await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Cera C36"); await pg.fill("#pnp", "8000"); await pg.fill("#pnc", "4500"); await pg.fill("#pns", "2");
