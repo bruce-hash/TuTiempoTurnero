@@ -1296,6 +1296,82 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok(`D32: (la vuelta de Google entró con la cuenta ${email})`, (await pgg.evaluate(() => S.user && S.user.email)) === email && JSON.stringify(await (await fetch(BASE + "/__log")).json()).includes(email));
     await cg.close();
   }
+  {
+    // 4/11 · Bloque 3: seguidores. Sofía en su panel y Ana (clienta) en otra sesión.
+    const sofi = (await q("select id, slug from providers where name like 'Sofía%'"))[0];
+    await db.query("delete from follows where provider_id = $1", [sofi.id]);
+    await db.query("update auth.users set encrypted_password = 'cliente12345', email_confirmed_at = coalesce(email_confirmed_at, now()) where email = 'ana@test.ar'");
+    const anaId = (await q("select id from auth.users where email = 'ana@test.ar'"))[0].id;
+    const login = async (page, email, pass) => {
+      await page.goto(BASE + "/ingresar"); await page.waitForSelector("#ai_e");
+      await page.fill("#ai_e", email); await page.fill("#ai_p", pass); await page.click("#fLogin button[type=submit]"); await page.waitForTimeout(1500);
+    };
+    const ctxS = await b.newContext({ viewport: { width: 400, height: 900 } }); const ps = await ctxS.newPage(); ps.on("pageerror", (e) => errs.push(e.message));
+    const ctxA = await b.newContext({ viewport: { width: 400, height: 900 } }); const pa = await ctxA.newPage(); pa.on("pageerror", (e) => errs.push(e.message));
+    const stxt = () => ps.locator("#app").innerText();
+    const volver = () => ps.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await login(ps, "sofia@test.ar", "prestador123");
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".ctabs", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(800);
+    ok("4/11: Clientes tiene la pestaña Seguidores (con su dirección), vacía al principio",
+       (await ps.locator(".ctabs [data-t=seguidores][aria-pressed=true]").count()) === 1 && /Todavía no te sigue nadie/.test(await stxt()) && /Seguidores\s*0/.test(await ps.locator(".ctabs").innerText()));
+    // Ana la sigue desde el perfil
+    await login(pa, "ana@test.ar", "cliente12345");
+    await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector("[data-act=seguir]", { timeout: 8000 }).catch(() => {});
+    await pa.click("[data-act=seguir]");
+    await until("select count(*)::int c from follows where provider_id = $1", [sofi.id], (r) => r[0].c === 1);
+    await volver();
+    await ps.waitForFunction(() => /Ana/.test(document.querySelector(".folist")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("4/11: quien empieza a seguir aparece en la lista y en el número sin recargar (al volver a la pestaña)",
+       /Ana/.test(await ps.locator(".folist").innerText().catch(() => "")) && /Seguidores\s*1/.test(await ps.locator(".ctabs").innerText())
+       && (await ps.evaluate(() => S.notices.some((n) => n.kind === "new_follower" && /Ana empezó a seguirte/.test(n.body)))));
+    ok("4/11: de cada seguidor se ve el nombre y desde cuándo (sin email ni teléfono)", /Te sigue desde el \d{1,2}\/\d{1,2}/.test(await ps.locator(".folist").innerText()) && !/@/.test(await ps.locator(".folist").innerText()));
+    // "Ofrecer" a esa persona
+    await ps.click(".folist [data-act=folOffer]"); await ps.waitForSelector("[data-act=folOfferGo]", { timeout: 8000 }).catch(() => {});
+    const g1 = await ps.locator("[data-act=folOfferGo]:not([disabled])").first().getAttribute("data-g");
+    await ps.click(`[data-act=folOfferGo][data-g="${g1}"]`);
+    const toOne = await until("select count(*)::int c from slot_offers where provider_id = $1 and target_user = $2", [sofi.id, anaId], (r) => r[0].c === 1);
+    ok("4/11: «Ofrecer» a un seguidor le deja un aviso solo a esa persona", toOne
+       && (await q("select count(*)::int c from client_messages where kind = 'offer' and user_id = $1", [anaId]))[0].c === 1);
+    // Agenda: "Ofrecer" un hueco a todos los seguidores (el primer día con lugar)
+    await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".tl, .agwk", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    for (let i = 0; i < 10 && !(await ps.locator("[data-act=offerGap]:not([disabled])").count()); i++) {
+      const next = ps.locator(".agwk [data-aday][aria-selected=false]:not(.closed)").nth(i);
+      if (!(await next.count())) break;
+      await next.click(); await ps.waitForTimeout(250);
+    }
+    const g2 = await ps.locator("[data-act=offerGap]:not([disabled])").first().getAttribute("data-g");
+    await ps.click(`[data-act=offerGap][data-g="${g2}"]`);
+    const toAll = await until("select count(*)::int c from slot_offers where provider_id = $1 and target_user is null", [sofi.id], (r) => r[0].c === 1);
+    ok("4/11: «Ofrecer» de la Agenda les llega a los seguidores (aviso en la app con el horario)", toAll
+       && (await q("select count(*)::int c from client_messages where kind = 'offer' and user_id = $1", [anaId]))[0].c === 2
+       && /Listo: les avisamos a 1 seguidor/.test(await ps.locator(".toast").innerText().catch(() => "")));
+    await ps.reload(); await ps.waitForSelector(".tl, .agwk", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    await ps.evaluate((d) => { S.aday = d; S.awk = null; render(); }, g2.split("|")[0]); await ps.waitForTimeout(300);
+    ok("4/11: …y después de recargar sigue marcado «✓ Ofrecido»", /Ofrecido/.test(await ps.locator(`[data-act=offerGap][data-g="${g2}"]`).innerText().catch(() => "")));
+    // Ana: el aviso en Mis turnos con "Reservar", que la lleva al perfil ese día
+    await pa.goto(BASE + "/mis-turnos"); await pa.waitForSelector("[data-act=offerBook]", { timeout: 8000 }).catch(() => {});
+    ok("4/11: a la clienta le llega en Mis turnos «Tengo un turno libre…» con «Reservar»", (await pa.locator("[data-act=offerBook]").count()) === 2
+       && /Tengo un turno libre el/.test(await pa.locator("#app").innerText()));
+    const d2 = await pa.locator("[data-act=offerBook]").first().getAttribute("data-d");
+    await pa.click("[data-act=offerBook] >> nth=0"); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(400);
+    ok("4/11: «Reservar» abre el perfil con ese día elegido", new URL(pa.url()).pathname === "/" + sofi.slug && (await pa.evaluate(() => S.day)) === d2);
+    // Trabajos → "Avisar a tus seguidores": le llega a Ana, con "Ver perfil"
+    await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector("#postTxt", { timeout: 8000 }).catch(() => {});
+    await ps.fill("#postTxt", "Esta semana hay promo de esmaltado"); await ps.click("[data-act=publicar]");
+    const news = await until("select count(*)::int c from client_messages where kind = 'news' and user_id = $1", [anaId], (r) => r[0].c === 1);
+    ok("4/11: «Avisar a tus seguidores» de Trabajos les llega de verdad (aviso en la app)", news && /Listo: les avisamos a 1 seguidor/.test(await ps.locator(".toast").innerText().catch(() => "")));
+    await pa.goto(BASE + "/mis-turnos"); await pa.waitForSelector(".msg-act", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(300);
+    ok("4/11: …y en Mis turnos se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator("#app").innerText()) && (await pa.locator(".msg-act[data-go=perfil]").count()) >= 1);
+    await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector("[data-act=seguir]", { timeout: 8000 }).catch(() => {});
+    // Ana deja de seguir: sale de la lista de Sofía
+    await pa.waitForSelector("[data-act=seguir]"); await pa.click("[data-act=seguir]");
+    await until("select count(*)::int c from follows where provider_id = $1", [sofi.id], (r) => r[0].c === 0);
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".ctabs"); await ps.waitForTimeout(300);
+    await volver();
+    await ps.waitForFunction(() => /Todavía no te sigue nadie/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("4/11: quien deja de seguir sale de la lista y del número", /Todavía no te sigue nadie/.test(await stxt()) && /Seguidores\s*0/.test(await ps.locator(".ctabs").innerText()));
+    await ctxS.close(); await ctxA.close();
+  }
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));
   await b.close(); await db.end();
