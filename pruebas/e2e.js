@@ -480,9 +480,12 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.check("#rc-m", { force: true }); await wait(200); await pg.click("[data-act=svcAdd]"); await wait(200);
   const n = await pg.locator(".svcrow3").count();
   await pg.fill(`#sn${n - 1}`, "Masaje relajante"); await pg.fill(`#sd${n - 1}`, "50"); await pg.fill(`#sp${n - 1}`, "17000"); await pg.selectOption(`#sc${n - 1}`, "m");
-  await pg.click("#fDatos button[type=submit]"); await wait(1500);
-  ok("nuevo rubro y servicio en la base", (await q("select count(*)::int c from provider_categories pc join providers p on p.id=pc.provider_id where p.name like 'Sofía%' and pc.category_id='m'"))[0].c === 1
-    && (await q("select count(*)::int c from services where name='Masaje relajante'"))[0].c === 1);
+  await pg.click("#fDatos button[type=submit]");
+  // espera a que el guardado llegue a la base (hasta 6 s) en lugar de un tiempo fijo: en el CI a veces tarda más de 1,5 s
+  ok("nuevo rubro y servicio en la base",
+    await until("select count(*)::int c from provider_categories pc join providers p on p.id=pc.provider_id where p.name like 'Sofía%' and pc.category_id='m'", [], (r) => r[0].c === 1)
+    && await until("select count(*)::int c from services where name='Masaje relajante'", [], (r) => r[0].c === 1));
+  await wait(300);
   // horarios
   await pg.click("[data-btab=horarios]"); await wait(300);
   ok("C39/D31: Horarios sin 'Descanso entre turnos' ni 'Cada cuánto empieza un turno', con la regla explicada",
