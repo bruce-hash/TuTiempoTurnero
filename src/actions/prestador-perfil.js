@@ -199,11 +199,6 @@ registerClick("mpDescOk", (ev, el, act) => {
   render();
 });
 // avisos de cobros del panel: "Entendido" los marca leídos
-registerClick("noticesRead", (ev, el, act) => {
-  (S.notices || []).forEach((notice) => (notice.read = true));
-  api.m.readNotices();
-  render();
-});
 registerChange("msv", (ev) => {
   S.manSvc = +ev.target.value;
   const client = $("#mcl").value;

@@ -7,7 +7,7 @@
 /* panel del prestador en una columna: cabecera, avisos de cobros, pestañas y la sección (los avisos están en pb-main) */
 .pb .pb-side>.btabw{order:1}
 .pb .pb-main>*{order:2}
-.pb .pb-main>.pb-notices{order:0}
+
 
 @media (min-width:1024px){
   main{max-width:1200px}
@@ -18,7 +18,7 @@
   /* "← Volver" y "← Cambiar horario": a la izquierda, sobre la primera columna */
   .back{width:100%;max-width:1140px;justify-content:flex-start}
   .co .h1{text-align:left}
-  .pb .pb-side>.btabw,.pb .pb-main>*,.pb .pb-main>.pb-notices{order:0}
+  .pb .pb-side>.btabw,.pb .pb-main>*{order:0}
   /* columnas que acompañan al bajar (debajo de la cabecera fija) */
   .pp-l,.co-side,.pb-side{position:sticky;top:84px}
 
