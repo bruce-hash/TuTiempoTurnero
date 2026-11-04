@@ -74,6 +74,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     sellos pregunta ahí). En la base, `stamp_add` no suma ni canjea con los sellos apagados (`stamps_off`); los datos quedan.
   - V8 (C06): seguidor nuevo → `provider_notices` `new_follower` (trigger `follows_notice`, nombre de pila, una vez por
     persona) y push «Nuevo seguidor» con su interruptor propio (`profiles.push_followers`, «Nuevos seguidores»).
+  - 4/11 B3 (D35): Clientes → Seguidores (`src/views/prestador/seguidores.js`, `provider_followers`); «Ofrecer» de la
+    Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
+    «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
+    de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma
