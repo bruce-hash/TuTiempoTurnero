@@ -31,6 +31,12 @@ export const fresh = () => ({
   ctab: "clientes",
   offeredTo: {},
   offerFor: null,
+  // 4/11: "Crear cuenta" en ventana encima de /ingresar: lo que tenía la página (adónde volver, acción pendiente)
+  authOnPage: null,
+  // 4/11: cambiar contraseña en dos pasos ("form" y "code"); la nueva queda solo en memoria hasta confirmar el código
+  npStep: null,
+  npNew: null,
+  npResendAt: 0,
   afterSoft: false,
   login: {
     mode: "in",

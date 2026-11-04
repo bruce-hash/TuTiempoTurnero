@@ -23,6 +23,12 @@ export function openAuth(el, opts = {}) {
     go("cuenta");
     return;
   }
+  // 4/11: "Crear cuenta" siempre en ventana, también encima de la página /ingresar (la página guarda lo suyo y lo
+  // recupera al cerrar). En /crear-cuenta y /registrar-negocio (links directos) se cambia ahí mismo.
+  const overPage = AUTH_PAGES.includes(S.view) && !S.authModal && opts.mode === "up" && S.view === "login";
+  if (overPage) {
+    S.authOnPage = { after: S.after, afterSoft: S.afterSoft, pending: S.pending };
+  }
   if (opts.pending) {
     setPending(opts.pending);
   } else if (!opts.keepPending) {
@@ -30,19 +36,33 @@ export function openAuth(el, opts = {}) {
   }
   rememberOpener(el);
   S.login = { mode: opts.mode || "in", email: S.login.email || "", err: "", fails: S.login.fails || 0, locked: S.login.locked };
-  if (AUTH_PAGES.includes(S.view)) {
+  if (AUTH_PAGES.includes(S.view) && !overPage) {
     render();
     focusFirstField();
     return;
   }
   S.authModal = true;
-  S.after = location.pathname + location.search;
-  S.afterSoft = !opts.pending;
+  if (!overPage) {
+    S.after = location.pathname + location.search;
+    S.afterSoft = !S.pending;
+  }
   render();
   focusFirstField();
 }
 const closeAuth = () => {
   S.authModal = null;
+  // encima de /ingresar: la página queda como estaba
+  if (S.authOnPage) {
+    const page = S.authOnPage;
+    S.authOnPage = null;
+    S.after = page.after;
+    S.afterSoft = page.afterSoft;
+    S.pending = page.pending;
+    S.login = { mode: "in", email: S.login.email || "", err: "", fails: S.login.fails || 0, locked: S.login.locked };
+    render();
+    returnFocus();
+    return;
+  }
   S.after = null;
   S.afterSoft = false;
   clearPending();
@@ -91,6 +111,11 @@ registerClick("authMode", (ev, el, act) => {
     fails: S.login.fails || 0,
     locked: S.login.locked,
   };
+  // 4/11: "Creá una" abre la ventana (salvo en /crear-cuenta y /registrar-negocio, que ya son la página de crear cuenta)
+  if (el.dataset.m === "up" && !S.authModal && S.view !== "register" && S.view !== "negocio") {
+    openAuth(el, { mode: "up", keepPending: true });
+    return;
+  }
   if (!AUTH_PAGES.includes(S.view) && !S.authModal) {
     S.keepLogin = true;
     go(el.dataset.m === "up" ? "register" : "login");
@@ -141,45 +166,6 @@ registerClick("resendConfirm", async (ev, el, act) => {
     toast("Te lo reenviamos a " + S.login.email);
   }
 });
-registerClick("loginBack", (ev, el, act) => {
-  S.login = {
-    mode: "code",
-    email: S.login.email,
-    err: "",
-  };
-  render();
-});
-registerClick("reenviar", async (ev, el, act) => {
-  if (resendLeft(S.login.resendAt) > 0) {
-    return;
-  }
-  let token;
-  try {
-    token = await captchaToken("reenviar");
-  } catch (err) {
-    return toast(errMsg(err));
-  }
-  S.login.err = "";
-  S.login.resendAt = Date.now() + RESEND_WAIT_MS;
-  if (LIVE) {
-    sb.auth
-      .signInWithOtp({
-        email: S.login.email,
-        options: {
-          shouldCreateUser: false,
-          captchaToken: token,
-        },
-      })
-      .then((res) => {
-        if (res.error && !NO_ACCOUNT.test(res.error.message || res.error.code || "")) {
-          toast(errMsg(res.error));
-        }
-      });
-  }
-  toast("Te reenviamos el código a " + S.login.email);
-  render();
-  tickResend();
-});
 // barra de fuerza de la contraseña mientras se escribe
 registerInput(["au_p", "np1"], (ev) => {
   const score = pwScore(ev.target.value);
@@ -196,7 +182,7 @@ registerInput(["au_p", "np1"], (ev) => {
   return;
 });
 // el mismo mensaje si el email no existe o la contraseña está mal (nadie puede averiguar qué emails tienen cuenta)
-const BAD_LOGIN = "Email o contraseña incorrectos. Revisalos o entrá con un código.";
+const BAD_LOGIN = "Email o contraseña incorrectos. Revisalos o recuperá tu contraseña.";
 // demo: cuentas de ejemplo de prestadores (H18: nada de esto vale en vivo)
 const DEMO_PROVIDERS = LIVE
   ? {}
@@ -354,109 +340,5 @@ registerSubmit("fForgot", (ev) => {
     return;
   }
   showSent();
-  return;
-});
-// lo que responde Supabase cuando el email no tiene cuenta y no se deja crear una (shouldCreateUser: false)
-const NO_ACCOUNT = /signups not allowed|otp_disabled|user not found/i;
-registerSubmit("fMail", (ev) => {
-  const email = $("#le").value.trim();
-  S.login.email = email;
-  if (!email) {
-    return showFieldErrors({ le: "Escribí tu email." }, "lerr");
-  }
-  if (!EMAIL.test(email)) {
-    return showFieldErrors({ le: "Ese email no es válido. Revisalo, por ejemplo: nombre@gmail.com" }, "lerr");
-  }
-  const keep = !$("#le_rem") || $("#le_rem").checked;
-  S.login.remember = keep;
-  if (LIVE) {
-    captchaToken("fMail")
-      .then((token) =>
-        sb.auth.signInWithOtp({
-          email: email,
-          options: {
-            // solo para cuentas que ya existen: antes creaba una cuenta sin aceptar los términos
-            shouldCreateUser: false,
-            captchaToken: token,
-          },
-        }),
-      )
-      .then((res) => {
-        // "no existe la cuenta" no se muestra: la pantalla es la misma exista o no
-        if (res.error && !NO_ACCOUNT.test(res.error.message || res.error.code || "")) {
-          S.login.err = errMsg(res.error);
-          render();
-          return;
-        }
-        rememberEmail(email, keep);
-        S.login = {
-          mode: "codeSent",
-          email: email,
-          err: "",
-          resendAt: Date.now() + RESEND_WAIT_MS,
-        };
-        toast("Código enviado a " + email);
-        render();
-        tickResend();
-      });
-    return;
-  }
-  rememberEmail(email, keep);
-  S.login = {
-    mode: "codeSent",
-    email: email,
-    err: "",
-    resendAt: Date.now() + RESEND_WAIT_MS,
-  };
-  toast("Código enviado a " + email);
-  render();
-  tickResend();
-  return;
-});
-// ingreso con código por email (en la demo el código es 123456)
-registerSubmit("fCode", (ev) => {
-  const code = $("#lc").value.replace(/\D/g, "");
-  if (code.length !== 6) {
-    S.login.err = "El código tiene 6 dígitos.";
-    render();
-    return;
-  }
-  if (LIVE) {
-    sb.auth
-      .verifyOtp({
-        email: S.login.email,
-        token: code,
-        type: "email",
-      })
-      .then(async (res) => {
-        if (res.error) {
-          S.login.err = errMsg(res.error);
-          render();
-          return;
-        }
-        await api.session();
-        afterLogin();
-      })
-      .catch((err) => {
-        S.login.err = errMsg(err);
-        render();
-      });
-    return;
-  }
-  if (code !== "123456") {
-    S.login.err = "Código incorrecto. Revisá el email o pedí uno nuevo.";
-    render();
-    return;
-  }
-  const name = S.login.email
-    .split("@")[0]
-    .replace(/[._-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-  if (DEMO_PROVIDERS[S.login.email.toLowerCase()]) {
-    demoProviderSignIn(S.login.email.toLowerCase(), DEMO_PROVIDERS[S.login.email.toLowerCase()].pid);
-  } else {
-    demoSignIn(S.login.email, store.DEMO_USERS[S.login.email.toLowerCase()] ? null : name);
-  }
-  afterLogin();
   return;
 });

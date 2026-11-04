@@ -64,6 +64,7 @@ async function onPopState() {
   if (S.authModal) {
     S.authModal = null;
     S.after = null;
+    S.authOnPage = null;
   }
   applying = true;
   try {

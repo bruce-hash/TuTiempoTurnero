@@ -16,7 +16,7 @@ import { dniMissing, dniRequired } from "../lib/verificacion.js";
 import { navigate } from "../router.js";
 import { S } from "../state.js";
 import { P } from "../store.js";
-import { AUTH_PAGES, focusFirstField } from "../ui/ingreso.js";
+import { focusFirstField } from "../ui/ingreso.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { daysFromTemplate } from "../views/auth/negocio.js";
@@ -54,7 +54,8 @@ const busy = (on) => {
 registerClick("bizStart", (ev, el, act) => {
   // sin sesión: el paso 0 (la cuenta personal) en la misma ventana; al ingresar sigue con el paso 1
   if (!S.user && !S.barberAuth) {
-    if (S.authModal || AUTH_PAGES.includes(S.view)) {
+    // 4/11: en la ventana o en /crear-cuenta y /registrar-negocio, ahí mismo; desde /ingresar, en la ventana
+    if (S.authModal || S.view === "register" || S.view === "negocio") {
       setPending({ a: "negocio" });
       S.login = { mode: "up", email: S.login.email || "", err: "", fails: S.login.fails || 0 };
       render();

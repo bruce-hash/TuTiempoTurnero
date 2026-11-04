@@ -21,6 +21,10 @@ const ERRS = {
   "Invalid login credentials": "Email o contraseña incorrectos.",
   "Email not confirmed": "Confirmá tu email: te mandamos un link.",
   "Token has expired or is invalid": "Código incorrecto o vencido. Pedí uno nuevo.",
+  // 4/11: el código de reautenticación (cambiar contraseña)
+  reauthentication_not_valid: "El código no es correcto o venció. Revisalo o pedí uno nuevo.",
+  "invalid nonce": "El código no es correcto o venció. Revisalo o pedí uno nuevo.",
+  reauthentication_needed: "Confirmá el cambio con el código que te mandamos por email.",
   "User already registered": "Ese email ya tiene cuenta. Ingresá o recuperá tu contraseña.",
   "Password should be at least": "La contraseña tiene que tener al menos 8 caracteres, con letras y números.",
   "Password should contain": "La contraseña tiene que tener letras y números.",
