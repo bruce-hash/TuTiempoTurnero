@@ -1,3 +1,5 @@
+import { savePendingPay } from "../../lib/cobro-pendiente.js";
+import { isStandalone } from "../../lib/pwa.js";
 import { liveApi } from "./index.js";
 import { feesFromDb } from "../mapeo.js";
 import { call } from "../saved.js";
@@ -152,6 +154,7 @@ export const liveAdmin = {
     const pref = await sb.functions.invoke("mp-create-preference", {
       body: {
         booking_ids: res.booking_ids,
+        app: isStandalone(),
       },
     });
     if (pref.error || !pref.data || !pref.data.init_point) {
@@ -160,6 +163,9 @@ export const liveAdmin = {
       });
       throw new Error("No pudimos abrir Mercado Pago. Probá de nuevo.");
     }
+    // 4/11: el cobro queda guardado en la app (turno y token de regreso) para confirmarlo al volver, aunque la vuelta
+    // de Mercado Pago se abra en otro navegador (iPhone con la app instalada)
+    savePendingPay(pref.data.token, pref.data.booking || res.booking_ids[0]);
     safeRedirect(pref.data.init_point);
     return {
       redirect: true,
@@ -168,11 +174,12 @@ export const liveAdmin = {
   // C54 (V8): volver a pagar un turno que sigue reservado (hold) después de que el pago no se completó en Mercado Pago.
   // El monto lo vuelve a calcular la Edge Function desde la base; si el hold ya venció, avisa (hold_expired).
   async payHold(ids) {
-    const pref = await sb.functions.invoke("mp-create-preference", { body: { booking_ids: ids } });
+    const pref = await sb.functions.invoke("mp-create-preference", { body: { booking_ids: ids, app: isStandalone() } });
     if (pref.error || !pref.data || !pref.data.init_point) {
       const why = await pref.error?.context?.json?.().catch(() => null);
       throw new Error(why && why.error === "hold_expired" ? "El horario ya se liberó. Elegí otro." : "No pudimos abrir Mercado Pago. Probá de nuevo.");
     }
+    savePendingPay(pref.data.token, pref.data.booking || ids[0]);
     safeRedirect(pref.data.init_point);
   },
 };

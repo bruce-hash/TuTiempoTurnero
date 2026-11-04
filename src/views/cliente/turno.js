@@ -11,6 +11,9 @@ import { store } from "../../store.js";
 import { installCard, pushCard } from "../../ui/avisos.js";
 import { render } from "../../ui/render.js";
 import { vHome } from "./home.js";
+import { settlePendingPay } from "../../lib/cobro-pendiente.js";
+
+const RESUME_WAIT = 20000;
 
 // Paso 1 (v4): turno pagando (hold) al volver de Mercado Pago: se actualiza solo cada 4 segundos, unos 3 minutos, y
 // con el token de la vuelta le pide a mp-reconcile que consulte el pago (por si el aviso de Mercado Pago no llega)
@@ -61,7 +64,18 @@ export function vTurnoOk() {
   if (!booking) {
     return vHome();
   }
-  if (booking.status === "hold" && S.payBack === "failure") {
+  if (booking.status !== "hold") {
+    // 4/11: el cobro guardado al ir a Mercado Pago ya se resolvió
+    S.payResume = null;
+    settlePendingPay();
+  }
+  // 4/11: volvió a la app con el cobro todavía sin pago: a los 20 s de consultar, "El pago no se completó" (si el pago
+  // llega después, esta misma pantalla pasa sola a "Tenés turno": se sigue consultando)
+  const gaveUp = booking.status === "hold" && S.payResume && Date.now() - S.payResume > RESUME_WAIT;
+  if (gaveUp) {
+    waitPaid(booking.id);
+  }
+  if (booking.status === "hold" && (S.payBack === "failure" || gaveUp)) {
     // C54 (V8): volvió de Mercado Pago sin pagar: el horario sigue reservado unos minutos y se puede reintentar
     return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px">✕</div><h1 class="h1">El pago no se completó</h1>
     <p class="lead">Tu horario sigue reservado unos minutos: podés volver a intentarlo con otra tarjeta o medio de pago.</p><button class="btn btn-pri btn-block" data-act="payRetry">Volver a intentar</button><button class="btn btn-ghost btn-block" style="margin-top:8px" data-go="perfil" data-id="${booking.pid}">Elegir otro horario</button></div></div>`;

@@ -1,7 +1,7 @@
 import { mountCaptchas } from "../lib/captcha.js";
 import { authModal } from "./ingreso.js";
 import { isBusiness } from "../lib/cuentas.js";
-import { pwaAfterRender } from "../lib/pwa.js";
+import { isStandalone, pwaAfterRender } from "../lib/pwa.js";
 import { $ } from "../lib/dom.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { CAT, pcat } from "../lib/rubros.js";
@@ -195,7 +195,8 @@ function renderInner() {
 // Bloque C: "Instalar la app" en el menú de cuenta, si este navegador lo permite
 const installItem = () => {
   const item = installMenuItem();
-  return item ? [item] : [];
+  // 4/11 · Bloque 1: la app instalada no tiene botón de recargar; "Actualizar" por si el gesto de deslizar choca con algo
+  return [...(item ? [item] : []), ...(isStandalone() ? [["↻", "Actualizar", 'data-act="appReload"']] : [])];
 };
 function renderMain() {
   document.body.dataset.seg = segNow();

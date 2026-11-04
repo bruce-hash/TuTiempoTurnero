@@ -245,6 +245,112 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await db.query("delete from payments where id = any($1::bigint[])", [pids.filter(Boolean)]);
     await db.query("delete from bookings where id = $1", [hid]);
   }
+  {
+    // 4/11 · Bloque 1: Mercado Pago "tarde" (como el real): la vuelta llega antes que el aviso del pago, con los
+    // parámetros que agrega Mercado Pago. Turnos extra en "hold" de Ana, que se borran al final.
+    const hb = (await q("select provider_id, service_id, starts_at, ends_at from bookings where client_id = (select id from auth.users where email='ana@test.ar') and status='confirmed' order by id limit 1"))[0];
+    const hold = async (days) => {
+      const id = (await q("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, hold_expires_at) values ($1, $2, (select id from auth.users where email='ana@test.ar'), 'Ana', 'Esmaltado semipermanente', 'app', 'hold', $3::timestamptz + make_interval(days => $5), $4::timestamptz + make_interval(days => $5), 12000, 6000, 1200, now() + interval '10 minutes') returning id",
+        [hb.provider_id, hb.service_id, hb.starts_at, hb.ends_at, days]))[0].id;
+      return { id: Number(id), tok: (await q("select checkout_open(array[$1]::bigint[], null) as t", [id]))[0].t };
+    };
+    const extra = [];
+    const prefs = async () => (await (await fetch(BASE + "/__log")).json()).filter((x) => x.fn === "mp-create-preference");
+    await fetch(BASE + "/__mp?modo=tarde");
+    // (2) navegador con sesión: Volver a intentar → Mercado Pago → vuelta sin el pago todavía → confirmando → confirmado
+    const h1 = await hold(9); extra.push(h1.id);
+    await pg.goto(`${BASE}/turno/${h1.id}?pago=${h1.tok}&mp=failure`); await pg.waitForSelector("[data-act=payRetry]", { timeout: 8000 }).catch(() => {});
+    await Promise.all([pg.waitForURL(/collection_id=/, { timeout: 8000 }).catch(() => {}), pg.click("[data-act=payRetry]")]);
+    await pg.waitForFunction(() => /Estamos confirmando tu pago/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("4/11 navegador: la vuelta (con los parámetros de Mercado Pago) muestra “Estamos confirmando tu pago” en la pantalla del turno",
+       /^\/turno\/\d+$/.test(new URL(pg.url()).pathname) && /Estamos confirmando tu pago/.test(await txt()), new URL(pg.url()).pathname + " " + (await txt()).slice(0, 120));
+    await pg.waitForFunction(() => /Tenés turno/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 15000 }).catch(() => {});
+    ok("4/11 navegador: …y pasa sola a “Tenés turno” cuando la consulta a Mercado Pago encuentra el pago",
+       /Tenés turno/.test(await txt()) && (await q("select status from bookings where id = $1", [h1.id]))[0].status === "confirmed");
+    ok("4/11 navegador: el cobro guardado se borra al confirmarse", (await pg.evaluate(() => localStorage.getItem("tt_cobro"))) === null);
+    ok("4/11 navegador: en el navegador el cobro no lleva la marca de la app", (await prefs()).at(-1).body.app === false);
+    // (3) la app instalada: Mercado Pago abre la vuelta en Safari (simulado: la app no la recibe); al volver a abrir la
+    // app, sola: confirmando → confirmado. Contexto aparte, con la sesión de Ana, pantalla táctil y modo instalado.
+    const actx = await b.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, storageState: await ctx.storageState() });
+    await actx.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
+    const pa = await actx.newPage(); pa.on("pageerror", (e) => errs.push(e.message));
+    const atxt = () => pa.locator("#app").innerText();
+    let vuelta = null;
+    await pa.route("**/turno/**", (route) => {
+      const u = route.request().url();
+      if (/[?&]app=1/.test(u) && /collection_id=/.test(u)) { vuelta = u; return route.fulfill({ contentType: "text/html", body: "<title>Mercado Pago</title><p>Pagando en Mercado Pago…</p>" }); }
+      return route.continue();
+    });
+    const h2 = await hold(10); extra.push(h2.id);
+    await pa.goto(`${BASE}/turno/${h2.id}?pago=${h2.tok}&mp=failure`); await pa.waitForSelector("[data-act=payRetry]", { timeout: 8000 }).catch(() => {});
+    await Promise.all([pa.waitForURL(/collection_id=/, { timeout: 8000 }).catch(() => {}), pa.click("[data-act=payRetry]")]);
+    await pa.waitForTimeout(300);
+    const saved = await pa.evaluate(() => JSON.parse(localStorage.getItem("tt_cobro") || "null"));
+    const lastPref = (await prefs()).at(-1);
+    ok("4/11 app: antes de ir a Mercado Pago guarda el cobro (turno y token, nada personal) y lo marca como de la app",
+       saved && saved.b === h2.id && /^[0-9a-f]{64}$/.test(saved.t) && Object.keys(saved).sort().join() === "at,b,t" && lastPref.body.app === true && !!vuelta, JSON.stringify([saved, lastPref.body]));
+    ok("4/11 app: el turno sigue sin pagar mientras se paga en Mercado Pago", (await q("select status from bookings where id = $1", [h2.id]))[0].status === "hold");
+    await pa.goto(BASE + "/");
+    await pa.waitForFunction(() => /Estamos confirmando tu pago/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("4/11 app: al volver a abrir la app, va sola a su turno con “Estamos confirmando tu pago”",
+       new URL(pa.url()).pathname === `/turno/${h2.id}` && /Estamos confirmando tu pago/.test(await atxt()), new URL(pa.url()).pathname + " " + (await atxt()).slice(0, 120));
+    await pa.waitForFunction(() => /Tenés turno/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 15000 }).catch(() => {});
+    ok("4/11 app: …y pasa sola a “Tenés turno” (consulta a Mercado Pago, sin depender de la vuelta)",
+       /Tenés turno/.test(await atxt()) && (await q("select status from bookings where id = $1", [h2.id]))[0].status === "confirmed"
+       && (await pa.evaluate(() => localStorage.getItem("tt_cobro"))) === null);
+    // la vuelta que abrió Safari (sin la sesión de la app): "Pago recibido. Volvé a la app"
+    const sctx = await b.newContext({ viewport: { width: 390, height: 844 } }); const ps = await sctx.newPage(); ps.on("pageerror", (e) => errs.push(e.message));
+    await ps.goto(vuelta); await ps.waitForSelector(".pay-back", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    const stxt = await ps.locator("#app").innerText().catch(() => "");
+    ok("4/11 Safari: la vuelta con la marca de la app dice “Pago recibido · Volvé a la app TuTiempo para ver tu turno”, sin datos de la clienta",
+       /Pago recibido/.test(stxt) && /Volvé a la app TuTiempo para ver tu turno/.test(stxt) && stxt.includes("Esmaltado semipermanente") && !/Ana/.test(stxt) && (await ps.locator("[data-act=payLogin]").count()) === 1, stxt.slice(0, 200));
+    await sctx.close();
+    // al volver a primer plano (visibilitychange) con un cobro abierto y sin pago: confirmando y, a los ~20 s,
+    // "El pago no se completó · Volver a intentar"
+    const h3 = await hold(11); extra.push(h3.id);
+    await pa.goto(BASE + "/"); await pa.waitForSelector(".grid .card", { timeout: 8000 }).catch(() => {});
+    await pa.evaluate(([t, id]) => localStorage.setItem("tt_cobro", JSON.stringify({ t, b: id, at: Date.now() })), [h3.tok, h3.id]);
+    await pa.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await pa.waitForFunction(() => /Estamos confirmando tu pago/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("4/11 app: al volver a primer plano con un cobro abierto, “Estamos confirmando tu pago”", new URL(pa.url()).pathname === `/turno/${h3.id}` && /Estamos confirmando tu pago/.test(await atxt()));
+    await pa.waitForSelector("[data-act=payRetry]", { timeout: 30000 }).catch(() => {});
+    ok("4/11 app: …y si Mercado Pago no tiene el pago, “El pago no se completó” con “Volver a intentar”",
+       /El pago no se completó/.test(await atxt()) && (await pa.locator("[data-act=payRetry]").count()) === 1 && (await q("select status from bookings where id = $1", [h3.id]))[0].status === "hold");
+    // (4) deslizar hacia abajo para actualizar (solo en la app instalada) y "Actualizar" en el menú
+    // (sin el cobro abierto de recién: al recargar, la app volvería a ese turno)
+    await pa.evaluate(() => localStorage.removeItem("tt_cobro"));
+    await pa.goto(BASE + "/mis-turnos"); await pa.waitForTimeout(800);
+    await pa.evaluate(() => { window.__antes = 1; });
+    const pull = async (to, end) => pa.evaluate(([y, fin]) => {
+      const t = (cy) => new Touch({ identifier: 1, target: document.body, clientX: 150, clientY: cy });
+      document.body.dispatchEvent(new TouchEvent("touchstart", { touches: [t(120)], bubbles: true }));
+      document.body.dispatchEvent(new TouchEvent("touchmove", { touches: [t(y)], bubbles: true }));
+      const bar = document.querySelector(".ptr"); const out = { text: bar && bar.textContent, ready: !!bar && bar.classList.contains("ready") };
+      if (fin) document.body.dispatchEvent(new TouchEvent("touchend", { touches: [], bubbles: true }));
+      return out;
+    }, [to, end]);
+    const poco = await pull(150, true);
+    ok("4/11 deslizar: un tirón corto no actualiza", poco.text === "Deslizá para actualizar" && !poco.ready && (await pa.evaluate(() => window.__antes)) === 1);
+    await Promise.all([pa.waitForEvent("load", { timeout: 8000 }).catch(() => {}), pull(260, true)]);
+    await pa.waitForTimeout(600);
+    ok("4/11 deslizar: tirando hasta “Soltá para actualizar” y soltando, la app recarga la misma pantalla",
+       (await pa.evaluate(() => window.__antes)) === undefined && new URL(pa.url()).pathname === "/mis-turnos");
+    await pa.click("nav .acct-btn"); await pa.waitForSelector("#acctMenu:not([hidden])");
+    ok("4/11: en la app instalada, el menú de cuenta tiene “Actualizar”", (await pa.locator("#acctMenu [data-act=appReload]").count()) === 1);
+    ok("4/11: en el navegador no (ni el gesto)", (await pg.locator("#acctMenu [data-act=appReload]").count()) === 0 && (await pg.locator(".ptr").count()) === 0);
+    await actx.close();
+    await fetch(BASE + "/__mp?modo=ya");
+    // esos turnos extra no siguen: las pruebas de más abajo cuentan los turnos de Ana
+    for (const id of extra) {
+      await db.query("delete from mp_checkouts where $1 = any(booking_ids)", [id]);
+      await db.query("delete from client_messages where ref = $1::text", [id]);
+      await db.query("delete from payment_bookings where booking_id = $1", [id]);
+      const pids = (await q("select payment_id from bookings where id = $1", [id])).map((r) => r.payment_id).filter(Boolean);
+      await db.query("update bookings set payment_id = null where id = $1", [id]);
+      await db.query("delete from payments where id = any($1::bigint[])", [pids]);
+      await db.query("delete from bookings where id = $1", [id]);
+    }
+  }
   const bk = await q("select status, deposit, paid_mp, cashback from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
   ok("en la base: confirmado, seña 50% y sin cashback", bk.length === 1 && bk[0].status === "confirmed" && bk[0].deposit === 6000 && bk[0].paid_mp === 6000 && bk[0].cashback === 0);
   const bx = await q("select price, addons, intake, buffer_min, extract(epoch from busy_until - ends_at)::int gap, extract(epoch from ends_at - starts_at)::int dur from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
