@@ -105,6 +105,9 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### 4/11 · Campanita de avisos (D36)
+- Sin migraciones ni Edge Functions: se sube el `dist/` nuevo. Va después del Bloque 3 (usa sus avisos de ofertas).
+
 ### 4/11 · Bloque 3 (seguidores, D35)
 - Migración nueva: `20261104190000_seguidores.sql`.
   - Tabla `slot_offers` (RLS: el prestador ve las suyas; se escriben solo con `offer_slot`).
