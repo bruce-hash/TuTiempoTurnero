@@ -6,6 +6,7 @@ import { CATS, catName } from "../../lib/rubros.js";
 import { cfg } from "../../lib/turnero.js";
 import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
+import { mpTermNote } from "../prestador/perfil.js";
 import { dniForm } from "../prestador/verificacion.js";
 import { vLogin } from "./login.js";
 import { api } from "../../api/index.js";
@@ -132,7 +133,7 @@ function step4() {
     4,
     `<div class="f"><label>Seña que paga el cliente al reservar</label><div class="biz-seg">${[["30", "30%"], ["40", "40%"], ["50", "50%"], ["total", "Total"]].map(([value, label]) => seg("bizPay", value, label, pay === value)).join("")}</div><span class="hint">El resto lo cobrás en el local, como prefieras.</span></div>
    <div class="biz-mp"><div><b>Mercado Pago</b><div class="hint">${mpOk ? "✓ Conectado: las señas entran directo a tu cuenta." : "Las señas entran directo a tu cuenta."}</div></div>${mpOk ? "" : '<button type="button" class="btn btn-pri btn-sm" data-act="bizMp">Conectar Mercado Pago</button>'}</div>
-   ${mpOk ? "" : '<p class="note" style="text-align:left;margin-top:12px">Sin Mercado Pago conectado tu perfil no recibe reservas. Si preferís, conectalo después desde Perfil → Cobros.</p>'}`,
+   ${mpTermNote("margin-top:12px")}${mpOk ? "" : '<p class="note" style="text-align:left;margin-top:6px">Si preferís, conectalo después desde Perfil → Cobros.</p>'}`,
     { title: "Seña y cobro", sub: "Cómo cobrás la seña de cada turno." },
   );
 }

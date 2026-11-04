@@ -57,15 +57,17 @@ export function useProvider(pid) {
   S.mp = kept.mp;
   store.COMM = comm(pid);
 }
+// v2: el orden que pidió el cliente; todas a la vista (en el celular, 4 × 2 con ícono y etiqueta chica; en la compu, la
+// columna de la izquierda)
 export const BTABS = [
-  ["agenda", "Agenda"],
-  ["finanzas", "Finanzas"],
-  ["clientes", "Clientes"],
-  ["productos", "Productos"],
-  ["horarios", "Horarios"],
-  ["stats", "Estadísticas"],
-  ["comunidad", "Trabajos"],
-  ["perfil", "Perfil"],
+  ["agenda", "Agenda", "📅"],
+  ["horarios", "Horarios", "🕒"],
+  ["finanzas", "Finanzas", "💰"],
+  ["productos", "Productos", "🧴"],
+  ["stats", "Estadísticas", "📊"],
+  ["clientes", "Clientes", "👥"],
+  ["comunidad", "Trabajos", "📸"],
+  ["perfil", "Perfil", "⚙️"],
 ];
 // cambia de pestaña del panel y cierra lo que hubiera abierto (setBtab no dibuja: lo usa también el enrutador)
 export function selectBtab(tab) {
@@ -111,17 +113,14 @@ function noticesPanel() {
 export function vBarbero() {
   const prov = pr(ME());
   const tabs = BTABS;
-  const tabIndex = Math.max(
-    0,
-    tabs.findIndex((tab) => tab[0] === S.btab),
-  );
   const conf = cfg(ME());
   const head = `<div class="panel bhead"><div class="contact">${avatar(prov)}<div><b>${esc(prov.name)}</b><div class="cchips" style="justify-content:flex-start;margin-top:4px">${prov.cats.map((cat) => `<button class="cchip seg-${cat}" data-pctx="${cat}" aria-pressed="${cat === pcat(prov, S.pctx)}">${CAT[cat] ? catInfo(cat).ic : ""} ${esc(catName(cat))}</button>`).join("")}</div></div></div>
-   <div class="swrow"><div><b>📅 Turnos online</b><div class="hint">${!conf.on ? "⚪ Nadie puede reservar online" : LIVE && S.mp !== "ok" ? "⚠ Sin Mercado Pago conectado: hoy nadie puede reservarte online" : "🟢 Tus clientes pueden reservar y pagar"}</div>${conf.on && LIVE && S.mp !== "ok" ? '<button class="lnk" data-btab="perfil">Conectar Mercado Pago</button>' : ""}</div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div><button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como lo ve un cliente</button>`;
-  const tabBar = `<div class="btabw"><button class="tabarr" data-act="tabPrev" aria-label="Sección anterior" ${tabIndex === 0 ? "disabled" : ""}>‹</button><div class="btabs" role="tablist">${tabs.map(([id, label]) => `<button role="tab" data-btab="${id}" aria-selected="${S.btab === id}">${label}${id === "agenda" && S.newT ? ' <i class="dotn"></i>' : ""}</button>`).join("")}</div><button class="tabarr" data-act="tabNext" aria-label="Sección siguiente" ${tabIndex >= tabs.length - 1 ? "disabled" : ""}>›</button></div>`;
+   <div class="swrow"><div><b>📅 Turnos online</b><div class="hint">${!conf.on ? "⚪ Nadie puede reservar online" : LIVE && S.mp !== "ok" ? "⚠ Sin Mercado Pago conectado: hoy nadie puede reservarte online" : "🟢 Tus clientes pueden reservar y pagar"}</div>${conf.on && LIVE && S.mp !== "ok" ? '<button class="lnk" data-btab="perfil">Conectar Mercado Pago</button>' : ""}</div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div>`;
+  const tabBar = `<div class="btabw"><div class="btabs" role="tablist" aria-label="Secciones del panel">${tabs.map(([id, label, icon]) => `<button role="tab" data-btab="${id}" aria-selected="${S.btab === id}"><span class="bt-i" aria-hidden="true">${icon}</span><span class="bt-l">${label}</span>${id === "agenda" && S.newT ? '<i class="dotn"></i>' : ""}</button>`).join("")}</div></div>`;
   const body = (
     {
-      agenda: () => setupCard() + pushCard("prestador") + vBAgendaT(),
+      // v2: "Ver mi perfil como cliente" salió de la cabecera y del menú de cuenta: queda acá, al final de la Agenda
+      agenda: () => setupCard() + pushCard("prestador") + vBAgendaT() + '<button class="btn btn-ghost btn-block ag-prev" data-act="preview">👁 Ver mi perfil como cliente</button>',
       clientes: () => vBClientes(),
       finanzas: () => vBFinanzas(),
       horarios: () => vBHorarios(),

@@ -107,6 +107,14 @@ document.addEventListener("click", (ev) => {
   const tabEl = ev.target.closest("[data-btab]");
   if (tabEl) {
     selectBtab(tabEl.dataset.btab);
+    // v2: "Armar happy hour" y "Avisar a seguidores" (Estadísticas) llevan a esa parte de la sección, justo debajo de la
+    // cabecera fija (antes quedaba la página donde estaba y caía un poco más arriba o más abajo)
+    const target = tabEl.dataset.sec && $("." + tabEl.dataset.sec);
+    if (target) {
+      const header = $(".top");
+      const below = header ? header.getBoundingClientRect().bottom : 0;
+      window.scrollTo(0, Math.max(0, target.getBoundingClientRect().top + window.scrollY - below - 12));
+    }
     return;
   }
   const cfEl = ev.target.closest("[data-cf]");

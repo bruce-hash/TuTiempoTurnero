@@ -105,6 +105,11 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### v2 · Profesional (3/11)
+- Migración nueva: `20261103060000_aviso_tasas_mp.sql` (`confirm_payment_core` igual que antes salvo el texto del aviso
+  de D30, que ahora dice «Si tu cuenta tiene otras tasas, avisanos.»; los avisos ya enviados con el texto viejo se
+  reescriben). Sin Edge Functions ni cambios de `config.js`.
+
 ### v2 · Admin (3/11)
 - Migración nueva: `20261103050000_admin_avisos.sql` (tabla `admin_alert_marks` con RLS y sin permisos directos:
   `admin_alert_marks_get`/`admin_alert_mark`; `admin_nudge_mp(profesional, texto)` con el mensaje editable). Sin Edge

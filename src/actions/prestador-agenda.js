@@ -14,17 +14,7 @@ import { toast } from "../ui/toast.js";
 import { pushCancel } from "../views/prestador/bloqueo-dias.js";
 import { feeOf } from "../views/prestador/finanzas.js";
 import { pushNotice } from "../views/prestador/mensajes.js";
-import { BTABS, selectBtab } from "../views/prestador/panel.js";
 
-registerClick(["tabPrev", "tabNext"], (ev, el, act) => {
-  const current = Math.max(
-    0,
-    BTABS.findIndex((tab) => tab[0] === S.btab),
-  );
-  const next = Math.max(0, Math.min(BTABS.length - 1, current + (act === "tabNext" ? 1 : -1)));
-  selectBtab(BTABS[next][0]);
-  return;
-});
 registerClick("selClose", (ev, el, act) => {
   S.sel = null;
   S.bAsk = null;

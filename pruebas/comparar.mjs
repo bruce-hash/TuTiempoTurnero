@@ -184,6 +184,13 @@ async function normalizar(page) {
     document.querySelectorAll("#app .kpi").forEach((el) => { if (/Transferencia/.test(el.textContent)) el.remove(); });
     // la barra de pestañas del panel pierde "Caja" y se corre: transparente en las dos versiones (sigue tocable)
     document.querySelectorAll("#app .btabw").forEach((el) => { el.style.opacity = "0"; });
+    // v2 · Profesional (cambios a propósito): el menú del panel pasa a 4 × 2 con íconos y en otro orden (fuera del
+    // flujo, transparente y abajo, en las dos versiones: sigue tocable y no corre lo demás); «Ver mi perfil como
+    // cliente» pasa de la cabecera (y de Horarios) a la Agenda; Horarios pierde «Tu link de turnos»; Perfil suma la nota
+    // del plazo de acreditación. Lo nuevo lo prueban e2e.js y ancho.mjs.
+    document.querySelectorAll("#app .btabw").forEach((el) => { Object.assign(el.style, { position: "fixed", left: "0", right: "0", bottom: "0", zIndex: "50" }); el.querySelectorAll(".tabarr").forEach((b) => b.remove()); el.querySelectorAll("button").forEach((b) => { b.textContent = "·"; }); });
+    document.querySelectorAll("#app [data-act=preview], #app .mpterm").forEach((el) => el.remove());
+    document.querySelectorAll("#app #fHorarios [data-act=copiarLink]").forEach((el) => el.closest(".panel").remove());
     document.querySelectorAll("#app .ftbl b.pos, #app .ftbl b.neg").forEach((el) => el.removeAttribute("class"));
     document.querySelectorAll("#app .pl-acts").forEach((el) => el.replaceWith(...el.childNodes));
     {

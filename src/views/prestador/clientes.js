@@ -3,7 +3,6 @@ import { money } from "../../lib/dinero.js";
 import { esc, ini } from "../../lib/dom.js";
 import { NOW, TODAY, dayLabel, nowHM } from "../../lib/fechas.js";
 import { ME, pr } from "../../lib/prestadores.js";
-import { RUBRO } from "../../lib/rubros.js";
 import { skey } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
@@ -32,10 +31,10 @@ export const lastTxt = (days) =>
           : days < 60
             ? `Hace ${Math.round(days / 7)} semanas`
             : `Hace ${Math.round(days / 30)} meses`;
-// pestaña Clientes: resumen, mensajes, contactos, filtros y lista (o la ficha si hay uno elegido)
+// pestaña Clientes: resumen, mensajes, contactos, filtros y lista (o un cliente, si hay uno elegido)
 export function vBClientes() {
   if (!LIVE) {
-    demoClients(ME()); // la demo suma a la lista a los que reservaron por la app (también para la ficha)
+    demoClients(ME()); // la demo suma a la lista a los que reservaron por la app (también para ver a uno)
   }
   if (S.cli && store.CLIENTS[S.cli]) {
     return vFicha(S.cli);
@@ -104,21 +103,8 @@ function vAddContact() {
    <div class="f"><label for="nc_x">Notas</label><input id="nc_x" maxlength="300" autocomplete="off" placeholder="Opcional"></div>
    <div class="err" id="ncerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar contacto</button></form>`;
 }
-// campos de la ficha del cliente según los rubros del prestador, sin repetir
-export function fichaFields() {
-  const fields = [];
-  const seen = {};
-  pr(ME()).cats.forEach((cat) =>
-    (RUBRO[cat] || RUBRO.b).ficha.forEach((field) => {
-      if (!seen[field[0]]) {
-        seen[field[0]] = 1;
-        fields.push(field);
-      }
-    }),
-  );
-  return fields;
-}
-// ficha de un cliente: datos, sellos, notas, próximos turnos e historial
+// un cliente: teléfono, números, sellos, próximos turnos e historial (v2: sin la ficha de notas; lo que ya estaba
+// cargado queda en la base)
 function vFicha(name) {
   const client = store.CLIENTS[name];
   const upcoming = store.BOOK.filter(
@@ -127,7 +113,7 @@ function vFicha(name) {
   const history = store.BOOK.filter((booking) => booking.cliente === name && booking.status !== "confirmed" && booking.status !== "cancelled");
   return `<button class="back" data-act="cliBack">← Todos los clientes</button>
   <div class="panel contact" style="gap:14px"><span class="av" style="width:54px;height:54px;font-size:18px;background:hsl(${(name.charCodeAt(0) * 37) % 360} 55% 45%)">${ini(name)}</span><div><b style="font-size:18px">${esc(name)}</b><div class="hint">📞 ${esc(client.tel)}${client.bday ? ` · 🎂 ${client.bday.slice(3)}/${client.bday.slice(0, 2)}` : ""}</div><div style="margin-top:6px">${relBadge(name)}</div></div></div>
-  <div class="stats2"><div><b>${client.v}</b><span>Visitas</span></div><div><b>${client.n}</b><span>Faltas</span></div><div><b>${money(client.spend * client.v)}</b><span>Gastó en total</span></div></div>
+  <div class="stats2 s4"><div><b>${client.v}</b><span>Visitas</span></div><div><b>${client.n}</b><span>Faltas</span></div><div><b>${money(client.spend * client.v)}</b><span>Gastó en total</span></div><div><b>${client.last == null ? "—" : esc(lastTxt(client.last))}</b><span>Última visita</span></div></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-ok" data-act="msgOne" ${inApp(name) ? "" : "disabled"}>${inApp(name) ? "💬 Mandar mensaje" : "📵 Sin la app"}</button><button class="btn btn-pri" data-act="cliAgendar">+ Agendar turno</button></div>
   ${(() => {
     const conf = stampCfg(ME());
@@ -147,17 +133,6 @@ function vFicha(name) {
       .join("")}
      <p class="note" style="text-align:left;margin:10px 0 0">${canStamp ? "Cada turno atendido por la app suma solo en la tarjeta de ese servicio." : "Los sellos se guardan en la cuenta de la app del cliente: este contacto todavía no la tiene."}</p></div>`;
   })()}
-  <form class="panel" id="fNotas" novalidate><p class="lbl">📝 Ficha</p>
-   ${fichaFields()
-     .map(
-       ([key, label]) =>
-         `<div class="f"><label for="cf-${key}">${esc(label)}</label><input id="cf-${key}" data-cf2="${key}" maxlength="200" value="${esc((client.profile || {})[key] || "")}" autocomplete="off"></div>`,
-     )
-     .join("")}
-   <div class="f" style="margin:0"><label for="cnotes">Notas</label><textarea id="cnotes" maxlength="1000" placeholder="Lo que quieras recordar de este cliente">${esc(client.notes)}</textarea></div>
-   <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px"><div class="f"><label for="ctel">Celular</label><input id="ctel" value="${esc(client.tel)}" autocomplete="off"></div><div class="f"><label for="cbd">Cumpleaños (DD/MM)</label><input id="cbd" value="${client.bday ? client.bday.slice(3) + "/" + client.bday.slice(0, 2) : ""}" placeholder="22/03" autocomplete="off"></div></div>
-   <div class="err" id="nerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar ficha</button>
-   <p class="note" style="margin-top:6px">Estas notas te aparecen en la agenda cada vez que viene.</p></form>
   <div class="panel"><p class="lbl">Próximos turnos</p>${upcoming.length ? `<ul class="ag">${upcoming.map((booking) => `<li><span class="ag-t">${booking.time}</span><div><b>${esc(dayLabel(booking.date))}</b><span>${esc(booking.svc)}</span></div><span class="chip ok">✓ Confirmado</span></li>`).join("")}</ul>` : '<p class="note">No tiene turnos reservados.</p>'}</div>
   <div class="panel"><p class="lbl">Historial</p><ul class="ag">${history.map((booking) => `<li><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(booking.svc)}</b><span>${money(booking.price)}</span></div>${booking.status === "noshow" ? '<span class="chip bad">No vino</span>' : '<span class="chip ok">✔ Atendido</span>'}</li>`).join("")}
    ${client.last != null ? `<li><span class="ag-t">${lastTxt(client.last).replace("Hace ", "")}</span><div><b>Última visita registrada</b><span>Ticket promedio ${money(client.spend)}</span></div><span class="chip ok">✔</span></li>` : ""}</ul>

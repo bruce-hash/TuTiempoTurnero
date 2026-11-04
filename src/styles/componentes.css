@@ -109,13 +109,13 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .tries{margin:8px 0 0;font-size:13px;color:var(--muted);text-align:center}
 /* Bloque D · respuesta visual: hover (solo con mouse), foco con teclado y presionado; transiciones cortas. Con
    prefers-reduced-motion no se mueve nada (solo cambian los colores) */
-.btn,.lnk,.card,.segtile,.wd,.slot,.svci,.payopt,.cchip,.gbtn,.tabarr,.pk-nav,.acct-btn,.btabs button,.ptabs button,.authtabs button,.seg3 button{transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,transform .12s}
+.btn,.lnk,.card,.segtile,.wd,.slot,.svci,.payopt,.cchip,.gbtn,.pk-nav,.acct-btn,.btabs button,.ptabs button,.authtabs button,.seg3 button{transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,transform .12s}
 @media (hover:hover){
   .btn-ghost:hover:not([disabled]),.gbtn:hover{background:var(--brand-soft);border-color:var(--brand-line)}
   .btn-ok:hover:not([disabled]),.btn-bad:hover:not([disabled]){filter:brightness(.95)}
   .card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(0,0,0,.12)}
   .segtile:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.18)}
-  .svci:hover,.payopt:hover,.slot:hover:not([disabled]),.wd:hover:not([disabled]),.acct-btn:hover,.tabarr:hover:not([disabled]),.pk-nav:hover:not([disabled]){border-color:var(--brand-line)}
+  .svci:hover,.payopt:hover,.slot:hover:not([disabled]),.wd:hover:not([disabled]),.acct-btn:hover,.pk-nav:hover:not([disabled]){border-color:var(--brand-line)}
   .btabs button:hover:not([aria-selected="true"]),.ptabs button:hover:not([aria-selected="true"]),.authtabs button:hover:not(.on),.seg3 button:hover:not([aria-pressed="true"]){color:var(--fg);background:var(--brand-soft)}
   .lnk:hover{text-decoration:underline;text-underline-offset:3px}
 }
@@ -250,6 +250,11 @@ body.am-open{overflow:hidden}
 .rs-btns{display:grid;grid-template-columns:1fr 2fr;gap:8px}.rs-miss{color:var(--bad)}
 .movs li.movform{display:block;padding:0;border:0}
 .pl-acts{display:flex;gap:6px;align-items:center}
+/* v2: lo que se abre debajo de un producto (venta, eliminar) y los botones van a todo el ancho: antes caían en la columna
+   de la cantidad, la ensanchaban y el nombre quedaba palabra por palabra debajo de los controles */
+.plist .pl-acts,.plist .movask{grid-column:1/-1}.plist .pl-s{flex:none}
+.pl-acts .pl-buy{flex:1 1 0;min-width:0;white-space:nowrap}.pl-acts .xbtn{flex:none}
+@media (min-width:1024px){.pl-acts .pl-buy{flex:0 0 auto}}
 .msum .mhead{font-weight:700;margin:10px 0 6px;font-size:14px}
 .msum .mrow{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px;margin:4px 0}
 .msum .mbar{display:block;height:10px;border-radius:9px;min-width:2px}

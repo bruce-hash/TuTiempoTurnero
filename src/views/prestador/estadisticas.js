@@ -260,7 +260,7 @@ export function vBStats() {
     quiet.length
       ? `<div class="panel"><p class="lbl">Tus horarios más flojos</p><p style="margin:0 0 10px;font-size:14px;text-align:left">Según las últimas 4 semanas. Llenalos con un happy hour o avisando a tus seguidores.</p>
    <ul class="ag">${quiet.map((win) => `<li><span class="ag-t">${win.h}–${win.e} h</span><div><b>${DNAME[win.dow]}</b><span>${win.v}% ocupado</span></div><span class="chip ${win.v < 35 ? "ok" : "gray"}">${win.v < 35 ? "Libre" : "Medio"}</span></li>`).join("")}</ul>
-   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn btn-ghost" data-btab="horarios">Armar happy hour</button><button class="btn btn-ghost" data-btab="comunidad">Avisar a seguidores</button></div></div>`
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn btn-ghost" data-btab="horarios" data-sec="hhpanel">Armar happy hour</button><button class="btn btn-ghost" data-btab="comunidad" data-sec="avisarpanel">Avisar a seguidores</button></div></div>`
       : ""
   }`;
 }

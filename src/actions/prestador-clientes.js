@@ -2,7 +2,7 @@ import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
 import { $ } from "../lib/dom.js";
-import { TODAY, pad } from "../lib/fechas.js";
+import { TODAY } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { skey } from "../lib/turnero.js";
 import { S } from "../state.js";
@@ -10,7 +10,7 @@ import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { cliStamps, setCliStamps, stampGoal, svcByKey } from "../ui/sellos.js";
 import { toast } from "../ui/toast.js";
-import { fichaFields, realClients } from "../views/prestador/clientes.js";
+import { realClients } from "../views/prestador/clientes.js";
 import { MSG_TPL, fillMsg2, inApp, msgGroup, myLink, updMsgCount } from "../views/prestador/mensajes.js";
 
 registerClick("msgOpen", (ev, el, act) => {
@@ -334,37 +334,6 @@ registerSubmit("fContact", (ev) => {
   S.contactOpen = false;
   S.newC = null;
   toast("Contacto guardado");
-  render();
-  return;
-});
-registerSubmit("fNotas", (ev) => {
-  const client = store.CLIENTS[S.cli];
-  const bdayText = $("#cbd").value.trim();
-  if (bdayText && !/^\d{1,2}\/\d{1,2}$/.test(bdayText)) {
-    $("#nerr").textContent = "Escribí el cumpleaños como día/mes, por ejemplo 22/03.";
-    return;
-  }
-  if (bdayText) {
-    const [day, month] = bdayText.split("/").map(Number);
-    if (day < 1 || day > 31 || month < 1 || month > 12) {
-      $("#nerr").textContent = "Esa fecha no existe.";
-      return;
-    }
-    client.bday = pad(month) + "-" + pad(day);
-  } else {
-    client.bday = "";
-  }
-  client.profile = client.profile || {};
-  fichaFields().forEach(([key]) => {
-    const input = $("#cf-" + key);
-    if (input) {
-      client.profile[key] = input.value.trim().slice(0, 200);
-    }
-  });
-  client.notes = $("#cnotes").value.trim().slice(0, 1e3);
-  client.tel = $("#ctel").value.trim().slice(0, 40) || client.tel;
-  api.m.upsertClient(S.cli, client);
-  toast("Ficha guardada");
   render();
   return;
 });
