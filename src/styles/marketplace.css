@@ -113,6 +113,9 @@ label.chk{display:flex;gap:8px;align-items:flex-start;font-weight:500;line-heigh
 footer{background:var(--card);border-top:1px solid var(--line);margin-top:40px}
 footer .in{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:22px;text-align:center}
 footer .logo{justify-content:center}
+footer .logo .lg-i{height:28px}footer .logo .lg-t{height:18px}
+/* C04: el lema del manual, en Montserrat y en el color de la marca del rubro */
+.claim{font-family:"Montserrat",var(--font);font-weight:700;font-size:11px;letter-spacing:.05em;color:var(--brand);margin:8px 0 0}
 footer h4{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 footer ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:14px;justify-items:center}
 footer .legal{grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px;font-size:12px;color:var(--muted)}

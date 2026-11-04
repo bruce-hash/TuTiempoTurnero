@@ -105,6 +105,12 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### C04 · Marca (3/11)
+- Sin migraciones. Se sube el `dist/` nuevo (logo, paleta, fuentes Nunito y Montserrat, íconos de la app y
+  `icons/logo-email.png`) y se vuelve a desplegar `email-send` (`_shared/email.ts` lleva el logo y la paleta). El email
+  muestra el logo desde el sitio (`<site_url>/icons/logo-email.png`): subí el sitio antes que la función.
+- Los celulares que ya instalaron la app toman el ícono nuevo cuando el navegador actualiza el manifest (puede tardar días).
+
 ### v2 · Cliente (3/11)
 - Migración nueva: `20261103070000_avisos_cliente.sql` (`client_messages.dismissed_at`; `my_messages` devuelve `ref` y
   deja afuera los borrados; `dismiss_messages(ids)` para el ✕ y «Borrar los leídos»). Sin Edge Functions ni cambios de

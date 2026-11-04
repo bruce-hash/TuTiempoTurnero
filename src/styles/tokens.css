@@ -7,17 +7,20 @@
 :root,body[data-seg="n"],.seg-n{
   --font:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
   color-scheme:light; --c50:#fafaf9; --c100:#f5f5f4; --c200:#e7e5e4; --c300:#d6d3d1; --c400:#a8a29e; --c500:#78716c; --c600:#57534e; --c700:#44403c; --c800:#292524; --c900:#1c1917; --c950:#0c0a09;
-  --bg:#fafaf9; --card:#ffffff; --fg:#121212; --muted:#4d4c48; --line:#e7e5e4;
-  --brand:#121212; --brand-dark:#000; --on-brand:#fff; --brand-soft:#f5f5f4; --brand-line:#d6d3d1;
-  --ok:#15803d; --on-ok:#fff; --ok-soft:#e7f5ec; --ok-line:#b5e0c3;
+  /* C04: paleta del manual IDENTIDAD TU TIEMPO en el segmento TuTiempo (los rubros mantienen la suya): azul #0440F3,
+     azul oscuro #132F92, azul noche #04122E, crema #F8F5F1; el texto verde es #07774F (el verde de la marca, #07B67B, no
+     llega al contraste de texto sobre blanco) */
+  --bg:#F8F5F1; --card:#ffffff; --fg:#04122E; --muted:#4a5468; --line:#e6e1d9;
+  --brand:#0440F3; --brand-dark:#132F92; --on-brand:#fff; --brand-soft:#eaf0fe; --brand-line:#b9cbfb;
+  --ok:#07774F; --on-ok:#fff; --ok-soft:#e3f6ee; --ok-line:#9fdcc2;
   --warn:#a16207; --warn-soft:#fbf3dc; --warn-line:#ecd28f;
   --bad:#c62828; --bad-soft:#fdecec; --bad-line:#f3c1c1;
-  --font-d:var(--font); --d-tt:none; --d-ls:-.02em; --d-w:800;
+  --font-d:"Nunito",var(--font); --d-tt:none; --d-ls:-.01em; --d-w:800;
   --r:16px; --r-btn:10px; --btn-tt:none; --btn-ls:0; --btn-font:var(--font); --btn-fs:14px;
-  --hero-bg:linear-gradient(180deg,#ffffff,#f3f2ee); --hero-fg:#121212; --hero-muted:#5b5b57; --hero-em:#121212; --hero-chip:rgba(0,0,0,.06); --hero-bd:#e5e4df;
+  --hero-bg:linear-gradient(180deg,#ffffff,#F8F5F1); --hero-fg:#04122E; --hero-muted:#4a5468; --hero-em:#0440F3; --hero-chip:rgba(4,18,46,.06); --hero-bd:#e6e1d9;
   --hdr-bg:rgba(255,255,255,.92);
-  --bar-bg:#121212; --bar-fg:#fff; --bar-muted:#b5b5b0; --bar-btn:#fff; --bar-btn-fg:#121212; --bar-bd:transparent;
-  --bar-i:#d6d3d1; --glow:rgba(18,18,18,0.4);
+  --bar-bg:#04122E; --bar-fg:#fff; --bar-muted:#b3bccd; --bar-btn:#fff; --bar-btn-fg:#04122E; --bar-bd:transparent;
+  --bar-i:#d6d3d1; --glow:rgba(4,64,243,.35);
   --ph-ov:radial-gradient(80% 60% at 20% 10%,rgba(255,255,255,.35),transparent 60%); --ph-h0:30; --ph-hk:1; --ph-s:16%; --ph-l1:90%; --ph-l2:76%; --ph-fg:#121212;
   --oc-lo:#f5f5f4; --oc-lo-f:#292524; --oc-md:#d6d3d1; --oc-md-f:#0c0a09; --oc-hi:#78716c; --oc-hi-f:#fff; --oc-fu:#292524; --oc-fu-f:#fff;
   --ev-app:#f5f5f4; --ev-app-l:#d6d3d1; --ev-man:#ebe8f6; --ev-man-l:#a8a29e; --ev-walk:#dcfce7; --ev-walk-l:#86efac;

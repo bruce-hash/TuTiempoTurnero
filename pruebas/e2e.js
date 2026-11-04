@@ -25,6 +25,21 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
 
   await pg.goto(BASE); await pg.waitForSelector(".grid .card"); await wait();
   ok("modo en vivo: sin barra demo", !(await pg.isVisible(".modebar")) && !(await pg.isVisible(".demo")));
+  {
+    // C04: el logo del manual (isotipo + "tutiempo", con el nombre para lectores de pantalla), el lema en el pie, el
+    // favicon, el color de la barra del navegador y el logo de los emails
+    const brand = await pg.evaluate(() => ({
+      head: document.querySelectorAll("#logoLink svg.lg-i, #logoLink svg.lg-t").length, name: document.querySelector("#logoLink .vh")?.textContent,
+      foot: document.querySelectorAll("#logoFoot svg.lg-i").length, claim: document.querySelector("footer .claim")?.textContent,
+      icon: document.querySelector("link[rel=icon]")?.getAttribute("href"), theme: document.querySelector("meta[name=theme-color]")?.content,
+      bg: getComputedStyle(document.body).backgroundColor, brand: getComputedStyle(document.body).getPropertyValue("--brand").trim(), ok: getComputedStyle(document.body).getPropertyValue("--ok").trim(),
+    }));
+    ok("C04: logo del manual en la cabecera y el pie, lema, favicon y colores (azul #0440F3, verde de texto #07774F, crema)",
+       brand.head === 2 && brand.name === "TuTiempo" && brand.foot === 1 && brand.claim === "TU TIEMPO. SU SOLUCIÓN. AL INSTANTE." && brand.icon === "/icons/favicon.svg"
+       && brand.theme === "#04122E" && brand.bg === "rgb(248, 245, 241)" && brand.brand.toUpperCase() === "#0440F3" && brand.ok.toUpperCase() === "#07774F", JSON.stringify(brand));
+    const files = await Promise.all(["/icons/favicon.svg", "/icons/logo-email.png", "/fonts/nunito-latin-800-normal.woff2", "/fonts/montserrat-latin-700-normal.woff2"].map((f) => pg.evaluate((u) => fetch(u).then((r) => r.status), f)));
+    ok("C04: el favicon, el logo de los emails y las dos fuentes se sirven", files.every((s) => s === 200), JSON.stringify(files));
+  }
   // Ingreso y registro (rediseño aprobado el 1/11): un solo "Ingresar"; la ventana es la misma para clientes y prestadores
   ok("ingreso: la cabecera sin sesión tiene solo Ingresar", (await pg.locator("nav [data-act=authOpen]").count()) === 1 && (await pg.locator("nav [data-go=login]").count()) === 0);
   const urlHome = pg.url();

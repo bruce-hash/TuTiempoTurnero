@@ -16,12 +16,14 @@ button{font:inherit;cursor:pointer}
 
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:var(--hdr-bg);-webkit-backdrop-filter:saturate(1.4) blur(10px);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
 .top .in{max-width:1100px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.logo{font-weight:800;font-size:22px;letter-spacing:-.03em;color:var(--brand);display:inline-flex;align-items:center;gap:7px}
-.logo svg{width:26px;height:26px;flex:none}
+/* C04: isotipo + logotipo del manual (src/ui/iconos.js); el azul noche sigue el color del texto */
+.logo{color:var(--fg);display:inline-flex;align-items:center;gap:8px;text-decoration:none}
+.logo .lg-i{height:30px;width:auto;flex:none}.logo .lg-t{height:19px;width:auto;flex:none}
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .nav{display:flex;gap:8px;align-items:center}
 .nav .btn{white-space:nowrap}
 /* celular: la cabecera sin sesión entra en una línea también con los botones en mayúsculas de barbería */
-@media (max-width:420px){.top .in{gap:8px}.nav{gap:6px}.nav .btn{padding:8px 10px;letter-spacing:.02em}.top .logo{font-size:20px}}
+@media (max-width:420px){.top .in{gap:8px}.nav{gap:6px}.nav .btn{padding:8px 10px;letter-spacing:.02em}.top .logo .lg-i{height:27px}.top .logo .lg-t{height:17px}}
 .user{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
 .av{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--on-brand);font-size:12px;font-weight:800;background:var(--brand)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:10px;padding:9px 14px;font-weight:600;font-size:14px;border:1px solid transparent;text-align:center}

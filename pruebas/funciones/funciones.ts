@@ -582,7 +582,7 @@ const mRev = rs.enviados.find((e) => e.clave === `tt-email-${eRev}`)?.body;
 ok("…con remitente, respuestas a soporte, destinatario y asunto", mRev?.from === "TuTiempo <avisos@tutiempo.com.ar>" && mRev?.reply_to === "soporte@tutiempo.com.ar"
    && JSON.stringify(mRev?.to) === JSON.stringify(["cliente@fn.test"]) && mRev?.subject === "¿Qué tal tu turno en Prov Funciones?", JSON.stringify(mRev));
 ok("…con el texto de la app escapado (nada de HTML del texto) y el link tocable", mRev?.html.includes("&lt;script&gt;alert(1)&lt;/script&gt;") && !mRev?.html.includes("<script>")
-   && mRev?.html.includes(`<a href="${LINK}" style="color:#4338ca">${LINK}</a>.`));
+   && mRev?.html.includes(`<a href="${LINK}" style="color:#0440F3">${LINK}</a>.`));
 ok("…y el pie con el link a Mi perfil para dejar de recibirlos (también en el texto plano)",
    /<a href="https:\/\/tutiempo\.com\.ar\/cuenta"[^>]*>Dejar de recibir estos emails<\/a>/.test(mRev?.html ?? "")
    && mRev?.text.includes("Dejar de recibir estos emails: https://tutiempo.com.ar/cuenta") && mRev?.text.startsWith("¡Gracias por venir! <script>"));
@@ -635,7 +635,8 @@ ej = await body(await emailRun());
 const mHtml = rs.enviados.find((e) => e.clave === `tt-email-${eHtml}`)?.body?.html ?? "";
 const hrefs = [...mHtml.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
 ok("HTML del prestador: la plantilla, el nombre y la dirección llegan escapados (ni <a>, ni <script>, ni <img>, ni <b>)",
-   ej.sent === 1 && !/<a href="https:\/\/otro|<script|<img|<b>/.test(mHtml)
+   ej.sent === 1 && !/<a href="https:\/\/otro|<script|<img(?! src="https:\/\/tutiempo\.com\.ar\/icons\/logo-email\.png")|<b>Esquina/.test(mHtml)
+   && (mHtml.match(/<img /g) ?? []).length === 1
    && mHtml.includes("&lt;a href=&quot;https://otro.com&quot;&gt;Promo&lt;/a&gt;") && mHtml.includes("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;")
    && mHtml.includes("Barbería &quot;La &lt;b&gt;Esquina&lt;/b&gt;&quot; &amp; Cía") && mHtml.includes("&lt;img src=x onerror=&quot;alert(1)&quot;&gt; Calle &#39;Uno&#39;"),
    mHtml.slice(0, 600));
