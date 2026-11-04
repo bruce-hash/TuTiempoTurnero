@@ -117,6 +117,8 @@ export const liveAdmin = {
       // v2: qué aviso es y de qué turno (conf, r24, r2, rev y cancel), para la acción de cada uno en Mis turnos
       kind: msg.kind || "msg",
       ref: msg.ref || null,
+      // 4/11 · Bloque 3: el horario de un turno ofrecido (kind "offer"), en hora de Argentina
+      slot: msg.slot && msg.slot.starts ? { ...isoToLocal(msg.slot.starts), to: isoToLocal(msg.slot.ends).time } : null,
     }));
   },
   // Reserva: book_slot crea el turno (y los repetidos) en espera de pago con los montos que calcula la base. Si no hay

@@ -10,10 +10,18 @@ import { myCards, stampCard } from "../../ui/sellos.js";
 import { myUpcoming } from "./home.js";
 import { rateForm } from "./perfil.js";
 
-// v2: la acción de cada aviso según lo que dice (nunca "Reservar": desde los avisos no se reserva). Confirmación,
+// v2: la acción de cada aviso según lo que dice (4/11: "Reservar" solo en un turno que ofreció el profesional). Confirmación,
 // recordatorios y cancelación → ver ese turno; pedido de reseña → dejarla (o "Ya calificaste"); los mensajes del
 // profesional y el saludo de cumpleaños → ver su perfil. Si el turno ya no está en la lista, también su perfil.
 function msgAction(msg) {
+  // 4/11 · Bloque 3: un turno libre que ofreció el profesional → "Reservar" (al perfil, con ese día elegido)
+  if (msg.kind === "offer" && msg.pid) {
+    const slot = msg.slot;
+    if (!slot || slot.date + " " + slot.time <= TODAY() + " " + nowHM()) {
+      return '<span class="hint">Ese horario ya pasó</span>';
+    }
+    return `<button class="btn btn-pri btn-sm msg-act" data-act="offerBook" data-id="${esc(String(msg.pid))}" data-d="${esc(slot.date)}">Reservar</button>`;
+  }
   const booking = msg.ref && ["conf", "r24", "r2", "rev", "cancel"].includes(msg.kind) ? store.BOOK.find((item) => item.mine && String(item.id) === String(msg.ref)) : null;
   const btn = (attrs, label) => `<button class="btn btn-ghost btn-sm msg-act" ${attrs}>${label}</button>`;
   if (booking && msg.kind === "rev") {
