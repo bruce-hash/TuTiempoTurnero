@@ -337,3 +337,15 @@ body.am-open{overflow:hidden}
 .nudgebox{grid-column:1/-1;margin-top:4px;text-align:left}
 .nudgebox b{display:inline;font-size:inherit}.nudgebox span{font-size:inherit;color:inherit}
 .nudgebox textarea{width:100%;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--fg);resize:vertical}
+/* 4/11 · La campanita de avisos (src/ui/campanita.js): a la izquierda del menú de cuenta; la lista cae debajo, en el
+   celular a lo ancho de la pantalla */
+.bellw{position:relative}
+.bell-btn{position:relative;display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--fg);font-size:18px;line-height:1}
+.bell-btn:hover{border-color:var(--brand-line)}
+.bell-btn[aria-expanded=true]{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.bell-n{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:99px;background:var(--bad);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--card)}
+.bellpanel{position:absolute;right:-56px;top:calc(100% + 8px);width:min(400px,calc(100vw - 32px));max-height:min(70vh,560px);overflow:auto;padding:12px 14px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.18);z-index:60;text-align:left}
+.bellpanel:focus{outline:none}
+.bellpanel .ag li{padding:10px 0}
+.bell-empty{text-align:left;margin:4px 0}
+@media (max-width:699px){.bellpanel{position:fixed;left:16px;right:16px;top:64px;width:auto}}

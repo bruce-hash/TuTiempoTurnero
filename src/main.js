@@ -12,6 +12,7 @@ import "./actions/admin.js";
 import "./actions/negocio.js";
 import "./actions/auth.js";
 import "./actions/avisos.js";
+import "./actions/campanita.js";
 import "./actions/cambios.js";
 import "./actions/cliente.js";
 import "./actions/contrasena-nueva.js";
