@@ -166,9 +166,11 @@ export function describe() {
     const tab = PANEL_TABS[S.btab] ? S.btab : "agenda";
     const label = (BTABS.find((row) => row[0] === tab) || [])[1] || "Panel";
     const clientId = tab === "clientes" && S.cli ? clientIdOf(S.cli) : null;
+    // 4/11: Clientes → Seguidores tiene su dirección (/panel/clientes?ver=seguidores; la del push "Nuevo seguidor")
+    const ver = tab === "clientes" && clientId == null && S.ctab === "seguidores" ? "seguidores" : null;
     return {
-      url: withParams("/panel/" + PANEL_TABS[tab], { cliente: clientId, historia: S.story ? S.story.i : null }),
-      key: `panel:${tab}${clientId != null ? ":cliente:" + clientId : ""}${S.story ? ":historia" : ""}`,
+      url: withParams("/panel/" + PANEL_TABS[tab], { cliente: clientId, ver, historia: S.story ? S.story.i : null }),
+      key: `panel:${tab}${clientId != null ? ":cliente:" + clientId : ""}${ver ? ":seguidores" : ""}${S.story ? ":historia" : ""}`,
       overlay: clientId != null || !!S.story,
       title: `${label} · Panel · ${SITE}`,
     };

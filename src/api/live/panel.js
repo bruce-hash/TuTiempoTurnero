@@ -9,6 +9,7 @@ import { store } from "../../store.js";
 import { feeOf } from "../../views/prestador/finanzas.js";
 import { MSG_DEF } from "../../views/prestador/mensajes.js";
 import { medioFromDb } from "../../lib/medios.js";
+import { avatarUrl } from "../../ui/fotos.js";
 import { restMissing } from "../../lib/resto.js";
 
 // C22 (V3b): la consulta de los turnos del panel y cómo se pasan a la agenda. Los usan la carga completa (loadMine) y la
@@ -242,6 +243,8 @@ export const livePanel = {
     S.mpSt = mpSt || {};
     S.mp = S.mpSt.can_charge ? "ok" : "none";
     S.notices = notices || [];
+    // 4/11: los huecos ya ofrecidos (la Agenda los marca "✓ Ofrecido")
+    await livePanel.myOffers().catch(() => {});
     const prov = pr(pid);
     // reseñas y trabajos de su perfil (los cargó loadProvider)
     store.COMM = store.COMMBY[pid];
@@ -274,6 +277,54 @@ export const livePanel = {
     const rows = await call(sb.rpc("provider_month_breakdown", { p_year: year }));
     store.MBRK[year] = (rows || []).map((row) => ({ app: row.app, man: row.man, walk: row.walk, prod: row.prod, fixed: row.exp_fixed, buys: row.exp_products }));
     return store.MBRK[year];
+  },
+  // 4/11 · Bloque 3: quienes siguen al prestador (Clientes → Seguidores): "Ana G.", foto, desde cuándo y su ficha si ya
+  // es cliente. El número que se muestra en el panel sale de acá (al día).
+  async followers() {
+    const data = await call(sb.rpc("provider_followers"));
+    store.FOLLOWERS = ((data && data.items) || []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      photo: avatarUrl(row.photo),
+      since: row.since,
+      client: row.client,
+    }));
+    store.COMM.followers = (data && data.count) || 0;
+    return store.FOLLOWERS;
+  },
+  // los huecos que ya ofreció (a todos o a un seguidor), para marcarlos "✓ Ofrecido" aunque recargue
+  async myOffers() {
+    const rows = await call(
+      sb.from("slot_offers").select("starts_at,target_user").eq("provider_id", S.me).gte("starts_at", new Date().toISOString()).limit(1e3),
+    );
+    S.offered = {};
+    S.offeredTo = {};
+    (rows || []).forEach((row) => {
+      const { date, time } = isoToLocal(row.starts_at);
+      if (row.target_user) {
+        S.offeredTo[row.target_user + "|" + date + "|" + time] = true;
+      } else {
+        S.offered[date + "|" + time] = true;
+      }
+    });
+  },
+  // 4/11: el número de seguidores y los avisos del panel ("Nuevo seguidor") se vuelven a pedir con la Agenda (cada 30 s
+  // y al volver a la pestaña); antes se cargaban una sola vez al entrar. true si cambió algo.
+  async refreshCommunity() {
+    const pid = S.me;
+    if (!pid) {
+      return false;
+    }
+    const [row, notices] = await Promise.all([
+      call(sb.from("providers").select("followers").eq("id", pid).maybeSingle()),
+      call(sb.rpc("my_provider_notices")),
+    ]);
+    const before = JSON.stringify([store.COMM.followers, S.notices]);
+    if (row) {
+      store.COMM.followers = row.followers;
+    }
+    S.notices = notices || [];
+    return JSON.stringify([store.COMM.followers, S.notices]) !== before;
   },
   m: {},
 };

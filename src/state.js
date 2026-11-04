@@ -24,6 +24,11 @@ export const fresh = () => ({
   barberAuth: false,
   // la ventana de ingreso (true: abierta) y si S.after es solo la página donde estaba (el prestador va a su Agenda)
   authModal: null,
+  // 4/11 · Bloque 3: Clientes → "clientes" o "seguidores"; los huecos ofrecidos a un seguidor ("<cuenta>|día|hora") y
+  // a quién se le está eligiendo un turno para ofrecer
+  ctab: "clientes",
+  offeredTo: {},
+  offerFor: null,
   afterSoft: false,
   login: {
     mode: "in",

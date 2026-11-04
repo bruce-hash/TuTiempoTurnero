@@ -10,6 +10,7 @@ import { relBadge } from "../../ui/picker.js";
 import { cliBest, cliStamps, stampCfg, stampGoal, stampGrid, stampSvcs } from "../../ui/sellos.js";
 import { inApp, vMsgCompose } from "./mensajes.js";
 import { demoClients } from "../../demo/clientes.js";
+import { vSeguidores } from "./seguidores.js";
 
 // nombres de clientes para mostrar: en vivo, todos los de la base con nombre (H21: ya no se descarta nadie por cómo
 // se llama); en la demo, además, sin los turnos de relleno de la agenda de ejemplo
@@ -39,8 +40,13 @@ export function vBClientes() {
   if (S.cli && store.CLIENTS[S.cli]) {
     return vFicha(S.cli);
   }
-  const filter = S.cf || "todos";
   const names = realClients();
+  // 4/11 · Bloque 3: Clientes (los que reservaron o agregaste) y Seguidores (los que te siguen), por separado
+  const tabs = `<div class="seg3 ctabs" role="group" aria-label="Ver"><button data-act="ctab" data-t="clientes" aria-pressed="${S.ctab !== "seguidores"}">Clientes <span>${names.length}</span></button><button data-act="ctab" data-t="seguidores" aria-pressed="${S.ctab === "seguidores"}">Seguidores <span>${store.COMM.followers || 0}</span></button></div>`;
+  if (S.ctab === "seguidores") {
+    return tabs + vSeguidores();
+  }
+  const filter = S.cf || "todos";
   const groups = {
     todos: names,
     recuperar: names.filter((name) => store.CLIENTS[name].last >= 35),
@@ -52,7 +58,7 @@ export function vBClientes() {
     filter === "recuperar" ? store.CLIENTS[other].last - store.CLIENTS[one].last : store.CLIENTS[other].v - store.CLIENTS[one].v,
   );
   const toWin = groups.recuperar.filter((name) => !store.CLIENTS[name].contacted);
-  return `<div class="stats2"><div><b>${names.length}</b><span>Clientes</span></div><div><b>${groups.fieles.length}</b><span>Fieles (5+ visitas)</span></div><div><b>${groups.recuperar.length}</b><span>Hace 5+ semanas</span></div></div>
+  return `${tabs}<div class="stats2"><div><b>${names.length}</b><span>Clientes</span></div><div><b>${groups.fieles.length}</b><span>Fieles (5+ visitas)</span></div><div><b>${groups.recuperar.length}</b><span>Hace 5+ semanas</span></div></div>
   ${
     S.msgOpen
       ? vMsgCompose(names)

@@ -3,6 +3,7 @@
 // guarda adónde volver.
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
+import { TODAY } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { CAT_SLUGS } from "../lib/rubros.js";
 import { isReservedSlug } from "../lib/rutas.js";
@@ -121,6 +122,12 @@ async function openProfile(pid, parts, params, path) {
     S.pctx = null;
   }
   S.pid = pid;
+  // 4/11 · Bloque 3: desde un turno ofrecido (aviso o push), el perfil con ese día elegido (/<perfil>?dia=AAAA-MM-DD)
+  const offerDay = params.get("dia");
+  if (/^\d{4}-\d\d-\d\d$/.test(offerDay || "") && offerDay >= TODAY()) {
+    S.day = offerDay;
+    S.slot = null;
+  }
   const reprog = params.get("reprogramar");
   // mover un turno existente es solo de la demo y de un turno confirmado (en vivo, ver arriba)
   S.reprog = reprog && store.BOOK.some((booking) => booking.mine && booking.id == reprog && booking.status === "confirmed") ? +reprog : null;
@@ -198,6 +205,10 @@ function openPanel(parts, params, path) {
   if (tab === "agenda" && /^\d{4}-\d\d-\d\d$/.test(day || "")) {
     S.aday = day;
     S.awk = null;
+  }
+  // 4/11: /panel/clientes?ver=seguidores
+  if (tab === "clientes") {
+    S.ctab = params.get("ver") === "seguidores" ? "seguidores" : "clientes";
   }
   const clientId = params.get("cliente");
   if (tab === "clientes" && clientId) {
