@@ -23,6 +23,8 @@ registerClick("toAdmin", (ev, el, act) => {
 });
 registerClick("changePass", (ev, el, act) => {
   S.npMode = "change";
+  S.npStep = null;
+  S.npNew = null;
   go("newpass");
 });
 registerClick("toPanel", (ev, el, act) => {
