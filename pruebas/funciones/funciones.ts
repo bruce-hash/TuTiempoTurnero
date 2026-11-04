@@ -95,10 +95,10 @@ async function webhook(pid: number, acc: number | null, payId: string, { firma =
 const evento = async (payId: string, reason: string) =>
   Number(await one("select count(*) from mp_webhook_events where mp_payment_id = $1 and reason = $2", [payId, reason]));
 const refundsRun = async (key = CRON) => fn("mp-refunds", new Request("https://fn.test/functions/v1/mp-refunds", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
-async function preference(uid: string, ids: number[]) {
+async function preference(uid: string, ids: number[], extra: Record<string, unknown> = {}) {
   return fn("mp-create-preference", new Request("https://fn.test/functions/v1/mp-create-preference", {
     method: "POST", headers: { Authorization: `Bearer ${await jwt({ sub: uid, role: "authenticated" })}`, Origin: SITE, "Content-Type": "application/json" },
-    body: JSON.stringify({ booking_ids: ids }) }));
+    body: JSON.stringify({ booking_ids: ids, ...extra }) }));
 }
 async function oauth(uid: string, code: string) {
   const r = await fn("mp-oauth", new Request("https://fn.test/functions/v1/mp-oauth", {
@@ -173,11 +173,31 @@ ok("mp-create-preference: monto y comisión salen de la base", pref?.body.items[
   ok("Paso 1: la vuelta lleva a la pantalla del turno con el token de regreso (no al inicio)",
      back.origin === SITE && back.pathname === `/turno/${b1[0]}` && /^[0-9a-f]{64}$/.test(back.searchParams.get("pago") ?? "") && back.searchParams.get("mp") === "success"
      && pref?.body.back_urls.failure.includes(`pago=${back.searchParams.get("pago")}`), pref?.body.back_urls?.success);
+  const rb = await body(r);
+  ok("4/11: la respuesta trae el token de regreso y el turno (la app instalada los guarda), y en el navegador la vuelta no lleva app=1",
+     rb.token === back.searchParams.get("pago") && rb.booking === b1[0] && !back.searchParams.has("app"), JSON.stringify(rb));
   ok("Paso 1: el cobro queda anotado (sha256 del token, los turnos en el orden del external_reference y la cuenta que cobra)",
      Number(await one("select count(*) from mp_checkouts where token_hash = checkout_hash($1) and array_to_string(booking_ids, ',') = $2 and mp_account_id = $3 and closed_at is null",
        [back.searchParams.get("pago"), pref?.body.external_reference, A.id])) === 1
      && Number(await one("select count(*) from mp_checkouts where token_hash = $1", [back.searchParams.get("pago")])) === 0);
 }
+{
+  // 4/11 · Bloque 1: desde la app instalada (app: true) las tres vueltas llevan app=1; cualquier otro valor, no
+  const bApp = await book();
+  const ra = await preference(cli, bApp, { app: true });
+  const urls = mp.preferencias.at(-1)!.body.back_urls;
+  ok("4/11: desde la app instalada, las tres vueltas (success, failure, pending) llevan app=1 y el mismo token",
+     ra.status === 200 && ["success", "failure", "pending"].every((k) => new URL(urls[k]).searchParams.get("app") === "1" && new URL(urls[k]).searchParams.get("pago") === new URL(urls.success).searchParams.get("pago")),
+     `${ra.status} ${JSON.stringify(urls)}`);
+  const bRaro = await book();
+  const rr = await preference(cli, bRaro, { app: "1" });
+  ok("4/11: app que no es true no marca la vuelta", rr.status === 200 && !new URL(mp.preferencias.at(-1)!.body.back_urls.success).searchParams.has("app"));
+  // esos dos turnos y cobros no siguen (las pruebas de más abajo cuentan los cobros abiertos)
+  const extra = [...bApp, ...bRaro];
+  await q("delete from mp_checkouts where booking_ids && $1::bigint[]", [extra]);
+  await q("delete from bookings where id = any($1::bigint[])", [extra]);
+}
+
 
 // ---------- 3. Webhook: pago aprobado ----------
 mp.pago({ id: "9001", collector: "1001", status: "approved", amount: 6000, fee: 1000, ref: b1.join(",") });
