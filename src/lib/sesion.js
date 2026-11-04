@@ -26,6 +26,7 @@ export function afterLogin() {
 //   4. el resto se queda en la página donde estaba (o al inicio)
 export function goAfter() {
   S.authModal = null;
+  S.authOnPage = null;
   if (S.pending) {
     S.after = null;
     S.afterSoft = false;

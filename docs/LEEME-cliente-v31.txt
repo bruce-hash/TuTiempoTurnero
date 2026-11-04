@@ -65,8 +65,8 @@ C) Authentication → Emails → Templates (copiá cada uno tal cual; el link us
        <h2>Creá tu contraseña nueva</h2>
        <p><a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery">Crear contraseña nueva</a></p>
        <p>El link vence en 1 hora y sirve una sola vez. Si no lo pediste, ignorá este email.</p>
-   - "Magic Link" (entrar con código):
-       <p>Tu código para entrar a TuTiempo es: <b>{{ .Token }}</b></p>
+   - "Magic Link": ya no se usa (desde el 4/11 no se entra con un código por email).
+   - "Reauthentication" (el código para cambiar la contraseña desde Seguridad): ver docs/02 → "4/11 · Bloque 2".
    - "Change Email Address":
        <p><a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email_change">Confirmar email nuevo</a></p>
    Recomendado para producción: Authentication → Emails → SMTP Settings con tu propio envío

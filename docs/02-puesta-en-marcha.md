@@ -105,6 +105,29 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### 4/11 · Bloque 2 (general)
+- Sin migraciones ni Edge Functions. Se sube el `dist/` nuevo.
+- **Ya no hay «Entrar con un código por email».** Se ingresa con contraseña o con Google (y «Olvidé mi contraseña»).
+  La plantilla «Magic Link» de Supabase deja de usarse: podés dejarla como está.
+- **Cambiar contraseña (Seguridad)** pide la contraseña actual y después un código de 6 números que Supabase manda por
+  email (reautenticación). En Supabase:
+  1. Authentication → Sign In / Providers → Email → **Secure password change: activado** (ya estaba en el PASO 2 B del
+     LEEME; verificá que siga prendido). Con esa opción, Supabase exige el código cuando la sesión tiene más de 24 horas;
+     la app lo pide siempre.
+  2. Authentication → Emails → Templates → **Reauthentication**. Asunto: `Tu código para cambiar la contraseña`. Cuerpo
+     (copialo tal cual):
+     ```html
+     <h2>Confirmá el cambio de contraseña</h2>
+     <p>Tu código de TuTiempo es:</p>
+     <p style="font-size:28px;font-weight:700;letter-spacing:6px">{{ .Token }}</p>
+     <p>Escribilo en la app para guardar tu contraseña nueva. Vence en 1 hora y sirve una sola vez.</p>
+     <p>Si no estás cambiando tu contraseña, no compartas este código con nadie y entrá a TuTiempo para cambiarla.</p>
+     ```
+  3. Probalo: Mi perfil (o Ajustes) → Seguridad → Cambiar contraseña → la actual y la nueva → llega el email con el
+     código → al escribirlo, «Listo: tu contraseña cambió». Con la actual equivocada no se manda ningún email.
+- La contraseña actual se comprueba con Supabase Auth (como un ingreso, con el CAPTCHA si está prendido) sin cambiar la
+  sesión de la app; cuenta para los límites de intentos de ingreso (Authentication → Rate Limits).
+
 ### C04 · Marca (3/11)
 - Sin migraciones. Se sube el `dist/` nuevo (logo, paleta, fuentes Nunito y Montserrat, íconos de la app y
   `icons/logo-email.png`) y se vuelve a desplegar `email-send` (`_shared/email.ts` lleva el logo y la paleta). El email

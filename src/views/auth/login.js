@@ -11,8 +11,8 @@ import { pwField, rememberBox, resendBtn } from "./campos.js";
 
 // Ingreso y registro (rediseño aprobado el 1/11): lo mismo en la ventana (encima de la página, ui/ingreso.js) y en las
 // páginas /ingresar, /crear-cuenta y /registrar-negocio. Para ingresar no se elige nada: email o Google, y la app lleva
-// a cada uno a su lugar. S.login.mode: in (contraseña), up (crear cuenta), forgot / sent (recuperar contraseña),
-// code / codeSent (código por email) y confirm (falta tocar el link del email). Si el ingreso lo pidió una acción
+// a cada uno a su lugar. S.login.mode: in (contraseña), up (crear cuenta), forgot / sent (recuperar contraseña) y
+// confirm (falta tocar el link del email). 4/11: sin "Entrar con un código por email". Si el ingreso lo pidió una acción
 // (S.pending), arriba va el ticket; con "negocio", el paso 0 de Registrá tu negocio.
 
 // títulos según la acción pendiente
@@ -53,28 +53,7 @@ export function authBody() {
     return `${back("in")}${head("Revisá tu email")}
    <div class="am-ok">Si <b>${email}</b> tiene una cuenta, te llega un link para crear una contraseña nueva. Vence en 1 hora. Mirá también en Spam o Promociones.</div>
    ${LIVE ? "" : store.DEMO_USERS[(login.email || "").toLowerCase()] ? '<button class="btn btn-pri btn-block" data-act="demoRecoveryLink">Abrir el link del email (demo)</button>' : '<div class="demohint">Demo: ese email no tiene cuenta, así que no llega nada (y no se lo decimos a nadie: así nadie puede averiguar qué emails están registrados).</div>'}
-   <div class="am-sec" style="justify-content:center"><button type="button" class="lnk" data-act="authMode" data-m="code">Entrar con un código por email</button></div>`;
-  }
-  if (mode === "code") {
-    return `${tk}${back("in")}${head("Entrar con un código", "Sin contraseña: te mandamos un código de 6 números a tu email.")}
-   <form id="fMail" novalidate>
-    <div class="f"><label for="le">Email</label><input id="le" type="email" inputmode="email" autocomplete="email" maxlength="120" placeholder="tu@email.com" value="${esc(login.email || rememberedEmail())}"></div>
-    ${rememberBox("le_rem", login)}
-    <div class="err" id="lerr">${esc(login.err || "")}</div>
-    ${captchaBox("fMail")}<button class="btn btn-pri btn-block" type="submit">Enviarme un código</button>
-   </form>`;
-  }
-  if (mode === "codeSent") {
-    // el mismo mensaje exista o no la cuenta (el código es solo para cuentas que ya existen)
-    return `${tk}<button type="button" class="lnk am-back" data-act="loginBack">← Volver</button>${head("Entrar con un código", `Si <b>${email}</b> tiene cuenta, le llega un código de 6 números. Mirá también en Spam o Promociones.`)}
-   ${LIVE ? "" : '<div class="demohint">Demo: el código es <b>123456</b></div>'}
-   <form id="fCode" novalidate>
-    <div class="f"><label for="lc">Código</label><input id="lc" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" class="otp"></div>
-    <div class="err" id="lerr">${esc(login.err || "")}</div>
-    <button class="btn btn-pri btn-block" type="submit">Ingresar</button>
-   </form>
-   ${captchaBox("reenviar")}<div class="am-sec" style="justify-content:center">${resendBtn("reenviar", "Reenviar el código", login.resendAt)}</div>
-   ${foot('¿No tenés cuenta? <button type="button" class="lnk" data-act="authMode" data-m="up">Creá una</button>')}`;
+`;
   }
   if (mode === "confirm") {
     const goal = !pending ? "" : biz ? " y seguís con tu negocio" : " y seguís donde lo dejaste";
@@ -125,15 +104,19 @@ export function authBody() {
     <div class="f"><label for="ai_e">Email</label><input id="ai_e" type="email" inputmode="email" autocomplete="email" maxlength="120" value="${esc(login.email || rememberedEmail())}"></div>
     ${rememberBox("ai_rem", login)}
     ${pwField("ai_p", "Contraseña", "current-password", false)}
-    ${fails >= 3 && !login.locked ? `<p class="tries">Te ${left === 1 ? "queda 1 intento" : `quedan ${left} intentos`}. Después tenés que esperar 30 segundos (o entrá con un código).</p>` : ""}
+    ${fails >= 3 && !login.locked ? `<p class="tries">Te ${left === 1 ? "queda 1 intento" : `quedan ${left} intentos`}. Después tenés que esperar 30 segundos (o recuperá tu contraseña).</p>` : ""}
     <div class="err" id="aerr">${esc(login.err || "")}</div>
     ${captchaBox("fLogin")}<button class="btn btn-pri btn-block" type="submit" ${login.locked ? "disabled" : ""}>Ingresar</button>
    </form>
-   <div class="am-sec"><button type="button" class="lnk" data-act="authMode" data-m="forgot" ${fails >= 3 ? 'style="font-weight:700"' : ""}>Olvidé mi contraseña</button><button type="button" class="lnk" data-act="authMode" data-m="code">Entrar con un código por email</button></div>
+   <div class="am-sec"><button type="button" class="lnk" data-act="authMode" data-m="forgot" ${fails >= 3 ? 'style="font-weight:700"' : ""}>Olvidé mi contraseña</button></div>
    ${foot(`¿No tenés cuenta? <button type="button" class="lnk" data-act="authMode" data-m="up">${biz ? "Creála" : "Creá una"}</button>`)}`;
 }
 
 // la página (/ingresar, /crear-cuenta, /registrar-negocio sin sesión): el mismo contenido que la ventana
 export function vLogin() {
+  // 4/11: con "Crear cuenta" abierta en la ventana encima, la página no repite el formulario (mismos campos)
+  if (S.authOnPage && S.authModal) {
+    return `<div class="narrow"><div class="panel authpage" aria-hidden="true"><h1 class="am-h">Ingresá a TuTiempo</h1><p class="am-sub">Clientes y profesionales entran por acá.</p></div></div>`;
+  }
   return `<div class="narrow"><div class="panel authpage">${authBody()}</div></div>`;
 }
