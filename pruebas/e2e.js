@@ -125,7 +125,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("4/11: el ingreso no ofrece entrar con un código por email", (await pg.locator("[data-m=code]").count()) === 0 && !/con un código/.test(await pg.locator(".authmodal").innerText()));
   await db.query("insert into auth.users (email, encrypted_password, email_confirmed_at, raw_user_meta_data) values ('ana@test.ar', 'cliente12345', now(), '{\"full_name\":\"ana\"}')");
   probing = true; await pg.fill("#ai_e", "ana@test.ar"); await pg.fill("#ai_p", "otra-clave-1"); await pg.click("#fLogin button[type=submit]"); await wait(); probing = false;
-  ok("contraseña incorrecta avisa (y propone recuperarla, no un código)", (await pg.locator("#aerr").innerText()).includes("recuperá tu contraseña"));
+  ok("contraseña incorrecta avisa (y propone recuperarla, no un código)", (await pg.locator("#ai_p_err").innerText().catch(() => "")).includes("recuperá tu contraseña"));
   await pg.fill("#ai_p", "cliente12345"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector("#fTurno"); await wait();
   ok("vuelve al pago ya logueado", (await txt()).includes("Confirmá tu turno"));
   ok("checkout: seña obligatoria y el resto en efectivo o Mercado Pago, sin preguntas ni saldo", (await pg.locator("[data-paym=mp]").count()) === 1 && (await pg.locator("[data-paym=cash]").count()) === 1 && !(await pg.locator(".intake").count()) && !(await txt()).includes("Saldo") && (await txt()).includes("$6.000"));
