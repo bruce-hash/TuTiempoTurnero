@@ -114,6 +114,9 @@ export const liveAdmin = {
       d: relDate(msg.created_at),
       read: !!msg.read,
       auto: msg.kind && msg.kind !== "msg",
+      // v2: qué aviso es y de qué turno (conf, r24, r2, rev y cancel), para la acción de cada uno en Mis turnos
+      kind: msg.kind || "msg",
+      ref: msg.ref || null,
     }));
   },
   // Reserva: book_slot crea el turno (y los repetidos) en espera de pago con los montos que calcula la base. Si no hay

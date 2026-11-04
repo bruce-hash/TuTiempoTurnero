@@ -65,6 +65,9 @@ button.gi{border:0;padding:0;cursor:pointer;position:relative;background:none}.g
 .st-cta{position:absolute;left:16px;right:16px;bottom:22px;z-index:2}
 .paypick{display:grid;gap:8px}.payopt{display:flex;gap:12px;align-items:center;text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:12px;cursor:pointer;font:inherit;color:inherit}
 .payopt[aria-checked="true"]{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-line)}.payopt small{display:block}.mp.cash{background:#16a34a}
+/* v2: avisos de Mis turnos con su acción y su ✕ (sin "Reservar") */
+.inbox-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}.inbox-h .lbl{margin:0}.inbox-h .lnk{font-size:13px;white-space:nowrap}
+.inbox .msg-act{margin-top:6px;justify-self:start;width:auto}.inbox li>div{display:grid;justify-items:start;gap:1px}
 .inbox li.unread b{color:var(--brand)}.inbox .msgb{display:block;white-space:normal;color:var(--fg)}.inbox li{align-items:flex-start}.inbox .av{width:36px;height:36px;font-size:12px;flex:none}
 .cliacts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .msgc textarea{width:100%;min-height:96px}.msgsel{display:flex;flex-direction:column;gap:6px;margin:8px 0}.msgl{max-height:340px;overflow:auto;margin:0 0 12px}

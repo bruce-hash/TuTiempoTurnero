@@ -261,3 +261,5 @@ Reemplaza la lista "por rol" del 2/11. Un PR por bloque.
 | 4 · Profesional | Horarios sin «Copiar link» | Hecho | Queda el de Trabajos, junto al QR y el PDF. |
 | 4 · Profesional | Estadísticas: «Armar happy hour» y «Avisar a seguidores» | Hecho | Llevan a esa parte de la sección, justo debajo de la cabecera fija. |
 | 4 · Profesional | Plazo de acreditación explicado | Hecho | En «Seña y cobro» del alta y en Perfil → Cobros: se elige en la cuenta de Mercado Pago, la app lo detecta con el primer cobro y sin Mercado Pago no hay reservas. |
+| 5 · Cliente | Mis turnos: cada aviso con su acción, sin «Reservar» | Hecho | Confirmación, recordatorios y cancelación → «Ver turno» (ese turno); pedido de reseña → «Dejar reseña» (abre la reseña de ese turno en Anteriores) o «✓ Ya calificaste»; mensajes del profesional y cumpleaños → «Ver perfil». Desde los avisos no se reserva. |
+| 5 · Cliente | Borrar avisos | Hecho | ✕ por aviso y «Borrar los leídos». En la base quedan guardados (`client_messages.dismissed_at`), fuera de la lista: el límite diario de mensajes de cada profesional no cambia. |
