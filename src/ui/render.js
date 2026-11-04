@@ -265,6 +265,7 @@ export function go(view, id) {
   if (S.authModal) {
     S.authModal = null;
     S.after = null;
+    S.authOnPage = null;
   }
   if (S.role === "barbero" && S.preview) {
     S.preview = false;

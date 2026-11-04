@@ -24,6 +24,12 @@ export const fresh = () => ({
   barberAuth: false,
   // la ventana de ingreso (true: abierta) y si S.after es solo la página donde estaba (el prestador va a su Agenda)
   authModal: null,
+  // 4/11: "Crear cuenta" en ventana encima de /ingresar: lo que tenía la página (adónde volver, acción pendiente)
+  authOnPage: null,
+  // 4/11: cambiar contraseña en dos pasos ("form" y "code"); la nueva queda solo en memoria hasta confirmar el código
+  npStep: null,
+  npNew: null,
+  npResendAt: 0,
   afterSoft: false,
   login: {
     mode: "in",

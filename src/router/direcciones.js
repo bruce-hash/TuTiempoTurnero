@@ -108,7 +108,8 @@ function describeClient(view) {
       return { url: "/cuenta", key: "cuenta", title: `${isBusiness() ? "Ajustes" : "Mi perfil"} · ${SITE}` };
     case "login":
     case "register": {
-      const up = S.login && S.login.mode === "up";
+      // 4/11: con "Crear cuenta" en la ventana encima de /ingresar, la dirección sigue siendo la de la página
+      const up = S.authOnPage ? S.view === "register" : S.login && S.login.mode === "up";
       return {
         url: withParams(up ? "/crear-cuenta" : "/ingresar", { volver: afterPath() }),
         key: up ? "crear-cuenta" : "ingresar",
