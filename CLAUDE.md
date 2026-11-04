@@ -63,8 +63,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     El prestador va siempre a su Agenda. D33: una cuenta es de cliente o de negocio (`isBusiness()` en `src/lib/cuentas.js`;
     la de negocio no reserva, no sigue ni reseña: aviso en `src/actions/cuentas.js`; en la base, triggers `business_account`
     y `client_history`). Registrá tu negocio: `src/views/auth/negocio.js` + `src/actions/negocio.js`
-    (5 pasos, `setup_step`/`my_setup` en la base, `src/lib/alta.js` dice qué falta). El código por email es solo para
-    cuentas que existen (`shouldCreateUser: false`).
+    (5 pasos, `setup_step`/`my_setup` en la base, `src/lib/alta.js` dice qué falta). Desde el 4/11 no hay ingreso con código
+    por email; «Crear cuenta» va siempre en la ventana (`S.authOnPage` encima de `/ingresar`). Cambiar contraseña:
+    la actual con `sbScratch()` (no toca la sesión) y el código de `reauthenticate()` como `nonce`.
   - V3b (C22): `src/lib/agenda-al-dia.js` vuelve a pedir los turnos de la Agenda cada 30 s y al volver a la pestaña (sin
     Realtime) y solo dibuja si cambió algo; no toca la pantalla con un guardado pendiente, un formulario abierto o alguien escribiendo.
   - V4 resto: C31 gastos fijos en `src/lib/fijos.js` (qué corre cada mes; en la demo, la misma regla) y en la base
