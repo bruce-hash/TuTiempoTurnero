@@ -277,6 +277,8 @@ export async function applyUrl(href) {
       }
       S.payToken = token;
       S.payBack = token ? params.get("mp") : null;
+      // 4/11: la vuelta de un pago hecho desde la app instalada (marca app=1 en la vuelta de Mercado Pago)
+      S.payFromApp = !!token && params.get("app") === "1";
       if (token && !S.user) {
         S.turnoId = +parts[1];
         return showClient("pagoVuelta");

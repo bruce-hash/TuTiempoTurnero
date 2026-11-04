@@ -64,6 +64,19 @@ export function vPagoVuelta() {
     `<button class="btn btn-pri btn-block" data-act="payLogin">${label}</button><p class="note" style="margin-top:8px">Si pagaste desde la app instalada, Mercado Pago te trajo al navegador: ingresá con la misma cuenta.</p>`;
   const card = (icon, title, body, actions) =>
     `<div class="narrow stack pay-back" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px" aria-hidden="true">${icon}</div><h1 class="h1">${title}</h1>${body}${actions}</div></div>`;
+  // 4/11: pagó desde la app instalada y Mercado Pago abrió la vuelta en el navegador (en iPhone, Safari no tiene la
+  // sesión de la app): el pago está, el turno se ve en la app, que lo confirma sola al volver
+  if (S.payFromApp && (st.state === "confirmed" || st.state === "partial" || (st.state === "waiting" && S.payBack !== "failure"))) {
+    return card(
+      "✅",
+      "Pago recibido",
+      `${what}<p class="lead" style="font-weight:700">Volvé a la app TuTiempo para ver tu turno.</p><p class="note">${st.state === "waiting" ? "Mercado Pago nos está avisando: en la app se confirma solo en unos segundos." : "Te llega la confirmación por email."}</p>`,
+      '<p class="note" style="margin-top:8px">¿No tenés la app a mano? <button class="lnk" data-act="payLogin">Ingresá acá con tu cuenta</button>.</p>',
+    );
+  }
+  if (S.payFromApp && st.state === "waiting" && S.payBack === "failure") {
+    return card("✕", "El pago no se completó", `${what}<p class="lead" style="font-weight:700">Volvé a la app TuTiempo para intentarlo de nuevo.</p><p class="note">Tu horario sigue reservado unos minutos.</p>`, "");
+  }
   switch (st.state) {
     case "confirmed":
       return card("✅", "¡Listo! Tenés turno", `${what}<p class="note">Te llega la confirmación por email.</p>`, login("Ingresá para ver tu turno"));
