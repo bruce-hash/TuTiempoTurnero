@@ -73,6 +73,17 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   for (const route of ["/", "/rubro/barberias", "/buscar?q=corte", "/ingresar", "/crear-cuenta", "/sumate", "/registrar-negocio", "/prestadores/ingresar", "/terminos", "/no-existe"]) await go(route);
   await page.goto(BASE + "/");
   await page.waitForSelector(".grid .card");
+  // 4/11: el pie centrado (el mismo espacio a los dos lados de sus bloques)
+  const pie = await page.evaluate(() => {
+    const inner = document.querySelector("footer .in");
+    const cs = getComputedStyle(inner);
+    const box = inner.getBoundingClientRect();
+    const left = box.left + parseFloat(cs.paddingLeft);
+    const right = box.right - parseFloat(cs.paddingRight);
+    const blocks = [...inner.children].filter((el) => !el.classList.contains("legal")).map((el) => el.getBoundingClientRect());
+    return { izq: Math.round(Math.min(...blocks.map((b) => b.left)) - left), der: Math.round(right - Math.max(...blocks.map((b) => b.right))) };
+  });
+  ok(`${name} · pie centrado`, Math.abs(pie.izq - pie.der) <= 4, JSON.stringify(pie));
   await page.click(".grid .card [data-go=perfil]");
   await check("perfil del prestador");
   for (const tab of ["works", "reviews"]) {
@@ -96,6 +107,14 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   await check("mis turnos");
   await page.evaluate(() => go("cuenta"));
   await check("mi perfil");
+  // 4/11: Seguridad → Cambiar contraseña (la actual y la nueva; después el código del email)
+  await page.click("[data-act=changePass]");
+  await check("cambiar contraseña");
+  await page.fill("#np0", "cliente123"); await page.fill("#np1", "Nueva2026zz"); await page.fill("#np2", "Nueva2026zz");
+  await page.click("#fNewPass button[type=submit]");
+  await page.waitForSelector("#np_c");
+  await check("cambiar contraseña · código");
+  await page.click("[data-act=npCancel]");
   // Registrá tu negocio: los 5 pasos y el final (como un prestador con el alta a medias)
   for (const step of [1, 2, 3, 4, 5, "listo"]) {
     await page.evaluate((n) => { S.role = "cliente"; S.barberAuth = true; S.setupBy = { [S.me || 7]: { steps: [1, 2], status: "pending" } }; S.biz = {}; S.bizStep = n; go("negocio"); }, step);

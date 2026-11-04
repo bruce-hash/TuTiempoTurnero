@@ -41,6 +41,11 @@ document.addEventListener("click", (ev) => {
       window.scrollTo(0, 0);
       return;
     }
+    // 4/11: para el cliente y sin sesión, el logo lleva a la página general de rubros (todos, sin búsqueda)
+    if (goEl.id === "logoLink") {
+      S.cat = "todos";
+      S.q = "";
+    }
     if (goEl.dataset.go === "perfil") {
       S.pctx = goEl.dataset.ctx || null;
       S.svc = 0;

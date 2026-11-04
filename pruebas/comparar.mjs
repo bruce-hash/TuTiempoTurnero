@@ -309,12 +309,10 @@ async function recorridoVivo(browser, url) {
   await clic(page, "[data-slot]");
   await foto(page, pasos, "perfil con horario elegido");
   await clic(page, "[data-act=reservarT]");
-  await clic(page, "[data-act=authMode][data-m=code]");
-  await page.fill("#le", "ana@test.ar");
-  await clic(page, "#fMail button[type=submit]");
-  await page.waitForSelector("#lc");
-  await page.fill("#lc", "123456");
-  await clic(page, "#fCode button[type=submit]");
+  // 4/11: sin el código por email; con contraseña en las dos versiones
+  await page.fill("#ai_e", "ana@test.ar");
+  await page.fill("#ai_p", "cliente12345");
+  await clic(page, "#fLogin button[type=submit]");
   await page.waitForSelector("#fTurno");
   await foto(page, pasos, "pago (monto)");
   await clic(page, "#fTurno button[type=submit]");
@@ -437,9 +435,8 @@ if (process.env.PGHOST || process.env.POSTGREST) {
     await c.query("update public.providers set shuffle_key = id");
     await c.query("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ('admin@test.ar', 'admin12345', '{\"full_name\":\"Admin\"}')");
     await c.query("insert into public.app_admins (user_id) select id from auth.users where email = 'admin@test.ar'");
-    // ingreso y registro: el código por email ya no crea cuentas; la clienta existe en las dos bases (en la de
-    // referencia el código la creaba)
-    await c.query("insert into auth.users (email, raw_user_meta_data) values ('ana@test.ar', '{\"full_name\":\"ana\"}')");
+    // la clienta existe en las dos bases, con contraseña (4/11: ya no hay ingreso con código por email)
+    await c.query("insert into auth.users (email, encrypted_password, email_confirmed_at, raw_user_meta_data) values ('ana@test.ar', 'cliente12345', now(), '{\"full_name\":\"ana\"}')");
     await c.end();
   }
   const [viejo, nuevo] = await Promise.all(entornos.map((e) => recorridoVivo(browser, e.url)));
