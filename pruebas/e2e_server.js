@@ -58,6 +58,7 @@ const PWA = { sw: false, vapid: "" }; // Bloque C
 let ROUTES = "ok"; // C02: "inicio" imita un hosting sin el .htaccess, que manda al inicio cada dirección de la app
 let DOWN = false; // Bloque C: /__down?on=1 simula el sitio caído (sin conexión): cierra toda conexión salvo /__down
 let LAST_CHECKOUT = null; // Paso 1: el último cobro abierto ({ token, booking }), para probar la vuelta sin sesión (/__checkout)
+const REAUTH = {}; // 4/11: códigos de reautenticación pendientes, por usuario
 const USED = new Set(); // tokens ya usados (Cloudflare acepta cada uno una sola vez)
 const CAPTCHA_PATHS = ["/signup", "/otp", "/recover", "/resend"];
 
@@ -104,7 +105,11 @@ async function auth(req, res, url) {
   }
   const claims = verify((req.headers.authorization || "").slice(7));
   if (p === "/user" && req.method === "GET") { if (!claims || !claims.sub) return send(res, 401, { msg: "no session" }); return send(res, 200, userObj(await userRow("id", claims.sub))) }
+  // 4/11 · Bloque 2: reautenticación (cambiar contraseña). Como Supabase: manda un código de 6 números al email y
+  // updateUser lo pide como nonce. Acá el código es siempre 123456 y se exige cada vez que viene uno.
+  if (p === "/reauthenticate" && req.method === "GET") { if (!claims || !claims.sub) return send(res, 401, { msg: "no session" }); REAUTH[claims.sub] = "123456"; LOG.push({ reauth: claims.sub }); return send(res, 200, {}) }
   if (p === "/user" && req.method === "PUT") { if (!claims || !claims.sub) return send(res, 401, {}); const u = await userRow("id", claims.sub); const md = Object.assign({}, u.raw_user_meta_data, j.data || {});
+    if (j.password && j.nonce !== undefined) { if (!REAUTH[claims.sub] || REAUTH[claims.sub] !== j.nonce) return send(res, 400, { code: 400, error_code: "reauthentication_not_valid", msg: "Reauthentication failed: invalid nonce", message: "Reauthentication failed: invalid nonce" }); delete REAUTH[claims.sub] }
     if (j.password) { if (String(j.password).length < 8) return send(res, 422, { msg: "Password should be at least 8 characters", message: "Password should be at least 8 characters" }); await db.query("update auth.users set encrypted_password=$1 where id=$2", [j.password, claims.sub]) }
     await db.query("update auth.users set raw_user_meta_data=$1 where id=$2", [JSON.stringify(md), claims.sub]); return send(res, 200, userObj(await userRow("id", claims.sub))) }
   if (p === "/logout") return send(res, 204);

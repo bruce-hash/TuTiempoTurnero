@@ -71,6 +71,28 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("D32: Registrá tu negocio del footer abre Crear cuenta con la casilla ya marcada", (await pg.isVisible(".authmodal #fSignup")) && (await pg.isChecked("#au_biz")) && (await pg.locator("#amTitle").innerText()) === "Creá tu cuenta" && (await pg.locator("#au_t").count()) === 0 && (await pg.evaluate(() => S.pending && S.pending.a)) === "negocio");
   await pg.mouse.click(5, 5); await wait(200);
   ok("ingreso: tocar afuera cierra la ventana", (await pg.locator(".authmodal").count()) === 0);
+  {
+    // 4/11 · Bloque 2: "Crear cuenta" siempre en la ventana, también desde la página /ingresar; /crear-cuenta queda
+    // como página solo para los links directos
+    await pg.goto(BASE + "/ingresar"); await pg.waitForSelector("#fLogin"); await wait(300);
+    await pg.click("[data-act=authMode][data-m=up]"); await wait(300);
+    ok("4/11: en /ingresar, «Creá una» abre Crear cuenta en la ventana (la dirección no cambia)",
+       (await pg.isVisible(".authmodal #fSignup")) && new URL(pg.url()).pathname === "/ingresar" && (await pg.locator("#fLogin").count()) === 0 && (await pg.locator("#amTitle").count()) === 1);
+    await pg.click(".authmodal .am-x"); await wait(300);
+    ok("4/11: …al cerrarla, la página de ingreso queda como estaba", (await pg.locator(".authmodal").count()) === 0 && (await pg.isVisible("#fLogin")) && new URL(pg.url()).pathname === "/ingresar");
+    await pg.click("footer [data-act=bizStart]"); await wait(300);
+    ok("4/11: en /ingresar, «Registrá tu negocio» también abre la ventana, con la casilla de negocio marcada",
+       (await pg.isVisible(".authmodal #fSignup")) && (await pg.isChecked("#au_biz")) && new URL(pg.url()).pathname === "/ingresar");
+    await pg.keyboard.press("Escape"); await wait(200);
+    await pg.goto(BASE + "/crear-cuenta"); await pg.waitForSelector("#fSignup"); await wait(300);
+    ok("4/11: /crear-cuenta (link directo) sigue siendo una página", (await pg.locator(".authmodal").count()) === 0 && (await pg.isVisible("#fSignup")));
+    // el logo: para el cliente y sin sesión, la página general de rubros (sin el rubro ni la búsqueda de antes)
+    await pg.goto(BASE + "/rubro/unas"); await pg.waitForSelector(".grid .card, .empty", { timeout: 8000 }).catch(() => {}); await wait(300);
+    const conRubro = (await pg.locator("[data-act=verTodos]").count()) === 1;
+    await pg.click("#logoLink"); await wait(400);
+    ok("4/11: el logo lleva a la página general de rubros (todos, sin filtro)", conRubro && new URL(pg.url()).pathname === "/" && (await pg.locator("[data-act=verTodos]").count()) === 0);
+    await pg.goto(BASE + "/"); await pg.waitForSelector(".grid .card"); await wait(300);
+  }
   ok("ingreso: el footer dice Ingresar y Registrá tu negocio (sin Acceso prestadores ni Sumate)", /Registrá tu negocio/.test(await pg.locator("footer").innerText()) && !/Acceso prestadores|Sumate/.test(await pg.locator("footer").innerText()));
   ok("General: el footer tiene contacto@tutiempo.com.ar como link mailto y sin @tutiempo.arg",
      (await pg.locator('footer a[href="mailto:contacto@tutiempo.com.ar"]').count()) === 1 && !/@tutiempo\.arg/.test(await pg.locator("footer").innerText()));
@@ -99,22 +121,12 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("ingreso: el ticket muestra día, hora, servicio y negocio, y que sigue directo al pago",
      tk.includes(slotHM) && tk.includes(+slotDay.slice(8) + "/" + +slotDay.slice(5, 7)) && /Esmaltado/.test(tk) && /Sofía/.test(tk) && tk.includes("Al ingresar seguís directo al pago"), tk);
   ok("ingreso con Google, email y contraseña", await pg.isVisible("[data-act=google]") && await pg.isVisible("#ai_p"));
-  // el código por email es solo para cuentas que ya existen, con el mismo mensaje exista o no
-  await pg.click("[data-act=authMode][data-m=code]"); await wait(200);
-  ok("ingreso: el ticket sigue en Entrar con un código", (await pg.locator(".authmodal .tk").count()) === 1);
-  probing = true; await pg.fill("#le", "nadie.todavia@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc"); await wait(300); probing = false;
-  const noAcc = await pg.locator(".am-sub").innerText();
-  ok("código por email: un email sin cuenta ve el mismo mensaje y no se crea ninguna cuenta",
-     noAcc.includes("Si nadie.todavia@test.ar tiene cuenta, le llega un código") && !(await pg.locator("#lerr").innerText()) && (await q("select count(*)::int c from auth.users where email='nadie.todavia@test.ar'"))[0].c === 0
-     && (await (await fetch(BASE + "/__log")).json()).some((x) => x.otp === "nadie.todavia@test.ar" && x.create_user === false));
-  await pg.click("[data-act=loginBack]"); await wait(200);
-  // Ana ya tiene cuenta (antes el código creaba una cuenta sin aceptar los términos; ahora solo entra a las que existen)
-  await db.query("insert into auth.users (email, raw_user_meta_data) values ('ana@test.ar', '{\"full_name\":\"ana\"}')");
-  await pg.fill("#le", "ana@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc");
-  ok("código por email: el mismo mensaje con una cuenta que existe", (await pg.locator(".am-sub").innerText()).includes("Si ana@test.ar tiene cuenta, le llega un código"));
-  probing = true; await pg.fill("#lc", "111111"); await pg.click("#fCode button[type=submit]"); await wait(); probing = false;
-  ok("código incorrecto avisa", (await pg.locator("#lerr").innerText()).includes("incorrecto"));
-  await pg.fill("#lc", "123456"); await pg.click("#fCode button[type=submit]"); await pg.waitForSelector("#fTurno"); await wait();
+  // 4/11: sin "Entrar con un código por email" (en ningún lado): se ingresa con contraseña o con Google
+  ok("4/11: el ingreso no ofrece entrar con un código por email", (await pg.locator("[data-m=code]").count()) === 0 && !/con un código/.test(await pg.locator(".authmodal").innerText()));
+  await db.query("insert into auth.users (email, encrypted_password, email_confirmed_at, raw_user_meta_data) values ('ana@test.ar', 'cliente12345', now(), '{\"full_name\":\"ana\"}')");
+  probing = true; await pg.fill("#ai_e", "ana@test.ar"); await pg.fill("#ai_p", "otra-clave-1"); await pg.click("#fLogin button[type=submit]"); await wait(); probing = false;
+  ok("contraseña incorrecta avisa (y propone recuperarla, no un código)", (await pg.locator("#aerr").innerText()).includes("recuperá tu contraseña"));
+  await pg.fill("#ai_p", "cliente12345"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector("#fTurno"); await wait();
   ok("vuelve al pago ya logueado", (await txt()).includes("Confirmá tu turno"));
   ok("checkout: seña obligatoria y el resto en efectivo o Mercado Pago, sin preguntas ni saldo", (await pg.locator("[data-paym=mp]").count()) === 1 && (await pg.locator("[data-paym=cash]").count()) === 1 && !(await pg.locator(".intake").count()) && !(await txt()).includes("Saldo") && (await txt()).includes("$6.000"));
   ok("D34: la comisión va aparte de la seña, sobre el precio (10% del servicio = $1.200) y se paga $7.200", (await pg.locator(".feerow").innerText()).includes("10% del servicio") && (await pg.locator(".feerow").innerText()).includes("$1.200") && (await pg.locator("#fTurno .tot").innerText()).includes("$7.200") && (await pg.locator("#fTurno button[type=submit]").innerText()).includes("$7.200"));
@@ -191,10 +203,9 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("Paso 1: la dirección conserva el token (se puede recargar)", new URL(pp.url()).searchParams.get("pago") === ck.token);
     await pp.reload(); await pp.waitForSelector(".pay-back", { timeout: 8000 }).catch(() => {}); await pp.waitForTimeout(400);
     ok("Paso 1: …y recargando sigue ahí", /¡Listo! Tenés turno/.test(await pp.locator("#app").innerText()));
-    await pp.click("[data-act=payLogin]"); await pp.waitForSelector("#le", { timeout: 8000 }).catch(() => {}); await pp.waitForTimeout(300);
+    await pp.click("[data-act=payLogin]"); await pp.waitForSelector("#ai_e", { timeout: 8000 }).catch(() => {}); await pp.waitForTimeout(300);
     ok("Paso 1: “Ingresá para ver tu turno” lleva al ingreso y después vuelve al turno", new URL(pp.url()).pathname === "/ingresar" && new URL(pp.url()).searchParams.get("volver") === `/turno/${ck.booking}`);
-    await pp.click("[data-act=authMode][data-m=code]").catch(() => {}); await pp.waitForTimeout(200);
-    await pp.fill("#le", "ana@test.ar"); await pp.click("#fMail button[type=submit]"); await pp.waitForSelector("#lc"); await pp.fill("#lc", "123456"); await pp.click("#fCode button[type=submit]");
+    await pp.fill("#ai_e", "ana@test.ar"); await pp.fill("#ai_p", "cliente12345"); await pp.click("#fLogin button[type=submit]");
     await pp.waitForURL(new RegExp(`/turno/${ck.booking}$`), { timeout: 8000 }).catch(() => {}); await pp.waitForTimeout(800);
     ok("Paso 1: …ya con sesión, el detalle de su turno", new URL(pp.url()).pathname === `/turno/${ck.booking}` && /Esmaltado semipermanente/.test(await pp.locator("#app").innerText()));
     const ctxQ = await b.newContext({ viewport: { width: 400, height: 900 } }); const pq = await ctxQ.newPage();
@@ -321,7 +332,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   // ---------- Prestadora ----------
   // el mismo ingreso que los clientes; desde cualquier página, la prestadora entra a su Agenda
   await pg.click("footer [data-act=authOpen]"); await wait();
-  const BAD = "Email o contraseña incorrectos. Revisalos o entrá con un código.";
+  const BAD = "Email o contraseña incorrectos. Revisalos o recuperá tu contraseña.";
   probing = true; await pg.fill("#ai_e", "nadie.registrado@test.ar"); await pg.fill("#ai_p", "Cualquiera2026"); await pg.click("#fLogin button[type=submit]"); await wait(900);
   const badNoAccount = await pg.locator("#ai_p_err").innerText().catch(() => "");
   await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "mal"); await pg.click("#fLogin button[type=submit]"); await wait(900); probing = false;
@@ -642,9 +653,9 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   // V7 (C49): ingresar desde la capa deja la misma página (la ficha de un prestador)
   await pg.locator(".grid .card [data-go=perfil]").first().click(); await pg.waitForSelector(".pcard"); await wait(400);
   const urlProv = pg.url();
-  await pg.click("nav [data-act=authOpen]"); await wait(); await pg.click("[data-act=authMode][data-m=code]"); await wait(200);
-  ok("V7: Ingresar con código adentro de la capa", (await pg.isVisible(".authmodal #fMail")) && pg.url() === urlProv);
-  await pg.fill("#le", "ana@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc"); await pg.fill("#lc", "123456"); await pg.click("#fCode button[type=submit]"); await wait(1200);
+  await pg.click("nav [data-act=authOpen]"); await wait();
+  ok("V7: Ingresar adentro de la capa", (await pg.isVisible(".authmodal #fLogin")) && pg.url() === urlProv);
+  await pg.fill("#ai_e", "ana@test.ar"); await pg.fill("#ai_p", "cliente12345"); await pg.click("#fLogin button[type=submit]"); await wait(1200);
   ok("V7: después de ingresar la capa se cierra y queda la misma página", (await pg.evaluate(() => !!S.user)) && (await pg.locator(".authmodal").count()) === 0 && pg.url() === urlProv && (await pg.isVisible(".pcard")), pg.url() + " vs " + urlProv);
   await menu("[data-go=misturnos]"); await wait(800);
   ok("v31: Mis turnos: el turno cancelado por bloqueo dice que el profesional la va a llamar (sin Reprogramar automático)", /canceló el profesional/i.test(await txt()) && /te va a llamar/i.test(await txt()) && (await pg.locator(".delpanel [data-act=rebook]").count()) === 0);
@@ -988,8 +999,8 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
      /Todavía no toma turnos online/.test(await txt()) && (await pg.locator(".bookbar").count()) === 0 && (await pg.locator("[data-slot]").count()) === 0);
   // D22 (H25): con la cuenta desconectada, una clienta con la tarjeta llena igual puede canjear su premio
   await db.query("update loyalty_cards set stamps = 16 where user_id = (select id from auth.users where email='ana@test.ar') and service_id = $1", [esm]);
-  await pg.click("nav [data-act=authOpen]"); await wait(); await pg.click("[data-act=authMode][data-m=code]"); await wait(200);
-  await pg.fill("#le", "ana@test.ar"); await pg.click("#fMail button[type=submit]"); await pg.waitForSelector("#lc"); await pg.fill("#lc", "123456"); await pg.click("#fCode button[type=submit]"); await wait(1200);
+  await pg.click("nav [data-act=authOpen]"); await wait();
+  await pg.fill("#ai_e", "ana@test.ar"); await pg.fill("#ai_p", "cliente12345"); await pg.click("#fLogin button[type=submit]"); await wait(1200);
   await pg.goto(BASE + "/p/" + sofi); await pg.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("D22: sin Mercado Pago, la clienta con la tarjeta llena ve “Solo podés canjear tu premio”", /Solo podés canjear tu premio/.test(await txt()) && !/Todavía no toma turnos online/.test(await txt()));
   await pg.click(".panel [data-svc]"); await wait(400);
@@ -999,6 +1010,27 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("D22: en el pago solo queda “Usar mi premio”", (await pg.locator("[data-paym=reward]").count()) === 1 && (await pg.locator("[data-paym=mp]").count()) === 0);
   await pg.click("#fTurno button[type=submit]"); await wait(1500);
   ok("D22: el premio queda reservado sin pago", (await q("select count(*)::int c from bookings where pay_method = 'reward' and status = 'confirmed'"))[0].c === rewardsBefore + 1);
+  {
+    // 4/11 · Bloque 2: Seguridad → Cambiar contraseña: la actual, la nueva y el código que manda Supabase (reautenticación)
+    await pg.goto(BASE + "/cuenta"); await pg.waitForSelector("[data-act=changePass]", { timeout: 8000 }).catch(() => {});
+    await pg.click("[data-act=changePass]"); await pg.waitForSelector("#np0", { timeout: 8000 }).catch(() => {});
+    const reauths = async () => (await (await fetch(BASE + "/__log")).json()).filter((x) => x.reauth).length;
+    const r0 = await reauths();
+    ok("4/11: Cambiar contraseña pide la actual, la nueva y repetirla", (await pg.locator("#np0").count()) === 1 && (await pg.locator("#np1").count()) === 1 && (await pg.locator("#np2").count()) === 1);
+    probing = true;
+    await pg.fill("#np0", "no-es-esta-1"); await pg.fill("#np1", "Nueva2026ana"); await pg.fill("#np2", "Nueva2026ana"); await pg.click("#fNewPass button[type=submit]"); await wait(800);
+    probing = false;
+    ok("4/11: con la contraseña actual equivocada no sigue (y no manda ningún código)", (await pg.locator("#nperr").innerText()).includes("La contraseña actual no es correcta") && (await reauths()) === r0);
+    await pg.fill("#np0", "cliente12345"); await pg.click("#fNewPass button[type=submit]"); await pg.waitForSelector("#np_c", { timeout: 8000 }).catch(() => {});
+    ok("4/11: con la actual bien, Supabase manda el código de reautenticación y la app lo pide", (await pg.locator("#np_c").count()) === 1 && (await reauths()) === r0 + 1 && /Revisá tu email/.test(await txt()));
+    probing = true; await pg.fill("#np_c", "111111"); await pg.click("#fNewPassCode button[type=submit]"); await wait(800); probing = false;
+    ok("4/11: con un código equivocado no cambia", (await pg.locator("#nperr").innerText()).includes("El código no es correcto") && (await q("select encrypted_password p from auth.users where email='ana@test.ar'"))[0].p === "cliente12345");
+    await pg.fill("#np_c", "123456"); await pg.click("#fNewPassCode button[type=submit]"); await pg.waitForURL(/\/cuenta$/, { timeout: 8000 }).catch(() => {}); await wait(400);
+    ok("4/11: con el código bien, la contraseña cambia y sigue con la sesión abierta",
+       (await q("select encrypted_password p from auth.users where email='ana@test.ar'"))[0].p === "Nueva2026ana" && new URL(pg.url()).pathname === "/cuenta" && (await pg.locator("nav .acct-btn").count()) === 1);
+    // la de antes, para lo que sigue
+    await db.query("update auth.users set encrypted_password = 'cliente12345' where email = 'ana@test.ar'");
+  }
   await menu("[data-act=logout]"); await wait(800);
   // "Volver al panel" cierra la sesión del prestador: se vuelve a ingresar y la app vuelve a Perfil (?volver=)
   await pg.goto(BASE + "/panel/perfil"); await pg.waitForSelector("#fLogin", { timeout: 8000 }).catch(() => {}); await wait(400);
