@@ -568,7 +568,8 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
     if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(600); }
     ok("C30: antes de cerrar avisa el turno de hoy sin marcar", new RegExp(`Antes de cerrar · ${pend0 + 1} pendiente`, "i").test(await txt()) && (await pg.locator('.pendday li:has-text("Pendiente C30") [data-act=bDone]').count()) === 1
-       && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText()));
+       && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText().catch(() => "")),
+       JSON.stringify({ pend0, pend: await pg.locator(".pendday").innerText().catch(() => "(sin panel)"), cierre: await pg.locator("#fCloseDay, .cclosed").first().innerText().catch(() => "(sin cierre)") }));
     await pg.click('.pendday li:has-text("Pendiente C30") [data-act=bDone]'); await wait(900);
     ok("C30: «Vino» lo marca y pasa a pedir con qué pagó", (await q("select status from bookings where client_name='Pendiente C30'"))[0].status === "done"
        && /¿Cómo te pagó \$4\.000\?/.test(await pg.locator(".pendday").innerText()));
