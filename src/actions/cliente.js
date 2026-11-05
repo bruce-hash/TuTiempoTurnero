@@ -196,6 +196,14 @@ registerClick("verTurno", (ev, el, act) => {
   S.justBooked = false;
   go("turnoOk");
 });
+// 4/11 · Bloque 3: "Reservar" en el aviso de un turno ofrecido: al perfil del profesional, con ese día elegido
+registerClick("offerBook", (ev, el, act) => {
+  S.svc = 0;
+  S.slot = null;
+  go("perfil", el.dataset.id);
+  S.day = /^\d{4}-\d\d-\d\d$/.test(el.dataset.d || "") ? el.dataset.d : null;
+  render();
+});
 registerClick("goLocal", (ev, el, act) => {
   go("home");
 });

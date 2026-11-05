@@ -105,6 +105,19 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
 
+### 4/11 · Bloque 3 (seguidores, D35)
+- Migración nueva: `20261104190000_seguidores.sql`.
+  - Tabla `slot_offers` (RLS: el prestador ve las suyas; se escriben solo con `offer_slot`).
+  - `offer_slot` (ofrecer un hueco a todos o a un seguidor) y `notify_followers` («Avisar a tus seguidores»), con los
+    límites de D35.
+  - `provider_followers` (la lista de Clientes → Seguidores).
+  - Avisos del cliente `offer` y `news` y sus push. `push_due` y `my_messages` actualizados.
+  - `posts` deja de aceptar inserts directos.
+- Sin Edge Functions nuevas: `push-send` manda lo que devuelve `push_due`, como siempre. Sin cambios en `config.js` ni en
+  el `.htaccess`.
+- Cómo probarlo: con una cuenta de cliente, seguí a un negocio. En el panel de ese negocio, Clientes → Seguidores tiene
+  que mostrarla. «Ofrecer» un hueco en la Agenda: al cliente le llega el aviso en Mis turnos (con «Reservar») y el push.
+
 ### 4/11 · Bloque 2 (general)
 - Sin migraciones ni Edge Functions. Se sube el `dist/` nuevo.
 - **Ya no hay «Entrar con un código por email».** Se ingresa con contraseña o con Google (y «Olvidé mi contraseña»).

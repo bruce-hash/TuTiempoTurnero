@@ -61,6 +61,13 @@ const ERRS = {
   no_stamp_card: "Ese servicio no tiene tarjeta de sellos.",
   bad_stamp_goal: "Cada tarjeta lleva de 15 a 20 sellos.",
   forbidden: "No tenés permiso para hacer eso.",
+  // 4/11 · Bloque 3: ofrecer un hueco a los seguidores (offer_slot)
+  offer_repeated: "Ese horario ya lo ofreciste.",
+  offer_taken: "Ese horario ya no está libre.",
+  offer_past: "Ese horario ya pasó.",
+  offer_limit: "Llegaste al límite de hoy: 5 ofertas a todos tus seguidores y 10 a seguidores puntuales. Mañana podés seguir.",
+  not_follower: "Esa persona ya no te sigue.",
+  bad_offer: "Elegí un horario libre de los próximos días.",
   bad_commission: "La comisión tiene que estar entre 0% y 30%.",
   bad_site_url: "Escribí solo https:// y el dominio, sin barra al final ni nada después.",
   empty_note: "Escribí la nota.",

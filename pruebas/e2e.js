@@ -330,7 +330,8 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     // (4) deslizar hacia abajo para actualizar (solo en la app instalada) y "Actualizar" en el menú
     // (sin el cobro abierto de recién: al recargar, la app volvería a ese turno)
     await pa.evaluate(() => localStorage.removeItem("tt_cobro"));
-    await pa.goto(BASE + "/mis-turnos"); await pa.waitForTimeout(800);
+    // (la barra la arma el arranque al final: se espera a que exista, si no el tirón llega antes que ella)
+    await pa.goto(BASE + "/mis-turnos"); await pa.waitForSelector(".ptr", { state: "attached", timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(300);
     await pa.evaluate(() => { window.__antes = 1; });
     const pull = async (to, end) => pa.evaluate(([y, fin]) => {
       const t = (cy) => new Touch({ identifier: 1, target: document.body, clientX: 150, clientY: cy });
@@ -557,19 +558,34 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("V4b: un solo medio vuelve al resto entero (sin partes)", (await q("select rest_parts, rest_method from bookings where id=$1", [bd.id]))[0].rest_method === "transfer"
        && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
     // C30 (V4 resto): antes de cerrar el día, lo pendiente: turnos de hoy sin marcar y cobros sin medio de pago (el
-    // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba)
+    // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba). Se cuentan los pendientes
+    // que ya había (otro turno de hoy de esta prueba puede haber empezado). Sin esperas fijas: en el CI, la caja reabierta
+    // y el panel tardaban más que los 600 ms de antes (falló dos veces)
+    const openDay = async () => {
+      await pg.click("[data-btab=finanzas]"); await pg.waitForSelector("[data-fp=dia]"); await pg.click("[data-fp=dia]");
+      await pg.waitForSelector("#fCloseDay, [data-act=reopenDay]", { timeout: 8000 });
+      if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await pg.waitForSelector("#fCloseDay", { timeout: 8000 }); }
+      await wait(300);
+    };
+    await pg.reload(); await wait(1500);
+    await openDay();
+    const pend0 = +((await pg.locator(".pendday .lbl").innerText().catch(() => "")).match(/(\d+) pendiente/) || [0, 0])[1];
     await q("insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1,$2,'Pendiente C30','Corte','manual','confirmed',($3||' 00:00')::timestamp at time zone 'America/Argentina/Buenos_Aires',($3||' 00:30')::timestamp at time zone 'America/Argentina/Buenos_Aires',4000)", [sv.provider_id, sv.id, hoyBA]);
     await pg.reload(); await wait(1500);
-    await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
-    if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(600); }
-    ok("C30: antes de cerrar avisa el turno de hoy sin marcar", /Antes de cerrar · 1 pendiente/i.test(await txt()) && (await pg.locator('.pendday li:has-text("Pendiente C30") [data-act=bDone]').count()) === 1
-       && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText()));
-    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=bDone]'); await wait(900);
-    ok("C30: «Vino» lo marca y pasa a pedir con qué pagó", (await q("select status from bookings where client_name='Pendiente C30'"))[0].status === "done"
+    await openDay();
+    await pg.waitForFunction((n) => new RegExp(`Antes de cerrar · ${n} pendiente`, "i").test(document.querySelector("#app")?.innerText || ""), pend0 + 1, { timeout: 8000 }).catch(() => {});
+    ok("C30: antes de cerrar avisa el turno de hoy sin marcar", new RegExp(`Antes de cerrar · ${pend0 + 1} pendiente`, "i").test(await txt()) && (await pg.locator('.pendday li:has-text("Pendiente C30") [data-act=bDone]').count()) === 1
+       && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText().catch(() => "")),
+       JSON.stringify({ pend0, pend: await pg.locator(".pendday").innerText().catch(() => "(sin panel)"), cierre: await pg.locator("#fCloseDay, .cclosed").first().innerText().catch(() => "(sin cierre)") }));
+    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=bDone]');
+    await pg.waitForFunction(() => /¿Cómo te pagó \$4\.000\?/.test(document.querySelector(".pendday")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("C30: «Vino» lo marca y pasa a pedir con qué pagó", (await until("select status from bookings where client_name='Pendiente C30'", [], (r) => r[0]?.status === "done"))
        && /¿Cómo te pagó \$4\.000\?/.test(await pg.locator(".pendday").innerText()));
-    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=restMedio][data-m="Efectivo"]'); await wait(800);
-    ok("C30: con el medio anotado no queda nada pendiente y el botón vuelve a «Cerrar la caja»", (await q("select rest_method from bookings where client_name='Pendiente C30'"))[0].rest_method === "cash"
-       && (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText()));
+    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=restMedio][data-m="Efectivo"]');
+    await pg.waitForFunction(() => !/Pendiente C30/.test(document.querySelector(".pendday")?.innerText || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+    ok("C30: con el medio anotado no queda nada pendiente y el botón vuelve a «Cerrar la caja»", (await until("select rest_method from bookings where client_name='Pendiente C30'", [], (r) => r[0]?.rest_method === "cash"))
+       && (pend0 ? (await pg.locator('.pendday li:has-text("Pendiente C30")').count()) === 0 && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText())
+                 : (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText())));
     // C36 (V4 resto): precio de compra y "Vendí uno" desde Productos, que entra en la Caja del día
     await pg.click("[data-btab=productos]"); await wait(300);
     await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Cera C36"); await pg.fill("#pnp", "8000"); await pg.fill("#pnc", "4500"); await pg.fill("#pns", "2");
@@ -1433,6 +1449,82 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     }
     ok(`D32: (la vuelta de Google entró con la cuenta ${email})`, (await pgg.evaluate(() => S.user && S.user.email)) === email && JSON.stringify(await (await fetch(BASE + "/__log")).json()).includes(email));
     await cg.close();
+  }
+  {
+    // 4/11 · Bloque 3: seguidores. Sofía en su panel y Ana (clienta) en otra sesión.
+    const sofi = (await q("select id, slug from providers where name like 'Sofía%'"))[0];
+    await db.query("delete from follows where provider_id = $1", [sofi.id]);
+    await db.query("update auth.users set encrypted_password = 'cliente12345', email_confirmed_at = coalesce(email_confirmed_at, now()) where email = 'ana@test.ar'");
+    const anaId = (await q("select id from auth.users where email = 'ana@test.ar'"))[0].id;
+    const login = async (page, email, pass) => {
+      await page.goto(BASE + "/ingresar"); await page.waitForSelector("#ai_e");
+      await page.fill("#ai_e", email); await page.fill("#ai_p", pass); await page.click("#fLogin button[type=submit]"); await page.waitForTimeout(1500);
+    };
+    const ctxS = await b.newContext({ viewport: { width: 400, height: 900 } }); const ps = await ctxS.newPage(); ps.on("pageerror", (e) => errs.push(e.message));
+    const ctxA = await b.newContext({ viewport: { width: 400, height: 900 } }); const pa = await ctxA.newPage(); pa.on("pageerror", (e) => errs.push(e.message));
+    const stxt = () => ps.locator("#app").innerText();
+    const volver = () => ps.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await login(ps, "sofia@test.ar", "prestador123");
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".ctabs", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(800);
+    ok("4/11: Clientes tiene la pestaña Seguidores (con su dirección), vacía al principio",
+       (await ps.locator(".ctabs [data-t=seguidores][aria-pressed=true]").count()) === 1 && /Todavía no te sigue nadie/.test(await stxt()) && /Seguidores\s*0/.test(await ps.locator(".ctabs").innerText()));
+    // Ana la sigue desde el perfil
+    await login(pa, "ana@test.ar", "cliente12345");
+    await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector("[data-act=seguir]", { timeout: 8000 }).catch(() => {});
+    await pa.click("[data-act=seguir]");
+    await until("select count(*)::int c from follows where provider_id = $1", [sofi.id], (r) => r[0].c === 1);
+    await volver();
+    await ps.waitForFunction(() => /Ana/.test(document.querySelector(".folist")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("4/11: quien empieza a seguir aparece en la lista y en el número sin recargar (al volver a la pestaña)",
+       /Ana/.test(await ps.locator(".folist").innerText().catch(() => "")) && /Seguidores\s*1/.test(await ps.locator(".ctabs").innerText())
+       && (await ps.evaluate(() => S.notices.some((n) => n.kind === "new_follower" && /Ana empezó a seguirte/.test(n.body)))));
+    ok("4/11: de cada seguidor se ve el nombre y desde cuándo (sin email ni teléfono)", /Te sigue desde el \d{1,2}\/\d{1,2}/.test(await ps.locator(".folist").innerText()) && !/@/.test(await ps.locator(".folist").innerText()));
+    // "Ofrecer" a esa persona
+    await ps.click(".folist [data-act=folOffer]"); await ps.waitForSelector("[data-act=folOfferGo]", { timeout: 8000 }).catch(() => {});
+    const g1 = await ps.locator("[data-act=folOfferGo]:not([disabled])").first().getAttribute("data-g");
+    await ps.click(`[data-act=folOfferGo][data-g="${g1}"]`);
+    const toOne = await until("select count(*)::int c from slot_offers where provider_id = $1 and target_user = $2", [sofi.id, anaId], (r) => r[0].c === 1);
+    ok("4/11: «Ofrecer» a un seguidor le deja un aviso solo a esa persona", toOne
+       && (await q("select count(*)::int c from client_messages where kind = 'offer' and user_id = $1", [anaId]))[0].c === 1);
+    // Agenda: "Ofrecer" un hueco a todos los seguidores (el primer día con lugar)
+    await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".tl, .agwk", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    for (let i = 0; i < 10 && !(await ps.locator("[data-act=offerGap]:not([disabled])").count()); i++) {
+      const next = ps.locator(".agwk [data-aday][aria-selected=false]:not(.closed)").nth(i);
+      if (!(await next.count())) break;
+      await next.click(); await ps.waitForTimeout(250);
+    }
+    const g2 = await ps.locator("[data-act=offerGap]:not([disabled])").first().getAttribute("data-g");
+    await ps.click(`[data-act=offerGap][data-g="${g2}"]`);
+    const toAll = await until("select count(*)::int c from slot_offers where provider_id = $1 and target_user is null", [sofi.id], (r) => r[0].c === 1);
+    ok("4/11: «Ofrecer» de la Agenda les llega a los seguidores (aviso en la app con el horario)", toAll
+       && (await q("select count(*)::int c from client_messages where kind = 'offer' and user_id = $1", [anaId]))[0].c === 2
+       && /Listo: les avisamos a 1 seguidor/.test(await ps.locator(".toast").innerText().catch(() => "")));
+    await ps.reload(); await ps.waitForSelector(".tl, .agwk", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    await ps.evaluate((d) => { S.aday = d; S.awk = null; render(); }, g2.split("|")[0]); await ps.waitForTimeout(300);
+    ok("4/11: …y después de recargar sigue marcado «✓ Ofrecido»", /Ofrecido/.test(await ps.locator(`[data-act=offerGap][data-g="${g2}"]`).innerText().catch(() => "")));
+    // Ana: el aviso en Mis turnos con "Reservar", que la lleva al perfil ese día
+    await pa.goto(BASE + "/mis-turnos"); await pa.waitForSelector("[data-act=offerBook]", { timeout: 8000 }).catch(() => {});
+    ok("4/11: a la clienta le llega en Mis turnos «Tengo un turno libre…» con «Reservar»", (await pa.locator("[data-act=offerBook]").count()) === 2
+       && /Tengo un turno libre el/.test(await pa.locator("#app").innerText()));
+    const d2 = await pa.locator("[data-act=offerBook]").first().getAttribute("data-d");
+    await pa.click("[data-act=offerBook] >> nth=0"); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(400);
+    ok("4/11: «Reservar» abre el perfil con ese día elegido", new URL(pa.url()).pathname === "/" + sofi.slug && (await pa.evaluate(() => S.day)) === d2);
+    // Trabajos → "Avisar a tus seguidores": le llega a Ana, con "Ver perfil"
+    await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector("#postTxt", { timeout: 8000 }).catch(() => {});
+    await ps.fill("#postTxt", "Esta semana hay promo de esmaltado"); await ps.click("[data-act=publicar]");
+    const news = await until("select count(*)::int c from client_messages where kind = 'news' and user_id = $1", [anaId], (r) => r[0].c === 1);
+    ok("4/11: «Avisar a tus seguidores» de Trabajos les llega de verdad (aviso en la app)", news && /Listo: les avisamos a 1 seguidor/.test(await ps.locator(".toast").innerText().catch(() => "")));
+    await pa.goto(BASE + "/mis-turnos"); await pa.waitForSelector(".msg-act", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(300);
+    ok("4/11: …y en Mis turnos se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator("#app").innerText()) && (await pa.locator(".msg-act[data-go=perfil]").count()) >= 1);
+    await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector("[data-act=seguir]", { timeout: 8000 }).catch(() => {});
+    // Ana deja de seguir: sale de la lista de Sofía
+    await pa.waitForSelector("[data-act=seguir]"); await pa.click("[data-act=seguir]");
+    await until("select count(*)::int c from follows where provider_id = $1", [sofi.id], (r) => r[0].c === 0);
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".ctabs"); await ps.waitForTimeout(300);
+    await volver();
+    await ps.waitForFunction(() => /Todavía no te sigue nadie/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("4/11: quien deja de seguir sale de la lista y del número", /Todavía no te sigue nadie/.test(await stxt()) && /Seguidores\s*0/.test(await ps.locator(".ctabs").innerText()));
+    await ctxS.close(); await ctxA.close();
   }
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));

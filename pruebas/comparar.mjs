@@ -241,6 +241,11 @@ async function normalizar(page) {
     document.querySelectorAll("#app .kpis.adm .kpi").forEach((kpi) => {
       if (kpi.querySelector("span")?.textContent.trim() === "Clientes") kpi.querySelectorAll("b, small").forEach((el) => { el.textContent = "CLIENTES"; });
     });
+    // 4/11 · Bloque 3 (D35, cambios a propósito): Clientes suma las pestañas «Clientes / Seguidores» y la nota de
+    // «Avisar a tus seguidores» dice qué le llega a cada uno y el tope. Se neutraliza en las dos versiones; lo nuevo lo
+    // prueban e2e.js, test_push.py y ancho.mjs.
+    document.querySelectorAll("#app .ctabs").forEach((el) => el.remove());
+    document.querySelectorAll("#app .avisarpanel p.note").forEach((el) => { el.textContent = "Les llega una notificación con link para reservar."; });
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {

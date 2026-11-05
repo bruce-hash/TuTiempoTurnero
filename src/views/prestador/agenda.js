@@ -7,6 +7,7 @@ import { busy, cfg, cli, ranges, rangesTxt, slotsFor } from "../../lib/turnero.j
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { relBadge } from "../../ui/picker.js";
+import { freeGaps } from "../../lib/huecos.js";
 import { feeOf } from "./finanzas.js";
 import { restOf } from "../../lib/resto.js";
 import { restEditor, restSummary } from "./resto.js";
@@ -110,33 +111,8 @@ export function vBAgendaT() {
     }
   }
   // huecos libres de 30 minutos o más (desde ahora, si es hoy), entre lo ocupado, los descansos y los bordes
-  const gaps = [];
-  let cursor = top;
-  const taken = [...items.filter((item) => item.type !== "walk").map((item) => [toMin(item.time), toMin(item.time) + item.dur])];
-  breaks.forEach((brk) => taken.push(brk));
-  if (top < rngs[0][0]) {
-    taken.push([top, rngs[0][0]]);
-  }
-  if (bottom > rngs[rngs.length - 1][1]) {
-    taken.push([rngs[rngs.length - 1][1], bottom]);
-  }
-  taken.sort((one, other) => one[0] - other[0]);
+  const gaps = freeGaps(day);
   const nowMin = day === TODAY() ? NOW().getHours() * 60 + NOW().getMinutes() : 0;
-  for (const [from, to] of taken) {
-    if (from - cursor >= 30) {
-      const start = Math.max(cursor, nowMin && day === TODAY() ? Math.ceil(nowMin / 30) * 30 : cursor);
-      if (from - start >= 30) {
-        gaps.push([start, from]);
-      }
-    }
-    cursor = Math.max(cursor, to);
-  }
-  if (bottom - cursor >= 30) {
-    const start = Math.max(cursor, day === TODAY() ? Math.ceil(nowMin / 30) * 30 : cursor);
-    if (bottom - start >= 30) {
-      gaps.push([start, bottom]);
-    }
-  }
   const kindClass = (item) =>
     item.type === "block" ? "blk" : item.type === "walk" ? "walk" : item.src === "manual" ? "man" : "app";
   // dos turnos que se pisan se dibujan en columnas alternadas

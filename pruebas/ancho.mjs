@@ -128,6 +128,13 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
     await page.click(`[data-btab=${tab}]`);
     await check(`panel · ${tab}`);
   }
+  // 4/11 · Bloque 3: Clientes → Seguidores, con "Ofrecer" abierto
+  await page.click("[data-btab=clientes]");
+  await page.click("[data-act=ctab][data-t=seguidores]");
+  await page.waitForSelector(".folist");
+  await check("panel · clientes · seguidores");
+  await page.click(".folist [data-act=folOffer]");
+  await check("panel · clientes · seguidores · ofrecer");
   await role("admin");
   for (const tab of ["res", "prov", "bal", "com"]) {
     await page.click(`[data-act=admT][data-t=${tab}]`);

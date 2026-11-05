@@ -79,6 +79,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Pago (turno y token, `tt_cobro`) y al abrir o volver a la app lo confirma sola (no depende de la vuelta, que en iPhone se
     abre en Safari; la vuelta lleva `app=1` y dice «Volvé a la app»). `src/lib/actualizar.js`: datos de la pantalla al
     volver a primer plano y, en la app instalada, deslizar para actualizar y «Actualizar» en el menú.
+  - 4/11 B3 (D35): Clientes → Seguidores (`src/views/prestador/seguidores.js`, `provider_followers`); «Ofrecer» de la
+    Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
+    «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
+    de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma

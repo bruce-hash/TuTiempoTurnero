@@ -9,6 +9,9 @@ import { S } from "../../state.js";
 // Escrituras del panel del prestador (agenda, clientes, caja, productos, gastos, avisos y horarios), todas por saved().
 // Lo que crea una fila guarda su id en el objeto de la app.
 Object.assign(LM, {
+  // 4/11 · Bloque 3: ofrecer un hueco libre a todos los seguidores (user null) o a uno. Devuelve {id, sent}.
+  offerSlot: (day, from, to, user) =>
+    saved(sb.rpc("offer_slot", { p_starts: localToIso(day, from), p_ends: localToIso(day, to), p_user: user || null })),
   markBooking: (booking, status) =>
     saved(
       sb.rpc("mark_booking", {
