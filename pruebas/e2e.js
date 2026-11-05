@@ -330,7 +330,8 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     // (4) deslizar hacia abajo para actualizar (solo en la app instalada) y "Actualizar" en el menú
     // (sin el cobro abierto de recién: al recargar, la app volvería a ese turno)
     await pa.evaluate(() => localStorage.removeItem("tt_cobro"));
-    await pa.goto(BASE + "/mis-turnos"); await pa.waitForTimeout(800);
+    // (la barra la arma el arranque al final: se espera a que exista, si no el tirón llega antes que ella)
+    await pa.goto(BASE + "/mis-turnos"); await pa.waitForSelector(".ptr", { state: "attached", timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(300);
     await pa.evaluate(() => { window.__antes = 1; });
     const pull = async (to, end) => pa.evaluate(([y, fin]) => {
       const t = (cy) => new Touch({ identifier: 1, target: document.body, clientX: 150, clientY: cy });
@@ -558,22 +559,31 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
        && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
     // C30 (V4 resto): antes de cerrar el día, lo pendiente: turnos de hoy sin marcar y cobros sin medio de pago (el
     // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba). Se cuentan los pendientes
-    // que ya había: de noche en Argentina, otro turno de hoy de esta prueba ya empezó y también figura (falló a las 20 h)
+    // que ya había (otro turno de hoy de esta prueba puede haber empezado). Sin esperas fijas: en el CI, la caja reabierta
+    // y el panel tardaban más que los 600 ms de antes (falló dos veces)
+    const openDay = async () => {
+      await pg.click("[data-btab=finanzas]"); await pg.waitForSelector("[data-fp=dia]"); await pg.click("[data-fp=dia]");
+      await pg.waitForSelector("#fCloseDay, [data-act=reopenDay]", { timeout: 8000 });
+      if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await pg.waitForSelector("#fCloseDay", { timeout: 8000 }); }
+      await wait(300);
+    };
     await pg.reload(); await wait(1500);
-    await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
-    if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(600); }
+    await openDay();
     const pend0 = +((await pg.locator(".pendday .lbl").innerText().catch(() => "")).match(/(\d+) pendiente/) || [0, 0])[1];
     await q("insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1,$2,'Pendiente C30','Corte','manual','confirmed',($3||' 00:00')::timestamp at time zone 'America/Argentina/Buenos_Aires',($3||' 00:30')::timestamp at time zone 'America/Argentina/Buenos_Aires',4000)", [sv.provider_id, sv.id, hoyBA]);
     await pg.reload(); await wait(1500);
-    await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
-    if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(600); }
+    await openDay();
+    await pg.waitForFunction((n) => new RegExp(`Antes de cerrar · ${n} pendiente`, "i").test(document.querySelector("#app")?.innerText || ""), pend0 + 1, { timeout: 8000 }).catch(() => {});
     ok("C30: antes de cerrar avisa el turno de hoy sin marcar", new RegExp(`Antes de cerrar · ${pend0 + 1} pendiente`, "i").test(await txt()) && (await pg.locator('.pendday li:has-text("Pendiente C30") [data-act=bDone]').count()) === 1
-       && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText()));
-    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=bDone]'); await wait(900);
-    ok("C30: «Vino» lo marca y pasa a pedir con qué pagó", (await q("select status from bookings where client_name='Pendiente C30'"))[0].status === "done"
+       && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText().catch(() => "")),
+       JSON.stringify({ pend0, pend: await pg.locator(".pendday").innerText().catch(() => "(sin panel)"), cierre: await pg.locator("#fCloseDay, .cclosed").first().innerText().catch(() => "(sin cierre)") }));
+    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=bDone]');
+    await pg.waitForFunction(() => /¿Cómo te pagó \$4\.000\?/.test(document.querySelector(".pendday")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+    ok("C30: «Vino» lo marca y pasa a pedir con qué pagó", (await until("select status from bookings where client_name='Pendiente C30'", [], (r) => r[0]?.status === "done"))
        && /¿Cómo te pagó \$4\.000\?/.test(await pg.locator(".pendday").innerText()));
-    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=restMedio][data-m="Efectivo"]'); await wait(800);
-    ok("C30: con el medio anotado no queda nada pendiente y el botón vuelve a «Cerrar la caja»", (await q("select rest_method from bookings where client_name='Pendiente C30'"))[0].rest_method === "cash"
+    await pg.click('.pendday li:has-text("Pendiente C30") [data-act=restMedio][data-m="Efectivo"]');
+    await pg.waitForFunction(() => !/Pendiente C30/.test(document.querySelector(".pendday")?.innerText || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+    ok("C30: con el medio anotado no queda nada pendiente y el botón vuelve a «Cerrar la caja»", (await until("select rest_method from bookings where client_name='Pendiente C30'", [], (r) => r[0]?.rest_method === "cash"))
        && (pend0 ? (await pg.locator('.pendday li:has-text("Pendiente C30")').count()) === 0 && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText())
                  : (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText())));
     // C36 (V4 resto): precio de compra y "Vendí uno" desde Productos, que entra en la Caja del día
