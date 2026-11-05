@@ -44,6 +44,9 @@ export async function refreshScreen() {
     }
   } else if (S.user && ["misturnos", "turnoOk", "cuenta"].includes(S.view)) {
     await Promise.all([api.myBookings(), api.myMessages()]).then(done).catch(() => {});
+  } else if (S.user) {
+    // 4/11: la campanita de avisos está en todas las pantallas
+    await api.myMessages().then(done).catch(() => {});
   }
   return true;
 }

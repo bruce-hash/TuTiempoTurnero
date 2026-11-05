@@ -788,11 +788,15 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await db.query("update app_settings set stamps_on = true");
   await pg.reload(); await pg.waitForSelector(".stampcard", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("Mis sellos: tarjeta de Esmaltado 16 de 16, premio listo", (await pg.locator(".stampcard").count()) === 1 && (await pg.locator(".stampcard").innerText()).includes("Esmaltado semipermanente") && (await pg.locator(".stampcard").innerText()).includes("16 de 16") && /premio listo/i.test(await pg.locator(".stampcard").innerText()));
-  const tt = (await txt()).toLowerCase(); ok("Mis turnos: primero los próximos, después avisos y sellos", tt.indexOf("próximos") >= 0 && tt.indexOf("próximos") < tt.indexOf("avisos y mensajes") && tt.indexOf("avisos y mensajes") < tt.indexOf("mis sellos"));
+  const tt = (await txt()).toLowerCase(); ok("Mis turnos: primero los próximos y después los sellos; los avisos ya no están acá (4/11: campanita)", tt.indexOf("próximos") >= 0 && tt.indexOf("próximos") < tt.indexOf("mis sellos") && !tt.includes("avisos y mensajes"))
+  // 4/11: la campanita de la cabecera, con el número de avisos sin leer
+  const bellOpen = async () => { if (!(await pg.locator(".bellpanel").count())) { await pg.click("nav [data-act=bellToggle]"); await wait(300); } };;
   {
     // v2 · Cliente: cada aviso con la acción que corresponde (nunca «Reservar»), ✕ por aviso y «Borrar los leídos»
     const ana = (await q("select id from auth.users where email='ana@test.ar'"))[0].id;
-    if (await pg.locator("[data-act=inboxAll]").count()) { await pg.click("[data-act=inboxAll]"); await wait(300); }
+    const badge = await pg.locator("nav .bell-n").innerText().catch(() => "");
+    await bellOpen();
+    ok("4/11: la campanita muestra cuántos avisos hay sin leer y los lista al tocarla", +badge >= 1 && (await pg.locator(".bellpanel .inbox li, .bellpanel li").count()) >= 2, badge);
     const rows = await pg.locator(".inbox li").evaluateAll((lis) => lis.map((li) => ({ id: li.dataset.msg, acts: [...li.querySelectorAll(".msg-act")].map((b) => b.dataset.act || "go:" + b.dataset.go), txt: li.innerText })));
     const kinds = Object.fromEntries((await q("select id::text, kind from client_messages where user_id=$1", [ana])).map((r) => [r.id, r.kind]));
     ok("v2: ningún aviso de Mis turnos tiene «Reservar»", rows.length >= 2 && !rows.some((r) => /Reservar/.test(r.txt)), JSON.stringify(rows));
@@ -802,7 +806,10 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
        JSON.stringify(rows.map((r) => [kinds[r.id], r.acts])));
     const turno = rows.find((r) => r.acts.join() === "verTurno");
     await pg.click(`.inbox li[data-msg="${turno.id}"] [data-act=verTurno]`); await wait(500);
-    ok("v2: «Ver turno» abre ese turno", await pg.evaluate(() => S.view === "turnoOk" && !!S.turnoId));
+    ok("v2: «Ver turno» abre ese turno (y cierra la campanita)", await pg.evaluate(() => S.view === "turnoOk" && !!S.turnoId) && (await pg.locator(".bellpanel").count()) === 0);
+    await wait(1200);
+    ok("4/11: al abrir la campanita, los avisos quedan leídos (sin número)", (await pg.locator("nav .bell-n").count()) === 0
+       && (await q("select count(*)::int c from client_messages where user_id=$1 and read_at is null and dismissed_at is null", [ana]))[0].c === 0);
     await menu("[data-go=misturnos]"); await wait(800);
     // pedido de reseña de un turno atendido y sin reseña: «Dejar reseña» abre la reseña de ese turno en Anteriores
     // (si Ana no tiene ninguno, se le carga uno atendido hace 40 días, copia de uno suyo)
@@ -816,20 +823,25 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
         where b.client_id = $1 and b.status = 'done' and not exists (select 1 from reviews r where r.booking_id = b.id)
         order by b.id limit 1 on conflict do nothing returning id, ref`, [ana]);
     if (rv.length) {
-      await pg.reload(); await pg.waitForSelector(".inbox"); await wait(1200);
+      await pg.reload(); await pg.waitForSelector("nav [data-act=bellToggle]"); await wait(1200);
+      await bellOpen();
       await pg.click(`.inbox li[data-msg="${rv[0].id}"] [data-act=inboxRate]`); await wait(500);
       const pos = await pg.evaluate((ref) => { const row = document.querySelector(`[data-bk="${ref}"]`); return row && [!!row.querySelector(".rateform"), document.querySelector(".top").getBoundingClientRect().bottom, row.getBoundingClientRect().top]; }, rv[0].ref);
       ok("v2: «Dejar reseña» abre la reseña de ese turno y lleva hasta ahí", pos && pos[0] && pos[2] >= pos[1] && pos[2] - pos[1] <= 30, JSON.stringify(pos));
     } else ok("v2: hay un turno atendido de Ana para probar «Dejar reseña»", false);
+    await bellOpen();
     const first = await pg.locator(".inbox li").first().getAttribute("data-msg");
     await pg.click(`.inbox li[data-msg="${first}"] [data-act=inboxDel]`); await wait(800);
     ok("v2: el ✕ borra ese aviso de la lista (y queda guardado en la base, fuera de la lista)", (await pg.locator(`.inbox li[data-msg="${first}"]`).count()) === 0
        && (await q("select dismissed_at is not null d from client_messages where id=$1", [first]))[0].d);
     await pg.click("[data-act=inboxClear]"); await wait(1000);
-    ok("v2: «Borrar los leídos» vacía la lista", (await pg.locator(".inbox").count()) === 0
+    ok("v2: «Borrar los leídos» vacía la lista", (await pg.locator(".bellpanel li").count()) === 0 && /No tenés avisos/.test(await pg.locator(".bellpanel").innerText())
        && (await q("select count(*)::int c from client_messages where user_id=$1 and dismissed_at is null", [ana]))[0].c === 0);
     await pg.reload(); await pg.waitForSelector("#app"); await wait(1500);
-    ok("v2: …y al volver a entrar siguen borrados", (await pg.locator(".inbox").count()) === 0);
+    await bellOpen();
+    ok("v2: …y al volver a entrar siguen borrados", (await pg.locator(".bellpanel li").count()) === 0);
+    await pg.keyboard.press("Escape"); await wait(200);
+    ok("4/11: Esc cierra la campanita", (await pg.locator(".bellpanel").count()) === 0);
   }
   await pg.click("[data-act=useReward]"); await pg.waitForSelector(".pcard"); await wait(800);
   await pg.click("[data-quick]"); await wait(200); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno"); await wait(300);
@@ -1064,13 +1076,18 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.goto(BASE); await wait(1200); await menu("[data-act=logout]"); await wait(800);
   await pg.click("footer [data-act=authOpen]"); await wait();
   await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector(".bhead"); await wait(800);
-  ok("Bloque 1: el panel muestra el aviso del reclamo", /🔔 Avisos/i.test(await txt()) && /Ana empezó a seguirte/.test(await txt()) && /reclamo en Mercado Pago/.test(await txt()));
+  // 4/11: los avisos del profesional, en la campanita de la cabecera
+  const proBadge = await pg.locator("nav .bell-n").innerText().catch(() => "");
+  await pg.click("nav [data-act=bellToggle]"); await wait(300);
+  const bellTxt = await pg.locator(".bellpanel").innerText().catch(() => "");
+  ok("Bloque 1: el aviso del reclamo llega al profesional (4/11: en la campanita, con el número)", +proBadge >= 2 && /Ana empezó a seguirte/.test(bellTxt) && /reclamo en Mercado Pago/.test(bellTxt) && !/Ana empezó a seguirte/.test(await txt()), bellTxt.slice(0, 200));
+  ok("4/11: el aviso de seguidor nuevo lleva a Seguidores", (await pg.locator(".bellpanel [data-act=bellGo][data-to=seguidores]").count()) >= 1);
   {
     // v2 · Profesional: el texto del aviso usa el ancho de la caja (antes, una columna de 52 px, palabra por palabra)
-    const w = await pg.locator(".pb-notices .msgb").first().evaluate((el) => [el.getBoundingClientRect().width, el.closest(".panel").getBoundingClientRect().width]);
-    ok("v2: el texto del aviso se lee a lo ancho de la caja (390/400 px)", w[0] > w[1] * 0.75, JSON.stringify(w));
+    const w = await pg.locator(".bellpanel .msgb").first().evaluate((el) => [el.getBoundingClientRect().width, el.closest(".bellpanel").getBoundingClientRect().width]);
+    ok("v2: el texto del aviso se lee a lo ancho de la caja", w[0] > w[1] * 0.75, JSON.stringify(w));
   }
-  await pg.click("[data-act=noticesRead]"); await wait(800);
+  await wait(1700); await pg.keyboard.press("Escape"); await wait(300);
   {
     // v2 · Profesional: menú en el orden nuevo, todo a la vista y sin flechas; "Ver mi perfil como cliente" en la Agenda
     const tabs = await pg.locator(".btabs [data-btab]").evaluateAll((els) => els.map((el) => [el.dataset.btab, el.querySelector(".bt-l").innerText.trim(), (() => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.width > 40; })()]));
@@ -1098,7 +1115,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("v2: Perfil explica de dónde sale el plazo de acreditación", /se elige en tu cuenta de Mercado Pago[\s\S]*detecta sola con tu primer cobro[\s\S]*Sin Mercado Pago conectado no recibís reservas/.test(await txt()));
     await pg.click("[data-btab=agenda]"); await wait(300);
   }
-  ok("Bloque 1: Entendido marca el aviso leído", (await pg.locator(".pb-notices").count()) === 0 && (await q("select count(*)::int c from provider_notices n join providers p on p.id=n.provider_id where p.name like 'Sofía%' and n.read_at is null"))[0].c === 0);
+  ok("Bloque 1: abrir la campanita marca los avisos leídos (4/11; antes, «Entendido»)", (await pg.locator("nav .bell-n").count()) === 0 && (await q("select count(*)::int c from provider_notices n join providers p on p.id=n.provider_id where p.name like 'Sofía%' and n.read_at is null"))[0].c === 0);
   const accBefore = (await q("select id, mp_user_id from mp_accounts where provider_id=$1 and status='active'", [sofi]))[0];
   await pg.click("[data-btab=perfil]"); await wait(300);
   ok("Bloque 1: Mercado Pago conectado, con el número de cuenta (no el texto de la demo)", (await txt()).includes("Mercado Pago conectado") && (await txt()).includes("Cuenta n° " + accBefore.mp_user_id) && !(await txt()).includes("hidro.style.mp"));
@@ -1503,9 +1520,10 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await ps.evaluate((d) => { S.aday = d; S.awk = null; render(); }, g2.split("|")[0]); await ps.waitForTimeout(300);
     ok("4/11: …y después de recargar sigue marcado «✓ Ofrecido»", /Ofrecido/.test(await ps.locator(`[data-act=offerGap][data-g="${g2}"]`).innerText().catch(() => "")));
     // Ana: el aviso en Mis turnos con "Reservar", que la lleva al perfil ese día
-    await pa.goto(BASE + "/mis-turnos"); await pa.waitForSelector("[data-act=offerBook]", { timeout: 8000 }).catch(() => {});
-    ok("4/11: a la clienta le llega en Mis turnos «Tengo un turno libre…» con «Reservar»", (await pa.locator("[data-act=offerBook]").count()) === 2
-       && /Tengo un turno libre el/.test(await pa.locator("#app").innerText()));
+    await pa.goto(BASE + "/"); await pa.waitForSelector("nav [data-act=bellToggle]", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(500);
+    await pa.click("nav [data-act=bellToggle]"); await pa.waitForSelector("[data-act=offerBook]", { timeout: 8000 }).catch(() => {});
+    ok("4/11: a la clienta le llega en la campanita «Tengo un turno libre…» con «Reservar»", (await pa.locator("[data-act=offerBook]").count()) === 2
+       && /Tengo un turno libre el/.test(await pa.locator(".bellpanel").innerText()));
     const d2 = await pa.locator("[data-act=offerBook]").first().getAttribute("data-d");
     await pa.click("[data-act=offerBook] >> nth=0"); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(400);
     ok("4/11: «Reservar» abre el perfil con ese día elegido", new URL(pa.url()).pathname === "/" + sofi.slug && (await pa.evaluate(() => S.day)) === d2);
@@ -1514,8 +1532,10 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await ps.fill("#postTxt", "Esta semana hay promo de esmaltado"); await ps.click("[data-act=publicar]");
     const news = await until("select count(*)::int c from client_messages where kind = 'news' and user_id = $1", [anaId], (r) => r[0].c === 1);
     ok("4/11: «Avisar a tus seguidores» de Trabajos les llega de verdad (aviso en la app)", news && /Listo: les avisamos a 1 seguidor/.test(await ps.locator(".toast").innerText().catch(() => "")));
-    await pa.goto(BASE + "/mis-turnos"); await pa.waitForSelector(".msg-act", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(300);
-    ok("4/11: …y en Mis turnos se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator("#app").innerText()) && (await pa.locator(".msg-act[data-go=perfil]").count()) >= 1);
+    await pa.goto(BASE + "/"); await pa.waitForSelector("nav [data-act=bellToggle]", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(500);
+    await pa.click("nav [data-act=bellToggle]"); await pa.waitForSelector(".bellpanel .msg-act", { timeout: 8000 }).catch(() => {});
+    ok("4/11: …y en la campanita se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator(".bellpanel").innerText()) && (await pa.locator(".bellpanel .msg-act[data-go=perfil]").count()) >= 1);
+    await pa.keyboard.press("Escape");
     await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector("[data-act=seguir]", { timeout: 8000 }).catch(() => {});
     // Ana deja de seguir: sale de la lista de Sofía
     await pa.waitForSelector("[data-act=seguir]"); await pa.click("[data-act=seguir]");

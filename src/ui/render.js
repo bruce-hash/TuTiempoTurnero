@@ -10,6 +10,7 @@ import { store } from "../store.js";
 import { LOGO } from "./iconos.js";
 import { installGuide, installMenuItem, updateBar } from "./avisos.js";
 import { accountMenu } from "./menu-cuenta.js";
+import { bell } from "./campanita.js";
 import { syncUrl } from "../router.js";
 import { vAdmin } from "../views/admin/admin.js";
 import { vNegocio } from "../views/auth/negocio.js";
@@ -51,7 +52,8 @@ function nav() {
   // D33: una cuenta de negocio tiene el mismo menú en cualquier pantalla
   if (S.role === "barbero" || isBusiness()) {
     const prov = pr(ME());
-    $("#nav").innerHTML = accountMenu({
+    // 4/11: la campanita de avisos, a la izquierda del menú de cuenta
+    $("#nav").innerHTML = bell() + accountMenu({
       who: prov,
       email,
       items: [
@@ -67,10 +69,10 @@ function nav() {
     return;
   }
   $("#nav").innerHTML = S.user
-    ? accountMenu({
+    ? bell() +
+      accountMenu({
         who: S.user,
         email,
-        dot: (S.inbox || []).some((msg) => !msg.read),
         items: [
           ["👤", "Mi perfil", 'data-go="cuenta"'],
           ["📅", "Mis turnos", 'data-go="misturnos"', count],

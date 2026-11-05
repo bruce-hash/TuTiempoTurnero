@@ -13,12 +13,7 @@ import { toast } from "../ui/toast.js";
 import { loadList } from "../views/cliente/home.js";
 import { comm } from "../views/prestador/comunidad.js";
 
-registerClick("inboxAll", (ev, el, act) => {
-  S.inboxAll = true;
-  render();
-  return;
-});
-// v2: borrar avisos de Mis turnos (uno, o todos los leídos). En la base quedan guardados, fuera de la lista
+// v2: borrar avisos (uno, o todos los leídos; 4/11: desde la campanita). En la base quedan guardados, fuera de la lista
 const dropMessages = (keep) => {
   const inbox = S.inbox || [];
   const kept = inbox.filter(keep);
@@ -30,7 +25,7 @@ registerClick("inboxDel", (ev, el, act) => {
   api.m.dismissMessages([+id]).catch(() => {});
   render();
 });
-// los que están en pantalla ya se vieron (Mis turnos los marca leídos al abrir): primero se marcan, después se borran
+// los que están en pantalla ya se vieron (la campanita los marca leídos al abrir): primero se marcan, después se borran
 registerClick("inboxClear", (ev, el, act) => {
   (S.inbox || []).forEach((msg) => (msg.read = true));
   dropMessages((msg) => !msg.read);
@@ -42,6 +37,10 @@ registerClick("inboxClear", (ev, el, act) => {
 });
 // "Dejar reseña" desde el aviso: abre la reseña de ese turno en Anteriores y lleva hasta ahí (debajo de la cabecera fija)
 registerClick("inboxRate", (ev, el, act) => {
+  // 4/11: desde la campanita, a Mis turnos (ahí está la reseña de ese turno, en Anteriores)
+  if (S.view !== "misturnos") {
+    go("misturnos");
+  }
   S.rateFor = +el.dataset.id;
   S.rateN = 0;
   render();

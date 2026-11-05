@@ -1,6 +1,5 @@
 import { LIVE } from "../../config.js";
 import { esc } from "../../lib/dom.js";
-import { relDate } from "../../lib/fechas.js";
 import { ME, avatar, pr } from "../../lib/prestadores.js";
 import { CAT, catInfo, catName, pcat } from "../../lib/rubros.js";
 import { cfg } from "../../lib/turnero.js";
@@ -97,18 +96,8 @@ export function setBtab(tab) {
   S.manOpen = false;
   S.blockOpen = false;
 }
-// avisos sin leer: de cobros (Bloque 1: pagos devueltos desde Mercado Pago, contracargos y reclamos; conectar Mercado
-// Pago) y, desde C06 (V8), los seguidores nuevos
-function noticesPanel() {
-  const unread = (S.notices || []).filter((notice) => !notice.read);
-  if (!unread.length) {
-    return "";
-  }
-  return `<div class="panel inbox pb-notices"><p class="lbl">🔔 ${unread.every((notice) => notice.kind === "new_follower") ? "Seguidores nuevos" : "Avisos"} <span class="cnt">${unread.length}</span></p><ul class="ag">${unread
-    .slice(0, 5)
-    .map((notice) => `<li class="unread"><div><span class="msgb">${esc(notice.body)}</span><span class="hint">${esc(relDate(notice.at))}</span></div></li>`)
-    .join("")}</ul><button class="btn btn-ghost btn-sm" data-act="noticesRead">Entendido</button></div>`;
-}
+// 4/11: los avisos del panel (cobros, Mercado Pago, seguidores nuevos) pasaron a la campanita de la cabecera
+// (src/ui/campanita.js)
 // panel del prestador: cabecera (rubros, turnos online), pestañas y la sección elegida
 export function vBarbero() {
   const prov = pr(ME());
@@ -132,5 +121,5 @@ export function vBarbero() {
   )();
   // en la compu: menú lateral (cabecera y pestañas) y la sección a la derecha; en el celular, todo en una columna, en el
   // orden de siempre (cabecera, avisos, pestañas, sección: ver .pb en compu.css)
-  return `<div class="narrow stack cols2 pb" style="margin-top:20px"><div class="pb-side">${head}${tabBar}</div><div class="pb-main">${noticesPanel()}${body}</div></div>`;
+  return `<div class="narrow stack cols2 pb" style="margin-top:20px"><div class="pb-side">${head}${tabBar}</div><div class="pb-main">${body}</div></div>`;
 }

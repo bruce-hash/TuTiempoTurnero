@@ -1,43 +1,16 @@
-import { api } from "../../api/index.js";
 import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { TODAY, dayLabel, nowHM } from "../../lib/fechas.js";
 import { cap, notByProvider, refundText } from "../../lib/devoluciones.js";
-import { avatar, pr } from "../../lib/prestadores.js";
+import { pr } from "../../lib/prestadores.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { myCards, stampCard } from "../../ui/sellos.js";
 import { myUpcoming } from "./home.js";
 import { rateForm } from "./perfil.js";
 
-// v2: la acción de cada aviso según lo que dice (4/11: "Reservar" solo en un turno que ofreció el profesional). Confirmación,
-// recordatorios y cancelación → ver ese turno; pedido de reseña → dejarla (o "Ya calificaste"); los mensajes del
-// profesional y el saludo de cumpleaños → ver su perfil. Si el turno ya no está en la lista, también su perfil.
-function msgAction(msg) {
-  // 4/11 · Bloque 3: un turno libre que ofreció el profesional → "Reservar" (al perfil, con ese día elegido)
-  if (msg.kind === "offer" && msg.pid) {
-    const slot = msg.slot;
-    if (!slot || slot.date + " " + slot.time <= TODAY() + " " + nowHM()) {
-      return '<span class="hint">Ese horario ya pasó</span>';
-    }
-    return `<button class="btn btn-pri btn-sm msg-act" data-act="offerBook" data-id="${esc(String(msg.pid))}" data-d="${esc(slot.date)}">Reservar</button>`;
-  }
-  const booking = msg.ref && ["conf", "r24", "r2", "rev", "cancel"].includes(msg.kind) ? store.BOOK.find((item) => item.mine && String(item.id) === String(msg.ref)) : null;
-  const btn = (attrs, label) => `<button class="btn btn-ghost btn-sm msg-act" ${attrs}>${label}</button>`;
-  if (booking && msg.kind === "rev") {
-    if (booking.reviewed) {
-      return '<span class="hint">✓ Ya calificaste</span>';
-    }
-    if (booking.status === "done") {
-      return btn(`data-act="inboxRate" data-id="${booking.id}"`, "★ Dejar reseña");
-    }
-  }
-  if (booking && msg.kind !== "rev") {
-    return btn(`data-act="verTurno" data-id="${booking.id}"`, "Ver turno");
-  }
-  return msg.pid ? btn(`data-go="perfil" data-id="${esc(String(msg.pid))}"`, "Ver perfil") : "";
-}
-// Mis turnos: próximos, avisos de los profesionales (se marcan leídos a los 1,5 s), tarjetas de sellos y anteriores
+// 4/11: los avisos (y la acción de cada uno, msgAction) pasaron a la campanita de la cabecera (src/ui/campanita.js)
+// Mis turnos: próximos, tarjetas de sellos y anteriores (los avisos, en la campanita)
 function vMisTurnosBase() {
   const upcoming = myUpcoming();
   const past = store.BOOK.filter((booking) => booking.mine && !upcoming.includes(booking)).sort((one, other) =>
@@ -61,17 +34,8 @@ function vMisTurnosBase() {
           : booking.refund
             ? `<span class="chip gray">${esc(cap(refundText(booking)))}</span>`
             : '<span class="chip gray">Pasado</span>';
-  const inbox = S.inbox || [];
-  const unread = inbox.filter((msg) => !msg.read).length;
-  if (unread && !S.inboxSeen) {
-    S.inboxSeen = true;
-    setTimeout(() => {
-      inbox.forEach((msg) => (msg.read = true));
-      api.m.readMessages();
-    }, 1500);
-  }
-  // en la compu: próximos y anteriores a la izquierda, avisos a la derecha y los sellos debajo, a lo ancho (mt-a, mt-b,
-  // mt-c, mt-s); en el celular, en el orden de siempre
+  // en la compu: próximos y anteriores a la izquierda y los sellos a la derecha (mt-a, mt-c, mt-b); en el celular, en el
+  // orden de siempre
   return `<div class="narrow stack cols2 mt" style="margin-top:20px"><h1 class="h1 c-all">Mis turnos</h1>
    <div class="mt-a">
    ${(() => {
@@ -114,26 +78,7 @@ function vMisTurnosBase() {
    <p class="lbl" style="margin:4px 0 0">Próximos</p>
    ${upcoming.length ? upcoming.map(cardOf).join("") : '<div class="panel" style="text-align:center"><p class="note" style="margin:0 0 10px">No tenés turnos reservados.</p><button class="btn btn-pri btn-block" data-act="goLocal">Reservar un turno</button></div>'}
    </div>
-   <div class="mt-b">
-   ${
-     inbox.length
-       ? `<div class="panel inbox"><div class="inbox-h"><p class="lbl">🔔 Avisos y mensajes de tus profesionales${unread ? ` <span class="cnt">${unread}</span>` : ""}</p><button class="lnk" data-act="inboxClear">Borrar los leídos</button></div><ul class="ag">${inbox
-           .slice(0, S.inboxAll ? 50 : 3)
-           .map(
-             (msg) =>
-               `<li class="${msg.read ? "" : "unread"}" data-msg="${esc(String(msg.id))}">${avatar({
-                 photo: msg.photo,
-                 name: msg.name,
-                 hue: msg.hue,
-               })}<div><b>${esc(msg.name)}</b><span class="msgb">${esc(msg.body)}</span><span class="hint">${esc(msg.d)}</span>${msgAction(msg)}</div><button class="xbtn" data-act="inboxDel" data-id="${esc(String(msg.id))}" aria-label="Borrar este aviso">✕</button></li>`,
-           )
-           .join(
-             "",
-           )}</ul>${inbox.length > 3 && !S.inboxAll ? `<button class="lnk" data-act="inboxAll">Ver todos (${inbox.length})</button>` : ""}</div>`
-       : ""
-   }
-   </div>
-   <div class="mt-s"><!--SELLOS--></div>
+   <div class="mt-b"><!--SELLOS--></div>
    <div class="mt-c">
    ${past.length ? `<p class="lbl" style="margin:8px 0 0">Anteriores</p><div class="panel"><ul class="ag">${past.map((booking) => `<li data-bk="${booking.id}"><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(pr(booking.pid).name)} · ${booking.time}</b><span>${esc(booking.svc)} · ${money(booking.price)}</span>${booking.stamped ? '<span class="hint">🎟️ +1 sello</span>' : ""}${booking.status === "done" && !booking.reviewed ? (S.rateFor === booking.id ? rateForm(booking) : `<button class="lnk" data-act="rateOpen" data-id="${booking.id}">★ Calificar</button>`) : booking.reviewed ? '<span class="hint">✓ Calificaste</span>' : ""}</div>${chipOf(booking)}</li>`).join("")}</ul></div>` : ""}
    </div>
