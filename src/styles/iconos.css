@@ -1,0 +1,36 @@
+/* Íconos propios (4/11, src/lib/iconos.js): el trazo toma el color del texto y el detalle verde sale de --ic-a.
+   Miden lo mismo que el texto que acompañan (1.2em), salvo donde el contenedor fija su tamaño. */
+:root{--ic-a:#07B67B;--ic-on:#8ff0c8}
+body[data-seg],[class*="seg-"]{--ic-a:#07B67B;--ic-on:currentColor}
+body[data-seg="n"],.seg-n{--ic-on:#8ff0c8}
+body[data-seg="b"],.seg-b{--ic-a:#3fd6a0}
+.ic{display:inline-block;width:1.2em;height:1.2em;vertical-align:-.24em;flex:none;overflow:visible}
+.ic .a{stroke:var(--ic-a)}.ic .af{fill:var(--ic-a);stroke:none}.ic .df{fill:currentColor;stroke:none}
+.ic .af2{fill:color-mix(in srgb,var(--ic-a) 22%,transparent)}
+/* sobre un fondo de color el verde se pierde: va del color del texto (en el azul de TuTiempo, el verde claro de la
+   lámina: --ic-on) */
+.btn-pri,.btabs button[aria-selected="true"]{--ic-a:var(--ic-on)}
+.btn-ok,.btn-bad,.mp,.stamps i.on,.chip.bad,.alert,.ferr,.acct-menu [data-act=logout],.acct-menu [data-act=salirBarbero],.cchip[aria-pressed="true"]{--ic-a:currentColor}
+.chip .ic,.hint .ic,.note .ic{width:1.15em;height:1.15em}
+/* ícono grande arriba de una pantalla (pago, turno, página no encontrada, error) */
+.hero-ic{width:64px;height:64px;margin:0 auto 8px;border-radius:50%;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand)}
+.hero-ic .ic{width:34px;height:34px;vertical-align:0;stroke-width:1.6}
+.am-mail .ic{width:46px;height:46px;stroke-width:1.5;color:var(--brand)}
+/* tamaños que fija cada lugar */
+.btabs .bt-i .ic{width:22px;height:22px;vertical-align:0}
+.pb-side .btabs .bt-i .ic{width:20px;height:20px}
+.bell-btn .ic{width:21px;height:21px;vertical-align:0}
+.acct-menu [role=menuitem]>span[aria-hidden] .ic{width:19px;height:19px;vertical-align:-.3em;color:var(--muted)}
+.acct-menu [data-act=logout]>span[aria-hidden] .ic,.acct-menu [data-act=salirBarbero]>span[aria-hidden] .ic{color:currentColor}
+.mp .ic{width:18px;height:18px;vertical-align:0}
+.pwa-ic .ic{width:28px;height:28px;color:var(--brand)}
+.segtile .st-k .ic{width:26px;height:26px}
+.stampban .sb-ic .ic{width:26px;height:26px}
+.stamps i .ic{width:62%;height:62%;vertical-align:0}
+.pp-cam .ic{width:14px;height:14px;vertical-align:0}
+.ev-ic .ic{width:12px;height:12px;vertical-align:-.15em}
+.xbtn .ic,.gi-ed .ic{width:16px;height:16px;vertical-align:-.2em}
+.ntf-i .ic{width:20px;height:20px}
+.tk-stub span .ic{width:20px;height:20px}
+/* buscadores: la lupa dentro del campo (el texto de ejemplo ya no la lleva) */
+.search{padding-left:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='10.8' cy='10.8' r='6.3' stroke='%234a5468'/%3E%3Cpath d='m15.6 15.6 4.6 4.6' stroke='%2307B67B'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:12px center;background-size:18px}
