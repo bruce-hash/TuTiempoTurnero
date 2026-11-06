@@ -194,6 +194,9 @@ jobs:
       - name: CAPTCHA (Turnstile en cada llamada a Auth; sin clave, nada de Cloudflare)
         run: npm run test:captcha
 
+      - name: Verificación de prueba en local (el recorrido de "Verificar prueba" contra el build de producción)
+        run: npm run test:verificar
+
       - name: App instalable y push (manifest, service worker, sin conexión, versión nueva, notificaciones)
         run: npm run test:pwa
 
