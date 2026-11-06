@@ -782,6 +782,39 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("a Ana le llegó el aviso para reprogramar", cn.length >= 1 && cn[0].body.includes("tuvo que cancelar") && cn[0].body.includes("se va a comunicar con vos") && cn[0].body.includes("$3.600"));
   const dayBlk = await q("select count(*)::int c from provider_busy((select id from providers where name like 'Sofía%'), $1::date, $1::date) where day_block", [d]);
   ok("ese día queda Cerrado para los clientes", dayBlk[0].c === 1);
+  // 7/11 · feriados: un feriado confirmado de acá a 7 días, en un día que Sofía atiende y sin turnos: le llega el aviso
+  // con Abro / Cierro; Cierro bloquea el día (igual que Bloquear días) y Abro, desde Horarios, lo vuelve a abrir
+  {
+    const sof = "(select id from providers where name like 'Sofía%')";
+    const hd = (await q(`select to_char(g::date, 'YYYY-MM-DD') d from generate_series((now() at time zone 'America/Argentina/Buenos_Aires')::date + 1,
+        (now() at time zone 'America/Argentina/Buenos_Aires')::date + 7, interval '1 day') g
+       where exists (select 1 from provider_hours ph where ph.provider_id = ${sof} and ph.dow = extract(dow from g)::int)
+         and not exists (select 1 from bookings b where b.provider_id = ${sof} and (b.starts_at at time zone 'America/Argentina/Buenos_Aires')::date = g::date and b.status in ('confirmed','hold'))
+       order by g limit 1`))[0].d;
+    await q("select holidays_sync_save($1::int, $2::jsonb)", [+hd.slice(0, 4), JSON.stringify([{ fecha: hd, tipo: "trasladable", nombre: "Feriado de la prueba" }])]);
+    await q("update holiday_years set confirmed_at = now() where year = $1", [+hd.slice(0, 4)]);
+    // (abrir la campanita deja leídos los otros avisos de Sofía: al final vuelven a quedar como estaban)
+    const unread = (await q(`select id from provider_notices where provider_id = ${sof} and read_at is null`)).map((r) => r.id);
+    await q("select holiday_notices()");
+    await pg.evaluate(async () => { await api.loadMine(); render() }); await wait(600);
+    await pg.click("nav [data-act=bellToggle]"); await wait(500);
+    const hn = pg.locator(".bellpanel li", { hasText: "Feriado de la prueba" });
+    ok("7/11 · feriados: el aviso «El <día> es feriado (…). ¿Abrís?» llega a la campanita con Abro / Cierro",
+       (await hn.count()) === 1 && /es feriado \(Feriado de la prueba\)\. ¿Abrís\?/.test(await hn.innerText())
+       && (await hn.locator("[data-act=holOpen]").count()) === 1 && (await hn.locator("[data-act=holClose]").count()) === 1);
+    await hn.locator("[data-act=holClose]").click(); await wait(1800);
+    ok("7/11 · feriados: Cierro bloquea ese día (como Bloquear días) y guarda la elección",
+       (await q(`select count(*)::int c from provider_busy(${sof}, $1::date, $1::date) where day_block`, [hd]))[0].c === 1
+       && (await q(`select open from provider_holidays where provider_id = ${sof} and day = $1::date`, [hd]))[0]?.open === false);
+    ok("7/11 · feriados: …lleva a Horarios, donde «Próximos feriados» lo muestra cerrado",
+       await pg.evaluate(() => S.btab === "horarios") && /✓ Cerrado/.test(await pg.locator(`#holPanel li[data-hol="${hd}"]`).innerText()));
+    await pg.click(`#holPanel li[data-hol="${hd}"] [data-act=holOpen]`); await wait(1800);
+    ok("7/11 · feriados: Abro lo vuelve a abrir",
+       (await q(`select count(*)::int c from provider_busy(${sof}, $1::date, $1::date) where day_block`, [hd]))[0].c === 0
+       && (await q(`select open from provider_holidays where provider_id = ${sof} and day = $1::date`, [hd]))[0]?.open === true
+       && /✓ Abrís/.test(await pg.locator(`#holPanel li[data-hol="${hd}"]`).innerText()));
+    if (unread.length) await q("update provider_notices set read_at = null where id = any($1::bigint[])", [unread]);
+  }
   // seguridad como prestadora
   probing = true;
   const sec2 = await pg.evaluate(async () => {
@@ -951,6 +984,22 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("admin/D34: comisión de TuTiempo 10% del servicio y Mercado Pago en 0% en los cuatro plazos", (await pg.inputValue("#admCom")) === "10"
      && (await Promise.all(["instant", "d10", "d18", "d35"].map((t) => pg.inputValue("#admMp-" + t)))).every((v) => v === "0"));
   ok("admin: comisión sin botones fijos", (await pg.locator("[data-act=admComQuick]").count()) === 0);
+  // 7/11 · feriados: el admin ve el año en curso y el siguiente; corrige, agrega y confirma
+  {
+    const ny = (await q("select extract(year from now() at time zone 'America/Argentina/Buenos_Aires')::int + 1 y"))[0].y;
+    await q("select holidays_sync_save($1, $2::jsonb)", [ny, JSON.stringify([{ fecha: `${ny}-01-01`, tipo: "inamovible", nombre: "Año nuevo" }])]);
+    await pg.evaluate(async () => { await api.adminHolidays(); render() }); await wait(400);
+    const yb = pg.locator(".holyear", { hasText: String(ny) });
+    ok("7/11 · feriados: el admin ve el año siguiente sin confirmar, con lo que trajo la fuente",
+       /Sin confirmar/.test(await yb.innerText()) && /Año nuevo/.test(await yb.innerText()) && (await yb.locator("[data-act=admHolConfirm]").count()) === 1);
+    await pg.fill("#holD", `${ny}-03-24`); await pg.fill("#holN", "Día Nacional de la Memoria"); await pg.selectOption("#holK", "inamovible");
+    await pg.click("#fHol button[type=submit]"); await wait(1200);
+    ok("7/11 · feriados: agrega uno a mano", (await q("select source from holidays where day = $1::date", [`${ny}-03-24`]))[0]?.source === "admin"
+       && /cargado a mano/.test(await pg.locator(".holyear", { hasText: String(ny) }).innerText()));
+    await pg.click(`.holyear [data-act=admHolConfirm][data-y="${ny}"]`); await wait(1200);
+    ok("7/11 · feriados: confirma el año (desde ahí lo ven los profesionales)", (await q("select confirmed_at is not null c from holiday_years where year = $1", [ny]))[0].c === true
+       && /Confirmado el/.test(await pg.locator(".holyear", { hasText: String(ny) }).innerText()));
+  }
   // D30: guarda Comisión y espera a que el panel se vuelva a dibujar con lo guardado (si no, el render tardío pisa lo que se
   // escribe después: en el CI pasa)
   const saveCom = async () => {

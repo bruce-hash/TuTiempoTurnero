@@ -27,6 +27,7 @@ import "./actions/prestador-caja.js";
 import "./actions/prestador-clientes.js";
 import "./actions/prestador-finanzas.js";
 import "./actions/prestador-horarios.js";
+import "./actions/feriados.js";
 import "./actions/prestador-perfil.js";
 import "./actions/prestador-productos.js";
 import "./actions/reserva.js";

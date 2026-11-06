@@ -1,4 +1,9 @@
-# Feriados: propuesta (4/11 · Bloque 4, sin programar)
+# Feriados (propuesta del 4/11; decidido y programado el 7/11: D39)
+
+> **Estado:** programado como dice D39 en `docs/01-decisiones.md`. Lo decidido el 7/11: si no elige, queda abierto; el aviso
+> va **7 días antes** (no diez), con Abro / Cierro; entran los nacionales (inamovibles y trasladables) y los no laborables
+> turísticos (puentes), no los provinciales ni los municipales; la lista la trae el servidor y **el admin la confirma una
+> vez por año** (o la carga a mano si la fuente falla). Lo de abajo es la propuesta original.
 
 Objetivo: que cada profesional decida, feriado por feriado, si abre o cierra, sin cargar las fechas a mano. Hoy lo puede
 hacer con "Bloquear días o semanas" (Horarios), pero tiene que acordarse de cada feriado.

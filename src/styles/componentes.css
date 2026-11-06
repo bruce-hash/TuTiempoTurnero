@@ -383,3 +383,11 @@ body.am-open{overflow:hidden}
 .pl-n{display:grid;justify-items:center;font-size:22px;line-height:1;font-variant-numeric:tabular-nums;min-width:3.2em}
 .pl-n small{font-size:10px;font-weight:600;color:var(--muted);margin-top:3px}
 .pl-n.low{color:var(--bad)}
+/* 7/11 · Feriados: Próximos feriados (Horarios), aviso de la campanita y la lista del admin */
+.hollist li{align-items:center}
+.holbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.hollist .holbtns{margin-top:0}
+.holset{color:var(--ok,#07774F)}
+.holyear{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+.holyear-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.holerr{color:var(--bad,#b42318)}

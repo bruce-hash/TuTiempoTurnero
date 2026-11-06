@@ -61,6 +61,7 @@ supabase functions deploy mp-oauth --no-verify-jwt
 supabase functions deploy mp-refunds --no-verify-jwt
 supabase functions deploy dni-cleanup --no-verify-jwt
 supabase functions deploy email-send --no-verify-jwt
+supabase functions deploy holidays-sync --no-verify-jwt   # 7/11 · feriados (D39): no lleva secretos propios
 ```
 
 **6. Base:** `supabase db push` (aplica `supabase/migrations/` en orden; o pegar `supabase/TODO_EN_UNO.sql` en el SQL
@@ -94,7 +95,9 @@ Comisión: **4** y la **Dirección del sitio** (`https://<sitio>`).
 ```sql
 select jobname, schedule from cron.job order by jobname;
 -- 7 tareas: tt-cleanup, tt-dni-cleanup, tt-emails, tt-expire-holds, tt-notices, tt-refunds, tt-reshuffle
+-- (y las que sumaron los bloques siguientes; desde el 7/11, tt-holidays los lunes y tt-holiday-notices todos los días)
 select public.run_refunds(); select public.run_dni_cleanup(); select public.run_email_send();
+select public.run_holidays_sync();   -- 7/11: trae los feriados; después, panel admin → Comisión → Feriados → Confirmar
 select status_code, content from net._http_response order by created desc limit 3;   -- tres 200
 select site_url, commission_pct from app_settings;
 ```
