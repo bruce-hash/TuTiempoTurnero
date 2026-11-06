@@ -89,6 +89,22 @@ async function pagina(browser, { relojFijo }) {
 // recuadro fijos; el resto de la pantalla se compara igual, texto y píxeles.
 async function normalizar(page) {
   await page.evaluate(() => {
+    // 4/11 (íconos propios, cambio a propósito): los emojis de la interfaz pasaron a ser íconos SVG (src/lib/iconos.js).
+    // En las dos versiones, cada emoji de esa lista y cada svg.ic pasan a ser el mismo carácter (■), con el tamaño de
+    // letra de donde están; los lugares que cambiaron de forma por el ícono (el círculo arriba de una pantalla, la lupa
+    // dentro del buscador) vuelven a la de antes. Va primero: las reglas de abajo reescriben textos enteros.
+    // Lo nuevo lo revisan ancho.mjs y las capturas del PR.
+    const EMOJI = /(📅|🕒|⏱|💰|🧴|📊|👥|📸|📷|⚙|🔔|👤|↪|🛠|🏪|📲|↻|💈|✂|🌿|💅|✅|✔|❌|✎|🗑|🔍|🔎|📍|🗺|💬|📣|🎟|🎁|⚡|⏳|⛔|🏖|🔒|🔓|⚠|💳|💵|💸|🏦|📱|📞|🪪|✉|🖨|👁|✨|☀|🌤|🌙|😕|🎉|🙅|🗓|📋|📈|📉|🌐|⏸|🛒|🚶|✍|📝|📇|📵|🎂|🔥|🌱|💤|🟢|⚪|🔁|📆)\uFE0F?/gu;
+    document.querySelectorAll("svg.ic").forEach((svg) => { const parent = svg.parentNode; svg.replaceWith("■"); parent.normalize(); });
+    const walkIc = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let node = walkIc.nextNode(); node; node = walkIc.nextNode()) {
+      if (!EMOJI.test(node.nodeValue)) continue;
+      EMOJI.lastIndex = 0;
+      node.nodeValue = node.parentNode && node.parentNode.tagName === "OPTION" ? node.nodeValue.replace(new RegExp(EMOJI.source + " ?", "gu"), "") : node.nodeValue.replace(EMOJI, "■");
+    }
+    document.querySelectorAll("#app input[placeholder]").forEach((el) => { el.placeholder = el.placeholder.replace(new RegExp("^" + EMOJI.source + " ", "u"), ""); });
+    document.querySelectorAll("#app .hero-ic").forEach((el) => { el.className = ""; el.style.fontSize = "40px"; });
+    document.querySelectorAll("#app .search").forEach((el) => { el.style.paddingLeft = "12px"; el.style.backgroundImage = "none"; });
     // v2 (3/11, a propósito): «prestador» → «profesional» y «usuario» → «cliente» en los textos; la referencia dice lo de
     // antes. Se pasa a la palabra nueva en las dos (en la versión de hoy no cambia nada).
     const TERM = [[/Prestadoras/g, "Profesionales"], [/prestadoras/g, "profesionales"], [/Prestadores/g, "Profesionales"], [/prestadores/g, "profesionales"],
@@ -185,7 +201,7 @@ async function normalizar(page) {
     // el QR en PDF". Se neutraliza en las dos versiones; lo nuevo lo prueban e2e.js y rutas.js.
     document.querySelectorAll("#app #fHorarios button[type=submit], #app #hSaved, #app .hhchip, #app .tl-hh, #app [data-act=qrPrint]").forEach((el) => el.remove());
     document.querySelectorAll("#app [data-act=copiarLink]").forEach((el) => { el.style.marginTop = ""; });
-    document.querySelectorAll("#app .tl-top .hint").forEach((el) => { el.textContent = el.textContent.replace(/ · ⚡ Happy hour .*$/, ""); });
+    document.querySelectorAll("#app .tl-top .hint").forEach((el) => { el.textContent = el.textContent.replace(/ · (⚡ |■ )?\s*Happy hour .*$/, ""); });
     // V4 (C25, C32, C33, C35, cambios a propósito): la Caja del día suma Transferencia, editar y borrar cada movimiento
     // y el botón para cargar sin turno; el mes suma su resumen; los meses van con mayúscula y el balance del año en
     // verde o rojo; Productos suma Eliminar. Se neutraliza en las dos versiones; lo nuevo lo prueban e2e.js y test_db.py.
@@ -222,7 +238,7 @@ async function normalizar(page) {
     // V6 (C41, C42, cambios a propósito): el aviso de los activos sin Mercado Pago nombra a quiénes y suma «Ver quiénes»;
     // Prestadores suma el filtro «Sin Mercado Pago», el texto en negrita y «Avisarle». Se neutraliza en las dos versiones;
     // lo nuevo lo prueban e2e.js y test_db.py.
-    document.querySelectorAll("#app .adml li").forEach((li) => { if (li.textContent.trim().startsWith("💳")) li.remove(); });
+    document.querySelectorAll("#app .adml li").forEach((li) => { if (li.textContent.trim().startsWith("💳") || /profesional(es activos no conectaron| activo no conectó) Mercado Pago/.test(li.textContent)) li.remove(); });
     document.querySelectorAll("#app [data-act=admNudge], #app [data-act=admF][data-f=nomp]").forEach((el) => el.remove());
     document.querySelectorAll("#app .admact .chip.ok").forEach((el) => { if (/Avisado/.test(el.textContent)) el.remove(); });
     // (sin la negrita y en un solo texto, como antes: dos textos seguidos se pueden dibujar con un píxel de diferencia)
@@ -256,7 +272,18 @@ async function normalizar(page) {
 async function foto(page, pasos, nombre) {
   // el mouse queda donde fue el último clic: fuera de la pantalla, así ningún hover (Bloque D) entra en la captura
   await page.mouse.move(0, 0);
+  // 4/11 (íconos): en la referencia los emojis son más altos que el ■ que los reemplaza, y la pantalla ya se desplazó
+  // (al elegir un horario) con esa altura. Se fija lo que está en el medio de la ventana antes de normalizar y después se
+  // vuelve a poner en el mismo lugar: así las dos versiones quedan igual de desplazadas (y la barra fija, en su lugar).
+  await page.evaluate(() => {
+    const el = window.scrollY > 0 && document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    const box = el && el.closest("div, section, li, p, form, ul");
+    window.__ancla = box ? [box, box.getBoundingClientRect().top] : null;
+  });
   await normalizar(page);
+  await page.evaluate(() => {
+    if (window.__ancla && window.__ancla[0].isConnected) window.scrollBy(0, window.__ancla[0].getBoundingClientRect().top - window.__ancla[1]);
+  });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(350);
   const texto = await page.locator("#app").innerText();
