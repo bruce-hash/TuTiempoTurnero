@@ -1,5 +1,7 @@
 import { demoPending0 } from "./admin.js";
 import { demoInbox0, demoStamps0, demoUsers0 } from "./usuarios.js";
+import { demoHolidayYears, demoHolidays } from "./feriados.js";
+import { S } from "../state.js";
 import { store } from "../store.js";
 
 store.COMM = {
@@ -62,3 +64,6 @@ store.DEMO_OWNER = "juan.perez@tutiempo.demo";
 store.DEMO_ST = {};
 store.DEMO_INBOX = demoInbox0();
 store.DEMO_STAMPS = demoStamps0();
+// 7/11 · feriados de ejemplo (Horarios → Próximos feriados y Comisión → Feriados)
+store.HOLIDAYS = demoHolidays();
+S.admHol = demoHolidayYears();

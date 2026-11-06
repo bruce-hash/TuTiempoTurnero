@@ -4,6 +4,7 @@ import { ME, pr } from "../../lib/prestadores.js";
 import { R, cfg, freeCount } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { vDayBlocks } from "./bloqueo-dias.js";
+import { vHolidays } from "./feriados.js";
 import { depositNote, termPicker } from "./plazo.js";
 import { ic } from "../../ui/iconos.js";
 
@@ -86,5 +87,5 @@ export function vBHorarios() {
     ${termPicker(conf.term)}
    </div>
    <p class="note">Con lo guardado, mañana te quedan <b>${freeTomorrow}</b> turnos libres de 30 min.</p>
-  </form>${vDayBlocks()}`;
+  </form>${vDayBlocks()}${vHolidays()}`;
 }

@@ -249,6 +249,8 @@ export const livePanel = {
     S.notices = notices || [];
     // 4/11: los huecos ya ofrecidos (la Agenda los marca "✓ Ofrecido")
     await livePanel.myOffers().catch(() => {});
+    // 7/11 · Feriados: los próximos de los años confirmados, con lo que eligió (Horarios → Próximos feriados)
+    await livePanel.myHolidays().catch(() => {});
     const prov = pr(pid);
     // reseñas y trabajos de su perfil (los cargó loadProvider)
     store.COMM = store.COMMBY[pid];
@@ -312,6 +314,10 @@ export const livePanel = {
     return store.FOLLOWERS;
   },
   // los huecos que ya ofreció (a todos o a un seguidor), para marcarlos "✓ Ofrecido" aunque recargue
+  async myHolidays() {
+    const rows = await call(sb.rpc("my_holidays"));
+    store.HOLIDAYS = (rows || []).map((row) => ({ day: row.day, name: row.name, kind: row.kind, open: row.open, works: row.works }));
+  },
   async myOffers() {
     const rows = await call(
       sb.from("slot_offers").select("starts_at,target_user").eq("provider_id", S.me).gte("starts_at", new Date().toISOString()).limit(1e3),

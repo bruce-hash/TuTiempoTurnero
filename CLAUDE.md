@@ -94,7 +94,11 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     lo elige el profesional (Horarios y el alta); si un cobro trae la comisión de otro plazo, `confirm_payment_core` no
     lo cambia: `mp_term_mismatch` en Para revisar y aviso `mp_term` (lleva a Horarios). Caja del día de otra fecha
     (`S.cajaDay`, `store.WALKDAY`, `api.walkinsOn`), ventas con cantidad (`walkins.qty`), gastos variables aparte
-    (`provider_month_summary`), Ajustes solo Seguridad (`vAjustes`, `/cuenta/ajustes`). Feriados: propuesta en docs/09.
+    (`provider_month_summary`), Ajustes solo Seguridad (`vAjustes`, `/cuenta/ajustes`).
+  - 7/11 · Feriados (D39): `holidays-sync` (Edge Function, ArgentinaDatos; `HOLIDAYS_API_URL` solo pruebas) guarda la lista en
+    `holidays` (`holidays_sync_save`); el admin la confirma por año (`holiday_years`, Comisión → Feriados). El profesional:
+    `src/views/prestador/feriados.js` (Horarios → Próximos feriados), `src/actions/feriados.js` (Abro / Cierro → `holiday_decide`;
+    Cierro = `block_days`), aviso `holiday` 7 días antes (`holiday_notices`, campanita y push). Cuentas puras en `src/lib/feriados.js`.
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma
@@ -115,7 +119,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   (el CI falla si no son idénticos).
 - `supabase/functions/`: Edge Functions de Mercado Pago (desde el Paso 1, `mp-reconcile` le pregunta a Mercado Pago por los
   cobros sin pago registrado, cron `tt-mp-sync`; el webhook y la consulta registran el pago con `_shared/pago.ts`; cada
-  cobro queda en `mp_checkouts` con su token de regreso, D28), `dni-cleanup` (borra las fotos del DNI, D24), `push-send` (notificaciones
+  cobro queda en `mp_checkouts` con su token de regreso, D28), `dni-cleanup` (borra las fotos del DNI, D24), `holidays-sync` (feriados, D39), `push-send` (notificaciones
   push, Bloque C: cola `push_outbox`, cifrado y VAPID en `_shared/webpush.ts`, secretos `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y
   `VAPID_SUBJECT`; `PUSH_TEST_ORIGINS` solo en pruebas) y `email-send` (avisos por
   email con Resend, Bloque 3; el HTML sale de `_shared/email.ts`); `_shared/util.ts` compartido. Desde el Bloque 1 las llaves están

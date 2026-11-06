@@ -429,5 +429,23 @@ ok("4/11: funciones nuevas con search_path fijo y solo para cuentas con sesión"
    "select bool_and(p.proconfig::text like '%%search_path%%') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname in ('provider_followers','offer_slot','follower_label')")
    and not one("select has_function_privilege('anon', 'offer_slot(timestamptz,timestamptz,uuid)', 'execute') or has_function_privilege('anon', 'provider_followers()', 'execute')"))
 
+# ---------- 7/11 · feriados: el aviso de 7 días antes también va por push ----------
+hoyF = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))).date()
+fF = hoyF + dt.timedelta(days=4)
+q("update providers set status = 'active' where id = %s", (pid,))
+q("insert into provider_hours select %s, g, 1, '09:00', '18:00' from generate_series(0, 6) g on conflict do nothing", (pid,))
+q("select holidays_sync_save(%s, %s::jsonb)", (fF.year, json.dumps([{"fecha": str(fF), "tipo": "inamovible", "nombre": "Feriado Push"}])), role="service_role")
+q("select admin_holidays_confirm(%s)", (fF.year,), uid=admin)
+q("select holiday_notices()")
+hn = one("select id from provider_notices where provider_id = %s and kind = 'holiday'", (pid,))
+D = due()
+hp = [d for d in D.values() if d["tag"] == f"holiday-{hn}"]
+ok("feriados: el aviso va por push al profesional, a Horarios", hn and hp and hp[0]["title"] == "Feriado: ¿abrís?" and hp[0]["url"] == "/panel/horarios"
+   and "es feriado (Feriado Push). ¿Abrís?" in hp[0]["body"], str(hp))
+q("update push_outbox set next_attempt_at = now() where kind = 'holiday' and status = 'pending'")
+q("insert into provider_holidays (provider_id, day, open) values (%s, %s, true)", (pid, fF))
+due()
+ok("feriados: si ya eligió antes de que salga, no se manda", all(r[1] == "skipped" for r in cola(owner, "holiday")) and cola(owner, "holiday"))
+
 print("TODO OK" if F == 0 else f"{F} FALLAS")
 sys.exit(1 if F else 0)

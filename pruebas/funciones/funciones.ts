@@ -58,6 +58,22 @@ const vapidPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "
 const VAPID_PUB = b64uBytes(new Uint8Array(await crypto.subtle.exportKey("raw", vapidPair.publicKey)));
 const VAPID_PRIV = (await crypto.subtle.exportKey("jwk", vapidPair.privateKey)).d!;
 const ps = pushFalso(VAPID_PUB);
+// 7/11 · feriados: una fuente falsa con la forma de ArgentinaDatos (GET /<año>); ferModo la hace caer o cambiar
+let ferModo: "ok" | "caida" | "cambio" = "ok";
+const ferLista = (y: number) => [
+  { fecha: `${y}-01-01`, tipo: "inamovible", nombre: "Año nuevo" },
+  { fecha: `${y}-03-23`, tipo: "puente", nombre: "Día no laborable con fines turísticos" },
+  { fecha: `${y}-04-02`, tipo: "inamovible", nombre: "Día del Veterano y de los Caídos en la Guerra de Malvinas" },
+  { fecha: `${y}-06-17`, tipo: "trasladable", nombre: ferModo === "cambio" ? "Paso a la Inmortalidad del Gral. Güemes (trasladado)" : "Paso a la Inmortalidad del Gral. Güemes" },
+  { fecha: `${y}-04-03`, tipo: "no laborable", nombre: "Viernes Santo (no entra)" },
+  { fecha: `${y}-11-20`, tipo: "provincial", nombre: "Un feriado provincial (no entra)" },
+];
+const ferSrv = Deno.serve({ port: 0, hostname: "127.0.0.1", onListen() {} }, (req) => {
+  const y = Number(new URL(req.url).pathname.split("/").pop());
+  if (ferModo === "caida") return new Response("caído", { status: 503 });
+  return Response.json(ferLista(y));
+});
+const FER_URL = `http://127.0.0.1:${(ferSrv.addr as Deno.NetAddr).port}`;
 const SITE = "http://sitio.test", WHSEC = "whsec-prueba";
 const SERVICE = await jwt({ role: "service_role" });
 const rnd = (n: number) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n))));
@@ -68,13 +84,14 @@ for (const [k, v] of Object.entries({
   CRON_SECRET: CRON, MP_TOKENS_KEY: TOKENS_KEY, MP_OWNER_USER_ID: OWNER_MP,
   RESEND_API_KEY: RESEND_KEY, EMAIL_FROM: "TuTiempo <avisos@tutiempo.com.ar>", EMAIL_REPLY_TO: "soporte@tutiempo.com.ar",
   EMAIL_API_URL: rs.url, EMAIL_GAP_MS: "0",
+  HOLIDAYS_API_URL: FER_URL,
   VAPID_PUBLIC_KEY: VAPID_PUB, VAPID_PRIVATE_KEY: VAPID_PRIV, VAPID_SUBJECT: "mailto:contacto@tutiempo.com.ar", PUSH_TEST_ORIGINS: ps.origin,
 })) Deno.env.set(k, v);
 const handlers: Record<string, (req: Request) => Promise<Response>> = {};
 let loading = "";
 const realServe = Deno.serve.bind(Deno);   // el de verdad, para los servidores falsos de la prueba
 (Deno as any).serve = (h: any) => { handlers[loading] = typeof h === "function" ? h : h.handler; return { finished: Promise.resolve(), shutdown: async () => {} }; };
-for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "mp-reconcile", "dni-cleanup", "email-send", "push-send"]) {
+for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "mp-reconcile", "dni-cleanup", "email-send", "push-send", "holidays-sync"]) {
   loading = n;
   await import(`../../supabase/functions/${n}/index.ts`);
 }
@@ -1074,6 +1091,35 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
      && rev.webhook_events.some((e: any) => e.reason === "bad_signature" && e.detail && e.hits >= 1), JSON.stringify(rev?.webhook_alert ?? rev));
 }
 
+// ---------- 7/11 · feriados: holidays-sync trae la lista oficial y la base guarda solo lo que entra ----------
+{
+  const run = async (key = CRON) => fn("holidays-sync", new Request("https://fn.test/functions/v1/holidays-sync", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
+  const y = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric" }).format(new Date()));
+  let r = await run("otra-clave-cualquiera-de-mas-de-32-caracteres");
+  ok("feriados) holidays-sync sin la clave del cron: 403", r.status === 403);
+  r = await run();
+  let j = await body(r);
+  ok("feriados) trae el año en curso y el siguiente", r.status === 200 && j.years?.length === 2 && j.years.every((x: any) => x.count === 4), JSON.stringify(j));
+  const dias = async (yy: number) => (await q("select to_char(day, 'MM-DD') d, kind from holidays where extract(year from day) = $1 order by day", [yy])).map((x: any) => `${x.d} ${x.kind}`);
+  ok("feriados) entran inamovibles, trasladables y puentes; no los no laborables ni los provinciales",
+     JSON.stringify(await dias(y)) === JSON.stringify(["01-01 inamovible", "03-23 puente", "04-02 inamovible", "06-17 trasladable"]), JSON.stringify(await dias(y)));
+  await run();
+  ok("feriados) una segunda corrida no duplica", Number(await one("select count(*) from holidays where extract(year from day) = $1", [y])) === 4);
+  ferModo = "caida";
+  r = await run(); j = await body(r);
+  ok("feriados) si la fuente se cae, quedan las fechas que ya había y el error para el admin",
+     r.status === 200 && Number(await one("select count(*) from holidays where extract(year from day) = $1", [y])) === 4
+     && /503/.test(await one("select fetch_error from holiday_years where year = $1", [y])));
+  ferModo = "ok"; await run();
+  ok("feriados) …y cuando vuelve, se borra el error", (await one("select fetch_error from holiday_years where year = $1", [y])) === null);
+  await q("update holiday_years set confirmed_at = now() where year = $1", [y]);
+  ferModo = "cambio"; await run();
+  ok("feriados) con el año confirmado, un cambio de la fuente no toca nada: queda marcado para revisar",
+     (await one("select name from holidays where day = make_date($1, 6, 17)", [y])) === "Paso a la Inmortalidad del Gral. Güemes"
+     && (await one("select source_changed from holiday_years where year = $1", [y])) === true);
+  ferModo = "ok";
+}
+
 const cfg = fileURLToPath(new URL("./deno.json", import.meta.url));
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;
 const leer = async (extra: Record<string, string>) => {
@@ -1088,5 +1134,6 @@ ok("con MP_API_URL (solo pruebas), usan esa", (await leer({ MP_API_URL: "http://
 await db.end();
 await mp.cerrar();
 await rs.cerrar();
+await ferSrv.shutdown();
 console.log(F ? `${F} FALLAS` : "TODO OK");
 Deno.exit(F ? 1 : 0);

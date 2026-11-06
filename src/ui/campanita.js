@@ -55,6 +55,17 @@ function noticeAction(notice) {
   if (notice.kind === "mp_connect" || notice.kind === "mp_reconnect") {
     return go("perfil", "Conectar Mercado Pago");
   }
+  // 7/11 · Feriados: «El lunes 23/11 es feriado (…). ¿Abrís?» con Abro / Cierro (o lo que ya eligió)
+  if (notice.kind === "holiday" && notice.ref) {
+    if (notice.open != null) {
+      return `<span class="hint">✓ ${notice.open ? "Abrís ese día" : "Cerrado ese día"}</span>`;
+    }
+    if (notice.ref < TODAY()) {
+      return "";
+    }
+    const day = esc(notice.ref);
+    return `<div class="holbtns"><button class="btn btn-ghost btn-sm msg-act" data-act="holOpen" data-d="${day}">Abro</button><button class="btn btn-ghost btn-sm msg-act" data-act="holClose" data-d="${day}">Cierro</button></div>`;
+  }
   // 4/11 · Bloque 4: Mercado Pago cobró la comisión de otro plazo: a Horarios, donde se elige
   if (notice.kind === "mp_term") {
     return go("horarios", "Revisar el plazo");

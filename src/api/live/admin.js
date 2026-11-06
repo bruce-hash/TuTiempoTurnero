@@ -42,6 +42,8 @@ export const liveAdmin = {
       call(sb.rpc("admin_client_counts")).catch(() => null),
       // v2 (3/11): los avisos que este admin ya vio o borró
       call(sb.rpc("admin_alert_marks_get")).then((marks) => (store.ADM_MARKS = marks || {})).catch(() => null),
+      // 7/11 · Feriados: el año en curso y el siguiente (pestaña Comisión → Feriados)
+      liveAdmin.adminHolidays().catch(() => null),
     ]);
     if (stats && clientCounts) {
       stats.clients = clientCounts.clients;
@@ -85,6 +87,10 @@ export const liveAdmin = {
       store.FEES = feesFromDb(settings);
     }
     return S.adm;
+  },
+  async adminHolidays() {
+    S.admHol = (await call(sb.rpc("admin_holidays"))) || [];
+    return S.admHol;
   },
   // "Para revisar · cobros" (Bloque 1): devoluciones que fallan o se reintentan y pagos en revisión
   async adminReview() {

@@ -30,7 +30,7 @@ registerClick("dbConfirm", (ev, el, act) => {
   if (!ask) {
     return;
   }
-  blockDays(ask.from, ask.to, ask.why);
+  blockDays(ask.from, ask.to, ask.why, ask.holiday);
   return;
 });
 registerClick("dbAskNo", (ev, el, act) => {

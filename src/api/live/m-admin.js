@@ -5,6 +5,11 @@ import { sb } from "../../config.js";
 // Escrituras del administrador (todas por funciones de la base que verifican el rol) y, al final, sellos y
 // mensajes del prestador a sus clientes.
 Object.assign(LM, {
+  // 7/11 · Feriados: corregir, borrar, confirmar el año y volver a traer la lista de la fuente
+  adminHolidaySave: (day, name, kind) => saved(sb.rpc("admin_holiday_save", { p_day: day, p_name: name, p_kind: kind })),
+  adminHolidayDelete: (day) => saved(sb.rpc("admin_holiday_delete", { p_day: day })),
+  adminHolidaysConfirm: (year) => saved(sb.rpc("admin_holidays_confirm", { p_year: year })),
+  adminHolidaysFetch: () => saved(sb.rpc("admin_holidays_fetch")),
   // D34: comisión de TuTiempo (% del precio del turno) y % de Mercado Pago por plazo
   adminSetFees: (pct, mp) =>
     saved(
