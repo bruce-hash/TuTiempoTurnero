@@ -80,7 +80,7 @@
 .delbtn{display:block;margin:8px auto 0;font-size:13px;color:var(--bad)}
 .delpanel{border:1.5px solid var(--bad-line);background:var(--bad-soft);text-align:left}
 .dl{margin:8px 0 0;padding-left:18px;font-size:14px;display:grid;gap:4px}
-.wc-badge{background:rgba(255,255,255,.18);border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.wc-badge{background:rgba(255,255,255,.18);border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700}
 .wplus{color:#bbf7d0!important}.wminus{color:#fecaca!important}
 .wallmini{display:flex;align-items:center;gap:6px;width:100%;border:1.5px solid var(--ok-line);background:var(--ok-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:14px;text-align:left}
 .wallmini span{margin-left:auto;color:var(--ok);font-weight:700}
@@ -148,7 +148,7 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .pwa-share::before{content:"";position:absolute;left:5px;top:-6px;width:1.6px;height:11px;background:currentColor}
 .pwa-share::after{content:"";position:absolute;left:2.6px;top:-6px;width:5px;height:5px;border-left:1.6px solid currentColor;border-top:1.6px solid currentColor;transform:rotate(45deg)}
 .pwa-dev{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 10px}
-.pill-ok{font-size:12px;font-weight:700;border-radius:99px;padding:3px 9px;background:var(--ok-soft);color:var(--ok);white-space:nowrap}
+.pill-ok{font-size:12px;font-weight:700;border-radius:99px;padding:3px 9px;background:var(--ok-soft);color:var(--ok)}
 .pwa-opt{justify-content:flex-start;text-align:left;margin-top:12px}
 .pwa-guide{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.45);display:grid;place-items:end center;padding:16px}
 .pwa-guide .panel{width:100%;max-width:420px;text-align:left}
@@ -375,3 +375,11 @@ body.am-open{overflow:hidden}
 .calbtn .ic{width:19px;height:19px;vertical-align:0}
 .calbtn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
 .calbtn:focus-within{outline:2px solid var(--brand);outline-offset:2px}
+
+/* 7/11: Caja del día con dos botones (servicio sin turno y vender producto) y el stock bien visible en Productos */
+.cajabtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.cajabtns .btn{min-width:0}
+.saletot{margin:0;padding:10px 0;font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.pl-n{display:grid;justify-items:center;font-size:22px;line-height:1;font-variant-numeric:tabular-nums;min-width:3.2em}
+.pl-n small{font-size:10px;font-weight:600;color:var(--muted);margin-top:3px}
+.pl-n.low{color:var(--bad)}

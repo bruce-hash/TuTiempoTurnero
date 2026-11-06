@@ -33,8 +33,10 @@ function vMisTurnosBase() {
               ? `<span class="chip bad">${notByProvider(booking) ? "Pago devuelto" : "Lo canceló el profesional"}</span>`
               : '<span class="chip gray">Avisaste que no ibas</span>'
           : booking.refund
-            ? `<span class="chip gray">${esc(cap(refundText(booking)))}</span>`
+            ? '<span class="chip gray">Devuelto</span>'
             : '<span class="chip gray">Pasado</span>';
+  // 7/11: la nota de la devolución va debajo del servicio (en la etiqueta de la derecha ensanchaba la página)
+  const refundNote = (booking) => (booking.refund && refundText(booking) ? `<span class="hint">${esc(cap(refundText(booking)))}</span>` : "");
   // en la compu: próximos y anteriores a la izquierda y los sellos a la derecha (mt-a, mt-c, mt-b); en el celular, en el
   // orden de siempre
   return `<div class="narrow stack cols2 mt" style="margin-top:20px"><h1 class="h1 c-all">Mis turnos</h1>
@@ -81,7 +83,7 @@ function vMisTurnosBase() {
    </div>
    <div class="mt-b"><!--SELLOS--></div>
    <div class="mt-c">
-   ${past.length ? `<p class="lbl" style="margin:8px 0 0">Anteriores</p><div class="panel"><ul class="ag">${past.map((booking) => `<li data-bk="${booking.id}"><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(pr(booking.pid).name)} · ${booking.time}</b><span>${esc(booking.svc)} · ${money(booking.price)}</span>${booking.stamped ? `<span class="hint">${ic("sellos")} +1 sello</span>` : ""}${booking.status === "done" && !booking.reviewed ? (S.rateFor === booking.id ? rateForm(booking) : `<button class="lnk" data-act="rateOpen" data-id="${booking.id}">★ Calificar</button>`) : booking.reviewed ? '<span class="hint">✓ Calificaste</span>' : ""}</div>${chipOf(booking)}</li>`).join("")}</ul></div>` : ""}
+   ${past.length ? `<p class="lbl" style="margin:8px 0 0">Anteriores</p><div class="panel"><ul class="ag">${past.map((booking) => `<li data-bk="${booking.id}"><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(pr(booking.pid).name)} · ${booking.time}</b><span>${esc(booking.svc)} · ${money(booking.price)}</span>${refundNote(booking)}${booking.stamped ? `<span class="hint">${ic("sellos")} +1 sello</span>` : ""}${booking.status === "done" && !booking.reviewed ? (S.rateFor === booking.id ? rateForm(booking) : `<button class="lnk" data-act="rateOpen" data-id="${booking.id}">★ Calificar</button>`) : booking.reviewed ? '<span class="hint">✓ Calificaste</span>' : ""}</div>${chipOf(booking)}</li>`).join("")}</ul></div>` : ""}
    </div>
   </div>`;
 }

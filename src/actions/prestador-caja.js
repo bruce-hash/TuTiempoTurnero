@@ -11,6 +11,7 @@ import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { CAJA_BACK, cashLines, closeDay, dayLines, finTot, ymk } from "../views/prestador/finanzas.js";
 import { medioToDb } from "../lib/medios.js";
+import { saleTotal } from "../views/prestador/caja.js";
 import { checkSplit, restOf } from "../lib/resto.js";
 
 registerClick("reopenDay", (ev, el, act) => {
@@ -61,6 +62,7 @@ registerChange("cajaDay", (ev) => {
   const today = TODAY();
   S.cajaDay = day && day < today && day >= dkey(addDays(-CAJA_BACK)) ? day : null;
   S.walkOpen = false;
+  S.saleOpen = false;
   S.movEd = null;
   S.movDel = null;
   if (S.cajaDay && !store.WALKDAY[S.cajaDay]) {
@@ -79,6 +81,7 @@ registerClick("cajaHoy", (ev, el, act) => {
 });
 registerClick("walkOpen", (ev, el, act) => {
   S.walkOpen = true;
+  S.saleOpen = false;
   S.movEd = null;
   S.movDel = null;
   S.walkMedio = "Efectivo";
@@ -252,19 +255,11 @@ registerSubmit("fRest", (ev) => {
   toast(`Anotado: ${parts.map((part) => money(part.m) + " en " + part.medio.toLowerCase()).join(" y ")}`);
   render();
 });
-// 4/11 · Bloque 4: con un producto se pide la cantidad (no la hora) y "Cobraste" es precio × cantidad
-const prodOf = (value) => (value && value[0] === "p" ? store.PRODS[+value.slice(1)] : null);
 registerChange("wsv", (ev) => {
   const prov = pr(ME());
   const value = ev.target.value;
-  const prod = prodOf(value);
   $("#wotroBox").hidden = value !== "otro";
-  $("#whrBox").hidden = !!prod;
-  $("#wqtyBox").hidden = !prod;
-  if (prod) {
-    $("#wqty").value = "1";
-    $("#wpr").value = prod.p;
-  } else if (value !== "otro") {
+  if (value !== "otro") {
     $("#wpr").value = prov.svcs[+value][2];
   } else {
     $("#wpr").value = "";
@@ -272,37 +267,13 @@ registerChange("wsv", (ev) => {
   }
   return;
 });
-registerInput("wqty", () => {
-  const prod = prodOf($("#wsv").value);
-  const qty = parseWhole($("#wqty").value);
-  if (prod && qty > 0) {
-    $("#wpr").value = String(prod.p * qty);
-  }
-});
-// servicio sin turno o venta de producto cargado en la caja (sin comisión; la propina no se pide: va en 0)
+// servicio sin turno cargado en la caja (sin comisión; la propina no se pide: va en 0)
 registerSubmit("fWalk", (ev) => {
   const prov = pr(ME());
   const value = $("#wsv").value;
-  const prod = prodOf(value);
-  const isProd = !!prod;
-  const qty = isProd ? parseWhole($("#wqty").value) : 1;
-  const label = isProd ? (qty > 1 ? `${prod.n} × ${qty}` : prod.n) : value === "otro" ? $("#wotro").value.trim() : prov.svcs[+value][0];
-  if (isProd && prod.stock <= 0) {
-    $("#werr").textContent = "No te queda stock de ese producto.";
-    return;
-  }
-  if (isProd && (isNaN(qty) || qty < 1)) {
-    $("#werr").textContent = "Escribí la cantidad con números enteros (1 o más).";
-    return;
-  }
-  if (isProd && qty > prod.stock) {
-    $("#werr").textContent = `Te ${prod.stock === 1 ? "queda 1 unidad" : `quedan ${prod.stock} unidades`} de ${prod.n}.`;
-    return;
-  }
+  const label = value === "otro" ? $("#wotro").value.trim() : prov.svcs[+value][0];
   const price = parsePesos($("#wpr").value);
-  const tip = 0;
-  // un producto se vende ahora (la hora no se pide)
-  const time = isProd ? nowHM() : $("#whr").value;
+  const time = $("#whr").value;
   if (!label) {
     $("#werr").textContent = "Escribí qué servicio hiciste.";
     return;
@@ -320,33 +291,83 @@ registerSubmit("fWalk", (ev) => {
     return;
   }
   const client = $("#wcl").value.trim();
-  if (isProd) {
-    prod.stock -= qty;
-  } else if (client) {
+  if (client) {
     const stats = cli(client);
     stats.v++;
     stats.last = 0;
     stats.spend ||= price;
   }
+  const walk = { svc: label, precio: price, propina: 0, hora: time, medio: S.walkMedio || "Efectivo", cliente: client, kind: "svc", pid: null };
+  S.walk.push(walk);
+  api.m.addWalk(walk);
+  S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
+  S.walkOpen = false;
+  toast(`Guardado: ${label} · ${money(price)}`);
+  render();
+  return;
+});
+// 7/11: "Vender producto", su propio botón en la Caja del día (producto, cantidad y medio de pago)
+registerClick("saleOpen", (ev, el, act) => {
+  S.saleOpen = true;
+  S.walkOpen = false;
+  S.saleI = null;
+  S.movEd = null;
+  S.movDel = null;
+  S.walkMedio = "Efectivo";
+  render();
+  const input = $("#sqty");
+  if (input) {
+    input.focus();
+  }
+});
+registerClick("saleClose", (ev, el, act) => {
+  S.saleOpen = false;
+  render();
+});
+const saleUpdate = () => {
+  const prod = store.PRODS[+$("#spr").value];
+  const qty = parseWhole($("#sqty").value);
+  $("#stot").textContent = qty > 0 && prod ? money(saleTotal(prod, qty)) : "—";
+};
+registerChange("spr", (ev) => {
+  S.saleI = +ev.target.value;
+  saleUpdate();
+});
+registerInput("sqty", saleUpdate);
+registerSubmit("fSale", (ev) => {
+  const prod = store.PRODS[+$("#spr").value];
+  const qty = parseWhole($("#sqty").value);
+  if (!prod || prod.stock <= 0) {
+    $("#serr").textContent = "No te queda stock de ese producto.";
+    return;
+  }
+  if (isNaN(qty) || qty < 1) {
+    $("#serr").textContent = "Escribí la cantidad con números enteros (1 o más).";
+    return;
+  }
+  if (qty > prod.stock) {
+    $("#serr").textContent = `Te ${prod.stock === 1 ? "queda 1 unidad" : `quedan ${prod.stock} unidades`} de ${prod.n}.`;
+    return;
+  }
+  const price = saleTotal(prod, qty);
+  prod.stock -= qty;
   const walk = {
-    svc: label,
+    svc: qty > 1 ? `${prod.n} × ${qty}` : prod.n,
     precio: price,
-    propina: tip,
-    hora: time,
+    propina: 0,
+    hora: nowHM(),
     medio: S.walkMedio || "Efectivo",
-    cliente: client,
-    kind: isProd ? "prod" : "svc",
-    pid: (isProd && prod.id) || null,
-    qty: isProd ? qty : null,
+    cliente: "",
+    kind: "prod",
+    pid: prod.id || null,
+    qty,
   };
   S.walk.push(walk);
   api.m.addWalk(walk);
-  if (isProd) {
-    api.m.setStock(prod);
-  }
+  api.m.setStock(prod);
   S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
-  S.walkOpen = false;
-  toast(isProd ? `Venta guardada: ${label} · ${money(price)}. Quedan ${prod.stock} en stock.` : `Guardado: ${label} · ${money(price)}`);
+  S.saleOpen = false;
+  toast(`Venta guardada: ${walk.svc} · ${money(price)}. Quedan ${prod.stock} en stock.`);
   render();
   return;
 });

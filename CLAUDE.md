@@ -70,7 +70,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Realtime) y solo dibuja si cambió algo; no toca la pantalla con un guardado pendiente, un formulario abierto o alguien escribiendo.
   - V4 resto: C31 gastos fijos en `src/lib/fijos.js` (qué corre cada mes; en la demo, la misma regla) y en la base
     (`fixed_expenses`, `fixed_expenses_sync` al abrir el panel, `fixed_expense_save`/`_stop` desde un mes; un mes cerrado
-    no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost` y «Vendí uno».
+    no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost`; las ventas, con «Vender producto» en la Caja del día (`saleForm`, 7/11).
   - V5 resto (C29): interruptor global de sellos (`app_settings.stamps_on`, `stampsOn()` en `src/ui/sellos.js`; todo lo de
     sellos pregunta ahí). En la base, `stamp_add` no suma ni canjea con los sellos apagados (`stamps_off`); los datos quedan.
   - V8 (C06): seguidor nuevo → `provider_notices` `new_follower` (trigger `follows_notice`, nombre de pila, una vez por
