@@ -85,6 +85,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
   - D36: la campanita de avisos de la cabecera (`src/ui/campanita.js` + `src/actions/campanita.js`): `S.inbox` del
     cliente (con `msgAction`) y `S.notices` del profesional. Mis turnos y el panel ya no muestran avisos.
+  - D37: íconos propios, sin emojis en la interfaz: `ic("nombre")` de `src/lib/iconos.js` (SVG en línea, trazo del color
+    del texto y detalle verde en `--ic-a`; tamaños por lugar en `src/styles/iconos.css`; `src/ui/iconos.js` lo reexporta).
+    Un ícono nuevo se agrega ahí. Los textos planos (toast, confirm, push, title, placeholder, `<option>`) van sin ícono.
+    `pruebas/unidad.mjs` falla si vuelve a aparecer un emoji en `src/` (fuera de comentarios y de `src/demo/`).
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma
