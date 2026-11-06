@@ -34,7 +34,7 @@ registerClick("acctMenu", (ev, el, act) => {
 registerClick("asClient", (ev, el, act) => {
   S.role = "cliente";
   S.preview = false;
-  go(el.dataset.to === "misturnos" ? "misturnos" : el.dataset.to === "home" ? "home" : "cuenta");
+  go(["misturnos", "home", "ajustes"].includes(el.dataset.to) ? el.dataset.to : "cuenta");
   window.scrollTo(0, 0);
 });
 registerClick("salirAdmin", (ev, el, act) => {

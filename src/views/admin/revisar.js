@@ -48,6 +48,8 @@ const PAYMENT_WHY = {
   fee_mismatch: "la comisión de TuTiempo que informó Mercado Pago no coincide con la calculada",
   // D30 (el texto con los dos números lo arma paymentWhy)
   mp_cost_mismatch: "la comisión de Mercado Pago no es la del plazo elegido",
+  // 4/11 · Bloque 4: es la de otro plazo de la tabla; el plazo no se cambió solo (se le avisó al profesional)
+  mp_term_mismatch: "la comisión de Mercado Pago es la de otro plazo, no la del que eligió el profesional en Horarios (se le avisó; el plazo no se cambió)",
   amount_over: "pagó más de lo que debía (la diferencia no se devolvió sola)",
   other_provider: "trae turnos de otro profesional",
   partial_refund_mismatch: "devolución parcial que no hizo la app",
@@ -71,7 +73,7 @@ const EVENT_WHY = {
 };
 const REJECTED = ["bad_signature", "stale_signature", "no_signature", "bad_request", "config_error"];
 const paymentWhy = (reason, payment) =>
-  reason === "mp_cost_mismatch" && payment && payment.mp_cost != null
+  (reason === "mp_cost_mismatch" || reason === "mp_term_mismatch") && payment && payment.mp_cost != null
     ? `${PAYMENT_WHY[reason]}: cobró ${money(payment.mp_cost)} y se esperaba ${money(payment.mp_cost_expected)} (revisar que el plazo del perfil del profesional sea el de su cuenta)`
     : PAYMENT_WHY[reason] || (/^unregistered_/.test(reason) ? "aviso de un pago que no está registrado" : /^error/.test(reason) ? "error al procesarlo: " + reason.slice(7) : reason);
 // formulario de "Devolver" (D20): monto (por defecto lo que falta devolver) y nota obligatoria; la devolución la hace
