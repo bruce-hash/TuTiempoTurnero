@@ -22,7 +22,7 @@ export const bellShown = () => !!S.user && S.role !== "admin";
 
 // la acción de cada aviso del cliente según lo que dice. Confirmación, recordatorios y cancelación → ver ese turno;
 // pedido de reseña → dejarla (o "Ya calificaste"); turno libre que ofreció el profesional → "Reservar" (4/11); los
-// mensajes del profesional, las novedades y el saludo de cumpleaños → ver su perfil. Si el turno ya no está, su perfil.
+// mensajes del profesional, las novedades (y los saludos de cumpleaños viejos) → ver su perfil. Si el turno ya no está, su perfil.
 export function msgAction(msg) {
   const btn = (attrs, label, cls = "btn-ghost") => `<button class="btn ${cls} btn-sm msg-act" ${attrs}>${label}</button>`;
   if (msg.kind === "offer" && msg.pid) {

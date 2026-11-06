@@ -270,6 +270,15 @@ async function normalizar(page) {
     document.querySelectorAll("#app [data-act=saleOpen], #app .salenote").forEach((el) => el.remove());
     document.querySelectorAll("#app .pl-n").forEach((el) => { el.querySelector("small")?.remove(); el.removeAttribute("class"); });
     document.querySelectorAll("#app .cajabtns").forEach((el) => el.replaceWith(...el.childNodes));
+    // 7/11 · Bloque 5 (cambios a propósito): salen el recordatorio de 2 h y el cumpleaños de los avisos automáticos, el
+    // filtro «Cumplen este mes» de Clientes y la marca «cumple» de cada cliente. Se neutraliza en las dos versiones; lo
+    // nuevo lo prueban test_db.py, test_emails.py y e2e.js.
+    document.querySelectorAll("#app .mlist li").forEach((li) => { if (/Recordatorio 2 h antes|El día de su cumpleaños/.test(li.textContent)) li.remove(); });
+    document.querySelectorAll("#app [data-cf=cumple]").forEach((el) => el.remove());
+    document.querySelectorAll("#app .crow .cr-m > span").forEach((el) => {
+      el.querySelectorAll("svg").forEach((svg) => { if (/· $/.test(svg.previousSibling?.textContent || "") && /^\s*cumple/.test(svg.nextSibling?.textContent || "")) svg.remove(); });
+      el.textContent = el.textContent.replace(/ · \s*(■ )?cumple$/, "");
+    });
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {

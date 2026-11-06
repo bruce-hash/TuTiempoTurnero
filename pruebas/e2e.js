@@ -844,7 +844,8 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("4/11: al abrir la campanita, los avisos quedan leídos (sin número)", (await pg.locator("nav .bell-n").count()) === 0
        && (await q("select count(*)::int c from client_messages where user_id=$1 and read_at is null and dismissed_at is null", [ana]))[0].c === 0);
     await menu("[data-go=misturnos]"); await wait(800);
-    // pedido de reseña de un turno atendido y sin reseña: «Dejar reseña» abre la reseña de ese turno en Anteriores
+    // pedido de reseña de un turno atendido y sin reseña: «Dejar reseña» abre la reseña de ese turno en el perfil del
+    // profesional, pestaña Reseñas (7/11 · Bloque 5: Mis turnos ya no tiene «Anteriores»)
     // (si Ana no tiene ninguno, se le carga uno atendido hace 40 días, copia de uno suyo)
     if (!(await q("select 1 from bookings b where b.client_id = $1 and b.status = 'done' and not exists (select 1 from reviews r where r.booking_id = b.id)", [ana])).length) {
       await q(`insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, busy_until, price)
@@ -859,8 +860,13 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
       await pg.reload(); await pg.waitForSelector("nav [data-act=bellToggle]"); await wait(1200);
       await bellOpen();
       await pg.click(`.inbox li[data-msg="${rv[0].id}"] [data-act=inboxRate]`); await wait(500);
-      const pos = await pg.evaluate((ref) => { const row = document.querySelector(`[data-bk="${ref}"]`); return row && [!!row.querySelector(".rateform"), document.querySelector(".top").getBoundingClientRect().bottom, row.getBoundingClientRect().top]; }, rv[0].ref);
-      ok("v2: «Dejar reseña» abre la reseña de ese turno y lleva hasta ahí", pos && pos[0] && pos[2] >= pos[1] && pos[2] - pos[1] <= 30, JSON.stringify(pos));
+      await pg.waitForSelector(".rateform", { timeout: 8000 }).catch(() => {}); await wait(400);
+      const pos = await pg.evaluate((ref) => { const box = document.querySelector(".rateform"); const send = box && box.querySelector("[data-act=sendReview]");
+        return box && [S.view, S.ptab, send && send.dataset.id === String(ref), document.querySelector(".top").getBoundingClientRect().bottom, box.getBoundingClientRect().top, innerHeight]; }, rv[0].ref);
+      ok("7/11 · Bloque 5: «Dejar reseña» abre la reseña de ese turno en el perfil del profesional (Reseñas) y lleva hasta ahí",
+         pos && pos[0] === "perfil" && pos[1] === "reviews" && pos[2] && pos[4] >= pos[3] && pos[4] < pos[5], JSON.stringify(pos));
+      await menu("[data-go=misturnos]"); await wait(800);
+      ok("7/11 · Bloque 5: Mis turnos ya no tiene la lista de «Anteriores»", !/Anteriores/.test(await pg.locator("#app").innerText()) && (await pg.locator("#app [data-bk]").count()) === 0);
     } else ok("v2: hay un turno atendido de Ana para probar «Dejar reseña»", false);
     await bellOpen();
     const first = await pg.locator(".inbox li").first().getAttribute("data-msg");
@@ -1291,7 +1297,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   const st2 = (await q("select deposit_pct, pay_mode, payout_term, setup_done from provider_settings where provider_id=$1", [np.id]))[0];
   ok("alta paso 4: seña del 30%, el plazo que eligió (18 días) y se puede seguir sin Mercado Pago", st2.deposit_pct === 30 && st2.pay_mode === "deposit" && st2.payout_term === "d18" && JSON.stringify(st2.setup_done) === "[1,2,3,4]" && new URL(p2b.url()).pathname === "/registrar-negocio/5", JSON.stringify(st2));
   ok("alta paso 5: con «Exigir DNI», pide número, frente y dorso", await p2b.isVisible("#fDni") && await p2b.isVisible("#dniFront") && await p2b.isVisible("#dniBack"));
-  ok("D24: el paso avisa cuánto se guardan las fotos", (await p2b.innerText("body")).includes("Guardamos las fotos hasta 30 días después de verificarte"));
+  ok("D24 (7/11 · Bloque 6): el paso avisa que las fotos se borran al verificar", (await p2b.innerText("body")).includes("Las fotos se borran apenas te verificamos"));
   await p2b.click("[data-act=bizFinish]"); await p2b.waitForTimeout(300);
   ok("alta paso 5: sin el DNI no se envía (y queda guardado para seguir después)", /Para enviarlo falta el número, la foto del frente y la del dorso/.test(await p2b.locator("#bizErr").innerText()));
   p2 = p2b;

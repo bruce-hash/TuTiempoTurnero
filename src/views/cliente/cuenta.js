@@ -42,7 +42,7 @@ export function vCuenta() {
     <button class="btn btn-pri btn-block" type="submit">Guardar</button></form>
    <div class="panel"><p class="lbl">Avisos por email</p>
     <label class="chk" style="justify-content:flex-start;text-align:left"><input type="checkbox" id="uMail"${user.emailNotices === false ? "" : " checked"}> Recordatorios y novedades por email</label>
-    <p class="note" style="text-align:left;margin:8px 0 0">Los recordatorios de tus turnos, el pedido de reseña y el saludo de cumpleaños. La confirmación y las cancelaciones te llegan siempre por email, y todos los avisos siguen en Mis turnos.</p></div>
+    <p class="note" style="text-align:left;margin:8px 0 0">El recordatorio del día anterior a tu turno, el pedido de reseña y las novedades de tus profesionales. La confirmación y las cancelaciones te llegan siempre por email, y todos los avisos siguen en la campanita.</p></div>
    ${pushPanel("cliente")}
    ${S.isAdmin ? `<button class="btn btn-ghost btn-block" data-act="toAdmin">${ic("admin")} Panel de TuTiempo (admin)</button>` : ""}
    ${S.barberAuth ? '<button class="btn btn-pri btn-block" data-act="toPanel">Ir a mi panel de profesional</button>' : '<p class="note">¿Tenés un negocio? <button class="lnk" data-act="bizStart">Registralo en TuTiempo</button></p>'}

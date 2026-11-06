@@ -9,7 +9,7 @@ const DNI_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
 // H10: lo que falta para verificar la identidad (número, frente y dorso). El número no se muestra: solo si está cargado.
 export function dniForm(st) {
   const done = (ok) => (ok ? ' <span style="color:var(--ok)">✓ cargado</span>' : "");
-  return `<p class="note" style="text-align:left;margin:10px 0">Necesitamos tu número de DNI y las fotos del frente y del dorso. Solo los ve el equipo de TuTiempo. Guardamos las fotos hasta 30 días después de verificarte.</p>
+  return `<p class="note" style="text-align:left;margin:10px 0">Necesitamos tu número de DNI y las fotos del frente y del dorso. Solo los ve el equipo de TuTiempo. Las fotos se borran apenas te verificamos: queda solo el número.</p>
    <form id="fDni" novalidate><div class="f"><label for="dniN">Número de DNI${done(st.number)}</label><div class="pw"><input id="dniN" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="Sin puntos, 7 u 8 números"><button class="btn btn-ghost btn-sm" type="submit">Guardar</button></div></div></form>
    <div class="f"><label for="dniFront">Foto del frente${done(st.front)}</label><input id="dniFront" type="file" accept="${DNI_ACCEPT}"></div>
    <div class="f"><label for="dniBack">Foto del dorso${done(st.back)}</label><input id="dniBack" type="file" accept="${DNI_ACCEPT}"></div>`;

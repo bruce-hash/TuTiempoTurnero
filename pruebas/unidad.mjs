@@ -143,12 +143,11 @@ ok("resto: sin partes, el resto entero en lo que eligió el cliente", JSON.strin
 ok("resto: sin partes, el medio que anotó el prestador", restSplit({ price: 4000, paid: 0, src: "manual", restMethod: "transfer" }).parts[0].medio === T);
 
 // 4/11 · íconos propios: la interfaz no vuelve a usar emojis (van ic("nombre"), src/lib/iconos.js). Se permiten solo en
-// comentarios, en el dato que marca un día bloqueado ("🏖️ " al principio del servicio) y en el mensaje de ejemplo de
-// cumpleaños (lo escribe el profesional). La demo (src/demo/) no entra al build de producción.
+// comentarios, en el dato que marca un día bloqueado ("🏖️ " al principio del servicio). La demo (src/demo/) no entra al build de producción.
 {
   const PICTO = /[\u{1F300}-\u{1FAFF}\u2600-\u26FF\u2700-\u27BF\u2B50\u23F0-\u23FF]/u;
   const TYPO = new Set(["✓", "✕", "★", "☆", "✗"]);
-  const ALLOWED = [/isDayBlock = /, /svc: "🏖️ " \+ reason/, /run\.why\.replace\(\/\^🏖️/, /svc\.replace\(\/\^🏖️/, /¡Feliz cumpleaños, \{nombre\}! 🎉/];
+  const ALLOWED = [/isDayBlock = /, /svc: "🏖️ " \+ reason/, /run\.why\.replace\(\/\^🏖️/, /svc\.replace\(\/\^🏖️/];
   const found = [];
   const scanDir = (dir) => {
     for (const name of fs.readdirSync(dir)) {
