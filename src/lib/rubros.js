@@ -1,13 +1,14 @@
 import { S } from "../state.js";
+import { ic } from "./iconos.js";
 
 // Rubros: [id, nombre en plural, en singular, ícono]. CAT los indexa por id; "n" es el genérico (sin rubro).
 export const CATS = [
-  ["b", "Barberías", "Barbería", "💈"],
-  ["p", "Peluquerías", "Peluquería", "✂"],
-  ["m", "Masajes", "Masajes", "🌿"],
-  ["l", "Pestañas", "Pestañas", "👁"],
-  ["u", "Uñas", "Uñas", "💅"],
-  ["d", "Depilación", "Depilación", "✨"],
+  ["b", "Barberías", "Barbería", ic("barberia")],
+  ["p", "Peluquerías", "Peluquería", ic("peluqueria")],
+  ["m", "Masajes", "Masajes", ic("masajes")],
+  ["l", "Pestañas", "Pestañas", ic("pestanas")],
+  ["u", "Uñas", "Uñas", ic("unas")],
+  ["d", "Depilación", "Depilación", ic("depilacion")],
 ];
 export const CAT = Object.fromEntries(
   CATS.map((row) => [

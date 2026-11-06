@@ -5,6 +5,7 @@ import { TODAY, nowHM, relDate } from "../lib/fechas.js";
 import { avatar } from "../lib/prestadores.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
+import { ic } from "./iconos.js";
 
 // 4/11 · La campanita de avisos en la cabecera, para el cliente y para el profesional (antes, los del cliente estaban en
 // Mis turnos y los del profesional arriba del panel). El número dice cuántos hay sin leer; al abrirla se ven todos y
@@ -91,9 +92,9 @@ export function bell() {
   const unread = bellUnread();
   const provider = forProvider();
   const hasRead = !provider && (S.inbox || []).some((msg) => msg.read);
-  return `<div class="bellw"><button type="button" class="bell-btn" data-act="bellToggle" aria-haspopup="dialog" aria-expanded="${!!S.bellOpen}" aria-controls="bellPanel" aria-label="Avisos${unread ? `, ${unread} sin leer` : ""}"><span aria-hidden="true">🔔</span>${unread ? `<span class="bell-n">${unread > 9 ? "9+" : unread}</span>` : ""}</button>${
+  return `<div class="bellw"><button type="button" class="bell-btn" data-act="bellToggle" aria-haspopup="dialog" aria-expanded="${!!S.bellOpen}" aria-controls="bellPanel" aria-label="Avisos${unread ? `, ${unread} sin leer` : ""}"><span aria-hidden="true">${ic("campana")}</span>${unread ? `<span class="bell-n">${unread > 9 ? "9+" : unread}</span>` : ""}</button>${
     S.bellOpen
-      ? `<div class="bellpanel inbox" id="bellPanel" role="dialog" aria-label="Avisos"><div class="inbox-h"><p class="lbl">🔔 Avisos${unread ? ` <span class="cnt">${unread}</span>` : ""}</p>${hasRead ? '<button class="lnk" data-act="inboxClear">Borrar los leídos</button>' : ""}</div>${provider ? providerList() : clientList()}</div>`
+      ? `<div class="bellpanel inbox" id="bellPanel" role="dialog" aria-label="Avisos"><div class="inbox-h"><p class="lbl">${ic("campana")} Avisos${unread ? ` <span class="cnt">${unread}</span>` : ""}</p>${hasRead ? '<button class="lnk" data-act="inboxClear">Borrar los leídos</button>' : ""}</div>${provider ? providerList() : clientList()}</div>`
       : ""
   }</div>`;
 }

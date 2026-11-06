@@ -17,6 +17,7 @@ import { rating, reviewsHtml } from "../../ui/resenas.js";
 import { myStamps, stampBox, stampEarns, stampGoal, svcByKey } from "../../ui/sellos.js";
 import { toast } from "../../ui/toast.js";
 import { comm } from "../prestador/comunidad.js";
+import { ic } from "../../ui/iconos.js";
 
 // en vivo el listado trae datos resumidos: el perfil completo se pide al abrirlo
 async function ensureProvider(id) {
@@ -70,7 +71,7 @@ export function vPerfil() {
     .map((cat) => [cat, prov.svcs.map((svc, index) => [svc, index]).filter(([svc]) => svc[3] === cat)])
     .filter((group) => group[1].length);
   const svcBtn = ([svc, index]) =>
-    `<button class="svci" data-svc="${index}" aria-pressed="${index === S.svc}"><span><b>${esc(svc[0])}</b><small>${svc[1]} min${happyOn ? ` · ${money(Math.round(svc[2] * (1 - conf.happy.pct / 100)))} en happy hour` : ""}${stampEarns(prov.id, svc) ? (S.user ? ` · 🎟️ ${Math.min(myStamps(prov.id, svc), stampGoal(prov.id, svc))}/${stampGoal(prov.id, svc)}` : " · 🎟️ suma sello") : ""}</small></span><span class="price">${money(svc[2])}</span></button>`;
+    `<button class="svci" data-svc="${index}" aria-pressed="${index === S.svc}"><span><b>${esc(svc[0])}</b><small>${svc[1]} min${happyOn ? ` · ${money(Math.round(svc[2] * (1 - conf.happy.pct / 100)))} en happy hour` : ""}${stampEarns(prov.id, svc) ? (S.user ? ` · ${ic("sellos")} ${Math.min(myStamps(prov.id, svc), stampGoal(prov.id, svc))}/${stampGoal(prov.id, svc)}` : ` · ${ic("sellos")} suma sello`) : ""}</small></span><span class="price">${money(svc[2])}</span></button>`;
   const head = `<div class="phero">${ph(prov, "prof-ph")}
      <button class="pav ${nMedia ? "ring" : ""}" ${nMedia ? `data-act="story" data-i="0" aria-label="Ver trabajos de ${esc(prov.name)}"` : 'tabindex="-1" aria-hidden="true"'}>${avatar(prov, "av-xl")}</button></div>
    <div class="panel pcard">

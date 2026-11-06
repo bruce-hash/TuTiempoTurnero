@@ -5,6 +5,7 @@ import { nextGaps } from "../../lib/huecos.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
+import { ic } from "../../ui/iconos.js";
 
 // 4/11 · Bloque 3: Clientes → Seguidores. Quienes siguen al prestador ("Ana G.", con la foto y desde cuándo), cuántos son
 // y, a cada uno, "Ofrecer turno": elige un hueco libre de los próximos 7 días y a esa persona le llega un aviso en la app
@@ -62,7 +63,7 @@ export function vSeguidores() {
          ? `<ul class="clist folist">${list
              .map(
                (fol) =>
-                 `<li><div class="crow">${avatarOf(fol)}<span class="cr-m"><b>${esc(fol.name)}</b><span>${sinceTxt(fol.since)}${fol.client ? " · ya reservó" : ""}</span></span><span class="cr-r"><button type="button" class="btn btn-ghost btn-sm" data-act="folOffer" data-id="${esc(fol.id)}" ${S.offerFor === fol.id ? 'aria-expanded="true"' : ""}>📣 Ofrecer</button></span></div>${S.offerFor === fol.id ? offerPicker(fol) : ""}</li>`,
+                 `<li><div class="crow">${avatarOf(fol)}<span class="cr-m"><b>${esc(fol.name)}</b><span>${sinceTxt(fol.since)}${fol.client ? " · ya reservó" : ""}</span></span><span class="cr-r"><button type="button" class="btn btn-ghost btn-sm" data-act="folOffer" data-id="${esc(fol.id)}" ${S.offerFor === fol.id ? 'aria-expanded="true"' : ""}>${ic("ofrecer")} Ofrecer</button></span></div>${S.offerFor === fol.id ? offerPicker(fol) : ""}</li>`,
              )
              .join("")}</ul>${count > list.length ? `<p class="note">Se muestran los últimos ${list.length}.</p>` : ""}`
          : '<p class="note">Todavía no te sigue nadie. Compartí tu perfil (el QR está en Perfil) para que te sigan y te enteres cuando tengas lugar.</p>'

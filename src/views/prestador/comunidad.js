@@ -5,6 +5,7 @@ import { profileLinkText, profileUrl } from "../../router.js";
 import { seedComm } from "../../demo/comunidad.js";
 import { store } from "../../store.js";
 import { gallery, rating, reviewsHtml } from "../../ui/resenas.js";
+import { ic } from "../../ui/iconos.js";
 
 // comunidad de un prestador, creada la primera vez que se pide
 // (en vivo arranca vacía y la completa la carga del perfil; en la demo se inventa a partir del rubro: src/demo/comunidad.js)
@@ -19,7 +20,7 @@ export function vBComunidad(prov) {
    <p class="note" style="margin-top:6px">A cada uno le llega un aviso en la app y una notificación con el link a tu perfil. Hasta 5 avisos por día, contando los huecos que ofrecés desde la Agenda.</p></div>
   <div class="panel"><p class="lbl">Reseñas de clientes</p>${reviewsHtml(true)}</div>
   <div class="panel" style="text-align:center"><p class="lbl">Sumá seguidores</p><div class="qr" aria-hidden="true">${qr(profileUrl(prov))}</div><p style="margin:8px 0 2px;font-weight:700">${esc(profileLinkText(prov))}</p><p class="note">Imprimí el QR para el espejo y poné el link en tu bio de Instagram.</p>
-   <button class="btn btn-pri btn-block" data-act="qrPrint">🖨 Imprimir o guardar el QR en PDF</button>
+   <button class="btn btn-pri btn-block" data-act="qrPrint">${ic("imprimir")} Imprimir o guardar el QR en PDF</button>
    <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="copiarLink">Copiar link</button></div>`;
 }
 // C40 (V3b): hoja lista para imprimir (o "Guardar como PDF" desde la impresión del navegador), sin librerías nuevas:

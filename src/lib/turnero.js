@@ -5,6 +5,7 @@ import { pr } from "./prestadores.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { notif } from "../ui/toast.js";
+import { ic } from "./iconos.js";
 
 // Franja horaria de un turno de atención (mañana o tarde).
 export const R = (enabled, start, end) => ({
@@ -234,7 +235,7 @@ export function freed(booking) {
   if (waiting.length) {
     store.WAIT = store.WAIT.filter((entry) => entry.pid != booking.pid || entry.date !== booking.date);
     notif(
-      `<span class="mp" style="background:var(--ok)">🔔</span><div><b>Se liberó un turno</b><br><span class="hint">${esc(pr(booking.pid).name)} · ${esc(dayLabel(booking.date))} ${booking.time}. Avisamos a quienes estaban en lista de espera.</span></div>`,
+      `<span class="mp" style="background:var(--ok)">${ic("campana")}</span><div><b>Se liberó un turno</b><br><span class="hint">${esc(pr(booking.pid).name)} · ${esc(dayLabel(booking.date))} ${booking.time}. Avisamos a quienes estaban en lista de espera.</span></div>`,
     );
   }
   return waiting.length;

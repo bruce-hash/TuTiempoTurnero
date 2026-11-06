@@ -54,10 +54,10 @@ registerClick("bDone", (ev, el, act) => {
     const have = cliStamps(booking.cliente, svc) + 1;
     setCliStamps(booking.cliente, svc, have);
     booking.stamped = true;
-    stampMsg = ` 🎟️ Sumó un sello en ${svc[0]} (${Math.min(have, goal)}/${goal})${have >= goal ? ": ¡ya tiene su premio!" : "."}`;
+    stampMsg = ` Sumó un sello en ${svc[0]} (${Math.min(have, goal)}/${goal})${have >= goal ? ": ¡ya tiene su premio!" : "."}`;
   }
   if (booking.mine) {
-    pushNotice(ME(), "rev", booking, booking.stamped ? ` 🎟️ Sumaste 1 sello en tu tarjeta de ${booking.svc}.` : "");
+    pushNotice(ME(), "rev", booking, booking.stamped ? ` Sumaste 1 sello en tu tarjeta de ${booking.svc}.` : "");
   }
   if (booking.date === TODAY()) {
     S.jobsToday++;

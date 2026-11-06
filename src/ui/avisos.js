@@ -1,5 +1,6 @@
 import { dismissed, inAppBrowser, isIOS, needsIosInstall } from "../lib/pwa.js";
 import { S } from "../state.js";
+import { ic } from "./iconos.js";
 
 // Bloque C: lo que ve la persona de la app instalable y las notificaciones push. Solo arma HTML; las acciones están en
 // actions/avisos.js. Sin vapidPublicKey en config.js (o en la demo) no aparece nada de notificaciones.
@@ -27,7 +28,7 @@ export function pushCard(kind) {
   }
   if (push.avail === "ios-install" && !inAppBrowser() && !dismissed("ios_" + kind, 30)) {
     return card(
-      "📲",
+      ic("instalar"),
       "Para recibir avisos en el iPhone, agregá TuTiempo a tu pantalla de inicio",
       `${iosSteps(true)}<p class="note pwa-note">Apple solo permite notificaciones a las apps agregadas a inicio (iOS 16.4 o más nuevo). Igual te mandamos todo por email.</p>`,
       `<div class="pwa-acts one"><button class="btn btn-ghost" data-act="pushLater" data-k="ios_${kind}">Entendido</button></div>`,
@@ -38,7 +39,7 @@ export function pushCard(kind) {
   }
   const [title, text] = PUSH_TEXT[kind];
   return card(
-    "🔔",
+    ic("campana"),
     title,
     `<p class="note pwa-note">${text}</p>`,
     two(`<button class="btn btn-ghost" data-act="pushLater" data-k="push_${kind}">Ahora no</button>`, '<button class="btn btn-pri" data-act="pushOn">Activar avisos</button>'),
@@ -52,7 +53,7 @@ export function installCard() {
     return "";
   }
   return card(
-    "📲",
+    ic("instalar"),
     "Instalá TuTiempo para tener tus turnos a mano",
     '<p class="note pwa-note">Se abre como una app, desde su ícono, y ocupa muy poco.</p>',
     two('<button class="btn btn-ghost" data-act="installLater">Ahora no</button>', '<button class="btn btn-pri" data-act="pwaInstall">Instalar</button>'),
@@ -60,7 +61,7 @@ export function installCard() {
 }
 
 // ¿va "Instalar la app" en el menú de cuenta? (Android y compu con el aviso del navegador; iPhone: abre la guía)
-export const installMenuItem = () => (S.canInstall || needsIosInstall()) && !inAppBrowser() ? ["📲", isIOS() ? "Agregar a inicio" : "Instalar la app", 'data-act="pwaInstall"'] : null;
+export const installMenuItem = () => (S.canInstall || needsIosInstall()) && !inAppBrowser() ? [ic("instalar"), isIOS() ? "Agregar a inicio" : "Instalar la app", 'data-act="pwaInstall"'] : null;
 
 // Mi perfil (cliente) y Perfil del panel (prestador): este dispositivo y la opción de cada uno
 export function pushPanel(scope) {
@@ -104,7 +105,7 @@ export function installGuide() {
     ? '<p class="note pwa-note">Desde el navegador de Instagram, Facebook o WhatsApp no se puede instalar. Abrí este link en Safari (iPhone) o Chrome (Android) y probá de nuevo.</p>'
     : `${iosSteps(false)}<p class="note pwa-note">Queda en tu pantalla de inicio y se abre como una app. Desde iOS 16.4, también te puede mandar notificaciones.</p>`;
   return `<div class="pwa-guide" role="dialog" aria-modal="true" aria-label="Agregar TuTiempo a inicio"><div class="panel">
-   <b class="pwa-gt">📲 Agregá TuTiempo a tu pantalla de inicio</b>${body}
+   <b class="pwa-gt">${ic("instalar")} Agregá TuTiempo a tu pantalla de inicio</b>${body}
    <button class="btn btn-pri btn-block" data-act="pwaGuideClose">Entendido</button></div></div>`;
 }
 

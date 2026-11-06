@@ -480,7 +480,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("servicio sin turno guardado desde la Caja del día", (await q("select count(*)::int c from walkins"))[0].c === 1);
   // C25 (V4): Transferencia como medio; editar y borrar un movimiento
   await wait(300); await pg.click("[data-act=walkOpen]"); await pg.fill("#wpr", "4000"); await pg.click('[data-medio="Transferencia"]'); await pg.click("#fWalk button[type=submit]"); await wait(700);
-  ok("C25: lo cobrado por transferencia queda así en la base y en la caja", (await q("select count(*)::int c from walkins where method='transfer' and amount=4000"))[0].c === 1 && (await txt()).includes("🏦 Transferencia"));
+  ok("C25: lo cobrado por transferencia queda así en la base y en la caja", (await q("select count(*)::int c from walkins where method='transfer' and amount=4000"))[0].c === 1 && (await txt()).includes("Transferencia"));
   await pg.click('.movs li:has-text("$4.000") [data-act=movEdit]'); await wait(200);
   await pg.fill("#wed_m", "4500"); await pg.click('#fWalkEd [data-medio="Efectivo"]'); await pg.click("#fWalkEd button[type=submit]"); await wait(800);
   ok("C25: editar un movimiento cambia monto y medio en la base", (await q("select count(*)::int c from walkins where method='cash' and amount=4500"))[0].c === 1 && (await q("select count(*)::int c from walkins where amount=4000"))[0].c === 0);
@@ -502,7 +502,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   {
     const sofiP = (await q("select id from providers where name like 'Sofía%'"))[0].id;
     ok("C31: precargados alquiler, luz, gas, internet y monotributo (sin monto)", (await q("select count(*)::int c from fixed_expenses where provider_id=$1", [sofiP]))[0].c === 5
-       && /Gastos fijos/.test(await txt()) && /Monotributo/.test(await txt()) && /Sin monto: tocá ✎ para cargarlo/.test(await txt()));
+       && /Gastos fijos/.test(await txt()) && /Monotributo/.test(await txt()) && /Sin monto: tocá\s*para cargarlo/.test(await txt()));
     const luz = (await q("select id from fixed_expenses where provider_id=$1 and concept='Luz'", [sofiP]))[0].id;
     await pg.click(`[data-act=fxEdit][data-id="${luz}"]`); await wait(200);
     await pg.fill("#fxm", "25000"); await pg.click("#fFixed button[type=submit]");
@@ -723,7 +723,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("tarjeta solo en Esmaltado, con 16 sellos", sg.length === 1 && sg[0].name === "Esmaltado semipermanente" && sg[0].stamp_goal === 16);
   ok("tarjetas activadas en la base", (await q("select stamps_on from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].stamps_on === true);
   await pg.click("[data-btab=clientes]"); await wait(300); await pg.click(".clist [data-cli]"); await wait(300);
-  ok("v2: el cliente se ve sin la ficha (números y teléfono)", (await pg.locator("#fNotas").count()) === 0 && /Visitas[\s\S]*Faltas[\s\S]*Gastó en total[\s\S]*Última visita/.test(await txt()) && /📞/.test(await txt()));
+  ok("v2: el cliente se ve sin la ficha (números y teléfono)", (await pg.locator("#fNotas").count()) === 0 && /Visitas[\s\S]*Faltas[\s\S]*Gastó en total[\s\S]*Última visita/.test(await txt()) && (await pg.locator("#app .panel.contact .hint svg.ic").count()) > 0);
   await pg.click(`[data-act=stampAdd][data-sk="${esm}"]`); await wait(800);
   const anaStamps = async () => ((await q("select stamps from loyalty_cards lc join auth.users u on u.id=lc.user_id where u.email='ana@test.ar' and lc.service_id=$1", [esm]))[0] || {}).stamps || 0;
   ok("sello a mano guardado en la tarjeta de Esmaltado de Ana", (await anaStamps()) === 1 && (await pg.locator(".stampcard").innerText()).includes("1 / 16"));

@@ -14,6 +14,7 @@ import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
 import { demoMonthTotals } from "../../demo/estadisticas.js";
+import { ic } from "../../ui/iconos.js";
 
 store.FIN = [];
 store.GASTOS = [];
@@ -219,11 +220,11 @@ function movLine(line) {
   const deleting = key && S.movDel === key;
   const actions =
     line.w != null
-      ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Editar">✎</button><button class="xbtn" data-act="movDel" data-k="${key}" aria-label="Borrar">✕</button>`
+      ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Editar">${ic("editar")}</button><button class="xbtn" data-act="movDel" data-k="${key}" aria-label="Borrar">✕</button>`
       : line.rest
-        ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Cambiar cómo te pagó el resto">✎</button>`
+        ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Cambiar cómo te pagó el resto">${ic("editar")}</button>`
         : "";
-  const head = `<li class="${editing || deleting ? "on" : ""}"><span class="ag-t">${esc(line.h || "")}</span><div><b>${line.missing ? "⏳" : medioIcon(line.medio)} ${esc(line.t)}</b><span>${esc(line.s || "")} · ${esc(line.medio)}</span></div><span style="display:flex;gap:6px;align-items:center"><b class="price ${line.missing ? "rs-miss" : ""}" style="font-size:15px">${money(line.m)}</b>${actions}</span></li>`;
+  const head = `<li class="${editing || deleting ? "on" : ""}"><span class="ag-t">${esc(line.h || "")}</span><div><b>${line.missing ? ic("espera") : medioIcon(line.medio)} ${esc(line.t)}</b><span>${esc(line.s || "")} · ${esc(line.medio)}</span></div><span style="display:flex;gap:6px;align-items:center"><b class="price ${line.missing ? "rs-miss" : ""}" style="font-size:15px">${money(line.m)}</b>${actions}</span></li>`;
   if (deleting) {
     return `${head}<li class="movask"><div><b>¿Borrar ${esc(line.t)} de las ${esc(line.h)}?</b><span>${S.walk[line.w] && S.walk[line.w].kind === "prod" ? "La unidad vuelve al stock." : "Sale de la caja y de tus finanzas."}</span></div><span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="movDelNo">No</button><button class="btn btn-pri btn-sm" data-act="movDelYes" data-k="${key}">Sí, borrar</button></span></li>`;
   }
@@ -300,14 +301,14 @@ function fixedPanel(ym, current, closing) {
     const row = fixedRow(item, ym);
     const amount = row ? row.m : 0;
     const editing = editable && S.fxEd === item.id;
-    const head = `<li class="${editing ? "on" : ""}"><span class="ag-t">${esc(item.cat)}</span><div><b>${esc(item.c)}</b>${row ? "" : '<span class="hint">Sin monto: tocá ✎ para cargarlo</span>'}</div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${row ? money(amount) : "—"}</b>${editable ? `<button class="xbtn" data-act="fxEdit" data-id="${item.id}" aria-label="Cambiar ${esc(item.c)}">✎</button>` : ""}</span></li>`;
+    const head = `<li class="${editing ? "on" : ""}"><span class="ag-t">${esc(item.cat)}</span><div><b>${esc(item.c)}</b>${row ? "" : `<span class="hint">Sin monto: tocá ${ic("editar")} para cargarlo</span>`}</div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${row ? money(amount) : "—"}</b>${editable ? `<button class="xbtn" data-act="fxEdit" data-id="${item.id}" aria-label="Cambiar ${esc(item.c)}">${ic("editar")}</button>` : ""}</span></li>`;
     return editing ? head + `<li class="movform">${fixedForm(item, ym, amount)}</li>` : head;
   };
   const total = items.reduce((sum, item) => sum + ((fixedRow(item, ym) || {}).m || 0), 0);
   return `<div class="panel"><p class="lbl">Gastos fijos · ${money(total)}</p>
-   <p class="note" style="text-align:left;margin:-2px 0 10px">Se repiten solos todos los meses. Si aumentan, cambialos con ✎: vale desde ${esc(mes(+ym.slice(5) - 1))} en adelante y los meses cerrados quedan como estaban.</p>
+   <p class="note" style="text-align:left;margin:-2px 0 10px">Se repiten solos todos los meses. Si aumentan, cambialos con ${ic("editar")}: vale desde ${esc(mes(+ym.slice(5) - 1))} en adelante y los meses cerrados quedan como estaban.</p>
    ${items.length ? `<ul class="ag movs">${items.map(line).join("")}</ul>` : '<p class="note" style="text-align:left">No tenés gastos fijos este mes.</p>'}
-   ${editable ? (S.fxEd === "new" ? fixedForm(null, ym, "") : '<button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="fxNew">+ Otro gasto fijo</button>') : closing ? '<p class="note" style="text-align:left;margin:8px 0 0">🔒 Mes cerrado: los gastos fijos de este mes quedan como están.</p>' : ""}</div>`;
+   ${editable ? (S.fxEd === "new" ? fixedForm(null, ym, "") : '<button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="fxNew">+ Otro gasto fijo</button>') : closing ? `<p class="note" style="text-align:left;margin:8px 0 0">${ic("candado")} Mes cerrado: los gastos fijos de este mes quedan como están.</p>` : ""}</div>`;
 }
 function fixedForm(item, ym, amount) {
   return `<form id="fFixed" class="mediaed" data-id="${item ? item.id : ""}" data-ym="${ym}" novalidate>
@@ -347,10 +348,10 @@ function vFinMes() {
   <div class="panel"><p class="lbl">Otros gastos del mes</p>
    <p class="note" style="text-align:left;margin:-2px 0 10px">Lo que no se repite todos los meses. Las compras de productos se cargan solas desde Productos → “Compré más”.</p>
    ${fixed.length ? `<ul class="ag">${fixed.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c)}</b></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(exp.m)}</b>${closing ? "" : `<button class="xbtn" data-act="gDel" data-id="${exp.id}" aria-label="Borrar gasto">✕</button>`}</span></li>`).join("")}</ul>` : `<p class="note" style="text-align:left">Todavía no cargaste otros gastos este mes.</p>`}
-   ${prodBuys.length ? `<p class="lbl" style="margin:12px 0 6px">🧴 Compras de productos</p><ul class="ag">${prodBuys.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c.replace(/^Compra: /, ""))}</b><span>Desde Productos</span></div><b class="price" style="font-size:15px">${money(exp.m)}</b></li>`).join("")}</ul>` : ""}
+   ${prodBuys.length ? `<p class="lbl" style="margin:12px 0 6px">${ic("productos")} Compras de productos</p><ul class="ag">${prodBuys.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c.replace(/^Compra: /, ""))}</b><span>Desde Productos</span></div><b class="price" style="font-size:15px">${money(exp.m)}</b></li>`).join("")}</ul>` : ""}
    ${
      closing
-       ? '<p class="note" style="text-align:left;margin:10px 0 0">🔒 El mes está cerrado. Para agregar, borrar o cambiar gastos, desbloquealo abajo.</p>'
+       ? `<p class="note" style="text-align:left;margin:10px 0 0">${ic("candado")} El mes está cerrado. Para agregar, borrar o cambiar gastos, desbloquealo abajo.</p>`
        : `<form class="gform" id="fGasto" novalidate><input id="gc" maxlength="80" placeholder="Concepto (ej: Alquiler)" autocomplete="off" aria-label="Concepto"><input id="gm" inputmode="numeric" placeholder="$ Monto" autocomplete="off" aria-label="Monto"><button class="btn btn-pri" type="submit">Agregar</button></form>
    <div class="err" id="gerr"></div>`
    }</div>
@@ -367,7 +368,7 @@ function vFinMes() {
     <p class="note" style="margin-top:6px">Cajas cerradas: ${closedDays} de ${activeDays} días con ingresos.${closedDays < activeDays ? ' <button class="lnk" data-fp="dia">Cerrar las que faltan</button>' : ""}</p></div>`
       : ""
   }
-  ${closing ? `<div class="panel cclosed"><b>✓ ${mes(month - 1)} cerrado</b><p class="note" style="text-align:left;margin:4px 0 0">Ingresos ${money(closing.income)} · gastos ${money(closing.expenses)} · balance ${money(closing.income - closing.expenses)}</p>${closing.income !== totals.ing || closing.expenses !== totals.gas ? `<p class="alert">Entraron ingresos después del cierre. Actualizá el cierre para que quede exacto.</p><button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="closeMonth" data-m="${ym}">Actualizar el cierre</button>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="unlockMonth" data-m="${ym}">🔓 Desbloquear para editar</button></div>` : `<button class="btn btn-pri btn-block" data-act="closeMonth" data-m="${ym}">Cerrar ${mes(month - 1)} · balance ${money(balance)}</button>`}`;
+  ${closing ? `<div class="panel cclosed"><b>✓ ${mes(month - 1)} cerrado</b><p class="note" style="text-align:left;margin:4px 0 0">Ingresos ${money(closing.income)} · gastos ${money(closing.expenses)} · balance ${money(closing.income - closing.expenses)}</p>${closing.income !== totals.ing || closing.expenses !== totals.gas ? `<p class="alert">Entraron ingresos después del cierre. Actualizá el cierre para que quede exacto.</p><button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="closeMonth" data-m="${ym}">Actualizar el cierre</button>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="unlockMonth" data-m="${ym}">${ic("abierto")} Desbloquear para editar</button></div>` : `<button class="btn btn-pri btn-block" data-act="closeMonth" data-m="${ym}">Cerrar ${mes(month - 1)} · balance ${money(balance)}</button>`}`;
 }
 // balance del año, mes por mes
 function vFinAnio() {
