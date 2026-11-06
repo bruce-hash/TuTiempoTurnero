@@ -1,4 +1,4 @@
-import { alertDismissed, alertItems } from "../../lib/avisos-admin.js";
+import { alertDismissed, alertItems, alertRead } from "../../lib/avisos-admin.js";
 import { api } from "../../api/index.js";
 import { LIVE } from "../../config.js";
 import { admReviewDemo } from "../../demo/admin.js";
@@ -112,7 +112,8 @@ export function admReview() {
   const payments = data.payments || [];
   // v2 (3/11): los avisos de Mercado Pago descartados o recuperados son informativos: se pueden borrar (los borrados no
   // vuelven); los pagos y devoluciones para resolver salen solos al resolverlos
-  const events = (data.webhook_events || []).filter((event) => !alertDismissed("mpev:" + event.id));
+  // 7/11: además, se borran solos una vez leídos (se ven en una visita y en la siguiente ya no están)
+  const events = (data.webhook_events || []).filter((event) => !alertDismissed("mpev:" + event.id) && !alertRead("mpev:" + event.id));
   const accounts = data.accounts || [];
   const alert = data.webhook_alert || {};
   if (!refunds.length && !payments.length && !events.length && !accounts.length) {
@@ -135,13 +136,15 @@ export function admReview() {
     `<li class="admal" data-k="mpev:${esc(String(event.id))}"><div><span>${event.reason === "recovered" ? "Pago recuperado" : "Aviso descartado"} · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)}${event.detail ? " (" + esc(event.detail) + ")" : ""} · ${esc(dmyIso(event.last_at || event.created_at))}${+event.hits > 1 ? ` · ${+event.hits} veces` : ""}</span></div><button type="button" class="xbtn" data-act="admAlertDel" data-k="mpev:${esc(String(event.id))}" aria-label="Borrar este aviso" title="Borrar">✕</button></li>`;
   // Paso 1 (v4): Mercado Pago manda avisos que la app rechaza, o hubo pagos que se registraron sin aviso: arriba de todo,
   // porque mientras siga así los pagos se confirman con demora (los encuentra la consulta automática)
+  // 7/11: solo los avisos RECHAZADOS (un problema de configuración) prenden este aviso. Un pago recuperado sin aviso
+  // está registrado y es informativo: va en la lista de abajo y no hace volver este aviso una vez borrado.
   const webhookLi =
-    +alert.rejected || +alert.recovered
+    +alert.rejected
       ? `<li><div><b>${ic("aviso")} Los avisos de Mercado Pago no están llegando bien</b>
      <span>${+alert.rejected ? `${+alert.rejected} aviso${+alert.rejected === 1 ? "" : "s"} rechazado${+alert.rejected === 1 ? "" : "s"} en 7 días${alert.rejected_reason ? " (" + esc(EVENT_WHY[alert.rejected_reason] || alert.rejected_reason) + ")" : ""}${alert.rejected_last ? ", el último el " + esc(dmyIso(alert.rejected_last)) : ""}. ` : ""}${+alert.recovered ? `${+alert.recovered} pago${+alert.recovered === 1 ? "" : "s"} registrado${+alert.recovered === 1 ? "" : "s"} sin aviso por la consulta automática.` : ""}</span>
      <span class="hint">Los pagos igual se registran (la app le pregunta a Mercado Pago cada 2 minutos), pero con demora. Revisá el webhook y MP_WEBHOOK_SECRET: docs/02 → "Si los pagos no se registran".</span></div></li>`
       : "";
-  const whKey = `mpwh:${alert.rejected_last || ""}|${alert.recovered_last || ""}`;
+  const whKey = `mpwh:${alert.rejected_last || ""}`;
   const wh = alertItems([webhookLi ? { key: whKey, html: webhookLi.replace(/^<li><div>/, "").replace(/<\/div><\/li>$/, "") } : null]);
   const nAlert = wh.count;
   return `<div class="panel admalert"><p class="lbl">Para revisar · cobros <span class="cnt">${refunds.length + payments.length + accounts.length + nAlert}</span></p>

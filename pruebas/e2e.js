@@ -596,15 +596,18 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
        await until("select e.amount, e.category, e.qty, e.product_id = p.id same from expenses e join products p on p.name = 'Cera C36' where e.concept like 'Stock inicial: Cera C36%'", [],
                    (r) => r.length === 1 && r[0].amount === 9000 && r[0].category === "Productos" && r[0].qty === 2 && r[0].same === true));
     ok("4/11: Productos ya no tiene «Vendí uno» (las ventas se cargan en Finanzas)", (await pg.locator("[data-act=prodSell]").count()) === 0 && !/Vendí uno/.test(await txt()));
-    // la venta desde la Caja del día: con un producto pide Cantidad (no la hora) y cobra precio × cantidad
+    // 7/11: la venta tiene su propio botón en la Caja del día (producto, cantidad y medio); "Servicio sin turno" es solo servicios
     await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
     await pg.click("[data-act=walkOpen]"); await wait(200);
-    const pv36 = await pg.evaluate(() => [...document.querySelectorAll("#wsv option")].find((o) => /Cera C36/.test(o.textContent))?.value);
-    await pg.selectOption("#wsv", pv36); await wait(200);
-    ok("4/11: con un producto, el formulario pide Cantidad (1) en vez de Hora", (await pg.isHidden("#whrBox")) && (await pg.inputValue("#wqty")) === "1" && (await pg.inputValue("#wpr")) === "8000");
-    await pg.fill("#wqty", "2"); await pg.dispatchEvent("#wqty", "input"); await wait(100);
-    ok("4/11: …y «Cobraste» pasa a precio × cantidad ($16.000)", (await pg.inputValue("#wpr")) === "16000");
-    await pg.click('#fWalk [data-medio="Transferencia"]'); await pg.click("#fWalk button[type=submit]");
+    ok("7/11: «Servicio sin turno» ya no ofrece productos", !(await pg.evaluate(() => [...document.querySelectorAll("#wsv option")].some((o) => /Cera C36/.test(o.textContent)))) && (await pg.locator("#wqty").count()) === 0);
+    await pg.click("[data-act=walkClose]"); await wait(200);
+    await pg.click("[data-act=saleOpen]"); await wait(200);
+    const pv36 = await pg.evaluate(() => [...document.querySelectorAll("#spr option")].find((o) => /Cera C36/.test(o.textContent))?.value);
+    await pg.selectOption("#spr", pv36); await wait(150);
+    ok("7/11: «Vender producto» pide el producto y la cantidad (1) y muestra el total ($8.000)", (await pg.inputValue("#sqty")) === "1" && (await pg.locator("#stot").innerText()) === "$8.000");
+    await pg.fill("#sqty", "2"); await pg.dispatchEvent("#sqty", "input"); await wait(100);
+    ok("7/11: …con 2, el total es $16.000", (await pg.locator("#stot").innerText()) === "$16.000");
+    await pg.click('#fSale [data-medio="Transferencia"]'); await pg.click("#fSale button[type=submit]");
     ok("4/11: la venta de 2 queda en la caja con su cantidad y descuenta 2 del stock", await until("select amount, method, qty from walkins where kind='product' and description='Cera C36 × 2'", [], (r) => r.length === 1 && r[0].amount === 16000 && r[0].method === "transfer" && r[0].qty === 2)
        && await until("select stock from products where name='Cera C36'", [], (r) => r[0].stock === 0));
     ok("C36: …y se ve en los movimientos de hoy", (await pg.locator('.movs li:has-text("Cera C36 × 2")').count()) === 1);
@@ -1028,6 +1031,15 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
      && /1 pago registrado sin aviso/.test(await txt()) && /MP_WEBHOOK_SECRET/.test(await txt()));
   ok("Paso 1: …y la lista de avisos dice el detalle y cuántas veces llegó", /la firma no coincide con MP_WEBHOOK_SECRET\) · [^·]+ · 2 veces/.test(await txt()) && /Pago recuperado · pago 1999000111/.test(await txt()));
   await db.query("delete from mp_webhook_events where mp_payment_id = '1999000111'");
+  // 7/11: un pago recuperado sin aviso (informativo) no prende "no están llegando bien" y, una vez visto, en la visita
+  // siguiente ya no está
+  await db.query("select mp_webhook_event('1999000222', p.id, null, 'recovered', 'pago aprobado sin aviso: lo encontró la consulta automática') from providers p where p.name like 'Sofía%'");
+  await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForFunction(() => /Pago recuperado · pago 1999000222/.test(document.body.textContent), null, { timeout: 8000 }).catch(() => {}); await wait(800);
+  ok("7/11: un pago recuperado solo es informativo: se ve en la lista (plegada) y no prende «no están llegando bien»",
+     /Pago recuperado · pago 1999000222/.test(await pg.evaluate(() => document.body.textContent)) && !/no están llegando bien/.test(await txt()));
+  await pg.reload(); await pg.waitForFunction(() => /Comisión de TuTiempo este mes/.test(document.body.innerText), null, { timeout: 10000 }).catch(() => {}); await wait(1200);
+  ok("7/11: …y en la visita siguiente ya no aparece (se borra una vez leído)", /Comisión de TuTiempo este mes/.test(await txt()) && !/1999000222/.test(await pg.evaluate(() => document.body.textContent)), new URL(pg.url()).pathname);
+  await db.query("delete from mp_webhook_events where mp_payment_id = '1999000222'");
   await pg.evaluate(() => { S.admRev = null; render() }); await wait(600);
   // C41/C42 (V6): los activos sin Mercado Pago, en negrita y con "Ver quiénes"; el filtro y "Avisarle"
   {
