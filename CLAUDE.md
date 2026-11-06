@@ -128,6 +128,11 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   Claves del proyecto: `projectKey()` usa las nuevas (`SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS`) si están, si no las
   viejas; `caller()` verifica la sesión ES256/RS256 con el JWKS del proyecto y la HS256 con Auth (H31). Ninguna función usa `verify_jwt`.
 - `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: prestadores ficticios. Solo para pruebas locales (pide `set tt.ejemplos = 'si'` antes).
+- Despliegue a prueba (docs/10): `.github/workflows/desplegar-prueba.yml` (botón: `supabase db push`, Edge Functions que
+  cambiaron, build con `tools/preparar_prueba.mjs`, FTPS con `tools/subir_prueba.sh`, etiqueta `prueba-desplegada`) y
+  `verificar-prueba.yml` (botón y todas las noches: `pruebas/verificar_prueba.mjs`; en la base lee solo
+  `verificacion_prueba()`, que nadie puede llamar salvo el usuario `tt_verificador`). En cada PR, `npm run test:verificar`
+  corre el mismo recorrido contra el entorno local. Producción no tiene despliegue automático.
 - `pruebas/`: pruebas del cliente; `unidad.mjs` (reglas de los formularios sin navegador); `ancho.mjs` (ninguna pantalla más
   ancha que la ventana en 390 y 1366 px y nada con `hidden` a la vista); `test_db.py`, `test_cobros.py` (base: pagos,
   devoluciones, cuentas de MP) y `test_emails.py` (avisos por email: cola, reintentos, opción del cliente);
@@ -167,7 +172,7 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
   `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py`, `pruebas/test_push.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` y `npm run test:webpush` si tocás las
   Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:unidad`, `npm run test:crawl`,
-  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:pwa` y `npm run test:comparar` (navegador
+  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:verificar`, `npm run test:pwa` y `npm run test:comparar` (navegador
   real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` y `npm run test:litespeed` si tocás el
   `.htaccess` (Apache local y OpenLiteSpeed en docker; en el CI, contenedores `httpd:2.4` y `openlitespeed`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
