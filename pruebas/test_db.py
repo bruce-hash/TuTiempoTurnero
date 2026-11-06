@@ -854,6 +854,9 @@ ok("H36: Finanzas suma el precio completo del turno nuevo y solo descuenta la co
 q("insert into expenses (provider_id, concept, amount, category, spent_on) values (%s,'Alquiler',150000,'Alquiler',%s),(%s,'Compra: Cera',4000,'Productos',%s)", (p4, hoy4, p4, hoy4), uid=own4)
 mb = {r[0]: r[1:] for r in q("select * from provider_month_breakdown(%s)", (hoy4.year,), uid=own4)}
 ok("C33: el resumen del mes separa ingresos por origen y gastos fijos y de productos", mb[hoy4.month] == (19000, 5000, 3000, 2000, 150000, 4000), str(mb[hoy4.month]))
+ms = {r[0]: r[1:] for r in q("select * from provider_month_summary(%s)", (hoy4.year,), uid=own4)}
+ok("4/11: el resumen nuevo separa los gastos variables (cargados a mano) de los fijos", ms[hoy4.month] == (19000, 5000, 3000, 2000, 0, 4000, 150000), str(ms[hoy4.month]))
+ok("4/11: otro no ve el resumen ajeno", all(r[1:] == (0, 0, 0, 0, 0, 0, 0) for r in q("select * from provider_month_summary(%s)", (hoy4.year,), uid=cli1)))
 tot = {r[0]: r[1:] for r in q("select * from provider_month_totals(%s)", (hoy4.year,), uid=own4)}
 ok("C33: …y suma lo mismo que el total del mes de siempre", tot[hoy4.month] == (19000 + 5000 + 3000 + 2000, 154000), str(tot[hoy4.month]))
 ok("C33: otro no ve el resumen ajeno", all(r[1:] == (0, 0, 0, 0, 0, 0) for r in q("select * from provider_month_breakdown(%s)", (hoy4.year,), uid=cli1)))
