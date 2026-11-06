@@ -389,7 +389,7 @@ bx2 = q("insert into bookings (provider_id, service_id, client_id, client_name, 
 q("select mark_booking(%s,'done')", (bx2,), uid=prov)
 ok("el que tiene tarjeta sí suma", card(cli2, svc_l) == 1)
 
-# avisos programados: recordatorio 24 h antes y cumpleaños (una sola vez)
+# avisos programados: recordatorio 24 h antes (una sola vez); desde el 7/11 (Bloque 5), ni el de 2 h ni el cumpleaños
 st24 = dt.datetime.now(tz).replace(minute=0, second=0, microsecond=0) + dt.timedelta(hours=20)
 b24 = q("insert into bookings (provider_id, service_id, client_id, client_name, source, status, starts_at, ends_at, price, created_at) values (%s,%s,%s,'Beto Díaz','app','confirmed', %s, %s, 10000, now() - interval '3 days') returning id",
         (pid2, svc_other, cli2, st24, st24 + dt.timedelta(minutes=30)))
@@ -400,11 +400,12 @@ ok("los avisos programados los corre solo el servidor", not err(q("select send_s
 q("select send_scheduled_notices()", role="service_role")
 km = [m["kind"] for m in q("select my_messages()", uid=cli2)[0][0]]
 ok("recordatorio de 24 h en la app, una sola vez", km.count("r24") == 1)
-ok("saludo de cumpleaños en la app, una sola vez", km.count("bday") == 1)
-q("update message_templates set enabled=false where provider_id=%s and key='r2'", (pid2,), uid=prov2)
+ok("7/11 · Bloque 5: el saludo de cumpleaños ya no se manda (aunque el profesional lo tenga prendido)", km.count("bday") == 0)
+q("update message_templates set enabled=true where provider_id=%s and key='r2'", (pid2,), uid=prov2)
 q("update bookings set starts_at = now() + interval '90 minutes', ends_at = now() + interval '120 minutes' where id=%s", (b24,))
 q("select send_scheduled_notices()", role="service_role")
-ok("si el prestador apaga un aviso, no se manda", "r2" not in [m["kind"] for m in q("select my_messages()", uid=cli2)[0][0]])
+ok("7/11 · Bloque 5: el recordatorio de 2 h ya no se manda (aunque el profesional lo tenga prendido)", "r2" not in [m["kind"] for m in q("select my_messages()", uid=cli2)[0][0]])
+ok("7/11 · Bloque 5: …y el cumpleaños queda guardado", q("select birthday is not null from provider_clients where provider_id=%s and user_id=%s", (pid, cli2))[0][0] is True)
 
 # comisión y panel de administración
 ok("comisión por defecto 10%", float(q("select commission()", role="anon")[0][0]) == 0.10)
@@ -466,11 +467,7 @@ def due(folder):
     r = q("select reason, paths from dni_photos_due(1000) where folder = %s", (str(folder),), role="service_role")
     return r if err(r) else [(x[0], sorted(x[1])) for x in r]
 fotos_nu = sorted([f"{nu}/frente-1.png", f"{nu}/dorso-1.png"])
-ok("D24: verificado hoy, sus fotos todavía no se borran", due(nu) == [])
-q("update provider_private set dni_verified_at = now() - interval '29 days' where provider_id = %s", (pn_,))
-ok("D24: …ni a los 29 días de verificarlo", due(nu) == [])
-q("update provider_private set dni_verified_at = now() - interval '30 days 1 minute' where provider_id = %s", (pn_,))
-ok("D24: a los 30 días de verificarlo, sus dos fotos se borran", due(nu) == [("verificado", fotos_nu)])
+ok("D24 (7/11 · Bloque 6): verificado, sus dos fotos se borran en el momento (ya no a los 30 días)", due(nu) == [("verificado", fotos_nu)])
 ok("D24: si todavía quedan fotos, no se marca el borrado", q("select dni_photos_deleted(%s, %s)", (str(nu), fotos_nu), role="service_role")[0][0] == 2
    and q("select dni_photos_deleted_at from provider_private where provider_id = %s", (pn_,))[0][0] is None)
 q("delete from storage.objects where bucket_id = 'dni' and name = any(%s)", (fotos_nu,))   # lo que hace la API de Storage
@@ -534,8 +531,22 @@ ok("D24: dado de baja, ya no puede subir fotos (su carpeta queda sin prestador)"
 ok("D24: …sus fotos se borran en el momento", due(baja) == [("baja", sorted([f"{baja}/frente-1.jpg", f"{baja}/dorso-1.jpg"]))])
 rq = q("select url, headers->>'Authorization' from net.requests")
 ok("D24: …y la baja llama ya a dni-cleanup con la clave del cron", rq == [("https://proyecto.supabase.co/functions/v1/dni-cleanup", "Bearer secreto-del-cron")])
+# 7/11 · Bloque 6: verificar pide el borrado ya, como la baja (y una sola vez: reactivarlo no lo vuelve a pedir)
+ver6 = mkuser("verifica-b6@test.ar", "Verifica B6")
+pver6 = q("select register_provider('Verifica B6', 'Calle 12', array['b'], '2284 12', '30111904')", uid=ver6)[0][0]
+q("insert into storage.objects (bucket_id, name) values ('dni', %s), ('dni', %s)", (f"{ver6}/frente-1.jpg", f"{ver6}/dorso-1.jpg"), uid=ver6)
+q("delete from net.requests")
+ok("Bloque 6: sin verificar, sus fotos no se borran ni se pide nada", due(ver6) == [] and q("select count(*) from net.requests")[0][0] == 0)
+ok("Bloque 6: el admin lo verifica", not err(q("select admin_set_provider(%s,'active',null)", (pver6,), uid=adm)))
+ok("Bloque 6: …y en el momento se llama a dni-cleanup con la clave del cron",
+   q("select url, headers->>'Authorization' from net.requests") == [("https://proyecto.supabase.co/functions/v1/dni-cleanup", "Bearer secreto-del-cron")])
+ok("Bloque 6: …que borra las dos fotos", due(ver6) == [("verificado", sorted([f"{ver6}/frente-1.jpg", f"{ver6}/dorso-1.jpg"]))])
+q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(ver6),))
+q("select admin_set_provider(%s,'suspended',null)", (pver6,), uid=adm); q("delete from net.requests")
+ok("Bloque 6: suspendido y reactivado (sin fotos), no se vuelve a pedir el borrado", not err(q("select admin_set_provider(%s,'active',null)", (pver6,), uid=adm))
+   and q("select count(*) from net.requests")[0][0] == 0)
 ok("D24: el cron diario llama a la misma función", q("select run_dni_cleanup()", role="service_role")[0][0] is not None
-   and q("select count(*) from net.requests where url like '%%/dni-cleanup'")[0][0] == 2)
+   and q("select count(*) from net.requests where url like '%%/dni-cleanup'")[0][0] == 1)
 q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
 ok("D24: sin los secretos en Vault, una baja no falla ni llama a nada", not err(q("update providers set status = 'deleted' where owner_id = %s", (pend,)))
    and q("select count(*) from net.requests")[0][0] == 0 and due(pend)[0][0] == "baja")

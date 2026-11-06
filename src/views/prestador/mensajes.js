@@ -5,11 +5,12 @@ import { ME, avatar, pr } from "../../lib/prestadores.js";
 import { S } from "../../state.js";
 import { profileUrl } from "../../router.js";
 import { store } from "../../store.js";
-import { lastTxt, realClients, thisMonthBday } from "./clientes.js";
+import { lastTxt, realClients } from "./clientes.js";
 import { STORE } from "./panel.js";
 import { ic } from "../../ui/iconos.js";
 
-// avisos automáticos por defecto (el parámetro no se usa)
+// avisos automáticos por defecto (el parámetro no se usa). 7/11 · Bloque 5: salen el recordatorio de 2 h y el saludo
+// de cumpleaños (ya no se mandan a nadie: send_scheduled_notices en la base)
 export const MSG_DEF = (cat) => [
   {
     k: "conf",
@@ -26,25 +27,11 @@ export const MSG_DEF = (cat) => [
     txt: "{nombre}, te recordamos tu turno mañana a las {hora} en {barberia}. ¡Te esperamos!",
   },
   {
-    k: "r2",
-    t: "Recordatorio 2 h antes",
-    cuando: "2 horas antes",
-    on: true,
-    txt: "¡Nos vemos a las {hora}! Si te demorás, avisá con un toque: {link}",
-  },
-  {
     k: "rev",
     t: "Pedido de reseña",
     cuando: "2 horas después del turno",
     on: true,
     txt: "¡Gracias por venir, {nombre}! ¿Nos dejás tu opinión? Nos ayuda muchísimo: {link}",
-  },
-  {
-    k: "bday",
-    t: "Cumpleaños",
-    cuando: "El día de su cumpleaños",
-    on: false,
-    txt: "¡Feliz cumpleaños, {nombre}! 🎉 Este mes tenés 15% off en tu próximo turno. Reservá: {link}",
   },
 ];
 store.MSGS = MSG_DEF();
@@ -68,16 +55,14 @@ export const MSG_TPL = [
     "¡Gracias por elegirnos, {nombre}! Te esperamos en {negocio} cuando quieras: {link}",
   ],
 ];
-// grupos de clientes: recuperar (35+ días sin venir), fieles (5+ visitas) o cumpleaños del mes
+// grupos de clientes: recuperar (35+ días sin venir) o fieles (5+ visitas)
 export function msgGroup(group) {
   return realClients().filter((name) => {
     const client = store.CLIENTS[name];
     if (group === "recuperar") {
       return client.last != null && client.last >= 35;
-    } else if (group === "fieles") {
-      return client.v >= 5;
     } else {
-      return thisMonthBday(client);
+      return group === "fieles" && client.v >= 5;
     }
   });
 }
@@ -122,7 +107,6 @@ export function vMsgCompose(names) {
     <div class="fchips">${[
       ["recuperar", "Hace 5+ semanas"],
       ["fieles", "Fieles"],
-      ["cumple", "Cumplen este mes"],
     ]
       .map(([key, label]) => {
         const members = msgGroup(key);

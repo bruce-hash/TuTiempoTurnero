@@ -102,7 +102,9 @@ export function vPerfil() {
         : '<p class="note">Todavía no subió trabajos.</p>'
     }</div>`;
   } else if (tab === "reviews") {
-    const toRate = S.user ? store.BOOK.find((booking) => booking.mine && booking.pid == prov.id && booking.status === "done" && !booking.reviewed) : null;
+    // el turno que pidió calificar el aviso de la campanita (S.rateFor), si es de este profesional; si no, el primero sin reseña
+    const ratable = (booking) => booking.mine && booking.pid == prov.id && booking.status === "done" && !booking.reviewed;
+    const toRate = S.user ? store.BOOK.find((booking) => booking.id === S.rateFor && ratable(booking)) || store.BOOK.find(ratable) : null;
     body = `<div class="panel rvhead"><div><b class="rvbig">★ ${rating(provComm).toFixed(1)}</b><span class="hint">${nReviews} reseña${nReviews === 1 ? "" : "s"} de clientes que fueron</span></div></div>
      ${toRate ? `<div class="panel"><p class="lbl">Calificá tu turno del ${esc(dayLabel(toRate.date))}</p>${rateForm(toRate)}</div>` : `<p class="note">${S.user ? "Después de tu turno vas a poder dejar tu reseña acá." : "Las reseñas las dejan clientes que fueron. Ingresá después de tu turno para calificar."}</p>`}
      <div class="panel">${reviewsHtml(false, provComm)}</div>`;

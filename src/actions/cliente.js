@@ -37,18 +37,30 @@ registerClick("inboxClear", (ev, el, act) => {
 });
 // "Dejar reseña" desde el aviso: abre la reseña de ese turno en Anteriores y lleva hasta ahí (debajo de la cabecera fija)
 registerClick("inboxRate", (ev, el, act) => {
-  // 4/11: desde la campanita, a Mis turnos (ahí está la reseña de ese turno, en Anteriores)
-  if (S.view !== "misturnos") {
-    go("misturnos");
+  // 7/11 · Bloque 5: Mis turnos ya no tiene «Anteriores»; la reseña de ese turno se deja en el perfil del profesional,
+  // pestaña Reseñas
+  const booking = store.BOOK.find((item) => item.mine && item.id === +el.dataset.id);
+  if (!booking) {
+    return;
   }
-  S.rateFor = +el.dataset.id;
+  go("perfil", booking.pid);
+  S.ptab = "reviews";
+  S.rateFor = booking.id;
   S.rateN = 0;
   render();
-  const row = $(`[data-bk="${S.rateFor}"]`);
-  if (row) {
-    const header = $(".top");
-    window.scrollTo(0, Math.max(0, row.getBoundingClientRect().top + window.scrollY - (header ? header.getBoundingClientRect().bottom : 0) - 12));
-  }
+  // en vivo el perfil puede estar cargándose: se espera a que esté completo (hasta unos 4 s) para llevar hasta la reseña
+  let tries = 0;
+  const scrollToRate = () => {
+    const prov = pr(booking.pid);
+    const box = $(".rateform");
+    if (box && (!LIVE || (prov && prov.full))) {
+      const header = $(".top");
+      window.scrollTo(0, Math.max(0, box.getBoundingClientRect().top + window.scrollY - (header ? header.getBoundingClientRect().bottom : 0) - 60));
+    } else if (S.view === "perfil" && ++tries < 25) {
+      setTimeout(scrollToRate, 150);
+    }
+  };
+  scrollToRate();
 });
 registerClick("ptab", (ev, el, act) => {
   S.ptab = el.dataset.t;

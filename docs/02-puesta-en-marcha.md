@@ -353,8 +353,8 @@ Vault que `mp-refunds`), cinco migraciones y el frontend:
    - La de la dirección del sitio (`…_site_url_https.sql`) solo acepta `https://` y el dominio. Si la guardada no
      cumple (por ejemplo, con `http://`), la migración sigue y deja el aviso `site_url: …`: cambiala en el paso 3.
    - La de retención (`…_dni_retencion.sql`, D24) arma la tarea `tt-dni-cleanup` (todos los días a las 3:37 UTC) y
-     pide el borrado en el momento en cada baja de prestador. La función borra con la API de Storage las fotos de los
-     verificados hace 30 días o más, de las altas sin aprobar con la última foto de hace 90 días o más y de las bajas
+     pide el borrado en el momento en cada baja de prestador y, desde el 7/11 (`…_bloques_5_6.sql`), en cada
+     verificación. La función borra con la API de Storage las fotos de los verificados (en el momento), de las altas sin aprobar con la última foto de hace 90 días o más y de las bajas
      (los verificados antes del 2b no tienen fecha de verificación: conservan las fotos hasta que los vuelvas a
      verificar). Si la llamada de una baja falla, la corrida diaria borra esas fotos.
 3. Panel admin → Comisión → **Dirección del sitio**: en el entorno de prueba, `https://prueba.tutiempo.com.ar` (con
@@ -500,16 +500,16 @@ Hace falta el sitio en HTTPS (el subdominio de prueba ya lo tiene), los pasos de
 cliente y la del prestador de prueba (con Mercado Pago de prueba conectado).
 
 Los avisos le llegan a un dispositivo desde que activa las notificaciones: lo que pasó antes (por ejemplo, la confirmación
-del turno que acabás de reservar) no se manda de nuevo. Los recordatorios salen cada 10 minutos (`tt-notices`): el de 2 h,
-si el turno se reservó más de 2 h antes; el de 24 h, si se reservó más de 24 h antes.
+del turno que acabás de reservar) no se manda de nuevo. El recordatorio sale con la tarea `tt-notices` (cada 10 minutos):
+el día anterior, si el turno se reservó más de 24 h antes. Desde el 7/11 (D10) no hay recordatorio de 2 h ni saludo de cumpleaños.
 
 **Android (Chrome):**
 1. Abrí `https://prueba.tutiempo.com.ar` en Chrome, ingresá como cliente y reservá un turno (pagá con el comprador de prueba).
 2. En "¡Listo! Tenés turno" aparece "¿Te avisamos antes del turno?": tocá **Activar avisos** y aceptá el permiso de
    Chrome. Mi perfil → Notificaciones tiene que decir "Activadas".
-3. Reservá otro turno para dentro de unas **2 h 30 min** (con más de 2 h de anticipación): enseguida llega **"Turno confirmado"** (probalo también con el
+3. Reservá otro turno para pasado mañana: enseguida llega **"Turno confirmado"** (probalo también con el
    celular bloqueado). Tocala: abre la app en ese turno.
-4. Dejá pasar el tiempo hasta que falten menos de 2 h: en los 10 minutos siguientes llega el **recordatorio de 2 h**.
+4. Al día siguiente, cuando falten menos de 24 h para el turno, en los 10 minutos siguientes llega el **recordatorio**.
 5. Mi perfil → apagá "Recordatorios y novedades por notificación" y repetí los pasos 3 y 4 con otro turno: la
    confirmación llega, el recordatorio no. Volvé a prenderla.
 6. Menú de cuenta → **Instalar la app** (o la tarjeta "Instalá TuTiempo para tener tus turnos a mano", que sale una sola vez): queda el ícono en la pantalla de inicio. Abrila
@@ -660,8 +660,8 @@ el aviso, mirá Supabase → Edge Functions → **mp-webhook → Invocations / L
       ("Pago devuelto por Mercado Pago") y al prestador le llega el aviso.
 - [ ] Emails (Bloque 3): llegan la confirmación, el recordatorio de 24 h y una cancelación, con el mismo texto que en Mis
       turnos y desde `avisos@tutiempo.com.ar`; responder llega a `soporte@`; el pie lleva a Mi perfil ("Dejar de recibir
-      estos emails" en el recordatorio; "Recordatorios y novedades: Mi perfil" en la confirmación y la cancelación). Con "Recordatorios y novedades por email" apagada no llegan los recordatorios, la reseña ni el
-      cumpleaños, pero la confirmación y las cancelaciones sí (y todos los avisos siguen en Mis turnos).
+      estos emails" en el recordatorio; "Recordatorios y novedades: Mi perfil" en la confirmación y la cancelación). Con "Recordatorios y novedades por email" apagada no llegan el recordatorio, la reseña ni las
+      novedades, pero la confirmación y las cancelaciones sí (y todos los avisos siguen en Mis turnos).
 - [ ] Sellos: marcar "Asistió" suma sello; canjear el premio.
 
 ### CAPTCHA (Turnstile, H30)

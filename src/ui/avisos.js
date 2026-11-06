@@ -15,7 +15,7 @@ export function iosSteps(forPush) {
 }
 
 const PUSH_TEXT = {
-  cliente: ["¿Te avisamos antes del turno?", "Te mandamos una notificación 24 h y 2 h antes, y si el turno cambia. Lo podés apagar cuando quieras en Mi perfil."],
+  cliente: ["¿Te avisamos antes del turno?", "Te mandamos una notificación el día anterior, y si el turno cambia. Lo podés apagar cuando quieras en Mi perfil."],
   prestador: ["Enterate al toque de cada reserva", "Te avisamos cuando alguien reserva o cancela, y si hay novedades de tus cobros. De tus clientes, solo el nombre de pila."],
 };
 

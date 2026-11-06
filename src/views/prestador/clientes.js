@@ -1,7 +1,7 @@
 import { LIVE } from "../../config.js";
 import { money } from "../../lib/dinero.js";
 import { esc, ini } from "../../lib/dom.js";
-import { NOW, TODAY, dayLabel, nowHM } from "../../lib/fechas.js";
+import { TODAY, dayLabel, nowHM } from "../../lib/fechas.js";
 import { ME, pr } from "../../lib/prestadores.js";
 import { skey } from "../../lib/turnero.js";
 import { S } from "../../state.js";
@@ -19,7 +19,6 @@ export const realClients = () =>
   LIVE
     ? Object.keys(store.CLIENTS).filter((name) => name.trim())
     : demoClients(ME()).filter((name) => name.trim());
-export const thisMonthBday = (client) => client.bday && +client.bday.slice(0, 2) === NOW().getMonth() + 1;
 // “Hace X días/semanas/meses” desde la última visita
 export const lastTxt = (days) =>
   days == null
@@ -47,13 +46,13 @@ export function vBClientes() {
   if (S.ctab === "seguidores") {
     return tabs + vSeguidores();
   }
-  const filter = S.cf || "todos";
+  // 7/11 · Bloque 5: sin el filtro «Cumplen este mes» (el cumpleaños queda en la ficha y en la base)
+  const filter = S.cf in { todos: 1, recuperar: 1, fieles: 1, faltas: 1 } ? S.cf : "todos";
   const groups = {
     todos: names,
     recuperar: names.filter((name) => store.CLIENTS[name].last >= 35),
     fieles: names.filter((name) => store.CLIENTS[name].v >= 5),
     faltas: names.filter((name) => store.CLIENTS[name].n >= 1),
-    cumple: names.filter((name) => thisMonthBday(store.CLIENTS[name])),
   };
   const shown = groups[filter].sort((one, other) =>
     filter === "recuperar" ? store.CLIENTS[other].last - store.CLIENTS[one].last : store.CLIENTS[other].v - store.CLIENTS[one].v,
@@ -74,7 +73,6 @@ export function vBClientes() {
      ["recuperar", "Para recuperar"],
      ["fieles", "Fieles"],
      ["faltas", "Con faltas"],
-     ["cumple", "Cumplen este mes"],
    ]
      .map(
        ([key, label]) =>
@@ -86,7 +84,7 @@ export function vBClientes() {
        ? `<ul class="clist">${shown
            .map((name) => {
              const client = store.CLIENTS[name];
-             return `<li data-name="${esc((name + " " + client.tel).toLowerCase())}"><button class="crow" data-cli="${esc(name)}"><span class="av" style="background:hsl(${(name.charCodeAt(0) * 37) % 360} 55% 45%)">${ini(name)}</span><span class="cr-m"><b>${esc(name)}</b><span>${lastTxt(client.last)} · ${client.v} visita${client.v === 1 ? "" : "s"}${thisMonthBday(client) ? ` · ${ic("torta")} cumple` : ""}</span></span><span class="cr-r">${(() => {
+             return `<li data-name="${esc((name + " " + client.tel).toLowerCase())}"><button class="crow" data-cli="${esc(name)}"><span class="av" style="background:hsl(${(name.charCodeAt(0) * 37) % 360} 55% 45%)">${ini(name)}</span><span class="cr-m"><b>${esc(name)}</b><span>${lastTxt(client.last)} · ${client.v} visita${client.v === 1 ? "" : "s"}</span></span><span class="cr-r">${(() => {
                const best = cliBest(name);
                if (best) {
                  return `<span class="rb st">${ic("sellos")} ${best.n}/${best.g}</span>`;
