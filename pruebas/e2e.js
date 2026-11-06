@@ -49,7 +49,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
      && (await pg.evaluate(() => document.body.classList.contains("am-open"))) && (await pg.getAttribute(".authmodal", "role")) === "dialog" && (await pg.locator("#amTitle").innerText()).length > 0);
   ok("ingreso: sin elegir cliente o profesional (una cuenta = una persona)", (await pg.locator(".am-tabs, [data-act=authSide], #fBarb").count()) === 0 && (await pg.locator(".am-sub").innerText()).includes("Clientes y profesionales entran por acá"));
   ok("ingreso: en el celular no enfoca un campo (no abre el teclado tapando la ventana)", await pg.evaluate(() => document.activeElement && document.activeElement.classList.contains("am-box")));
-  ok("ingreso: debajo de Google, la aceptación de los Términos y la Política de privacidad", /Al continuar, aceptás los Términos y la Política de privacidad/.test(await pg.locator(".authmodal .gterms").innerText()) && (await pg.locator(".authmodal .gterms [data-go=terminos]").count()) === 2);
+  ok("ingreso: debajo de Google, la aceptación de los Términos y la Política de privacidad", /Al continuar, aceptás los Términos y la Política de privacidad/.test(await pg.locator(".authmodal .gterms").innerText()) && (await pg.locator(".authmodal .gterms [data-go=terminos]").count()) === 1 && (await pg.locator(".authmodal .gterms [data-go=privacidad]").count()) === 1);
   // el foco no se escapa de la ventana
   for (let i = 0; i < 30; i++) await pg.keyboard.press("Tab");
   ok("ingreso: Tab da la vuelta adentro de la ventana", await pg.evaluate(() => !!document.activeElement.closest(".am-box")));

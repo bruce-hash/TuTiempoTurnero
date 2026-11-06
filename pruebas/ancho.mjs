@@ -70,7 +70,7 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   };
 
   // visitante
-  for (const route of ["/", "/rubro/barberias", "/buscar?q=corte", "/ingresar", "/crear-cuenta", "/sumate", "/registrar-negocio", "/prestadores/ingresar", "/terminos", "/no-existe"]) await go(route);
+  for (const route of ["/", "/rubro/barberias", "/buscar?q=corte", "/ingresar", "/crear-cuenta", "/sumate", "/registrar-negocio", "/prestadores/ingresar", "/terminos", "/privacidad", "/no-existe"]) await go(route);
   await page.goto(BASE + "/");
   await page.waitForSelector(".grid .card");
   // 4/11: el pie centrado (el mismo espacio a los dos lados de sus bloques)

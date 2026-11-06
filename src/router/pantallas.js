@@ -363,6 +363,8 @@ export async function applyUrl(href) {
       return openBiz(parts, path);
     case "terminos":
       return single("terminos");
+    case "privacidad":
+      return single("privacidad");
     case "panel":
       return openPanel(parts, params, path);
     case "admin":

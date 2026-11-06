@@ -94,6 +94,7 @@ const SOFIA = "sofia-benitez-studio";
     ["/crear-cuenta", "register", "Crear cuenta · TuTiempo"],
     ["/registrar-negocio", "negocio", "Registrá tu negocio · TuTiempo"],
     ["/terminos", "terminos", "Términos y condiciones · TuTiempo"],
+    ["/privacidad", "privacidad", "Política de privacidad · TuTiempo"],
     ["/nueva-contrasena", "newpass", "Contraseña nueva · TuTiempo"],
   ]) {
     s = await go(page, route);
@@ -324,7 +325,7 @@ const SOFIA = "sofia-benitez-studio";
   await q("alter table providers disable trigger providers_slug_not_reserved");
   await q("update providers set slug = 'blog' where id = $1", [maxId]);
   await q("alter table providers enable trigger providers_slug_not_reserved");
-  const screens = { ingresar: "login", "crear-cuenta": "register", "nueva-contrasena": "newpass", sumate: "negocio", "registrar-negocio": "negocio", terminos: "terminos", buscar: "home", "mis-turnos": "login", cuenta: "login", panel: "login", admin: "login" };
+  const screens = { ingresar: "login", "crear-cuenta": "register", "nueva-contrasena": "newpass", sumate: "negocio", "registrar-negocio": "negocio", terminos: "terminos", privacidad: "privacidad", buscar: "home", "mis-turnos": "login", cuenta: "login", panel: "login", admin: "login" };
   const wrong = [];
   const folders = ["assets", "fonts", "vendor"]; // carpetas reales del sitio: Apache responde 403, nunca la app
   for (const word of RESERVED) {

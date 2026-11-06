@@ -130,6 +130,8 @@ function describeClient(view) {
     }
     case "terminos":
       return { url: "/terminos", key: "terminos", title: `Términos y condiciones · ${SITE}` };
+    case "privacidad":
+      return { url: "/privacidad", key: "privacidad", title: `Política de privacidad · ${SITE}` };
     case "notfound":
       return { url: S.notFound || "/", key: "notfound:" + S.notFound, title: `No encontrado · ${SITE}` };
     default: {

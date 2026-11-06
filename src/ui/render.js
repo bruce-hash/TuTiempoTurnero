@@ -25,6 +25,7 @@ import { vPerfil } from "../views/cliente/perfil.js";
 import { vPagoVuelta } from "../views/cliente/pago.js";
 import { vTurnoOk } from "../views/cliente/turno.js";
 import { vNotFound } from "../views/legal/no-encontrado.js";
+import { vPrivacidad } from "../views/legal/privacidad.js";
 import { vTerminos } from "../views/legal/terminos.js";
 import { vBarbero } from "../views/prestador/panel.js";
 
@@ -245,6 +246,9 @@ function renderMain() {
         break;
       case "terminos":
         html = vTerminos();
+        break;
+      case "privacidad":
+        html = vPrivacidad();
         break;
       case "notfound":
         html = vNotFound();

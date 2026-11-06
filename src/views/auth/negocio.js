@@ -144,7 +144,9 @@ function step5() {
       ? '<div class="am-ok">Ya tenemos tu DNI: lo revisa el equipo de TuTiempo.</div>'
       : dniForm(S.dniSt || {})
     : '<div class="am-ok"><b>Aprobación de TuTiempo</b><br>El equipo de TuTiempo revisa tu perfil antes de que aparezca en el listado. No tenés que cargar nada más.</div>';
-  return shell(5, body, {
+  // 7/11 · Legales: al enviar el negocio acepta los términos (incluyen las reglas para profesionales) y la privacidad
+  const legal = '<p class="note biz-legal">Al enviar tu negocio aceptás los <button type="button" class="lnk" data-go="terminos">Términos y condiciones</button> (incluyen las reglas para profesionales) y la <button type="button" class="lnk" data-go="privacidad">Política de privacidad</button>.</p>';
+  return shell(5, body + legal, {
     title: "Verificación",
     sub: dniRequired() ? "Para que tus clientes sepan quién sos." : "Último paso.",
     next: "Enviar para aprobar",
