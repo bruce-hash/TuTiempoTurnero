@@ -184,6 +184,9 @@ async function normalizar(page) {
     document.querySelectorAll("#app #fTurno .feerow").forEach((el) => el.closest(".panel")?.remove());
     document.querySelectorAll("#app #fTurno p.note").forEach((el) => { if (/Si cancela el profesional/.test(el.textContent)) el.textContent = "SI NO VAS O SI CANCELA EL PROFESIONAL"; });
     document.querySelectorAll("#app #hpay, #app #hterm").forEach((el) => el.closest(".f")?.remove());
+    // 4/11 · Bloque 4 (cambios a propósito): la seña fija y el plazo de Mercado Pago con su tabla, el acceso a "Bloquear
+    // días" arriba de Horarios y el calendario de la Caja del día. Lo nuevo lo prueban e2e.js y ancho.mjs.
+    document.querySelectorAll("#app .depnote, #app .termpick, #app .hblock, #app .calbtn").forEach((el) => el.remove());
     if (document.querySelector("#app [data-act=admM]")) document.querySelectorAll("#app .kpis, #app table").forEach((el) => el.remove());
     // V3 (D31, C39 y C21, cambios a propósito): los horarios se suceden según la duración del servicio y sin descanso, así
     // que cambian los horarios ofrecidos, cuántos libres hay por día y el próximo turno de cada tarjeta; Horarios ya no tiene
