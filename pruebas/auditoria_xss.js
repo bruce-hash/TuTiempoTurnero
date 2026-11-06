@@ -46,6 +46,14 @@ const XS = `"><b class=ttxss>1</b>'`;
   await q("update provider_clients set phone = $2 where provider_id = $1", [sofi.id, XS]);
   await q("insert into products (provider_id, name, price, stock) values ($1, $2, 1000, 3)", [sofi.id, X("Producto")]);
   await q("insert into admin_notes (provider_id, body) values ($1, $2)", [sofi.id, X("nota admin")]).catch(() => {});
+  // revisión v3 (7/11): novedades y ofertas a seguidores, avisos del profesional (campanita) y feriados (Horarios y admin).
+  // Los feriados se cargan directo en la tabla (la base ya saca < y >): así se prueba que la pantalla escapa igual.
+  const post = (await q("insert into posts (provider_id, body) values ($1, $2) returning id", [sofi.id, X("novedad")]))[0].id;
+  await q("insert into client_messages (provider_id, user_id, kind, ref, body) values ($1, $2, 'news', $3, $4)", [sofi.id, ANA, String(post), X("novedad")]);
+  const hday = (await q("select to_char((now() at time zone 'America/Argentina/Buenos_Aires')::date + 3, 'YYYY-MM-DD') d"))[0].d;
+  await q("insert into holiday_years (year, confirmed_at) values ($1, now()) on conflict (year) do update set confirmed_at = now()", [+hday.slice(0, 4)]);
+  await q("insert into holidays (day, name, kind, source) values ($1, $2, 'inamovible', 'admin') on conflict (day) do update set name = excluded.name", [hday, X("Feriado")]);
+  await q("insert into provider_notices (provider_id, kind, ref, body) values ($1, 'holiday', $2, $3), ($1, 'new_follower', 'x1', $4)", [sofi.id, hday, X("Aviso feriado"), X("Seguidor")]);
 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 400, height: 900 } });
@@ -81,10 +89,14 @@ const XS = `"><b class=ttxss>1</b>'`;
   // ---------- Clienta (también admin) ----------
   await page.goto(BASE + "/ingresar"); await ready(); await login("ana@test.ar", "cliente12345");
   await visit("/mis-turnos", "mis turnos y mensajes");
+  await page.evaluate(() => { S.bellOpen = true; render(); }); await wait(400); await check("v3: campanita del cliente con una novedad de un profesional");
+  await page.evaluate(() => { S.bellOpen = false; render(); });
   await visit("/cuenta", "mi perfil");
   await visit("/" + sofi.slug + "/reservar", "reservar");
   for (const t of ["resumen", "prestadores"]) await visit("/admin/" + t, "admin · " + t);
   for (const t of ["balance", "comision"]) await visit("/admin/" + t, "admin · " + t, false);   // sin textos de usuarios
+  await page.goto(BASE + "/admin/comision"); await ready(); await page.evaluate(async () => { await api.adminHolidays(); render(); }); await wait(500);
+  await check("v3: admin · comisión → feriados");
   await visit("/admin/prestadores", "admin · prestadores");
   await page.evaluate((id) => { S.admOpen = id; render(); }, sofi.id); await wait(400); await check("admin · ficha del prestador");
   await page.evaluate((id) => { S.admNudgeAsk = { id, body: "" }; render(); }, sofi.id); await wait(400); await check("admin · v2: cuadro de «Avisarle» con el nombre del profesional");
@@ -99,6 +111,9 @@ const XS = `"><b class=ttxss>1</b>'`;
   if (cli) { await page.evaluate((c) => { S.cli = c; render(); }, cli); await wait(400); await check("panel · un cliente (v2: sin la ficha)"); }
   else ok("panel · hay clientes para abrir la ficha", false);
   await page.evaluate(() => { S.btab = "perfil"; S.msgOpen = true; render(); }); await wait(300); await check("panel · mensajes y plantillas");
+  await page.evaluate(() => { S.msgOpen = false; S.btab = "horarios"; render(); }); await wait(400); await check("v3: panel · horarios → próximos feriados");
+  await page.evaluate(() => { S.bellOpen = true; render(); }); await wait(400); await check("v3: campanita del profesional (feriado y seguidor)");
+  await page.evaluate(() => { S.bellOpen = false; S.btab = "finanzas"; S.fp = "dia"; S.saleOpen = true; render(); }); await wait(400); await check("v3: caja del día → vender producto", false);
 
   ok("ningún diálogo (alert) se abrió", dialogs.length === 0, dialogs.join(" | "));
   await browser.close(); await db.end();

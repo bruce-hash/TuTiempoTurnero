@@ -291,6 +291,34 @@ q("select mp_webhook_event('P-REAL', %s, null, 'unknown_provider')", (honest,))
 finding("S18", "500 avisos falsos de Mercado Pago en una hora tapan el registro de los reales en «Para revisar»",
         one("select count(*) from mp_webhook_events where mp_payment_id='P-REAL'") == 0)
 
+# ---------- Revisión v3 (7/11): lo nuevo desde el 3/11 ----------
+# S19: un prestador suspendido (dado de baja por el admin) sigue mandando novedades y ofertas a sus seguidores
+q("insert into follows (user_id, provider_id) values (%s, %s) on conflict do nothing", (other, evil), uid=other)
+q("update providers set status = 'suspended' where id = %s", (evil,))
+r19 = q("select notify_followers('Promo: pagá por transferencia al alias mario.barber')", uid=evil_u)
+d19 = (dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))) + dt.timedelta(days=2)).replace(hour=12, minute=0, second=0, microsecond=0)
+o19 = q("select offer_slot(%s, %s, null)", (d19, d19 + dt.timedelta(minutes=30)), uid=evil_u)
+got = one("select count(*) from client_messages where user_id = %s and provider_id = %s and kind in ('news', 'offer')", (other, evil))
+finding("S19", "un prestador suspendido sigue mandando novedades y ofertas (con push) a sus seguidores", not err(r19) and not err(o19) and got >= 2)
+q("update providers set status = 'active' where id = %s", (evil,))
+# feriados (D39): las tablas cerradas, solo el admin confirma, solo la función guarda lo de la fuente, cada uno ve lo suyo
+ok("feriados: anon no lee holidays ni holiday_years", denied(q("select * from holidays", role="anon")) and denied(q("select * from holiday_years", role="anon")))
+ok("feriados: un prestador no guarda la lista de la fuente", err(q("select holidays_sync_save(2026, '[]'::jsonb)", uid=evil_u)))
+ok("feriados: un prestador no confirma ni carga feriados", err(q("select admin_holidays_confirm(2026)", uid=evil_u), "forbidden")
+   and err(q("select admin_holiday_save('2026-12-31', 'x', 'inamovible')", uid=evil_u), "forbidden"))
+q("insert into provider_holidays (provider_id, day, open) values (%s, '2030-01-01', true) on conflict do nothing", (honest,))
+ok("feriados: un prestador no ve las elecciones de otro", one("select count(*) from provider_holidays where provider_id = %s", (honest,), uid=evil_u) == 0)
+ok("feriados: un cliente no elige feriados", err(q("select holiday_decide('2030-01-01', false)", uid=other), "not_provider"))
+q("select holidays_sync_save(2031, %s::jsonb)", (json.dumps([{"fecha": "2031-05-25", "tipo": "inamovible", "nombre": "<img src=x onerror=alert(1)>Mayo"}]),), role="service_role")
+ok("feriados: el nombre que trae la fuente se guarda sin < ni >", one("select name from holidays where day = '2031-05-25'") == "img src=x onerror=alert(1)Mayo")
+# despliegue a prueba (docs/10): el informe de la verificación no lo llama nadie de la app
+ok("verificacion_prueba: ni anon ni un usuario la llaman", err(q("select verificacion_prueba(null)", role="anon")) and err(q("select verificacion_prueba(null)", uid=evil_u)))
+# Bloque 5: ya no se mandan saludos de cumpleaños (S01 pierde su vía por email)
+q("update provider_clients set birthday = to_char(now() at time zone 'America/Argentina/Buenos_Aires', 'MM-DD') where provider_id = %s", (evil,))
+q("update message_templates set enabled = true where provider_id = %s and key = 'bday'", (evil,))
+q("select send_scheduled_notices()", role="service_role")
+ok("Bloque 5: send_scheduled_notices ya no manda saludos de cumpleaños", one("select count(*) from client_messages where kind = 'bday'") == 0)
+
 print()
 if OPEN:
     print("Hallazgos que se reproducen: " + ", ".join(sorted(set(OPEN))))

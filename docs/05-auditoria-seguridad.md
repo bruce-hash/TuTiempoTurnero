@@ -1,5 +1,169 @@
 # Auditoría de seguridad integral
 
+## Revisión v3 · 6/11/2026 (pedido del 7/11)
+
+Tercera pasada. Cubre todo lo que se sumó desde la v2 (3/11), sobre el código de `feature/legales`, que incluye todo
+lo anterior:
+- 4/11: pago desde la app instalada, Bloque 2 (cambiar contraseña con reautenticación, sin código por email),
+  seguidores (ofrecer turnos, avisar a seguidores), campanita, íconos y Bloque 4 (seña fija, plazo de MP, caja, productos).
+- 7/11: despliegue automático a prueba y su verificación (#57), arreglos chicos (#58), Bloques 5 y 6 (#59), feriados (#60)
+  y legales (#61).
+
+Rama: `audit/seguridad-v3`. Como las anteriores, **no cambia la app ni las migraciones**: suma controles a las dos
+pruebas de la auditoría y esta sección.
+
+Qué se hizo:
+- Volver a correr las dos pruebas contra el código de hoy.
+- Sumarles lo nuevo:
+  - la base: S19, feriados, `verificacion_prueba` y el Bloque 5;
+  - el navegador: campanita del cliente y del profesional, feriados en Horarios y en el admin, «Vender producto».
+- Revisar a mano:
+  - las 5 migraciones nuevas (`seguidores`, `profesional_4_11`, `verificacion_prueba`, `bloques_5_6`, `feriados`);
+  - las Edge Functions `holidays-sync` y `mp-create-preference`;
+  - los workflows de despliegue y sus scripts (`tools/`).
+
+Resultado de hoy:
+- `auditoria_seguridad.py`: **67 controles OK, 0 FAIL**.
+  - Siguen abiertos S01, S04, S05, S06, S11, S12, S15, S16, S17 y S18.
+  - Hay uno nuevo: **S19**.
+  - De S01 ya no se reproduce el email de cumpleaños, porque el Bloque 5 sacó los saludos.
+- `auditoria_xss.js`: **34 OK, 0 FAIL**. Ningún texto se interpreta como HTML, tampoco en lo nuevo:
+  - novedades de un profesional en la campanita del cliente;
+  - avisos del profesional (feriado, seguidor);
+  - «Próximos feriados» y Comisión → Feriados (con el nombre cargado directo en la tabla, sin pasar por la limpieza de la base);
+  - «Vender producto».
+- `npm audit`: 0 vulnerabilidades.
+
+Sigue sin haber nada **crítico**. Lo nuevo más importante está en el despliegue (**S20**): sale de cómo corre el
+workflow, no de la app. El arreglo es chico.
+
+### Estado de cada hallazgo
+
+| # | Gravedad | Hallazgo | Estado al 6/11 |
+|---|---|---|---|
+| S01 | **Alta** | El prestador liga cualquier usuario a su lista de clientes y le manda mensajes | Abierto. **Bajó**: sin saludos de cumpleaños (Bloque 5) ya no hay email con texto del prestador; quedan los mensajes en la app. |
+| S02 | Media | Cambiar la contraseña no pide la actual | **Arreglado** (4/11 · Bloque 2: la actual con `sbScratch()` y el código de `reauthenticate()`). |
+| S03 | Media | El cupo de emails de Auth se agota desde afuera | Mitigado (sin código por email desde el 4/11; Turnstile en la app). Falta activarlo en Supabase Auth. |
+| S04 | Media | Acaparar horarios con varias cuentas | Abierto (mitigado en parte con Turnstile activado). |
+| S05 | Baja | `reviews.client_id` público | Abierto |
+| S06 | Media | `dni_taken` responde si un DNI está registrado | Abierto |
+| S07 | Baja | `MP_WEBHOOK_SECRET=pendiente` en docs/02 | Abierto |
+| S08 | Baja | Logs con respuestas completas de terceros | Abierto |
+| S09 | Baja | Login CSRF con `token_hash` | Abierto (`main.js:106`) |
+| S10 | Baja | CSP abierta a cualquier `*.supabase.co` | Abierto |
+| S11 | Baja | El prestador verificado se renombra sin revisión | Abierto |
+| S12 | Baja | Funciones invoker sin `search_path` | Abierto (las mismas 10) |
+| S13 | Baja | supabase-js 2.45.4 | Abierto |
+| S14 | Baja | Vencimiento del código de 6 dígitos | **Ya casi no aplica**: desde el 4/11 no se ingresa con código. Queda el de «cambiar contraseña» (`reauthenticate`): a verificar su vencimiento en el proyecto. |
+| S15 | Media (legal) | Datos que quedan al eliminar la cuenta | Abierto. La Política de privacidad nueva (#61) ya dice lo que queda: reseñas con el nombre y la lista de clientes del profesional. |
+| S16 | **Alta** | Gastos fijos de otro prestador | Abierto (sin cambios desde la v2) |
+| S17 | Media | Gastos fijos sin límite hacia atrás | Abierto: espera que Bruno defina el margen. |
+| S18 | Baja | Registro de avisos de Mercado Pago que se llena | Abierto |
+| **S19** | Media | **Un prestador suspendido sigue mandando novedades y ofertas (con push) a sus seguidores** | **Nuevo** · `auditoria_seguridad.py` |
+| **S20** | Media | **«Desplegar prueba» deja el token de Supabase y la contraseña de la base a la vista de `npm ci` y de las pruebas** | **Nuevo** · lectura |
+| **S21** | Baja | **«Verificar prueba» corre el código de la etiqueta `prueba-desplegada` con los secretos de prueba** | **Nuevo** · lectura |
+
+### S19 · Media · Un prestador suspendido sigue escribiendo a sus seguidores
+
+**Qué pasa:**
+- `notify_followers` y `offer_slot` usan `my_provider()`, que devuelve el negocio del usuario con cualquier estado salvo
+  `deleted`.
+- Un profesional que el admin suspendió sigue mandando, hasta 5 por día, «novedades» y «turnos libres» a todos sus
+  seguidores, con notificación push.
+
+**Escenario:** el admin suspende a un profesional por estafar. Él escribe a sus seguidores «Promo: pagá por
+transferencia al alias …» y les llega como aviso de TuTiempo (la prueba lo reproduce con ese texto).
+
+**Arreglo:** en las dos funciones, `if (select status from providers where id = pid) <> 'active' then raise exception
+'not_active'`. En la app, no mostrar «Avisar a tus seguidores» ni «Ofrecer» mientras no esté activo.
+
+### S20 · Media · Los secretos de «Desplegar prueba» están en todo el job
+
+**Qué pasa:**
+- En `.github/workflows/desplegar-prueba.yml`, `SUPABASE_ACCESS_TOKEN`, `PRUEBA_PROJECT_REF` y `PRUEBA_DB_PASSWORD`
+  están en el `env:` **del job**, así que los ven todos los pasos.
+- Entre esos pasos está `npm ci`, que corre los scripts de instalación de cada dependencia (y sus dependencias), y
+  también `test:unidad` y `test:sin-demo`.
+- Un paquete comprometido (un ataque a la cadena de suministro de npm) podría leer el token de la CLI y la contraseña
+  de la base y mandarlos afuera.
+- Con el token, quien lo tenga maneja el proyecto de prueba. Si alguien crea el token con un usuario que también ve
+  producción (el paso 1 de docs/10 lo evita), maneja producción.
+
+**Arreglo** (chico):
+- Pasar esas tres variables al `env:` de los dos pasos que las usan: «Base de prueba» y «Edge Functions que cambiaron».
+- Opcional: separar el despliegue en dos jobs, uno que construye sin secretos y otro que despliega con lo construido.
+
+En «Verificar prueba» los secretos ya están solo en el paso que los usa.
+
+### S21 · Baja · «Verificar prueba» confía en la etiqueta
+
+**Qué pasa:**
+- La corrida de cada noche (y el botón) hace checkout del commit de la etiqueta `prueba-desplegada` y corre su
+  `pruebas/verificar_prueba.mjs` con los secretos del entorno `prueba`:
+  - la conexión de `tt_verificador`;
+  - las contraseñas de las dos cuentas fijas;
+  - el token del vendedor de prueba de Mercado Pago.
+- Cualquiera con permiso de escritura en el repo puede mover esa etiqueta a un commit de cualquier rama, aunque no
+  esté en `developer`. Así corre su propio código con esos secretos.
+- La regla del entorno («solo developer») no lo frena: la corrida programada sale de `developer` aunque el código que
+  ejecuta sea otro.
+
+**Arreglo:**
+- Antes de correr, verificar que el commit esté en `developer`: `git merge-base --is-ancestor "$sha" origin/developer`.
+- O proteger la etiqueta con una regla del repo (Settings → Rules → Tags).
+
+### Revisado en esta pasada y bien
+
+- **Catálogo:** todas las tablas de `public` tienen RLS, todas las funciones definer tienen `search_path`, y anon solo
+  ejecuta la lista de funciones públicas de siempre.
+  - Las tablas nuevas (`slot_offers`, `holidays`, `holiday_years`, `provider_holidays`) son cerradas por defecto:
+    `revoke all` y solo lo que hace falta.
+  - Un rol nuevo sin permisos (como `tt_verificador`) no ejecuta ninguna función definer: todas tienen el `execute` de
+    PUBLIC quitado o son de la lista pública.
+- **Feriados (D39):**
+  - `holidays_sync_save` es solo de `service_role`.
+  - Las funciones del admin controlan `is_admin()`.
+  - `holiday_decide` exige `my_provider()` y que sea un feriado confirmado y futuro; «Cierro» pasa por el mismo
+    `block_days` (mismos límites y avisos).
+  - `provider_holidays` la ve solo su dueño.
+  - El nombre que trae la fuente se guarda sin `<`, `>` ni caracteres de control, con 80 letras como máximo; la
+    pantalla lo escapa igual.
+  - `holidays-sync` solo acepta `CRON_SECRET`, pide a una dirección fija (`HOLIDAYS_API_URL` solo en pruebas), tiene un
+    tope de 15 s, toma 200 filas como máximo y no guarda nada si la respuesta no es una lista.
+- **Despliegue a prueba (#57):**
+  - `verificacion_prueba` no la llama ni anon ni un usuario: solo `tt_verificador`, que no lee tablas.
+  - `preparar_prueba.mjs` rechaza una clave `service_role` o `sb_secret_` en el `config.js`.
+  - `subir_prueba.sh` pasa la contraseña por variable de entorno (no en la línea de comando), usa FTPS con certificado
+    verificado y frena si la cuenta ve la raíz de Laravel.
+  - El workflow solo corre desde `developer` y en el entorno `prueba`.
+- **Seguidores (4/11):**
+  - `offer_slot` exige que el hueco esté libre y que el destinatario sea seguidor, con topes de 5 ofertas o novedades
+    por día y 10 personales.
+  - `provider_followers` muestra el nombre de pila y la inicial.
+  - Los avisos se escapan en la campanita.
+- **Bloque 4:**
+  - `ps_fixed_deposit` fuerza la seña del 30% en todo pedido con sesión.
+  - `provider_month_summary` filtra por `my_provider()`.
+  - `confirm_payment_core` no cambia el plazo por su cuenta.
+- **Bloques 5 y 6:**
+  - `send_scheduled_notices` ya no inserta `r2` ni `bday`.
+  - El trigger del DNI llama a `run_dni_cleanup` (Vault, `CRON_SECRET`) y, si falla, no frena la verificación.
+- **`mp-create-preference`:** devuelve el token de regreso solo a quien creó el cobro (su sesión). La app lo guarda 40
+  minutos. `checkout_status` con ese token devuelve el estado y el turno, sin montos ni datos del cliente.
+- **Legales:** solo texto; los links van a direcciones propias.
+
+### Qué conviene hacer, en orden
+
+1. **S16 y S20**: migración chica y cambio del workflow, con pruebas. S20 conviene antes del primer «Desplegar prueba».
+2. **S19** y **S01**: los dos son sobre mensajes que llegan a clientes sin que quieran; se pueden hacer juntos.
+3. Antes de abrir al público:
+   - activar Turnstile en Supabase Auth (S03, S04);
+   - cambiar `MP_WEBHOOK_SECRET` antes del primer pago (S07);
+   - S21 (proteger la etiqueta).
+4. El resto (S05, S06, S08–S15, S17, S18) en un bloque de ajustes. S17 espera el margen hacia atrás.
+
+---
+
 ## Revisión v2 · 3/11/2026
 
 Segunda pasada, sobre la v2 del cliente: `feature/opcionales-v2`, con D34, terminología, admin, profesional, cliente, C04 y
