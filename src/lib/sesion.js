@@ -26,6 +26,7 @@ export function afterLogin() {
 //   4. el resto se queda en la página donde estaba (o al inicio)
 export function goAfter() {
   S.authModal = null;
+  S.authOnPage = null;
   if (S.pending) {
     S.after = null;
     S.afterSoft = false;
@@ -70,7 +71,7 @@ export function showFieldErrors(errs, generalId = "aerr") {
     const note = document.createElement("span");
     note.className = "ferr fe-msg";
     note.id = id + "_err";
-    note.textContent = "⚠ " + msg;
+    note.textContent = msg;
     if (box && box.matches(".f")) {
       box.classList.add("bad");
       box.append(note);

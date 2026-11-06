@@ -13,12 +13,7 @@ import { toast } from "../ui/toast.js";
 import { loadList } from "../views/cliente/home.js";
 import { comm } from "../views/prestador/comunidad.js";
 
-registerClick("inboxAll", (ev, el, act) => {
-  S.inboxAll = true;
-  render();
-  return;
-});
-// v2: borrar avisos de Mis turnos (uno, o todos los leídos). En la base quedan guardados, fuera de la lista
+// v2: borrar avisos (uno, o todos los leídos; 4/11: desde la campanita). En la base quedan guardados, fuera de la lista
 const dropMessages = (keep) => {
   const inbox = S.inbox || [];
   const kept = inbox.filter(keep);
@@ -30,7 +25,7 @@ registerClick("inboxDel", (ev, el, act) => {
   api.m.dismissMessages([+id]).catch(() => {});
   render();
 });
-// los que están en pantalla ya se vieron (Mis turnos los marca leídos al abrir): primero se marcan, después se borran
+// los que están en pantalla ya se vieron (la campanita los marca leídos al abrir): primero se marcan, después se borran
 registerClick("inboxClear", (ev, el, act) => {
   (S.inbox || []).forEach((msg) => (msg.read = true));
   dropMessages((msg) => !msg.read);
@@ -42,14 +37,30 @@ registerClick("inboxClear", (ev, el, act) => {
 });
 // "Dejar reseña" desde el aviso: abre la reseña de ese turno en Anteriores y lleva hasta ahí (debajo de la cabecera fija)
 registerClick("inboxRate", (ev, el, act) => {
-  S.rateFor = +el.dataset.id;
+  // 7/11 · Bloque 5: Mis turnos ya no tiene «Anteriores»; la reseña de ese turno se deja en el perfil del profesional,
+  // pestaña Reseñas
+  const booking = store.BOOK.find((item) => item.mine && item.id === +el.dataset.id);
+  if (!booking) {
+    return;
+  }
+  go("perfil", booking.pid);
+  S.ptab = "reviews";
+  S.rateFor = booking.id;
   S.rateN = 0;
   render();
-  const row = $(`[data-bk="${S.rateFor}"]`);
-  if (row) {
-    const header = $(".top");
-    window.scrollTo(0, Math.max(0, row.getBoundingClientRect().top + window.scrollY - (header ? header.getBoundingClientRect().bottom : 0) - 12));
-  }
+  // en vivo el perfil puede estar cargándose: se espera a que esté completo (hasta unos 4 s) para llevar hasta la reseña
+  let tries = 0;
+  const scrollToRate = () => {
+    const prov = pr(booking.pid);
+    const box = $(".rateform");
+    if (box && (!LIVE || (prov && prov.full))) {
+      const header = $(".top");
+      window.scrollTo(0, Math.max(0, box.getBoundingClientRect().top + window.scrollY - (header ? header.getBoundingClientRect().bottom : 0) - 60));
+    } else if (S.view === "perfil" && ++tries < 25) {
+      setTimeout(scrollToRate, 150);
+    }
+  };
+  scrollToRate();
 });
 registerClick("ptab", (ev, el, act) => {
   S.ptab = el.dataset.t;
@@ -195,6 +206,14 @@ registerClick("verTurno", (ev, el, act) => {
   S.turnoId = +el.dataset.id;
   S.justBooked = false;
   go("turnoOk");
+});
+// 4/11 · Bloque 3: "Reservar" en el aviso de un turno ofrecido: al perfil del profesional, con ese día elegido
+registerClick("offerBook", (ev, el, act) => {
+  S.svc = 0;
+  S.slot = null;
+  go("perfil", el.dataset.id);
+  S.day = /^\d{4}-\d\d-\d\d$/.test(el.dataset.d || "") ? el.dataset.d : null;
+  render();
 });
 registerClick("goLocal", (ev, el, act) => {
   go("home");

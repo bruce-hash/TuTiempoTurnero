@@ -124,11 +124,14 @@ q("update message_templates set enabled = true where provider_id = %s and key = 
 b24 = turno(ana, 20)
 b2 = turno(ana, 1.5)
 q("select send_scheduled_notices()")
-ok("recordatorio de 24 h y de 2 h a la cola", cola(b24, "r24") == [("r24", "pending", None, 0)] and cola(b2, "r2") == [("r2", "pending", None, 0)])
+ok("recordatorio de 24 h a la cola; el de 2 h ya no (7/11 · Bloque 5)", cola(b24, "r24") == [("r24", "pending", None, 0)] and cola(b2) == [])
 ok("…y valen hasta que empieza el turno", one("select bool_and(o.expires_at = b.starts_at) from email_outbox o join bookings b on b.id = o.booking_id "
-                                              "where o.kind in ('r24','r2') and o.booking_id in (%s, %s)", (b24, b2)) is True)
+                                              "where o.kind = 'r24' and o.booking_id = %s", (b24,)) is True)
 q("select send_scheduled_notices()")
-ok("una segunda corrida del cron no repite los emails", len(cola(b24)) == 1 and len(cola(b2)) == 1)
+ok("una segunda corrida del cron no repite los emails", len(cola(b24)) == 1 and cola(b2) == [])
+# el de 2 h que quedó en la cola antes del 7/11 se saltea (la migración del Bloque 5); acá, uno a mano para lo de abajo
+b_perm = turno(ana, 60)
+q("select notify_booking(%s, 'conf')", (b_perm,))
 
 # ---------- 2. Lo que pide la función ----------
 D = due()
@@ -136,9 +139,8 @@ ok("emails_due: dirección, asunto, texto (el mismo de la app), negocio y direcc
    D.get(outbox_id(b1, "conf")) == ("ana@mail.test", "Tu turno en Barbería Mail quedó confirmado",
                                     one("select body from client_messages where kind = 'conf' and ref = %s", (str(b1),)),
                                     "Barbería Mail", "https://tutiempo.com.ar", False))   # la confirmación no se puede apagar
-ok("…los recordatorios sí se pueden apagar (optional)", D.get(outbox_id(b24, "r24"), [None] * 6)[5] is True and D.get(outbox_id(b2, "r2"), [None] * 6)[5] is True)
-ok("…asuntos de los recordatorios", D.get(outbox_id(b24, "r24"), [None, None])[1] == "Mañana tenés turno en Barbería Mail"
-   and D.get(outbox_id(b2, "r2"), [None, None])[1] == "Hoy a las " + one("select to_char(starts_at at time zone 'America/Argentina/Buenos_Aires', 'HH24:MI') from bookings where id = %s", (b2,)) + " tenés turno en Barbería Mail")
+ok("…los recordatorios sí se pueden apagar (optional)", D.get(outbox_id(b24, "r24"), [None] * 6)[5] is True)
+ok("…asunto del recordatorio", D.get(outbox_id(b24, "r24"), [None, None])[1] == "Mañana tenés turno en Barbería Mail")
 ok("…y los reserva: una segunda corrida al mismo tiempo no los manda otra vez", due() == {})
 
 # ---------- 3. Los que ya no van ----------
@@ -179,7 +181,7 @@ for _ in range(4):
     q("update email_outbox set expires_at = now() + interval '1 day' where id = %s", (e24,))
     q("select email_result(%s, false, null, '500')", (e24,), role="service_role")
 ok("…después del quinto intento queda fallido", q("select status, attempts from email_outbox where id = %s", (e24,)) == [("failed", 5)])
-e2 = outbox_id(b2, "r2")
+e2 = outbox_id(b_perm, "conf")
 q("select email_result(%s, false, null, '422 dirección inválida', true)", (e2,), role="service_role")
 ok("un error que no se arregla reintentando (dirección inválida) queda fallido enseguida", q("select status, attempts from email_outbox where id = %s", (e2,)) == [("failed", 1)])
 b_vence = turno(ana, 20)

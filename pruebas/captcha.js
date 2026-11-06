@@ -1,6 +1,6 @@
 // H30 · CAPTCHA de Supabase Auth con Cloudflare Turnstile, en navegador real contra la base, PostgREST y e2e_server.js.
 // Sin clave del sitio: la app no carga nada de Cloudflare. Con clave (e2e_server /__captcha): cada llamada a Auth (crear
-// cuenta, ingresar, código, reenviar, recuperar contraseña, ingreso y alta de prestadores) manda un token nuevo, que el
+// cuenta, ingresar, reenviar, recuperar contraseña, comprobar la contraseña actual, ingreso y alta de prestadores) manda un token nuevo, que el
 // servidor valida como Supabase (una sola vez); sin token, la app avisa y no llama. La CSP del .htaccess deja cargar el
 // script de challenges.cloudflare.com (lo sirve un Turnstile falso: la prueba no sale a internet).
 // Uso: node pruebas/entorno_e2e.mjs dist-test -- node pruebas/captcha.js {url} {pg}   (npm run test:captcha)
@@ -93,22 +93,29 @@ const FAKE = (pass) => `(() => {
   await page.evaluate(() => { S.login.resendAt = 0; render(); }); await page.waitForTimeout(300);
   await page.click("[data-act=resendConfirm]"); await page.waitForTimeout(900);
   ok("reenviar el email de activación: con token", (await last("/resend") || {}).valid === true);
-  // ingreso con código y reenviar código
+  // 4/11: sin "Entrar con un código por email"
   await open(page, "/ingresar");
-  await page.click("[data-act=authMode][data-m=code]"); await page.fill("#le", "capi@test.ar"); await page.click("#fMail button[type=submit]");
-  await page.waitForSelector("#lc", { timeout: 8000 }).catch(() => {});
-  ok("pedir código: con token", (await last("/otp") || {}).valid === true && (await page.locator("#lc").count()) === 1);
-  const otps = (await log()).filter((x) => x.captcha === "/otp").length;
-  await page.evaluate(() => { S.login.resendAt = 0; render(); }); await page.waitForTimeout(300);
-  await page.click("[data-act=reenviar]"); await page.waitForTimeout(900);
-  const otpLog = (await log()).filter((x) => x.captcha === "/otp");
-  ok("reenviar código: con un token nuevo", otpLog.length === otps + 1 && otpLog.at(-1).valid);
+  ok("4/11: el ingreso ya no ofrece el código por email", (await page.locator("[data-m=code], #fMail").count()) === 0);
   // recuperar contraseña
   await open(page, "/ingresar");
   await page.click("[data-act=authMode][data-m=forgot]"); await page.fill("#af_e", "capi@test.ar"); await page.click("#fForgot button[type=submit]");
   await page.waitForTimeout(1000);
   ok("recuperar contraseña: con token", (await last("/recover") || {}).valid === true);
   await page.context().close();
+
+  // 4/11 · Bloque 2: cambiar contraseña comprueba la actual con Supabase Auth, con su propio token
+  page = await nueva();
+  await open(page, "/ingresar");
+  await page.fill("#ai_e", "capi@test.ar"); await page.fill("#ai_p", "Capi2026xx"); await page.click("#fLogin button[type=submit]");
+  await page.waitForFunction(() => window.S && S.user, null, { timeout: 8000 }).catch(() => {});
+  await open(page, "/cuenta/ajustes"); await page.click("[data-act=changePass]"); await page.waitForSelector("#np0", { timeout: 8000 }).catch(() => {});
+  await page.waitForFunction(() => (window.__tt || []).some((w) => w.action === "fnewpass"), null, { timeout: 5000 }).catch(() => {});
+  const tokensAntes = (await log()).filter((x) => x.captcha === "/token").length;
+  await page.fill("#np0", "Capi2026xx"); await page.fill("#np1", "Capi2027yy"); await page.fill("#np2", "Capi2027yy"); await page.click("#fNewPass button[type=submit]");
+  await page.waitForSelector("#np_c", { timeout: 8000 }).catch(() => {});
+  const tokensDespues = (await log()).filter((x) => x.captcha === "/token");
+  ok("4/11: cambiar contraseña: la actual se comprueba con un token y pasa al código", tokensDespues.length === tokensAntes + 1 && tokensDespues.at(-1).valid && (await page.locator("#np_c").count()) === 1);
+  await page.evaluate(() => sb.auth.signOut()); await page.context().close();
 
   // prestadores: el mismo ingreso de todos, y el paso 0 de Registrá tu negocio
   page = await nueva();

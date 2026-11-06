@@ -18,6 +18,14 @@ export const sb = CONFIG_OK
       },
     })
   : null;
+// 4/11 · Bloque 2: un cliente aparte, que no guarda ni cambia la sesión de la app: para comprobar la contraseña actual
+// antes de cambiarla (con la sesión de la app intacta, Supabase sigue pidiendo el código de reautenticación)
+export const sbScratch = () =>
+  CONFIG_OK
+    ? window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "tt-comprobar" },
+      })
+    : null;
 export const CITY = CFG.city || "olavarria";
 // Bloque C: la clave pública VAPID de las notificaciones push (npm run vapid; sin ella la app no ofrece avisos) y el freno
 // del service worker (serviceWorker: false en config.js lo desinstala). En la demo, nada de esto.

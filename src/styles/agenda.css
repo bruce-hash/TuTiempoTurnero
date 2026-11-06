@@ -57,3 +57,14 @@
 /* C38 (V3b): franja del happy hour en la agenda (detrás de los turnos) */
 .tl-hh{position:absolute;left:4px;right:4px;border-radius:8px;background:var(--ok-soft);border-left:3px solid var(--ok);pointer-events:none;z-index:0}
 .tl-hh span{position:absolute;right:8px;top:4px;font-size:11px;font-weight:700;color:var(--ok)}
+/* 4/11 · Bloque 3: Clientes / Seguidores y "Ofrecer turno" a un seguidor */
+.ctabs{margin-bottom:12px}
+.ctabs button span{opacity:.7;font-weight:600;margin-left:2px}
+.folist li{border-bottom:1px solid var(--line)}
+.folist li:last-child{border-bottom:0}
+.folist .crow{cursor:default}
+.folist img.av{object-fit:cover}
+.folist .cr-r{margin-left:auto;flex:none}
+.folpick{padding:4px 2px 12px}
+.folgaps{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.folgaps .slot{font-size:13px;padding:9px 6px}

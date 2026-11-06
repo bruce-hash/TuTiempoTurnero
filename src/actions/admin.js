@@ -536,3 +536,99 @@ registerSubmit("fNote", (ev) => {
   render();
   return;
 });
+// 7/11 · Feriados (D39): corregir o agregar, borrar, confirmar el año y volver a traer la lista de la fuente
+const holYear = (day) => (S.admHol || []).find((y) => String(y.year) === day.slice(0, 4));
+function holReload(msg) {
+  const done = () => {
+    toast(msg);
+    render();
+  };
+  if (LIVE) {
+    return api.adminHolidays().then(done);
+  }
+  done();
+  return Promise.resolve();
+}
+registerSubmit("fHol", (ev) => {
+  const day = $("#holD").value;
+  const name = $("#holN").value.trim().replace(/[<>]/g, "").slice(0, 80);
+  const kind = $("#holK").value;
+  const showErr = (msg) => {
+    $("#holerr").textContent = msg;
+  };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return showErr("Elegí la fecha.");
+  }
+  if (!name) {
+    return showErr("Escribí el nombre del feriado.");
+  }
+  if (LIVE) {
+    api.m
+      .adminHolidaySave(day, name, kind)
+      .then(() => holReload("Feriado guardado."))
+      .catch(() => {});
+    return;
+  }
+  const year = holYear(day);
+  if (!year) {
+    return showErr("Solo el año en curso y el siguiente.");
+  }
+  year.days = year.days.filter((h) => h.day !== day).concat([{ day, name, kind, source: "admin" }]).sort((a, b) => a.day.localeCompare(b.day));
+  holReload("Feriado guardado.");
+});
+registerClick("admHolDel", (ev, el, act) => {
+  const day = el.dataset.d;
+  if (LIVE) {
+    el.disabled = true;
+    api.m
+      .adminHolidayDelete(day)
+      .then(() => holReload("Feriado borrado."))
+      .catch(() => {
+        el.disabled = false;
+      });
+    return;
+  }
+  const year = holYear(day);
+  if (year) {
+    year.days = year.days.filter((h) => h.day !== day);
+  }
+  holReload("Feriado borrado.");
+});
+registerClick("admHolConfirm", (ev, el, act) => {
+  const y = +el.dataset.y;
+  const msg = `Listo: los feriados de ${y} quedan confirmados. Los profesionales ya los ven en Horarios.`;
+  if (LIVE) {
+    el.disabled = true;
+    api.m
+      .adminHolidaysConfirm(y)
+      .then(() => holReload(msg))
+      .catch(() => {
+        el.disabled = false;
+      });
+    return;
+  }
+  const year = (S.admHol || []).find((item) => item.year === y);
+  if (year) {
+    year.confirmed_at = new Date().toISOString();
+    year.source_changed = false;
+  }
+  holReload(msg);
+});
+// solo en vivo: pide holidays-sync (la respuesta llega en unos segundos; se vuelve a pedir la lista)
+registerClick("admHolFetch", (ev, el, act) => {
+  el.disabled = true;
+  api.m
+    .adminHolidaysFetch()
+    .then((asked) => {
+      if (!asked) {
+        toast("No se pudo pedir: falta configurar la dirección y la clave del cron en Vault (docs/02).");
+        el.disabled = false;
+        return;
+      }
+      toast("Pedido a la fuente. En unos segundos se actualiza la lista.");
+      setTimeout(() => holReload("Lista de feriados actualizada.").catch(() => {}), 6000);
+    })
+    .catch(() => {
+      el.disabled = false;
+    });
+});

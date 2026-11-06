@@ -8,6 +8,7 @@ import { admReview } from "./revisar.js";
 import { alertItems, markShownAlerts } from "../../lib/avisos-admin.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
+import { ic } from "../../ui/iconos.js";
 
 // resumen del admin: comisión del mes, alertas, hoy y ayer, últimas 4 semanas, indicadores, más activos y rubros
 export function admRes(data) {
@@ -70,14 +71,14 @@ export function admRes(data) {
   // v2 (3/11): cada aviso con su clave (cambia si cambia lo que dice): se puede borrar y uno borrado no vuelve igual
   const ids = (list) => list.map((prov) => prov.id).sort((a, b) => a - b).join(",");
   const alerts = [
-    pending.length ? { key: `pend:${ids(pending)}`, html: `🪪 <b>${pending.length}</b> profesional${pending.length > 1 ? "es esperan" : " espera"} ${dniRequired() ? "la verificación del DNI" : "aprobación"}. <button class="lnk" data-act="admT" data-t="prov">Revisar</button>` } : null,
-    nNoMp ? { key: `nomp:${ids(noMp) || nNoMp}`, html: `💳 <b>${nNoMp}</b> profesional${nNoMp > 1 ? "es activos no conectaron" : " activo no conectó"} Mercado Pago: no ${nNoMp > 1 ? "pueden" : "puede"} cobrar señas${noMp.length ? ` (${noMpNames})` : ""}. <button class="lnk" data-act="admT" data-t="prov" data-f="nomp">Ver quiénes</button>` } : null,
+    pending.length ? { key: `pend:${ids(pending)}`, html: `${ic("dni")} <b>${pending.length}</b> profesional${pending.length > 1 ? "es esperan" : " espera"} ${dniRequired() ? "la verificación del DNI" : "aprobación"}. <button class="lnk" data-act="admT" data-t="prov">Revisar</button>` } : null,
+    nNoMp ? { key: `nomp:${ids(noMp) || nNoMp}`, html: `${ic("sena")} <b>${nNoMp}</b> profesional${nNoMp > 1 ? "es activos no conectaron" : " activo no conectó"} Mercado Pago: no ${nNoMp > 1 ? "pueden" : "puede"} cobrar señas${noMp.length ? ` (${noMpNames})` : ""}. <button class="lnk" data-act="admT" data-t="prov" data-f="nomp">Ver quiénes</button>` } : null,
     +st.providers_suspended
-      ? { key: `susp:${st.providers_suspended}`, html: `⛔ <b>${st.providers_suspended}</b> suspendido${+st.providers_suspended > 1 ? "s" : ""}.` }
+      ? { key: `susp:${st.providers_suspended}`, html: `${ic("bloquear")} <b>${st.providers_suspended}</b> suspendido${+st.providers_suspended > 1 ? "s" : ""}.` }
       : null,
-    nsPct >= 8 ? { key: `ns:${new Date().toISOString().slice(0, 7)}`, html: `⚠ Las faltas llegan al ${nsPct}% de los turnos del mes.` } : null,
+    nsPct >= 8 ? { key: `ns:${new Date().toISOString().slice(0, 7)}`, html: `${ic("aviso")} Las faltas llegan al ${nsPct}% de los turnos del mes.` } : null,
     // C02: el servidor no devuelve la app en las direcciones internas (recargar o abrir un link lleva al inicio)
-    S.routesOk === false ? { key: "routes", html: "🌐 <b>El sitio no devuelve la app en sus direcciones</b> (por ejemplo /panel/agenda): al recargar o al abrir un link o el QR de un perfil se puede volver al inicio. Revisá que el archivo .htaccess esté subido a la carpeta del sitio (docs/02, «Hostinger»)." } : null,
+    S.routesOk === false ? { key: "routes", html: `${ic("web")} <b>El sitio no devuelve la app en sus direcciones</b> (por ejemplo /panel/agenda): al recargar o al abrir un link o el QR de un perfil se puede volver al inicio. Revisá que el archivo .htaccess esté subido a la carpeta del sitio (docs/02, «Hostinger»).` } : null,
   ];
   const shown = alertItems(alerts);
   // los que se ven ahora quedan vistos (en la próxima visita, "leídos"), después de dibujar
@@ -102,7 +103,7 @@ export function admRes(data) {
       <div class="wkbar" aria-hidden="true"><i style="width:${Math.round((week.n / maxN) * 100)}%"></i></div><p class="wkm">Facturado <b>${money(week.gross)}</b> · Comisión <b>${money(week.fee)}</b></p></div>`,
       )
       .join("")}</div>
-    ${trend != null ? `<p class="note wknote">${trend >= 0 ? "📈" : "📉"} En los últimos 7 días hubo <b>${Math.abs(trend)}% ${trend >= 0 ? "más" : "menos"}</b> turnos que la semana anterior.</p>` : ""}</div>
+    ${trend != null ? `<p class="note wknote">${trend >= 0 ? ic("sube") : ic("baja")} En los últimos 7 días hubo <b>${Math.abs(trend)}% ${trend >= 0 ? "más" : "menos"}</b> turnos que la semana anterior.</p>` : ""}</div>
    <div class="kpis adm">${kpi("Facturado por la app", money(+st.gross_month || 0), "este mes", delta(st.gross_month, st.gross_prev))}${kpi("Turnos del mes", nMonth, "", delta(nMonth, st.bookings_prev))}
     ${kpi("Ticket promedio", money(ticket), "por turno")}${kpi("Señas cobradas", money(+st.deposits_month || 0), "para los profesionales")}
     ${kpi("Profesionales activos", st.providers_active, `+${st.new_providers_month || 0} nuevos este mes`)}${kpi("Clientes", st.clients, `+${st.new_clients_month || 0} nuevos este mes · cuentas de cliente`)}

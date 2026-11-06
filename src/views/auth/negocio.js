@@ -7,10 +7,12 @@ import { cfg } from "../../lib/turnero.js";
 import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { mpTermNote } from "../prestador/perfil.js";
+import { depositNote, termPicker } from "../prestador/plazo.js";
 import { dniForm } from "../prestador/verificacion.js";
 import { vLogin } from "./login.js";
 import { api } from "../../api/index.js";
 import { render } from "../../ui/render.js";
+import { ic } from "../../ui/iconos.js";
 
 // Registrá tu negocio (ingreso y registro, aprobado el 1/11): página completa en 5 pasos, después de la cuenta (paso 0,
 // la misma ventana de ingreso). Se guarda en cada paso ("Guardar y seguir"): si sale y vuelve, sigue donde quedó.
@@ -34,7 +36,7 @@ export const HOUR_TEMPLATES = [
 ];
 export const DURATIONS = [15, 20, 30, 40, 45, 60, 75, 90, 120, 150, 180, 240];
 
-const errOf = (key) => (S.biz.errs && S.biz.errs[key] ? `<span class="ferr" id="berr-${key}">⚠ ${esc(S.biz.errs[key])}</span>` : "");
+const errOf = (key) => (S.biz.errs && S.biz.errs[key] ? `<span class="ferr" id="berr-${key}">${ic("aviso")} ${esc(S.biz.errs[key])}</span>` : "");
 const field = (id, label, value, attrs = "", hint = "") =>
   `<div class="f"><label for="${id}">${label}</label><input id="${id}" value="${esc(value || "")}" ${attrs}>${hint ? `<span class="hint">${hint}</span>` : ""}${errOf(id)}</div>`;
 
@@ -60,7 +62,7 @@ function shell(n, body, { title, sub, next = "Guardar y seguir", form, finish })
 function step1() {
   const prov = S.barberAuth ? pr(ME()) : null;
   const d = Object.assign({ name: prov ? prov.name : "", cats: prov ? prov.cats : [], addr: prov ? prov.addr : "", tel: prov ? prov.tel : "", ig: prov ? prov.ig : "" }, S.biz.data || {});
-  const photo = prov && prov.photo ? avatar(prov) : S.biz.photoPreview ? `<img src="${esc(S.biz.photoPreview)}" alt="">` : "📷";
+  const photo = prov && prov.photo ? avatar(prov) : S.biz.photoPreview ? `<img src="${esc(S.biz.photoPreview)}" alt="">` : ic("trabajos");
   return shell(
     1,
     `${field("bn", "Nombre del negocio", d.name, 'maxlength="80" autocomplete="organization"')}
@@ -126,15 +128,14 @@ function step3() {
 }
 function step4() {
   const conf = cfg(ME());
-  const pay = S.biz.pay || (conf.pay === "total" ? "total" : String(conf.pct || 50));
-  const seg = (act, value, label, on) => `<button type="button" class="${on ? "on" : ""}" aria-pressed="${on}" data-act="${act}" data-v="${value}">${label}</button>`;
   const mpOk = S.mp === "ok";
+  // 4/11 · Bloque 4: la seña es fija (30%, D06) y el plazo de Mercado Pago lo elige el profesional (D30)
   return shell(
     4,
-    `<div class="f"><label>Seña que paga el cliente al reservar</label><div class="biz-seg">${[["30", "30%"], ["40", "40%"], ["50", "50%"], ["total", "Total"]].map(([value, label]) => seg("bizPay", value, label, pay === value)).join("")}</div><span class="hint">El resto lo cobrás en el local, como prefieras.</span></div>
+    `${depositNote("margin:0 0 12px")}${termPicker(S.biz.term || conf.term)}
    <div class="biz-mp"><div><b>Mercado Pago</b><div class="hint">${mpOk ? "✓ Conectado: las señas entran directo a tu cuenta." : "Las señas entran directo a tu cuenta."}</div></div>${mpOk ? "" : '<button type="button" class="btn btn-pri btn-sm" data-act="bizMp">Conectar Mercado Pago</button>'}</div>
    ${mpTermNote("margin-top:12px")}${mpOk ? "" : '<p class="note" style="text-align:left;margin-top:6px">Si preferís, conectalo después desde Perfil → Cobros.</p>'}`,
-    { title: "Seña y cobro", sub: "Cómo cobrás la seña de cada turno." },
+    { title: "Seña y cobro", sub: "La seña de cada turno y cuándo te la acredita Mercado Pago." },
   );
 }
 function step5() {
@@ -143,7 +144,9 @@ function step5() {
       ? '<div class="am-ok">Ya tenemos tu DNI: lo revisa el equipo de TuTiempo.</div>'
       : dniForm(S.dniSt || {})
     : '<div class="am-ok"><b>Aprobación de TuTiempo</b><br>El equipo de TuTiempo revisa tu perfil antes de que aparezca en el listado. No tenés que cargar nada más.</div>';
-  return shell(5, body, {
+  // 7/11 · Legales: al enviar el negocio acepta los términos (incluyen las reglas para profesionales) y la privacidad
+  const legal = '<p class="note biz-legal">Al enviar tu negocio aceptás los <button type="button" class="lnk" data-go="terminos">Términos y condiciones</button> (incluyen las reglas para profesionales) y la <button type="button" class="lnk" data-go="privacidad">Política de privacidad</button>.</p>';
+  return shell(5, body + legal, {
     title: "Verificación",
     sub: dniRequired() ? "Para que tus clientes sepan quién sos." : "Último paso.",
     next: "Enviar para aprobar",
@@ -154,7 +157,7 @@ function done() {
   const prov = pr(ME());
   const first = ((S.user && S.user.name) || (prov && prov.name) || "").split(" ")[0];
   const todo = setupTodo().slice(2);
-  return `<div class="biz biz-one"><section class="biz-card" style="text-align:center"><div style="font-size:40px" aria-hidden="true">🎉</div><h1 class="biz-h">¡Listo${first ? ", " + esc(first) : ""}!</h1>
+  return `<div class="biz biz-one"><section class="biz-card" style="text-align:center"><div class="hero-ic">${ic("fiesta")}</div><h1 class="biz-h">¡Listo${first ? ", " + esc(first) : ""}!</h1>
    <p class="am-sub">Tu negocio quedó cargado. Esto es lo que falta para recibir reservas:</p>
    <ol class="steps" style="text-align:left"><li class="done"><span class="dot">✓</span><div><b>Datos, servicios, horarios y seña</b></div></li>${todo
      .map(([label, ok], i) => `<li class="${ok ? "done" : i === 0 ? "now" : ""}"><span class="dot">${ok ? "✓" : i + 2}</span><div><b>${esc(label)}</b>${ok ? "" : label.startsWith("Conectar") ? "<span>Falta: sin esto no recibís reservas</span>" : ""}</div></li>`)

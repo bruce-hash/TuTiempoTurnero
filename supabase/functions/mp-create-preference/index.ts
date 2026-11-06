@@ -43,7 +43,10 @@ Deno.serve(async (req) => {
     // muestra el estado del pago aunque el navegador no tenga la sesión (por ejemplo, desde la app instalada) y, si el
     // aviso de Mercado Pago no llega, mp-reconcile le pregunta a Mercado Pago por este cobro.
     const back = must("anotar el cobro", await db.rpc("checkout_open", { p_booking_ids: ids, p_account: acc.id })) as string;
-    const ret = (st: string) => `${site}/turno/${ids[0]}?pago=${back}&mp=${st}`;
+    // 4/11: desde la app instalada la vuelta lleva app=1. En iOS, Mercado Pago la abre en Safari, que no tiene la sesión de
+    // la app: la pantalla de regreso muestra el estado y pide volver a la app, que confirma sola con el cobro que guardó.
+    const app = body.app === true ? "&app=1" : "";
+    const ret = (st: string) => `${site}/turno/${ids[0]}?pago=${back}&mp=${st}${app}`;
     const pref = {
       items: [{ id: String(ids[0]), title: `Seña + comisión · ${ok[0].service_name ?? "Turno"} · ${prov?.name ?? ""}`.slice(0, 250), quantity: 1, unit_price: amount, currency_id: "ARS" }],
       external_reference: ids.join(","),
@@ -70,7 +73,9 @@ Deno.serve(async (req) => {
     // solo referencia: si no se guarda, el pago igual se confirma por external_reference (se loguea y sigue)
     const up = await db.from("bookings").update({ mp_preference_id: mp.id }).in("id", ids);
     if (up.error) console.error("db: falló guardar mp_preference_id", JSON.stringify({ code: up.error.code, message: up.error.message }));
-    return json({ init_point: mp.init_point }, 200, h);
+    // el token de regreso también vuelve a la app (es el cobro del mismo usuario): la app instalada lo guarda para
+    // confirmar el pago al volver a primer plano, aunque la vuelta de Mercado Pago se abra en otro navegador
+    return json({ init_point: mp.init_point, token: back, booking: ids[0] }, 200, h);
   } catch (e) {
     console.error("mp-create-preference", e instanceof Error ? e.message : e);
     return json({ error: "server_error" }, 500, h);

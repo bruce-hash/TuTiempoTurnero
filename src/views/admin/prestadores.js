@@ -7,6 +7,7 @@ import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { admIc } from "./admin.js";
 import { admFile } from "./ficha.js";
+import { ic } from "../../ui/iconos.js";
 
 // H10: lo que cargó el prestador para verificarlo (para aprobar hacen falta el número y las dos fotos, si TuTiempo exige
 // el DNI: D26; si no, la línea y "Ver DNI" aparecen solo si cargó algo)
@@ -18,10 +19,10 @@ const dniLine = (prov) => {
 
 // niveles de actividad: [nombre, detalle, condición sobre los servicios de los últimos 30 días]
 const ACT_LEVELS = [
-  ["🔥 Muy activos", "30 o más servicios en 30 días", (count) => count >= 30],
-  ["✅ Activos", "10 a 29 servicios", (count) => count >= 10 && count < 30],
-  ["🌱 Poca actividad", "1 a 9 servicios", (count) => count >= 1 && count < 10],
-  ["💤 Sin actividad", "ningún servicio en 30 días", (count) => count < 1],
+  [`${ic("fuego")} Muy activos`, "30 o más servicios en 30 días", (count) => count >= 30],
+  [`${ic("ok")} Activos`, "10 a 29 servicios", (count) => count >= 10 && count < 30],
+  [`${ic("brote")} Poca actividad`, "1 a 9 servicios", (count) => count >= 1 && count < 10],
+  [`${ic("dormido")} Sin actividad`, "ningún servicio en 30 días", (count) => count < 1],
 ];
 // prestadores para el admin: pendientes de verificar arriba; el resto agrupado por rubro o por actividad,
 // con búsqueda, filtro por estado y la ficha de cada uno
@@ -37,7 +38,7 @@ export const NUDGE_TEXT =
 const nudgeBox = (prov) =>
   `<div class="panel nudgebox" role="group" aria-label="Avisarle a ${esc(prov.name)}"><p class="lbl" style="margin:0 0 6px">Aviso para ${esc(prov.name)}</p>
    <label class="hint" for="admNudgeTxt">Mensaje</label><textarea id="admNudgeTxt" maxlength="500" rows="4">${esc(S.admNudgeAsk.body || NUDGE_TEXT)}</textarea>
-   <p class="note" style="text-align:left;margin:6px 0 8px">📲 Le llega como <b>aviso en su panel</b> y como <b>notificación push</b> en su celular (si las activó). Un aviso por día.</p>
+   <p class="note" style="text-align:left;margin:6px 0 8px">${ic("instalar")} Le llega como <b>aviso en su panel</b> y como <b>notificación push</b> en su celular (si las activó). Un aviso por día.</p>
    <div class="err" id="admNudgeErr"></div>
    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn btn-ghost btn-sm" data-act="admNudgeCancel">Cancelar</button><button type="button" class="btn btn-pri btn-sm" data-act="admNudgeSend">Enviar</button></div></div>`;
 export function admProv(data) {
@@ -76,7 +77,7 @@ export function admProv(data) {
   const row = (prov) => {
     const open = S.admOpen === prov.id;
     const nNotes = (prov.notes || []).length;
-    return `<li class="${open ? "open" : ""}">${avatar(prov)}<div><b>${esc(prov.name)}</b><span>${admIc(prov.cats)} ${+prov.activity || 0} servicios en 30 días · ${prov.month} turno${prov.month === 1 ? "" : "s"} este mes · ★ ${(+prov.rating || 0).toFixed(1)}${prov.mp ? "" : " · <b>sin Mercado Pago</b>"}</span>${statusChip(prov)}${nNotes ? ` <span class="chip">📝 ${nNotes}</span>` : ""}</div>
+    return `<li class="${open ? "open" : ""}">${avatar(prov)}<div><b>${esc(prov.name)}</b><span>${admIc(prov.cats)} ${+prov.activity || 0} servicios en 30 días · ${prov.month} turno${prov.month === 1 ? "" : "s"} este mes · ★ ${(+prov.rating || 0).toFixed(1)}${prov.mp ? "" : " · <b>sin Mercado Pago</b>"}</span>${statusChip(prov)}${nNotes ? ` <span class="chip">${ic("nota")} ${nNotes}</span>` : ""}</div>
       <span class="admact">${prov.status === "active" && !prov.mp ? nudgeBtn(prov) : ""}<button class="btn btn-ghost btn-sm" data-act="admOpen" data-id="${prov.id}" aria-expanded="${open}">${open ? "Cerrar" : "Ficha"}</button></span>${S.admNudgeAsk && S.admNudgeAsk.id === prov.id ? nudgeBox(prov) : ""}${open ? admFile(prov) : ""}</li>`;
   };
   return `${
@@ -103,7 +104,7 @@ export function admProv(data) {
           `<button type="button" data-act="admG" data-g="${key}" aria-pressed="${groupBy === key}">${label}</button>`,
       )
       .join("")}</div>
-    <input id="admQ" class="search" placeholder="🔍 Buscar profesional" value="${esc(S.admQ || "")}" autocomplete="off">
+    <input id="admQ" class="search" placeholder="Buscar profesional" value="${esc(S.admQ || "")}" autocomplete="off">
     <div class="fchips">${[
       ["todos", "Todos"],
       ["active", "Activos"],

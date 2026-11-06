@@ -1,8 +1,10 @@
 // Enrutador (Bloque B) · de la dirección al estado: al abrir una URL (carga, recarga o atrás/adelante) arma S con la
 // pantalla, el prestador, la pestaña, el horario elegido… Si la pantalla pide sesión y no la hay, va al ingreso y
 // guarda adónde volver.
+import { isBusiness } from "../lib/cuentas.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
+import { TODAY } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { CAT_SLUGS } from "../lib/rubros.js";
 import { isReservedSlug } from "../lib/rutas.js";
@@ -121,6 +123,12 @@ async function openProfile(pid, parts, params, path) {
     S.pctx = null;
   }
   S.pid = pid;
+  // 4/11 · Bloque 3: desde un turno ofrecido (aviso o push), el perfil con ese día elegido (/<perfil>?dia=AAAA-MM-DD)
+  const offerDay = params.get("dia");
+  if (/^\d{4}-\d\d-\d\d$/.test(offerDay || "") && offerDay >= TODAY()) {
+    S.day = offerDay;
+    S.slot = null;
+  }
   const reprog = params.get("reprogramar");
   // mover un turno existente es solo de la demo y de un turno confirmado (en vivo, ver arriba)
   S.reprog = reprog && store.BOOK.some((booking) => booking.mine && booking.id == reprog && booking.status === "confirmed") ? +reprog : null;
@@ -198,6 +206,10 @@ function openPanel(parts, params, path) {
   if (tab === "agenda" && /^\d{4}-\d\d-\d\d$/.test(day || "")) {
     S.aday = day;
     S.awk = null;
+  }
+  // 4/11: /panel/clientes?ver=seguidores
+  if (tab === "clientes") {
+    S.ctab = params.get("ver") === "seguidores" ? "seguidores" : "clientes";
   }
   const clientId = params.get("cliente");
   if (tab === "clientes" && clientId) {
@@ -277,6 +289,8 @@ export async function applyUrl(href) {
       }
       S.payToken = token;
       S.payBack = token ? params.get("mp") : null;
+      // 4/11: la vuelta de un pago hecho desde la app instalada (marca app=1 en la vuelta de Mercado Pago)
+      S.payFromApp = !!token && params.get("app") === "1";
       if (token && !S.user) {
         S.turnoId = +parts[1];
         return showClient("pagoVuelta");
@@ -290,12 +304,22 @@ export async function applyUrl(href) {
     }
     case "mis-turnos":
     case "cuenta":
+      // 4/11 · Bloque 4: /cuenta/ajustes (solo Seguridad)
+      if (first === "cuenta" && parts.length === 2 && parts[1] === "ajustes") {
+        if (needUser(path)) {
+          showClient("ajustes");
+        }
+        return;
+      }
       if (parts.length !== 1) {
         return showNotFound(path);
       }
-      // D33: una cuenta de negocio no tiene Mis turnos (no reserva)
+      // D33: una cuenta de negocio no tiene Mis turnos (no reserva); su "Mi perfil" es la pestaña Perfil del panel
       if (first === "mis-turnos" && S.user && S.barberAuth && !S.isAdmin) {
         return applyUrl("/panel/agenda");
+      }
+      if (first === "cuenta" && S.user && isBusiness() && !S.isAdmin) {
+        return applyUrl("/panel/perfil");
       }
       if (needUser(path)) {
         showClient(first === "cuenta" ? "cuenta" : "misturnos");
@@ -339,6 +363,8 @@ export async function applyUrl(href) {
       return openBiz(parts, path);
     case "terminos":
       return single("terminos");
+    case "privacidad":
+      return single("privacidad");
     case "panel":
       return openPanel(parts, params, path);
     case "admin":

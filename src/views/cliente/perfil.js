@@ -17,6 +17,7 @@ import { rating, reviewsHtml } from "../../ui/resenas.js";
 import { myStamps, stampBox, stampEarns, stampGoal, svcByKey } from "../../ui/sellos.js";
 import { toast } from "../../ui/toast.js";
 import { comm } from "../prestador/comunidad.js";
+import { ic } from "../../ui/iconos.js";
 
 // en vivo el listado trae datos resumidos: el perfil completo se pide al abrirlo
 async function ensureProvider(id) {
@@ -70,7 +71,7 @@ export function vPerfil() {
     .map((cat) => [cat, prov.svcs.map((svc, index) => [svc, index]).filter(([svc]) => svc[3] === cat)])
     .filter((group) => group[1].length);
   const svcBtn = ([svc, index]) =>
-    `<button class="svci" data-svc="${index}" aria-pressed="${index === S.svc}"><span><b>${esc(svc[0])}</b><small>${svc[1]} min${happyOn ? ` · ${money(Math.round(svc[2] * (1 - conf.happy.pct / 100)))} en happy hour` : ""}${stampEarns(prov.id, svc) ? (S.user ? ` · 🎟️ ${Math.min(myStamps(prov.id, svc), stampGoal(prov.id, svc))}/${stampGoal(prov.id, svc)}` : " · 🎟️ suma sello") : ""}</small></span><span class="price">${money(svc[2])}</span></button>`;
+    `<button class="svci" data-svc="${index}" aria-pressed="${index === S.svc}"><span><b>${esc(svc[0])}</b><small>${svc[1]} min${happyOn ? ` · ${money(Math.round(svc[2] * (1 - conf.happy.pct / 100)))} en happy hour` : ""}${stampEarns(prov.id, svc) ? (S.user ? ` · ${ic("sellos")} ${Math.min(myStamps(prov.id, svc), stampGoal(prov.id, svc))}/${stampGoal(prov.id, svc)}` : ` · ${ic("sellos")} suma sello`) : ""}</small></span><span class="price">${money(svc[2])}</span></button>`;
   const head = `<div class="phero">${ph(prov, "prof-ph")}
      <button class="pav ${nMedia ? "ring" : ""}" ${nMedia ? `data-act="story" data-i="0" aria-label="Ver trabajos de ${esc(prov.name)}"` : 'tabindex="-1" aria-hidden="true"'}>${avatar(prov, "av-xl")}</button></div>
    <div class="panel pcard">
@@ -101,7 +102,9 @@ export function vPerfil() {
         : '<p class="note">Todavía no subió trabajos.</p>'
     }</div>`;
   } else if (tab === "reviews") {
-    const toRate = S.user ? store.BOOK.find((booking) => booking.mine && booking.pid == prov.id && booking.status === "done" && !booking.reviewed) : null;
+    // el turno que pidió calificar el aviso de la campanita (S.rateFor), si es de este profesional; si no, el primero sin reseña
+    const ratable = (booking) => booking.mine && booking.pid == prov.id && booking.status === "done" && !booking.reviewed;
+    const toRate = S.user ? store.BOOK.find((booking) => booking.id === S.rateFor && ratable(booking)) || store.BOOK.find(ratable) : null;
     body = `<div class="panel rvhead"><div><b class="rvbig">★ ${rating(provComm).toFixed(1)}</b><span class="hint">${nReviews} reseña${nReviews === 1 ? "" : "s"} de clientes que fueron</span></div></div>
      ${toRate ? `<div class="panel"><p class="lbl">Calificá tu turno del ${esc(dayLabel(toRate.date))}</p>${rateForm(toRate)}</div>` : `<p class="note">${S.user ? "Después de tu turno vas a poder dejar tu reseña acá." : "Las reseñas las dejan clientes que fueron. Ingresá después de tu turno para calificar."}</p>`}
      <div class="panel">${reviewsHtml(false, provComm)}</div>`;

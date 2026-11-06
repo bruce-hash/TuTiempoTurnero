@@ -1,0 +1,23 @@
+import { MP_TERMS } from "../../lib/cobro.js";
+import { pctTxt } from "../../lib/dinero.js";
+import { store } from "../../store.js";
+import { ic } from "../../ui/iconos.js";
+
+// 4/11 · Bloque 4: seña fija del 30% para todos (D06). La base no deja guardar otra (ps_fixed_deposit).
+export const DEPOSIT_PCT = 30;
+export const depositNote = (style = "") =>
+  `<p class="note depnote" style="text-align:left;${style}">${ic("sena")} <b>Seña: ${DEPOSIT_PCT}% del servicio</b>, igual para todos los profesionales de TuTiempo. El resto lo cobrás en el local. Si el cliente no viene, la seña te queda a vos.</p>`;
+
+// 4/11 · Bloque 4 (cambia D30): el profesional elige su plazo de acreditación de Mercado Pago, con la tabla del admin al
+// lado (lo que se suma al pago del cliente en cada plazo, con IVA). Si un cobro no coincide, la base avisa y lo manda a
+// "Para revisar"; ya no lo cambia sola. Radios con name="hterm" (los lee Horarios y el alta del negocio).
+export function termPicker(current) {
+  const term = MP_TERMS.some(([value]) => value === current) ? current : "instant";
+  const rows = MP_TERMS.map(([value, label]) => {
+    const pct = +(store.FEES.mp[value] || 0);
+    return `<label class="termopt"><input type="radio" name="hterm" value="${value}" ${value === term ? "checked" : ""}><span class="term-n">${label}</span><span class="term-p">${pctTxt(pct)}%</span></label>`;
+  }).join("");
+  return `<fieldset class="f termpick"><legend>Plazo de acreditación de Mercado Pago</legend>
+   <div class="termopts" role="radiogroup">${rows}</div>
+   <span class="hint">El % es lo que Mercado Pago cobra en cada plazo (con IVA) y se suma al pago del cliente, así vos recibís la seña completa. Elegí el mismo plazo que tenés en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos). Si un cobro no coincide, te avisamos.</span></fieldset>`;
+}

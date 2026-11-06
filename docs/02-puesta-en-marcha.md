@@ -61,6 +61,7 @@ supabase functions deploy mp-oauth --no-verify-jwt
 supabase functions deploy mp-refunds --no-verify-jwt
 supabase functions deploy dni-cleanup --no-verify-jwt
 supabase functions deploy email-send --no-verify-jwt
+supabase functions deploy holidays-sync --no-verify-jwt   # 7/11 · feriados (D39): no lleva secretos propios
 ```
 
 **6. Base:** `supabase db push` (aplica `supabase/migrations/` en orden; o pegar `supabase/TODO_EN_UNO.sql` en el SQL
@@ -94,7 +95,9 @@ Comisión: **4** y la **Dirección del sitio** (`https://<sitio>`).
 ```sql
 select jobname, schedule from cron.job order by jobname;
 -- 7 tareas: tt-cleanup, tt-dni-cleanup, tt-emails, tt-expire-holds, tt-notices, tt-refunds, tt-reshuffle
+-- (y las que sumaron los bloques siguientes; desde el 7/11, tt-holidays los lunes y tt-holiday-notices todos los días)
 select public.run_refunds(); select public.run_dni_cleanup(); select public.run_email_send();
+select public.run_holidays_sync();   -- 7/11: trae los feriados; después, panel admin → Comisión → Feriados → Confirmar
 select status_code, content from net._http_response order by created desc limit 3;   -- tres 200
 select site_url, commission_pct from app_settings;
 ```
@@ -104,6 +107,45 @@ un secreto de esa función. Después, la prueba de punta a punta (sección 4).
 ## Actualizar un entorno existente
 Lo que sigue (Etapa A con sus secciones por bloque, y Etapa B) es el detalle de cada paso y lo que cambia al pasar de un
 bloque al siguiente en un entorno que ya estaba armado.
+
+### 4/11 · Campanita de avisos (D36)
+- Sin migraciones ni Edge Functions: se sube el `dist/` nuevo. Va después del Bloque 3 (usa sus avisos de ofertas).
+
+### 4/11 · Bloque 3 (seguidores, D35)
+- Migración nueva: `20261104190000_seguidores.sql`.
+  - Tabla `slot_offers` (RLS: el prestador ve las suyas; se escriben solo con `offer_slot`).
+  - `offer_slot` (ofrecer un hueco a todos o a un seguidor) y `notify_followers` («Avisar a tus seguidores»), con los
+    límites de D35.
+  - `provider_followers` (la lista de Clientes → Seguidores).
+  - Avisos del cliente `offer` y `news` y sus push. `push_due` y `my_messages` actualizados.
+  - `posts` deja de aceptar inserts directos.
+- Sin Edge Functions nuevas: `push-send` manda lo que devuelve `push_due`, como siempre. Sin cambios en `config.js` ni en
+  el `.htaccess`.
+- Cómo probarlo: con una cuenta de cliente, seguí a un negocio. En el panel de ese negocio, Clientes → Seguidores tiene
+  que mostrarla. «Ofrecer» un hueco en la Agenda: al cliente le llega el aviso en Mis turnos (con «Reservar») y el push.
+
+### 4/11 · Bloque 2 (general)
+- Sin migraciones ni Edge Functions. Se sube el `dist/` nuevo.
+- **Ya no hay «Entrar con un código por email».** Se ingresa con contraseña o con Google (y «Olvidé mi contraseña»).
+  La plantilla «Magic Link» de Supabase deja de usarse: podés dejarla como está.
+- **Cambiar contraseña (Seguridad)** pide la contraseña actual y después un código de 6 números que Supabase manda por
+  email (reautenticación). En Supabase:
+  1. Authentication → Sign In / Providers → Email → **Secure password change: activado** (ya estaba en el PASO 2 B del
+     LEEME; verificá que siga prendido). Con esa opción, Supabase exige el código cuando la sesión tiene más de 24 horas;
+     la app lo pide siempre.
+  2. Authentication → Emails → Templates → **Reauthentication**. Asunto: `Tu código para cambiar la contraseña`. Cuerpo
+     (copialo tal cual):
+     ```html
+     <h2>Confirmá el cambio de contraseña</h2>
+     <p>Tu código de TuTiempo es:</p>
+     <p style="font-size:28px;font-weight:700;letter-spacing:6px">{{ .Token }}</p>
+     <p>Escribilo en la app para guardar tu contraseña nueva. Vence en 1 hora y sirve una sola vez.</p>
+     <p>Si no estás cambiando tu contraseña, no compartas este código con nadie y entrá a TuTiempo para cambiarla.</p>
+     ```
+  3. Probalo: Mi perfil (o Ajustes) → Seguridad → Cambiar contraseña → la actual y la nueva → llega el email con el
+     código → al escribirlo, «Listo: tu contraseña cambió». Con la actual equivocada no se manda ningún email.
+- La contraseña actual se comprueba con Supabase Auth (como un ingreso, con el CAPTCHA si está prendido) sin cambiar la
+  sesión de la app; cuenta para los límites de intentos de ingreso (Authentication → Rate Limits).
 
 ### C04 · Marca (3/11)
 - Sin migraciones. Se sube el `dist/` nuevo (logo, paleta, fuentes Nunito y Montserrat, íconos de la app y
@@ -314,8 +356,8 @@ Vault que `mp-refunds`), cinco migraciones y el frontend:
    - La de la dirección del sitio (`…_site_url_https.sql`) solo acepta `https://` y el dominio. Si la guardada no
      cumple (por ejemplo, con `http://`), la migración sigue y deja el aviso `site_url: …`: cambiala en el paso 3.
    - La de retención (`…_dni_retencion.sql`, D24) arma la tarea `tt-dni-cleanup` (todos los días a las 3:37 UTC) y
-     pide el borrado en el momento en cada baja de prestador. La función borra con la API de Storage las fotos de los
-     verificados hace 30 días o más, de las altas sin aprobar con la última foto de hace 90 días o más y de las bajas
+     pide el borrado en el momento en cada baja de prestador y, desde el 7/11 (`…_bloques_5_6.sql`), en cada
+     verificación. La función borra con la API de Storage las fotos de los verificados (en el momento), de las altas sin aprobar con la última foto de hace 90 días o más y de las bajas
      (los verificados antes del 2b no tienen fecha de verificación: conservan las fotos hasta que los vuelvas a
      verificar). Si la llamada de una baja falla, la corrida diaria borra esas fotos.
 3. Panel admin → Comisión → **Dirección del sitio**: en el entorno de prueba, `https://prueba.tutiempo.com.ar` (con
@@ -461,16 +503,16 @@ Hace falta el sitio en HTTPS (el subdominio de prueba ya lo tiene), los pasos de
 cliente y la del prestador de prueba (con Mercado Pago de prueba conectado).
 
 Los avisos le llegan a un dispositivo desde que activa las notificaciones: lo que pasó antes (por ejemplo, la confirmación
-del turno que acabás de reservar) no se manda de nuevo. Los recordatorios salen cada 10 minutos (`tt-notices`): el de 2 h,
-si el turno se reservó más de 2 h antes; el de 24 h, si se reservó más de 24 h antes.
+del turno que acabás de reservar) no se manda de nuevo. El recordatorio sale con la tarea `tt-notices` (cada 10 minutos):
+el día anterior, si el turno se reservó más de 24 h antes. Desde el 7/11 (D10) no hay recordatorio de 2 h ni saludo de cumpleaños.
 
 **Android (Chrome):**
 1. Abrí `https://prueba.tutiempo.com.ar` en Chrome, ingresá como cliente y reservá un turno (pagá con el comprador de prueba).
 2. En "¡Listo! Tenés turno" aparece "¿Te avisamos antes del turno?": tocá **Activar avisos** y aceptá el permiso de
    Chrome. Mi perfil → Notificaciones tiene que decir "Activadas".
-3. Reservá otro turno para dentro de unas **2 h 30 min** (con más de 2 h de anticipación): enseguida llega **"Turno confirmado"** (probalo también con el
+3. Reservá otro turno para pasado mañana: enseguida llega **"Turno confirmado"** (probalo también con el
    celular bloqueado). Tocala: abre la app en ese turno.
-4. Dejá pasar el tiempo hasta que falten menos de 2 h: en los 10 minutos siguientes llega el **recordatorio de 2 h**.
+4. Al día siguiente, cuando falten menos de 24 h para el turno, en los 10 minutos siguientes llega el **recordatorio**.
 5. Mi perfil → apagá "Recordatorios y novedades por notificación" y repetí los pasos 3 y 4 con otro turno: la
    confirmación llega, el recordatorio no. Volvé a prenderla.
 6. Menú de cuenta → **Instalar la app** (o la tarjeta "Instalá TuTiempo para tener tus turnos a mano", que sale una sola vez): queda el ícono en la pantalla de inicio. Abrila
@@ -558,6 +600,9 @@ el aviso, mirá Supabase → Edge Functions → **mp-webhook → Invocations / L
 | 200 con "el pago no existe en ninguna cuenta" o "cobrado por otra cuenta" | El prestador cobró con una cuenta que no es la conectada | Ver "Para revisar" (D16). |
 
 ### 3. Hostinger (subdominio de prueba)
+> Desde el 7/11 el despliegue a prueba es automático (GitHub → Actions → «Desplegar prueba»): ver **docs/10**. Los pasos de
+> abajo quedan para armar el subdominio la primera vez o para subir a mano si hiciera falta.
+
 1. hPanel → Dominios → Subdominios → crear `prueba.tutiempo.com.ar`. Activar SSL.
 2. En tu compu (Node 22, ver `.nvmrc`): `npm ci` y `npm run build` → carpeta `dist/`.
 3. Editar `dist/config.js` con la URL y la clave `anon` del proyecto de prueba (nunca la `service_role`).
@@ -618,8 +663,8 @@ el aviso, mirá Supabase → Edge Functions → **mp-webhook → Invocations / L
       ("Pago devuelto por Mercado Pago") y al prestador le llega el aviso.
 - [ ] Emails (Bloque 3): llegan la confirmación, el recordatorio de 24 h y una cancelación, con el mismo texto que en Mis
       turnos y desde `avisos@tutiempo.com.ar`; responder llega a `soporte@`; el pie lleva a Mi perfil ("Dejar de recibir
-      estos emails" en el recordatorio; "Recordatorios y novedades: Mi perfil" en la confirmación y la cancelación). Con "Recordatorios y novedades por email" apagada no llegan los recordatorios, la reseña ni el
-      cumpleaños, pero la confirmación y las cancelaciones sí (y todos los avisos siguen en Mis turnos).
+      estos emails" en el recordatorio; "Recordatorios y novedades: Mi perfil" en la confirmación y la cancelación). Con "Recordatorios y novedades por email" apagada no llegan el recordatorio, la reseña ni las
+      novedades, pero la confirmación y las cancelaciones sí (y todos los avisos siguen en Mis turnos).
 - [ ] Sellos: marcar "Asistió" suma sello; canjear el premio.
 
 ### CAPTCHA (Turnstile, H30)

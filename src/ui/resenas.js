@@ -1,6 +1,7 @@
 import { esc } from "../lib/dom.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
+import { ic } from "./iconos.js";
 
 function stars(avg) {
   return "★★★★★".slice(0, Math.round(avg)) + "☆☆☆☆☆".slice(0, 5 - Math.round(avg));
@@ -20,7 +21,7 @@ export function gallery(edit, comm) {
   // C26 (V5): en el panel cada trabajo muestra su nombre y ✎ abre el editor (nombre y borrar, con confirmación)
   const delBtn = (index) =>
     edit
-      ? `<button class="gi-del gi-ed" data-act="mediaEdit" data-i="${index}" aria-label="Editar o borrar ${esc(comm.media[index].label || "trabajo")}">✎</button>${comm.media[index].label && comm.media[index].url ? `<span class="gi-cap">${esc(comm.media[index].label)}</span>` : ""}`
+      ? `<button class="gi-del gi-ed" data-act="mediaEdit" data-i="${index}" aria-label="Editar o borrar ${esc(comm.media[index].label || "trabajo")}">${ic("editar")}</button>${comm.media[index].label && comm.media[index].url ? `<span class="gi-cap">${esc(comm.media[index].label)}</span>` : ""}`
       : "";
   return `<div class="gal">${comm.media.map((item, index) => (item.url ? (item.video ? `<div class="gi"><video src="${esc(item.url)}" controls playsinline></video>${delBtn(index)}</div>` : `<div class="gi"><img src="${esc(item.url)}" alt="${esc(item.label)}">${delBtn(index)}</div>`) : `<div class="gi gi-ph" style="--h:${+item.hue || 0}"><span>${item.video ? "▶ " : ""}${esc(item.label)}</span>${delBtn(index)}</div>`)).join("")}
    ${edit ? '<label class="gi gi-add" for="upMedia"><span>+<br>Subir trabajo</span></label>' : ""}</div>
@@ -39,7 +40,7 @@ function mediaEditor(comm) {
   return `<form id="fMedia" class="mediaed" data-i="${index}" novalidate>
    <div class="f"><label for="mdName">Nombre del trabajo</label><input id="mdName" maxlength="80" autocomplete="off" placeholder="Ej: Degradé con diseño" value="${esc(item.label || "")}"><span class="hint">Lo ven tus clientes debajo de la foto y en las historias. Podés dejarlo vacío.</span></div>
    <div class="rs-btns"><button type="button" class="btn btn-ghost" data-act="mediaEdClose">Cancelar</button><button class="btn btn-pri" type="submit">Guardar nombre</button></div>
-   <button type="button" class="btn btn-ghost btn-block mediadel" data-act="mediaDel" data-i="${index}">🗑 Borrar este trabajo</button></form>`;
+   <button type="button" class="btn btn-ghost btn-block mediadel" data-act="mediaDel" data-i="${index}">${ic("borrar")} Borrar este trabajo</button></form>`;
 }
 export function reviewsHtml(edit, comm) {
   comm = comm || store.COMM;

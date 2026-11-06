@@ -3,6 +3,7 @@ import { activity, norm, rot } from "../lib/prestadores.js";
 import { CATS, catInfo } from "../lib/rubros.js";
 import { P, store } from "../store.js";
 import { S } from "../state.js";
+import { demoFollowers } from "../demo/seguidores.js";
 
 // Modo demo: el listado y los conteos salen de los datos de ejemplo en memoria; el resto no hace nada (api.m.* son
 // funciones vacías y las pantallas cambian los datos directamente cuando no es LIVE).
@@ -63,6 +64,20 @@ export const demoApi = {
   async payHold() {},
   // Bloque C: en la demo no hay notificaciones push
   async pushRegistered() {
+    return false;
+  },
+  // 4/11 · Bloque 3: seguidores de ejemplo (el número sigue siendo el de la demo)
+  async followers() {
+    store.FOLLOWERS = demoFollowers();
+    return store.FOLLOWERS;
+  },
+  async myOffers() {},
+  // 4/11 · Bloque 4: en la demo no hay ventas guardadas de otros días
+  async walkinsOn(day) {
+    store.WALKDAY[day] = store.WALKDAY[day] || [];
+    return store.WALKDAY[day];
+  },
+  async refreshCommunity() {
     return false;
   },
   async providerIdBySlug(slug) {

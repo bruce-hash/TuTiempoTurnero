@@ -4,6 +4,7 @@ import { ME, avatar, pr } from "../lib/prestadores.js";
 import { cfg, skey, uname } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { P, store } from "../store.js";
+import { ic } from "./iconos.js";
 
 // Tarjeta de sellos: cada servicio puede dar un sello por visita; con la meta (15 a 20) el siguiente es gratis.
 // En vivo los sellos vienen de la base; en la demo se guardan en store.DEMO_STAMPS[prestador][cliente][servicio].
@@ -105,7 +106,7 @@ export const stampGrid = (have, goal, cls = "") =>
     {
       length: goal,
     },
-    (cell, index) => `<i class="${index < have ? "on" : ""}">${index < have ? "✓" : index === goal - 1 ? "🎁" : ""}</i>`,
+    (cell, index) => `<i class="${index < have ? "on" : ""}">${index < have ? "✓" : index === goal - 1 ? ic("premio") : ""}</i>`,
   ).join("")}</div>`;
 export function stampBox(prov) {
   const conf = stampCfg(prov.id);
@@ -119,11 +120,11 @@ export function stampBox(prov) {
   }
   const goal = stampGoal(prov.id, svc);
   if (!goal) {
-    return `<div class="panel stampban off" id="stampBox"><div class="sb-h"><span class="sb-ic">🎟️</span><div><b>${esc(svc[0])} no suma sellos</b><span class="hint">Tienen tarjeta de sellos: ${svcs.map((other) => esc(other[0])).join(", ")}.</span></div></div></div>`;
+    return `<div class="panel stampban off" id="stampBox"><div class="sb-h"><span class="sb-ic">${ic("sellos")}</span><div><b>${esc(svc[0])} no suma sellos</b><span class="hint">Tienen tarjeta de sellos: ${svcs.map((other) => esc(other[0])).join(", ")}.</span></div></div></div>`;
   }
   const have = myStamps(prov.id, svc);
-  return `<div class="panel stampban" id="stampBox"><div class="sb-h"><span class="sb-ic">🎟️</span><div><b>Tu tarjeta de ${esc(svc[0])}</b><span class="hint">Cada vez que te lo hacés suma 1 sello. Con ${goal} sellos, el próximo es gratis.</span></div>${S.user ? `<b class="sb-n">${Math.min(have, goal)}/${goal}</b>` : ""}</div>
-   ${S.user ? `${stampGrid(Math.min(have, goal), goal, "sm")}<p class="note" style="text-align:left;margin:6px 0 0">${have >= goal ? "🎁 ¡Tarjeta llena! Elegí horario y en el pago tocá “Usar mi premio”." : `Te faltan ${goal - have} para un ${esc(svc[0])} gratis.`}</p>` : '<p class="note" style="text-align:left;margin:6px 0 0">Ingresá para ver tus sellos.</p>'}</div>`;
+  return `<div class="panel stampban" id="stampBox"><div class="sb-h"><span class="sb-ic">${ic("sellos")}</span><div><b>Tu tarjeta de ${esc(svc[0])}</b><span class="hint">Cada vez que te lo hacés suma 1 sello. Con ${goal} sellos, el próximo es gratis.</span></div>${S.user ? `<b class="sb-n">${Math.min(have, goal)}/${goal}</b>` : ""}</div>
+   ${S.user ? `${stampGrid(Math.min(have, goal), goal, "sm")}<p class="note" style="text-align:left;margin:6px 0 0">${have >= goal ? `${ic("premio")} ¡Tarjeta llena! Elegí horario y en el pago tocá “Usar mi premio”.` : `Te faltan ${goal - have} para un ${esc(svc[0])} gratis.`}</p>` : '<p class="note" style="text-align:left;margin:6px 0 0">Ingresá para ver tus sellos.</p>'}</div>`;
 }
 export function myCards() {
   if (!S.user || !stampsOn()) {
@@ -160,6 +161,6 @@ export function stampCard(card) {
   const full = card.n >= card.goal;
   return `<div class="panel stampcard seg-${card.cat || "n"}"><div class="sc-h">${avatar(card)}<div><b>${esc(card.svc)}</b><span class="hint">${esc(card.name)} · ${Math.min(card.n, card.goal)} de ${card.goal} sellos · ${card.done} hecho${card.done === 1 ? "" : "s"}</span></div></div>
    ${stampGrid(Math.min(card.n, card.goal), card.goal)}
-   <p class="sc-r">${full ? `🎁 <b>¡Premio listo!</b> Tu próximo ${esc(card.svc)} es gratis.` : `Te faltan <b>${card.goal - card.n}</b> para un ${esc(card.svc)} gratis.`}</p>
+   <p class="sc-r">${full ? `${ic("premio")} <b>¡Premio listo!</b> Tu próximo ${esc(card.svc)} es gratis.` : `Te faltan <b>${card.goal - card.n}</b> para un ${esc(card.svc)} gratis.`}</p>
    ${full ? `<button class="btn btn-pri btn-block" data-act="useReward" data-id="${card.pid}" data-sk="${esc(String(card.sid))}">Reservar mi premio</button>` : `<button class="btn btn-ghost btn-block btn-sm" data-go="perfil" data-id="${card.pid}">Ver perfil</button>`}</div>`;
 }

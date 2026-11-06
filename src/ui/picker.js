@@ -7,12 +7,13 @@ import { cfg, cli, freeCount, nextFree, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { myStamps, stampGoal } from "./sellos.js";
+import { ic } from "./iconos.js";
 
 // etiqueta del cliente para el prestador según sus faltas (n) y visitas (v)
 export function relBadge(name) {
   const stats = cli(name);
   if (stats.n >= 2) {
-    return `<span class="rb bad">⚠ ${stats.n} faltas</span>`;
+    return `<span class="rb bad">${ic("aviso")} ${stats.n} faltas</span>`;
   } else if (stats.n === 1) {
     return '<span class="rb warn">1 falta</span>';
   } else if (stats.v >= 5) {
@@ -42,7 +43,7 @@ export function vPicker(prov) {
     const following = isFol(prov.id);
     const rewards = cfg(prov.id).on && rewardOnly(prov) ? prov.svcs.map((svc, index) => [svc, index]).filter(([svc]) => canRedeemSvc(prov, svc)) : [];
     if (rewards.length) {
-      return `<div class="panel" style="text-align:center"><b>Solo podés canjear tu premio.</b><p class="note">Este profesional todavía no toma turnos con seña online, pero tu tarjeta de sellos está llena. Elegí el servicio del premio:</p><div class="chips" style="justify-content:center">${rewards.map(([svc, index]) => `<button class="btn btn-sm btn-pri" data-svc="${index}">🎁 ${esc(svc[0])}</button>`).join("")}</div></div>`;
+      return `<div class="panel" style="text-align:center"><b>Solo podés canjear tu premio.</b><p class="note">Este profesional todavía no toma turnos con seña online, pero tu tarjeta de sellos está llena. Elegí el servicio del premio:</p><div class="chips" style="justify-content:center">${rewards.map(([svc, index]) => `<button class="btn btn-sm btn-pri" data-svc="${index}">${ic("premio")} ${esc(svc[0])}</button>`).join("")}</div></div>`;
     }
     return `<div class="panel" style="text-align:center"><b>Todavía no toma turnos online.</b><p class="note">Seguilo para enterarte cuando los active.</p><button class="btn btn-sm ${following ? "btn-ghost" : "btn-pri"}" data-act="seguir" aria-pressed="${following}">${following ? "✓ Siguiendo" : "+ Seguir"}</button></div>`;
   }
@@ -77,9 +78,9 @@ export function vPicker(prov) {
     return wait.pid == prov.id && wait.date === S.day && wait.user === ((user = S.user) == null ? void 0 : user.email);
   });
   const groups = [
-    ["Mañana", "☀️", 0, 720],
-    ["Tarde", "🌤️", 720, 1080],
-    ["Noche", "🌙", 1080, 1440],
+    ["Mañana", ic("manana"), 0, 720],
+    ["Tarde", ic("tarde"), 720, 1080],
+    ["Noche", ic("noche"), 1080, 1440],
   ]
     .map(([label, icon, from, to]) => [
       label,
@@ -93,7 +94,7 @@ export function vPicker(prov) {
   const anyHappy = free.some((slot) => slot.disc);
   return `<section class="picker">
    <div class="pk-head"><p class="lbl" style="margin:0">2 · Elegí día y horario <span class="hint">· próximos ${conf.ahead} días</span></p>
-    ${firstFree ? `<button class="quick" data-quick="${firstFree.date}|${firstFree.time}">⚡ Primer turno: <b>${esc(dayLabel(firstFree.date))} ${firstFree.time}</b>${firstFree.disc ? ` <i>-${firstFree.disc}%</i>` : ""}</button>` : ""}</div>
+    ${firstFree ? `<button class="quick" data-quick="${firstFree.date}|${firstFree.time}">${ic("ofertaflash")} Primer turno: <b>${esc(dayLabel(firstFree.date))} ${firstFree.time}</b>${firstFree.disc ? ` <i>-${firstFree.disc}%</i>` : ""}</button>` : ""}</div>
    <div class="pk-month"><button class="pk-nav" data-wk="-1" ${S.wk === 0 ? "disabled" : ""} aria-label="Semana anterior">‹</button><b>${monthLabel}</b><button class="pk-nav" data-wk="1" ${S.wk >= weeks - 1 ? "disabled" : ""} aria-label="Semana siguiente">›</button></div>
    <div class="wk" role="listbox" aria-label="Días">${weekDays
      .map((day) => {
@@ -120,11 +121,11 @@ export function vPicker(prov) {
             (anyHappy
               ? `<p class="hh-leg"><span class="slot hh mini"><i>-${conf.happy.pct}%</i></span> Happy hour: ${conf.happy.pct}% menos en horarios tranquilos</p>`
               : "")
-          : `<div class="pk-full"><div style="font-size:30px">😕</div><b>No quedan turnos este día</b><p class="note">Te avisamos al instante si alguien cancela.</p>
-       <button class="btn ${onWaitlist ? "btn-ghost" : "btn-pri"} btn-block" data-act="waitlist" ${onWaitlist ? "disabled" : ""}>${onWaitlist ? "✓ Estás en la lista de espera" : "🔔 Avisame si se libera un turno"}</button>
+          : `<div class="pk-full"><div class="hero-ic">${ic("triste")}</div><b>No quedan turnos este día</b><p class="note">Te avisamos al instante si alguien cancela.</p>
+       <button class="btn ${onWaitlist ? "btn-ghost" : "btn-pri"} btn-block" data-act="waitlist" ${onWaitlist ? "disabled" : ""}>${onWaitlist ? "✓ Estás en la lista de espera" : `${ic("campana")} Avisame si se libera un turno`}</button>
        ${firstFree ? `<button class="btn btn-ghost btn-block" style="margin-top:8px" data-quick="${firstFree.date}|${firstFree.time}">Ver el primer turno libre: ${esc(dayLabel(firstFree.date))} ${firstFree.time}</button>` : ""}</div>`
     }
    </div>
-   <p class="note pk-pol">⏱ ${dur} min · ${rewardOnly(prov) ? "Solo podés canjear tu premio: este turno no lleva seña ni comisión" : conf.pay === "total" ? "Pagás el total al reservar" : "Seña del " + conf.pct + "% al reservar"} + comisión TuTiempo (${pctTxt()}% de la seña)${mpPctOf(prov.id) ? " + costo de Mercado Pago" : ""} con Mercado Pago${conf.cash !== false && conf.pay !== "total" ? " · el resto en efectivo o Mercado Pago" : ""}</p>
+   <p class="note pk-pol">${ic("horarios")} ${dur} min · ${rewardOnly(prov) ? "Solo podés canjear tu premio: este turno no lleva seña ni comisión" : conf.pay === "total" ? "Pagás el total al reservar" : "Seña del " + conf.pct + "% al reservar"} + comisión TuTiempo (${pctTxt()}% de la seña)${mpPctOf(prov.id) ? " + costo de Mercado Pago" : ""} con Mercado Pago${conf.cash !== false && conf.pay !== "total" ? " · el resto en efectivo o Mercado Pago" : ""}</p>
   </section>`;
 }

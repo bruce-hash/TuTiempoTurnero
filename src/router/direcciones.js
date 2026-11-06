@@ -1,6 +1,5 @@
 // Enrutador (Bloque B) · del estado a la dirección: qué URL, qué título y qué descripción corresponden a la pantalla
 // que muestra S. La usan syncUrl() (src/router.js) y los links para compartir.
-import { isBusiness } from "../lib/cuentas.js";
 import { LIVE } from "../config.js";
 import { pr } from "../lib/prestadores.js";
 import { CAT_SLUGS, catInfo, pcat } from "../lib/rubros.js";
@@ -104,11 +103,14 @@ function describeClient(view) {
     case "misturnos":
       return { url: "/mis-turnos", key: "mis-turnos", title: `Mis turnos · ${SITE}` };
     case "cuenta":
-      // v2: para una cuenta de negocio, "Ajustes" (como en su menú)
-      return { url: "/cuenta", key: "cuenta", title: `${isBusiness() ? "Ajustes" : "Mi perfil"} · ${SITE}` };
+      return { url: "/cuenta", key: "cuenta", title: `Mi perfil · ${SITE}` };
+    // 4/11 · Bloque 4: Ajustes (solo Seguridad), dentro de /cuenta (palabra reservada: ningún profesional la toma)
+    case "ajustes":
+      return { url: "/cuenta/ajustes", key: "ajustes", title: `Ajustes · ${SITE}` };
     case "login":
     case "register": {
-      const up = S.login && S.login.mode === "up";
+      // 4/11: con "Crear cuenta" en la ventana encima de /ingresar, la dirección sigue siendo la de la página
+      const up = S.authOnPage ? S.view === "register" : S.login && S.login.mode === "up";
       return {
         url: withParams(up ? "/crear-cuenta" : "/ingresar", { volver: afterPath() }),
         key: up ? "crear-cuenta" : "ingresar",
@@ -128,6 +130,8 @@ function describeClient(view) {
     }
     case "terminos":
       return { url: "/terminos", key: "terminos", title: `Términos y condiciones · ${SITE}` };
+    case "privacidad":
+      return { url: "/privacidad", key: "privacidad", title: `Política de privacidad · ${SITE}` };
     case "notfound":
       return { url: S.notFound || "/", key: "notfound:" + S.notFound, title: `No encontrado · ${SITE}` };
     default: {
@@ -166,9 +170,11 @@ export function describe() {
     const tab = PANEL_TABS[S.btab] ? S.btab : "agenda";
     const label = (BTABS.find((row) => row[0] === tab) || [])[1] || "Panel";
     const clientId = tab === "clientes" && S.cli ? clientIdOf(S.cli) : null;
+    // 4/11: Clientes → Seguidores tiene su dirección (/panel/clientes?ver=seguidores; la del push "Nuevo seguidor")
+    const ver = tab === "clientes" && clientId == null && S.ctab === "seguidores" ? "seguidores" : null;
     return {
-      url: withParams("/panel/" + PANEL_TABS[tab], { cliente: clientId, historia: S.story ? S.story.i : null }),
-      key: `panel:${tab}${clientId != null ? ":cliente:" + clientId : ""}${S.story ? ":historia" : ""}`,
+      url: withParams("/panel/" + PANEL_TABS[tab], { cliente: clientId, ver, historia: S.story ? S.story.i : null }),
+      key: `panel:${tab}${clientId != null ? ":cliente:" + clientId : ""}${ver ? ":seguidores" : ""}${S.story ? ":historia" : ""}`,
       overlay: clientId != null || !!S.story,
       title: `${label} · Panel · ${SITE}`,
     };

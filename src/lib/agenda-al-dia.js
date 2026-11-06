@@ -34,10 +34,41 @@ export async function refreshAgendaNow() {
   }
 }
 
+// 4/11 · Bloque 3: en cualquier pestaña del panel, el número de seguidores y los avisos ("Nuevo seguidor") al día; con
+// Clientes → Seguidores abierta, también la lista (quien siguió o dejó de seguir). Antes se cargaban una vez al entrar.
+let community = false;
+export async function refreshCommunityNow() {
+  if (!LIVE || community || document.visibilityState !== "visible" || S.role !== "barbero" || !S.me || busy()) {
+    return false;
+  }
+  community = true;
+  try {
+    const changed = await api.refreshCommunity();
+    const onFollowers = S.btab === "clientes" && S.ctab === "seguidores";
+    if (changed && onFollowers) {
+      await api.followers().catch(() => {});
+    }
+    if (changed && S.role === "barbero" && !busy()) {
+      render();
+    }
+    return changed;
+  } catch {
+    return false;
+  } finally {
+    community = false;
+  }
+}
+
 export function startAgendaRefresh() {
   if (!LIVE) {
     return;
   }
-  document.addEventListener("visibilitychange", () => refreshAgendaNow());
-  setInterval(() => refreshAgendaNow(), EVERY);
+  document.addEventListener("visibilitychange", () => {
+    refreshAgendaNow();
+    refreshCommunityNow();
+  });
+  setInterval(() => {
+    refreshAgendaNow();
+    refreshCommunityNow();
+  }, EVERY);
 }

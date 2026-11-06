@@ -26,7 +26,8 @@ export function authModal() {
     return businessBlock();
   }
   // ni encima de una página que ya muestra un ingreso (mismos ids): las de ingreso, y Mi perfil y Mis turnos sin sesión
-  if (!S.authModal || S.user || S.role !== "cliente" || AUTH_PAGES.includes(S.view) || ["cuenta", "misturnos"].includes(S.view)) {
+  // (4/11: encima de /ingresar sí, para "Crear cuenta": la página esconde su formulario mientras tanto)
+  if (!S.authModal || S.user || S.role !== "cliente" || (AUTH_PAGES.includes(S.view) && !S.authOnPage) || ["cuenta", "misturnos"].includes(S.view)) {
     return "";
   }
   return `<div class="authmodal" role="dialog" aria-modal="true" aria-labelledby="amTitle">

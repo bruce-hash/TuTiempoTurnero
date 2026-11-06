@@ -8,6 +8,7 @@ import { PREP, selAdds, selDur, selPrice } from "../../lib/servicios.js";
 import { cfg, happyAt, priceAt, seriesDates, slotsFor, uname } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { myStamps, stampGoal } from "../../ui/sellos.js";
+import { ic } from "../../ui/iconos.js";
 
 // confirmación y pago de la reserva: repetición (serie de 3 turnos más), forma de pago (Mercado Pago, efectivo
 // en el local para el resto, o premio de sellos) y el resumen. Los montos acá son para mostrar: el cobro real lo
@@ -80,16 +81,16 @@ export function vCheckoutTurno() {
      const rest = priceTotal - depositTotal;
      if (method === "reward") {
        return [`<div class="panel"><p class="lbl">¿Cómo pagás?</p><div class="paypick" role="radiogroup">
-      <button type="button" role="radio" class="payopt" data-paym="reward" aria-checked="true"><span class="mp reward">🎁</span><span><b>Usar mi premio</b><small class="hint">Canjeás ${goal} sellos de tu tarjeta de ${esc(svc[0])}: este turno es gratis.</small></span></button>
+      <button type="button" role="radio" class="payopt" data-paym="reward" aria-checked="true"><span class="mp reward">${ic("premio")}</span><span><b>Usar mi premio</b><small class="hint">Canjeás ${goal} sellos de tu tarjeta de ${esc(svc[0])}: este turno es gratis.</small></span></button>
       ${rewardOnly ? "" : `<button type="button" role="radio" class="payopt" data-paym="mp" aria-checked="false"><span class="mp">MP</span><span><b>Mercado Pago</b><small class="hint">Pagar y guardar los sellos para después.</small></span></button>`}</div></div>
-`, `<div class="panel"><div class="sum"><div><span>${esc(svc[0])}</span><span><s>${money(svc[2])}</s></span></div><div style="color:var(--ok)"><span>🎁 Premio de la tarjeta de sellos</span><span>−${money(svc[2])}</span></div>
+`, `<div class="panel"><div class="sum"><div><span>${esc(svc[0])}</span><span><s>${money(svc[2])}</s></span></div><div style="color:var(--ok)"><span>${ic("premio")} Premio de la tarjeta de sellos</span><span>−${money(svc[2])}</span></div>
       <div class="tot"><span>Pagás</span><span>${money(0)}</span></div></div></div>
      <p class="note" style="text-align:left;margin:0">Si cancelás, los sellos vuelven a tu tarjeta.</p>
      <div class="err" id="terr"></div><button class="btn btn-pri btn-block" type="submit">Canjear premio y reservar</button>`];
      } else {
        return [`<div class="panel"><p class="lbl">Seña para reservar</p>
       <div class="paym"><span class="mp">MP</span><span><b>${rest > 0 ? `Seña de ${money(depositTotal)}` : money(depositTotal)}${feeTotal + mpTotal ? ` + ${money(feeTotal + mpTotal)} de ${mpTotal ? "comisiones" : "comisión"}` : ""} con Mercado Pago</b><small class="hint">${rest > 0 ? "Es obligatoria: con la seña pagada tu turno queda confirmado." : "Este profesional cobra el total al reservar."}</small></span></div>
-      ${canRedeem ? `<div class="paypick" style="margin-top:10px"><button type="button" role="radio" class="payopt" data-paym="reward" aria-checked="false"><span class="mp reward">🎁</span><span><b>Usar mi premio</b><small class="hint">Tu tarjeta de ${esc(svc[0])} está llena: este turno gratis, sin seña.</small></span></button></div>` : ""}
+      ${canRedeem ? `<div class="paypick" style="margin-top:10px"><button type="button" role="radio" class="payopt" data-paym="reward" aria-checked="false"><span class="mp reward">${ic("premio")}</span><span><b>Usar mi premio</b><small class="hint">Tu tarjeta de ${esc(svc[0])} está llena: este turno gratis, sin seña.</small></span></button></div>` : ""}
       ${mustTotal ? '<p class="alert" style="margin-top:10px">Este profesional pide pagar el total por faltas anteriores sin aviso.</p>' : ""}</div>
     ${
       rest > 0
@@ -129,7 +130,7 @@ export function vCheckoutTurno() {
    <div class="co-main">
    <h1 class="h1">Confirmá tu turno</h1>
    <div class="panel turnocard"><div class="tdate"><span>${esc(dayLabel(S.slot.date, true))}</span><b>${S.slot.time}</b></div>
-    <div><b>${esc(svc[0])}</b>${adds.length ? `<div class="hint">+ ${adds.map((addon) => esc(addon[0])).join(" · ")}</div>` : ""}<div class="hint">${dur} min · ${esc(prov.name)}</div><div class="hint">📍 ${esc(prov.addr)}</div></div></div>
+    <div><b>${esc(svc[0])}</b>${adds.length ? `<div class="hint">+ ${adds.map((addon) => esc(addon[0])).join(" · ")}</div>` : ""}<div class="hint">${dur} min · ${esc(prov.name)}</div><div class="hint">${ic("ubicacion")} ${esc(prov.addr)}</div></div></div>
    ${PREP(prov, svc) ? `<div class="panel prepbox"><b>Antes de venir</b><p>${esc(PREP(prov, svc))}</p></div>` : ""}
    ${
      S.payM === "reward"

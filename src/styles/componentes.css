@@ -80,7 +80,7 @@
 .delbtn{display:block;margin:8px auto 0;font-size:13px;color:var(--bad)}
 .delpanel{border:1.5px solid var(--bad-line);background:var(--bad-soft);text-align:left}
 .dl{margin:8px 0 0;padding-left:18px;font-size:14px;display:grid;gap:4px}
-.wc-badge{background:rgba(255,255,255,.18);border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.wc-badge{background:rgba(255,255,255,.18);border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700}
 .wplus{color:#bbf7d0!important}.wminus{color:#fecaca!important}
 .wallmini{display:flex;align-items:center;gap:6px;width:100%;border:1.5px solid var(--ok-line);background:var(--ok-soft);color:var(--fg);border-radius:12px;padding:10px 12px;font-size:14px;text-align:left}
 .wallmini span{margin-left:auto;color:var(--ok);font-weight:700}
@@ -148,7 +148,7 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .pwa-share::before{content:"";position:absolute;left:5px;top:-6px;width:1.6px;height:11px;background:currentColor}
 .pwa-share::after{content:"";position:absolute;left:2.6px;top:-6px;width:5px;height:5px;border-left:1.6px solid currentColor;border-top:1.6px solid currentColor;transform:rotate(45deg)}
 .pwa-dev{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 10px}
-.pill-ok{font-size:12px;font-weight:700;border-radius:99px;padding:3px 9px;background:var(--ok-soft);color:var(--ok);white-space:nowrap}
+.pill-ok{font-size:12px;font-weight:700;border-radius:99px;padding:3px 9px;background:var(--ok-soft);color:var(--ok)}
 .pwa-opt{justify-content:flex-start;text-align:left;margin-top:12px}
 .pwa-guide{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.45);display:grid;place-items:end center;padding:16px}
 .pwa-guide .panel{width:100%;max-width:420px;text-align:left}
@@ -217,7 +217,24 @@ body.am-open{overflow:hidden}
 }
 @media (min-width:700px){.authmodal{place-items:center}}
 /* V3b: Horarios se guarda solo (C37) y muestra el happy hour en sus días (C38) */
-.hsaved{margin:0;font-size:13px;color:var(--muted);text-align:right;min-height:18px}
+/* 4/11 · Bloque 4: el estado del guardado de Horarios queda siempre a la vista (arriba, al bajar también) */
+.hsaved{position:sticky;top:calc(68px + env(safe-area-inset-top,0px));z-index:6;justify-self:end;align-self:flex-end;margin:0;padding:6px 12px;border-radius:99px;font-size:13px;font-weight:600;color:var(--muted);background:var(--card);border:1px solid var(--line);box-shadow:0 2px 8px rgba(0,0,0,.06);min-height:18px}
+.hsaved.ok{color:var(--ok);background:var(--ok-soft);border-color:var(--ok-line);animation:hsaved .5s ease-out}
+.hsaved.busy{color:var(--muted)}
+.hsaved.bad{color:var(--bad);background:var(--bad-soft);border-color:var(--bad-line)}
+@keyframes hsaved{from{transform:scale(.94);opacity:.6}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.hsaved.ok{animation:none}}
+.hblock{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.hblock>div{display:grid;gap:2px;min-width:0}.hblock .hint{display:block}
+.termpick{border:0;padding:0;margin:0 0 10px;min-width:0}.termpick legend{font-weight:600;font-size:13px;margin-bottom:6px;padding:0}
+.termopts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:6px}
+.termopt{position:relative;display:grid;gap:2px;justify-items:center;padding:10px 6px;border:1.5px solid var(--line);border-radius:var(--r-btn);background:var(--card);cursor:pointer;text-align:center}
+.termopt input{position:absolute;opacity:0;pointer-events:none}
+.termopt .term-n{font-weight:700;font-size:13px}.termopt .term-p{font-size:12px;color:var(--muted)}
+.termopt:has(input:checked){border-color:var(--brand);background:var(--brand-soft);box-shadow:0 0 0 1px var(--brand)}
+.termopt:has(input:focus-visible){outline:2px solid var(--brand);outline-offset:2px}
+@media (max-width:380px){.termopts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.depnote{margin:0}
 .hday .hday-h{flex-wrap:wrap}
 .hhchip{display:inline-block;margin-left:auto;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;background:var(--ok-soft);color:var(--ok);white-space:nowrap}
 /* C40 (V3b): hoja del QR para imprimir o guardar en PDF; en pantalla no se ve */
@@ -337,3 +354,49 @@ body.am-open{overflow:hidden}
 .nudgebox{grid-column:1/-1;margin-top:4px;text-align:left}
 .nudgebox b{display:inline;font-size:inherit}.nudgebox span{font-size:inherit;color:inherit}
 .nudgebox textarea{width:100%;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--fg);resize:vertical}
+/* 4/11 · La campanita de avisos (src/ui/campanita.js): a la izquierda del menú de cuenta; la lista cae debajo, en el
+   celular a lo ancho de la pantalla */
+.bellw{position:relative}
+.bell-btn{position:relative;display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:99px;background:var(--card);color:var(--fg);font-size:18px;line-height:1}
+.bell-btn:hover{border-color:var(--brand-line)}
+.bell-btn[aria-expanded=true]{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.bell-n{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:99px;background:var(--bad);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--card)}
+.bellpanel{position:absolute;right:-56px;top:calc(100% + 8px);width:min(400px,calc(100vw - 32px));max-height:min(70vh,560px);overflow:auto;padding:12px 14px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.18);z-index:60;text-align:left}
+.bellpanel:focus{outline:none}
+.bellpanel .ag li{padding:10px 0}
+.bell-empty{text-align:left;margin:4px 0}
+@media (max-width:699px){.bellpanel{position:fixed;left:16px;right:16px;top:64px;width:auto}}
+/* 4/11 · Bloque 4 · Finanzas: lo que falta (pendientes, faltante del efectivo, sin cobrar) en negrita y rojo, y el
+   calendario de la Caja del día (un ícono con el selector de fecha encima) */
+.cmiss{color:var(--bad);font-weight:800}
+.cdate{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.calbtn{position:relative;display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer;flex:none}
+.calbtn:hover{border-color:var(--brand-line)}
+.calbtn .ic{width:19px;height:19px;vertical-align:0}
+.calbtn input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
+.calbtn:focus-within{outline:2px solid var(--brand);outline-offset:2px}
+
+/* 7/11: Caja del día con dos botones (servicio sin turno y vender producto) y el stock bien visible en Productos */
+.cajabtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.cajabtns .btn{min-width:0}
+.saletot{margin:0;padding:10px 0;font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.pl-n{display:grid;justify-items:center;font-size:22px;line-height:1;font-variant-numeric:tabular-nums;min-width:3.2em}
+.pl-n small{font-size:10px;font-weight:600;color:var(--muted);margin-top:3px}
+.pl-n.low{color:var(--bad)}
+/* 7/11 · Feriados: Próximos feriados (Horarios), aviso de la campanita y la lista del admin */
+.hollist li{align-items:center}
+.holbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.hollist .holbtns{margin-top:0}
+.holset{color:var(--ok,#07774F)}
+.holyear{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+.holyear-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.holerr{color:var(--bad,#b42318)}
+/* 7/11 · Legales: /privacidad y /terminos, con la marca de borrador */
+.legal-doc{text-align:left}
+.legal-doc h2{font-size:16px;margin:18px 0 6px}
+.legal-doc p,.legal-doc li{font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+.legal-doc ul{padding-left:18px;margin:6px 0}
+.legal-doc li{margin:4px 0}
+.legal-ver{margin:10px 0 0}
+.legal-draft{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--bad-soft);color:var(--fg);border:1px solid var(--bad-line);font-size:14px}
+.biz-legal{text-align:left;margin:12px 0 0}

@@ -7844,3 +7844,1072 @@ end $$;
 revoke execute on function public.dismiss_messages(bigint[]) from public, anon;
 grant execute on function public.dismiss_messages(bigint[]) to authenticated;
 
+-- ===================== 20261104190000_seguidores.sql =====================
+-- =====================================================================
+-- TuTiempo · 4/11 · Bloque 3 · Seguidores
+--   - "Ofrecer" de la Agenda llegaba a nadie: guardaba un texto en posts que nadie lee. Ahora offer_slot le deja a cada
+--     seguidor un aviso en la app (client_messages kind 'offer', con el día y la hora del hueco y un botón para
+--     reservar) y un push, que respeta "Recordatorios y avisos" (profiles.push_notices). No va por email.
+--   - A un seguidor puntual (Clientes → Seguidores → "Ofrecer turno"): el mismo aviso, solo a esa persona.
+--   - Límites (respuesta del 4/11): cada hueco se ofrece una sola vez a todos (y una vez a cada seguidor puntual), y por
+--     día del prestador (hora de su ciudad) hasta 5 ofertas a todos y 10 a seguidores puntuales.
+--   - provider_followers: la lista de quienes siguen al prestador, para la pestaña Seguidores. De cada persona, el
+--     nombre de pila y la inicial del apellido ("Ana G."), la foto, desde cuándo lo sigue y, si ya es cliente, su ficha.
+--     Nada más (ni email ni teléfono).
+--   - my_messages devuelve también el horario ofrecido (slot) y la dirección del perfil (slug), para "Reservar".
+--   - Trabajos → "Avisar a tus seguidores" (un mensaje libre) tampoco le llegaba a nadie (lo mismo: un insert en posts).
+--     Ahora notify_followers lo guarda en posts y a cada seguidor le deja el aviso (kind 'news', con "Ver perfil") y un
+--     push "Novedad de <negocio>" (respeta "Recordatorios y avisos"). Comparte el límite con las ofertas a todos: hasta 5
+--     por día entre las dos. posts deja de aceptar inserts directos (así no se saltea el límite).
+-- Idempotente y sin borrar datos.
+-- =====================================================================
+
+-- ---------- Ofertas de horarios ----------
+create table if not exists public.slot_offers (
+  id          bigint generated always as identity primary key,
+  provider_id bigint not null references public.providers(id) on delete cascade,
+  starts_at   timestamptz not null,
+  ends_at     timestamptz not null,
+  target_user uuid references auth.users(id) on delete cascade,   -- null = a todos los seguidores
+  recipients  integer not null default 0 check (recipients >= 0),
+  created_at  timestamptz not null default now(),
+  check (ends_at > starts_at)
+);
+create unique index if not exists slot_offers_once on public.slot_offers (provider_id, starts_at) where target_user is null;
+create unique index if not exists slot_offers_once_user on public.slot_offers (provider_id, starts_at, target_user) where target_user is not null;
+create index if not exists slot_offers_recent on public.slot_offers (provider_id, created_at desc);
+alter table public.slot_offers enable row level security;
+revoke all on public.slot_offers from public, anon, authenticated;
+-- el prestador ve las suyas (la Agenda marca "✓ Ofrecido"); se escriben solo con offer_slot
+grant select on public.slot_offers to authenticated;
+drop policy if exists slot_offers_owner on public.slot_offers;
+create policy slot_offers_owner on public.slot_offers for select to authenticated
+  using (provider_id = (select public.my_provider()));
+
+-- el aviso al seguidor
+alter table public.client_messages drop constraint if exists client_messages_kind_check;
+alter table public.client_messages add constraint client_messages_kind_check
+  check (kind in ('msg','conf','r24','r2','rev','bday','cancel','offer','news'));
+alter table public.push_outbox drop constraint if exists push_outbox_kind_check;
+alter table public.push_outbox add constraint push_outbox_kind_check
+  check (kind in ('conf','r24','r2','rev','bday','cancel','new_booking','client_cancel','cobros','mp_reconnect','new_follower','offer','news'));
+
+-- el push de una oferta se apaga con "Recordatorios y avisos", como los recordatorios
+create or replace function public.push_optional(p_kind text) returns boolean
+language sql immutable set search_path = public as $$ select p_kind in ('r24','r2','rev','bday','offer','news') $$;
+
+-- "Ana G.": el nombre de pila y la inicial del apellido (la última palabra), con mayúscula
+create or replace function public.follower_label(p_full text) returns text
+language sql immutable set search_path = public as $$
+  select case when first is null then 'Alguien'
+              else upper(left(first, 1)) || substr(first, 2) || coalesce(' ' || upper(left(last, 1)) || '.', '') end
+  from (select left(nullif(split_part(btrim(coalesce(p_full, '')), ' ', 1), ''), 30) as first,
+               nullif(regexp_replace(btrim(coalesce(p_full, '')), '^.*\s', ''), btrim(coalesce(p_full, ''))) as last) x
+$$;
+
+-- ---------- Seguidores del prestador ----------
+create or replace function public.provider_followers() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'count', (select count(*) from public.follows where provider_id = public.my_provider()),
+    'items', coalesce((select jsonb_agg(jsonb_build_object('id', x.user_id, 'name', x.label, 'photo', x.avatar_path,
+                                                           'since', x.created_at, 'client', x.client_id)
+                                        order by x.created_at desc)
+                         from (select f.user_id, f.created_at, p.avatar_path, public.follower_label(p.full_name) as label,
+                                      (select c.id from public.provider_clients c
+                                        where c.provider_id = f.provider_id and c.user_id = f.user_id) as client_id
+                                 from public.follows f left join public.profiles p on p.id = f.user_id
+                                where f.provider_id = public.my_provider()
+                                order by f.created_at desc limit 500) x), '[]'))
+$$;
+
+-- las novedades de hoy (posts) de un prestador, en el día de su ciudad
+create or replace function public.follower_posts_today(p_pid bigint, p_tz text) returns int
+language sql stable security definer set search_path = public as $$
+  select count(*)::int from public.posts
+   where provider_id = p_pid and (created_at at time zone p_tz)::date = (now() at time zone p_tz)::date
+$$;
+
+-- ---------- Ofrecer un hueco ----------
+-- p_user null: a todos los seguidores; si no, a ese seguidor. Devuelve {id, sent}.
+create or replace function public.offer_slot(p_starts timestamptz, p_ends timestamptz, p_user uuid default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); tz text; oid bigint; n int := 0; today int; cap int; msg text; lt timestamp; le timestamp;
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  if p_starts is null or p_ends is null or p_ends <= p_starts or p_ends - p_starts > interval '14 hours'
+     or p_starts > now() + interval '120 days' then
+    raise exception 'bad_offer';
+  end if;
+  if p_starts <= now() then raise exception 'offer_past'; end if;
+  -- el hueco tiene que seguir libre (ni turnos, ni reservas en pago, ni bloqueos)
+  if exists (select 1 from public.bookings b where b.provider_id = pid and b.status in ('hold','confirmed','done')
+               and b.during && tstzrange(p_starts, p_ends, '[)')) then
+    raise exception 'offer_taken';
+  end if;
+  tz := coalesce(public.provider_tz(pid), 'America/Argentina/Buenos_Aires');
+  -- de a una por prestador, para que los límites no se pasen con dos toques seguidos
+  perform pg_advisory_xact_lock(hashtext('tt-offer'), pid::int);
+  if p_user is null then
+    if exists (select 1 from public.slot_offers where provider_id = pid and starts_at = p_starts and target_user is null) then
+      raise exception 'offer_repeated';
+    end if;
+  else
+    if not exists (select 1 from public.follows where provider_id = pid and user_id = p_user) then
+      raise exception 'not_follower';
+    end if;
+    if exists (select 1 from public.slot_offers where provider_id = pid and starts_at = p_starts and target_user = p_user) then
+      raise exception 'offer_repeated';
+    end if;
+  end if;
+  select count(*) into today from public.slot_offers
+   where provider_id = pid and (target_user is null) = (p_user is null)
+     and (created_at at time zone tz)::date = (now() at time zone tz)::date;
+  -- a todos: las ofertas y las novedades ("Avisar a tus seguidores") comparten el tope de 5 por día
+  if p_user is null then
+    today := today + public.follower_posts_today(pid, tz);
+  end if;
+  cap := case when p_user is null then 5 else 10 end;
+  if today >= cap then raise exception 'offer_limit'; end if;
+
+  insert into public.slot_offers (provider_id, starts_at, ends_at, target_user) values (pid, p_starts, p_ends, p_user)
+  returning id into oid;
+  lt := p_starts at time zone tz;
+  le := p_ends at time zone tz;
+  msg := 'Tengo un turno libre el ' || (array['domingo','lunes','martes','miércoles','jueves','viernes','sábado'])[extract(dow from lt)::int + 1]
+         || ' ' || to_char(lt, 'DD/MM') || ' de ' || to_char(lt, 'HH24:MI') || ' a ' || to_char(le, 'HH24:MI') || '. ¿Lo querés?';
+  insert into public.client_messages (provider_id, user_id, kind, ref, body)
+  select pid, f.user_id, 'offer', oid::text, msg
+    from public.follows f
+   where f.provider_id = pid and (p_user is null or f.user_id = p_user)
+  on conflict do nothing;
+  get diagnostics n = row_count;
+  update public.slot_offers set recipients = n where id = oid;
+  return jsonb_build_object('id', oid, 'sent', n);
+end $$;
+
+-- ---------- Push de los avisos del cliente ----------
+create or replace function public.client_messages_push() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare bid bigint; starts timestamptz;
+begin
+  if new.kind not in ('conf','r24','r2','rev','bday','cancel','offer','news') then return null; end if;
+  if new.kind = 'news' then
+    perform public.push_enqueue(new.user_id, 'news', 'message', new.id, null, now() + interval '2 days');
+    return null;
+  end if;
+  if new.kind = 'offer' then
+    -- la oferta vale hasta que empieza el horario
+    select o.starts_at into starts from public.slot_offers o where o.id = new.ref::bigint;
+    if starts is null then return null; end if;
+    perform public.push_enqueue(new.user_id, 'offer', 'message', new.id, null, starts);
+    return null;
+  end if;
+  if new.kind <> 'bday' and new.ref ~ '^[0-9]{1,18}$' then
+    select id, starts_at into bid, starts from public.bookings where id = new.ref::bigint;
+  end if;
+  perform public.push_enqueue(new.user_id, new.kind, 'message', new.id, bid,
+    -- un recordatorio vale hasta que empieza el turno; el resto, dos días
+    case when new.kind in ('r24','r2') and starts is not null then starts else now() + interval '2 days' end);
+  return null;
+end $$;
+drop trigger if exists client_messages_push on public.client_messages;
+create trigger client_messages_push after insert on public.client_messages
+  for each row execute function public.client_messages_push();
+
+-- lo que la función de push manda (igual que antes, más la oferta: "Turno libre en <prestador>", al perfil ese día)
+create or replace function public.push_due(p_limit int default 100)
+returns table (id bigint, endpoint text, p256dh text, auth text, title text, body text, url text, tag text, ttl int, urgency text)
+language plpgsql security definer set search_path = public as $$
+declare r record; skip text; t text; b text; u text; who text; svc text; pname text; lt timestamp;
+        b_status text; b_start timestamptz; b_pid bigint; b_svc text; b_client text;
+        o_start timestamptz; o_pid bigint; o_slug text; o_body text;
+begin
+  for r in select o.id, o.kind, o.source, o.source_id, o.booking_id, o.expires_at, s.endpoint, s.p256dh, s.auth,
+                  coalesce(pr.push_notices, true) as wants, coalesce(pr.push_bookings, true) as wants_bookings,
+                  coalesce(pr.push_followers, true) as wants_followers
+             from public.push_outbox o
+             join public.push_subscriptions s on s.id = o.subscription_id
+             left join public.profiles pr on pr.id = o.user_id
+            where o.status = 'pending' and o.next_attempt_at <= now()
+            order by o.next_attempt_at, o.id
+            limit greatest(coalesce(p_limit, 100), 1)
+            for update of o skip locked loop
+    b_status := null; b_start := null; b_pid := null; b_svc := null; b_client := null;
+    o_start := null; o_pid := null; o_slug := null; o_body := null;
+    if r.booking_id is not null then
+      select bb.status, bb.starts_at, bb.provider_id, bb.service_name, bb.client_name into b_status, b_start, b_pid, b_svc, b_client
+        from public.bookings bb where bb.id = r.booking_id;
+    end if;
+    if r.kind = 'offer' then
+      select so.starts_at, so.provider_id, p.slug, m.body into o_start, o_pid, o_slug, o_body
+        from public.client_messages m
+        join public.slot_offers so on so.id = m.ref::bigint
+        join public.providers p on p.id = so.provider_id
+       where m.id = r.source_id and m.kind = 'offer';
+    end if;
+    skip := case when (public.push_optional(r.kind) and not r.wants) or (public.push_booking_kind(r.kind) and not r.wants_bookings)
+                   or (r.kind = 'new_follower' and not r.wants_followers) then 'opt_out'
+                 when r.expires_at <= now() then 'stale'
+                 when r.kind in ('conf','r24','r2','new_booking') and (b_status is distinct from 'confirmed' or b_start <= now()) then 'stale'
+                 when r.kind = 'client_cancel' and (b_start is null or b_start <= now()) then 'stale'
+                 when r.kind = 'offer' and (o_start is null or o_start <= now()) then 'stale'
+            end;
+    if skip is not null then
+      update public.push_outbox set status = 'skipped', skip_reason = skip where push_outbox.id = r.id;
+      continue;
+    end if;
+    t := null; b := null; u := null;
+    if r.source = 'message' then
+      select p.name into pname from public.client_messages m join public.providers p on p.id = m.provider_id where m.id = r.source_id;
+      lt := b_start at time zone public.provider_tz(b_pid);
+      case r.kind
+        when 'conf' then t := 'Turno confirmado'; b := pname || ' · ' || public.push_when(b_start, b_pid);
+        when 'r24'  then t := 'Mañana tenés turno'; b := pname || ' a las ' || to_char(lt, 'HH24:MI');
+        when 'r2'   then t := 'Hoy a las ' || to_char(lt, 'HH24:MI') || ' tenés turno'; b := pname || coalesce(' · ' || nullif(b_svc, ''), '');
+        when 'rev'  then t := '¿Qué tal tu turno?'; b := 'Contale a ' || pname || ' cómo te fue';
+        when 'bday' then t := '¡Feliz cumpleaños!'; b := 'De parte de ' || pname;
+        when 'offer' then t := 'Turno libre en ' || pname; b := o_body;
+        when 'news' then t := 'Novedad de ' || pname; select m.body into b from public.client_messages m where m.id = r.source_id;
+        else t := case when b_status = 'expired' then 'No pudimos confirmar tu turno' else 'Se canceló tu turno' end;
+             b := pname || '. Abrí TuTiempo para ver el detalle.';
+      end case;
+      u := case when r.kind = 'news' then '/' || (select p.slug from public.client_messages m join public.providers p on p.id = m.provider_id where m.id = r.source_id)
+                when r.kind = 'offer' then '/' || o_slug || '?dia=' || to_char(o_start at time zone public.provider_tz(o_pid), 'YYYY-MM-DD')
+                when r.booking_id is not null and r.kind in ('conf','r24','r2','cancel','rev') then '/turno/' || r.booking_id
+                else '/mis-turnos' end;
+    elsif r.source = 'booking' then
+      -- del cliente, solo el nombre de pila (sin apellido ni teléfono)
+      who := left(coalesce(nullif(split_part(trim(b_client), ' ', 1), ''), 'Un cliente'), 30);
+      svc := coalesce(nullif(b_svc, ''), 'Turno');
+      t := case r.kind when 'new_booking' then 'Nueva reserva' else 'Se canceló una reserva' end;
+      b := who || ' · ' || svc || ' · ' || public.push_when(b_start, b_pid);
+      u := '/panel/agenda?dia=' || to_char(b_start at time zone public.provider_tz(b_pid), 'YYYY-MM-DD');
+    else
+      -- C06 (V8): un seguidor nuevo, con su nombre de pila (lo guarda el aviso; nada más). 4/11: a la pestaña Seguidores
+      if r.kind = 'new_follower' then
+        select n.body into b from public.provider_notices n where n.id = r.source_id;
+        t := 'Nuevo seguidor'; b := left(coalesce(b, 'Alguien empezó a seguirte'), 120); u := '/panel/clientes?ver=seguidores';
+      -- C41/C42 (V6): el aviso de TuTiempo para conectar Mercado Pago por primera vez ("Avisarle" en el admin)
+      elsif r.kind = 'mp_reconnect' and (select n.kind from public.provider_notices n where n.id = r.source_id) = 'mp_connect' then
+        t := 'Conectá Mercado Pago'; b := 'Sin Mercado Pago no podés cobrar señas ni recibir reservas online. Conectalo desde tu perfil.';
+        u := '/panel/perfil';
+      else
+        t := case r.kind when 'mp_reconnect' then 'Volvé a conectar Mercado Pago' else 'Novedad en tus cobros' end;
+        b := case r.kind when 'mp_reconnect' then 'Hoy no podés cobrar señas. Conectalo desde tu perfil.' else 'Abrí tu panel para ver el detalle.' end;
+        u := case r.kind when 'mp_reconnect' then '/panel/perfil' else '/panel/agenda' end;
+      end if;
+    end if;
+    if t is null or b is null then
+      update public.push_outbox set status = 'skipped', skip_reason = 'stale' where push_outbox.id = r.id;
+      continue;
+    end if;
+    update public.push_outbox set next_attempt_at = now() + interval '2 minutes' where push_outbox.id = r.id;
+    id := r.id; endpoint := r.endpoint; p256dh := r.p256dh; auth := r.auth; title := left(t, 80); body := left(b, 160); url := u;
+    -- los avisos de un mismo turno se reemplazan entre sí en la pantalla (el recordatorio pisa a la confirmación)
+    tag := case when r.booking_id is not null then 'turno-' || r.booking_id else r.kind || '-' || r.source_id end;
+    -- cuánto la guarda el servicio de push si el dispositivo está apagado: hasta que vence, y nunca después del turno
+    ttl := greatest(60, least(2419200, extract(epoch from (least(r.expires_at, case when r.kind in ('conf','r24','r2','new_booking') then b_start end) - now()))::int));
+    urgency := case when r.kind in ('conf','cancel','r2','new_booking','client_cancel','mp_reconnect') then 'high' else 'normal' end;
+    return next;
+  end loop;
+end $$;
+
+-- ---------- Avisos del cliente: el horario de la oferta ----------
+create or replace function public.my_messages() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(x order by x.created_at desc), '[]') from (
+    select m.id, m.provider_id, p.name as provider_name, p.photo_path, p.hue, m.body, m.created_at,
+           m.read_at is not null as read, m.kind, m.ref, p.slug,
+           case when m.kind = 'offer' then (select jsonb_build_object('starts', so.starts_at, 'ends', so.ends_at)
+                                              from public.slot_offers so where so.id = m.ref::bigint) end as slot
+    from public.client_messages m join public.providers p on p.id = m.provider_id
+    where m.user_id = auth.uid() and m.dismissed_at is null
+    order by m.created_at desc limit 50) x
+$$;
+
+-- ---------- Avisar a tus seguidores (Trabajos) ----------
+create or replace function public.notify_followers(p_body text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); tz text; b text := btrim(regexp_replace(coalesce(p_body, ''), '[\x01-\x09\x0b-\x1f\x7f]', ' ', 'g'));
+        post bigint; n int := 0; today int;
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  if char_length(b) < 2 or char_length(b) > 400 then raise exception 'bad_message'; end if;
+  tz := coalesce(public.provider_tz(pid), 'America/Argentina/Buenos_Aires');
+  perform pg_advisory_xact_lock(hashtext('tt-offer'), pid::int);
+  select count(*) into today from public.slot_offers
+   where provider_id = pid and target_user is null and (created_at at time zone tz)::date = (now() at time zone tz)::date;
+  if today + public.follower_posts_today(pid, tz) >= 5 then raise exception 'offer_limit'; end if;
+  insert into public.posts (provider_id, body) values (pid, b) returning id into post;
+  insert into public.client_messages (provider_id, user_id, kind, ref, body)
+  select pid, f.user_id, 'news', post::text, b from public.follows f where f.provider_id = pid
+  on conflict do nothing;
+  get diagnostics n = row_count;
+  return jsonb_build_object('id', post, 'sent', n);
+end $$;
+-- las novedades se mandan solo con notify_followers (con el límite)
+revoke insert on public.posts from authenticated;
+drop policy if exists posts_write on public.posts;
+
+revoke execute on function public.provider_followers(), public.offer_slot(timestamptz, timestamptz, uuid), public.notify_followers(text) from public, anon;
+grant execute on function public.provider_followers(), public.offer_slot(timestamptz, timestamptz, uuid), public.notify_followers(text) to authenticated;
+revoke execute on function public.follower_posts_today(bigint, text) from public, anon, authenticated;
+revoke execute on function public.follower_label(text) from public, anon, authenticated;
+revoke execute on function public.push_due(int) from public, anon, authenticated;
+grant execute on function public.push_due(int) to service_role;
+
+-- ===================== 20261106150000_profesional_4_11.sql =====================
+-- 4/11 · Bloque 4 (profesional). Idempotente, sin borrar datos.
+--  1. Seña FIJA del 30% para todos (D06): deja de ser opcional y sale la opción de cobrar el total. Los profesionales que
+--     ya existen pasan a 30% para las reservas nuevas; los turnos ya reservados mantienen lo que pagaron. Desde la app
+--     (cualquier pedido con sesión) no se puede guardar otra seña: el trigger ps_fixed_deposit la vuelve a 30%.
+--  2. Plazo de acreditación de Mercado Pago (D30): lo elige el profesional en Horarios. La detección después de cada pago
+--     queda de respaldo: si la comisión es la de otro plazo, no lo cambia sola; el pago va a "Para revisar"
+--     (mp_term_mismatch) y el profesional recibe un aviso con los dos plazos.
+--  3. Ventas sin turno de un producto con cantidad (walkins.qty). El stock lo descuenta la app, como antes.
+--  4. Resumen del mes: los gastos variables (lo que no es fijo ni compra de productos) van aparte de los fijos
+--     (provider_month_summary; provider_month_breakdown queda como estaba para la app de antes).
+
+-- 1 · seña fija del 30%
+alter table public.provider_settings alter column pay_mode set default 'deposit';
+alter table public.provider_settings alter column deposit_pct set default 30;
+update public.provider_settings set pay_mode = 'deposit', deposit_pct = 30 where pay_mode <> 'deposit' or deposit_pct <> 30;
+
+create or replace function public.ps_fixed_deposit() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  -- con sesión (la app, también a través de funciones de la base): siempre seña del 30%. Sin sesión (migraciones,
+  -- tareas del servidor y las pruebas) se respeta lo que se escribe.
+  if auth.uid() is not null then
+    new.pay_mode := 'deposit';
+    new.deposit_pct := 30;
+  end if;
+  return new;
+end $$;
+drop trigger if exists ps_fixed_deposit on public.provider_settings;
+create trigger ps_fixed_deposit before insert or update on public.provider_settings
+  for each row execute function public.ps_fixed_deposit();
+revoke execute on function public.ps_fixed_deposit() from public, anon, authenticated;
+
+-- 2 · plazo elegido por el profesional; la detección solo avisa
+create or replace function public.term_txt(p_term text) returns text
+language sql immutable set search_path = public as $$
+  select case p_term when 'd10' then 'a 10 días' when 'd18' then 'a 18 días' when 'd35' then 'a 35 días' else 'al instante' end
+$$;
+revoke execute on function public.term_txt(text) from public, anon, authenticated;
+
+create or replace function public.confirm_payment_core(p_booking_ids bigint[], p_payment_id text, p_amount int,
+                                                       p_provider bigint, p_account bigint, p_fee_mp int, p_collector text,
+                                                       p_raw jsonb, p_status_detail text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare ids bigint[] := array(select distinct x from unnest(coalesce(p_booking_ids, '{}')) x where x is not null);
+        pid bigint; acct bigint; uid uuid; nm text; due int; fee_exp int; pay_id bigint; r record;
+        left_amt int := greatest(coalesce(p_amount, 0), 0); pay int; fee_part int; mpf_part int; short boolean; why text;
+        mp_pct numeric; cost_exp int; cost_mp int; mp_id text; cur_term text; got_term text; new_term text;
+        reasons text[] := '{}'; ok int := 0; back int := 0; first_ok bigint;
+begin
+  pid := coalesce(p_provider, (select min(provider_id) from public.bookings where id = any(ids)));
+  acct := coalesce(p_account, (select id from public.mp_accounts where provider_id = pid and status = 'active'));
+  -- lo que se debía: seña + comisión + costo de Mercado Pago (D30) de los turnos de ESTE prestador que vinieron en el pago
+  select sum(deposit + client_fee + mp_fee - paid_wallet), sum(client_fee), min(client_id::text)::uuid, min(client_name), max(mp_fee_pct)
+    into due, fee_exp, uid, nm, mp_pct
+    from public.bookings where id = any(ids) and provider_id = pid and source = 'app';
+  due := coalesce(due, 0); fee_exp := coalesce(fee_exp, 0);
+  -- D30: la comisión de Mercado Pago esperada (% del plazo sobre el total) y la que informa (fee_details, mercadopago_fee).
+  -- Solo se compara si al cliente se le sumó un costo de Mercado Pago (% del plazo > 0).
+  if coalesce(mp_pct, 0) > 0 then cost_exp := round(due * mp_pct / 100); end if;
+  select round(sum((f->>'amount')::numeric))::int into cost_mp
+    from jsonb_array_elements(case when jsonb_typeof(p_raw->'fee_details') = 'array' then p_raw->'fee_details' else '[]'::jsonb end) f
+   where f->>'type' = 'mercadopago_fee' and (f->>'amount') ~ '^[0-9]+(\.[0-9]+)?$';
+  -- 4/11 · Bloque 4 (cambia el plazo automático de D30): el plazo lo elige el profesional en Horarios. Si la comisión que
+  -- informa Mercado Pago es la de OTRO plazo de la tabla del admin (con o sin IVA, $2 de margen), ya no se le cambia
+  -- solo: el pago queda para revisar (mp_term_mismatch) y se le avisa cuál parece ser el plazo de su cuenta. Si no es la
+  -- de ningún plazo, para revisar como antes (mp_cost_mismatch). Con todos los % en 0 no se detecta nada.
+  if cost_mp is not null and due > 0 and pid is not null then
+    cur_term := coalesce((select payout_term from public.provider_settings where provider_id = pid), 'instant');
+    got_term := public.mp_term_match(due, cost_mp, cur_term);
+    if got_term is not null and got_term <> cur_term then
+      new_term := got_term;
+      reasons := array_append(reasons, 'mp_term_mismatch');
+    elsif got_term is null and cost_exp is not null then
+      reasons := array_append(reasons, 'mp_cost_mismatch');
+    end if;
+  end if;
+  if exists (select 1 from unnest(ids) x where not exists (select 1 from public.bookings b where b.id = x and b.provider_id = pid and b.source = 'app')) then
+    reasons := array_append(reasons, 'other_provider');      -- turnos de otro prestador o que no existen: no se tocan
+  end if;
+  -- comisión: la que informa Mercado Pago tiene que ser la calculada por la base
+  if fee_exp > 0 and p_fee_mp is null then reasons := array_append(reasons, 'fee_missing');
+  elsif p_fee_mp is not null and p_fee_mp <> fee_exp then reasons := array_append(reasons, 'fee_mismatch'); end if;
+  short := left_amt < due;                       -- D16: llegó menos → no se confirma nada y se devuelve todo
+  if left_amt > due and due > 0 then reasons := array_append(reasons, 'amount_over'); end if;   -- D16: llegó más → se confirma y la diferencia se revisa
+
+  insert into public.payments (mp_payment_id, provider_id, mp_account_id, collector_id, client_id, booking_ids, amount, fee_expected, fee_mp,
+                               mp_status_detail, mp_cost, mp_cost_expected)
+  values (p_payment_id, pid, acct, left(p_collector, 40), uid, ids, left_amt, fee_exp, p_fee_mp, left(p_status_detail, 60), cost_mp, cost_exp)
+  returning id into pay_id;
+  perform public.payment_log(pay_id, p_raw);
+
+  for r in select * from public.bookings where id = any(ids) and provider_id = pid and source = 'app' order by starts_at for update loop
+    pay := least(left_amt, r.deposit + r.client_fee + r.mp_fee - r.paid_wallet); left_amt := left_amt - pay;
+    fee_part := least(pay, r.client_fee);
+    mpf_part := least(pay - fee_part, r.mp_fee);   -- D30: lo que se sumó por Mercado Pago (no es del prestador ni de TuTiempo)
+    why := null;
+    if short then
+      why := 'amount_short';
+    elsif r.status not in ('hold', 'expired') or r.payment_id is not null then
+      why := 'booking_unavailable';             -- cancelado (por el prestador, un bloqueo, una baja) o ya pagado por otro pago
+    elsif r.starts_at <= now() then
+      why := 'booking_past';                    -- D29: el pago llegó cuando el turno ya había empezado: se devuelve
+    else
+      begin
+        update public.bookings set status = 'confirmed', hold_expires_at = null, payment_id = pay_id,
+               paid_mp = pay - fee_part - mpf_part, app_fee = fee_part, paid_mp_fee = mpf_part
+         where id = r.id;
+        ok := ok + 1; first_ok := coalesce(first_ok, r.id);
+      exception when exclusion_violation then
+        why := 'slot_taken';                     -- el hold venció y otro tomó el horario
+      end;
+    end if;
+    insert into public.payment_bookings (payment_id, booking_id, amount, fee, result, reason)
+    values (pay_id, r.id, pay, fee_part, case when why is null then 'confirmed' else 'refund' end, why);
+    if why is not null and pay > 0 then
+      if r.status in ('hold', 'expired') and r.payment_id is null then
+        -- lo canceló el sistema, no el prestador: 'expired' con lo cobrado (el cliente ve que se le devuelve y por qué)
+        update public.bookings set status = 'expired', hold_expires_at = null, payment_id = pay_id,
+               paid_mp = pay - fee_part - mpf_part, app_fee = fee_part, paid_mp_fee = mpf_part
+         where id = r.id;
+      end if;
+      perform public.refund_request(r.id, pay_id, pay, why);
+      back := back + 1;
+    end if;
+  end loop;
+  -- nada de este prestador en el pago: se devuelve todo lo cobrado (sin turno)
+  if not exists (select 1 from public.payment_bookings where payment_id = pay_id) and left_amt > 0 then
+    perform public.refund_request(null, pay_id, left_amt, 'unknown_booking');
+    left_amt := 0;
+  end if;
+
+  update public.payments set
+    outcome = case when cardinality(reasons) > 0 then 'review' when ok > 0 and back = 0 then 'confirmed' when ok > 0 then 'partial' else 'refund' end,
+    review_reasons = reasons, updated_at = now()
+   where id = pay_id;
+  -- D30: el prestador se entera si Mercado Pago le cobró otro % que el del plazo de su perfil (con los dos números)
+  if 'mp_cost_mismatch' = any(reasons) and pid is not null then
+    select mp_payment_id into mp_id from public.payments where id = pay_id;
+    insert into public.provider_notices (provider_id, kind, ref, body)
+    values (pid, 'mp_cost', left('costo-' || mp_id, 40),
+            'Mercado Pago te cobró ' || public.pct_txt(cost_mp * 100.0 / nullif(due, 0)) || '% (' || public.money_txt(cost_mp) ||
+            ') en vez de ' || public.pct_txt(mp_pct) || '% (' || public.money_txt(cost_exp) || ') en el pago n° ' || mp_id ||
+            '. Si tu cuenta tiene otras tasas, avisanos.')
+    on conflict (provider_id, kind, ref) do update set body = excluded.body;
+  end if;
+  -- 4/11: el plazo que parece tener su cuenta NO se cambia solo: se le avisa (con los dos plazos) para que lo revise
+  if new_term is not null then
+    select mp_payment_id into mp_id from public.payments where id = pay_id;
+    insert into public.provider_notices (provider_id, kind, ref, body)
+    values (pid, 'mp_term', left('plazo-' || new_term || '-' || mp_id, 40),
+            'Mercado Pago te cobró la comisión de acreditar ' || public.term_txt(new_term) || ' (' || public.money_txt(cost_mp) ||
+            ') y en Horarios tenés elegido ' || public.term_txt(cur_term) || ' (pago n° ' || mp_id || '). Si tu cuenta de ' ||
+            'Mercado Pago acredita ' || public.term_txt(new_term) || ', cambiá el plazo en Horarios: así tus clientes pagan lo que corresponde.')
+    on conflict (provider_id, kind, ref) do nothing;
+  end if;
+  if ok > 0 then
+    if uid is not null then perform public.link_client(pid, uid, nm); end if;
+    perform public.notify_booking(first_ok, 'conf');
+  end if;
+  return jsonb_build_object('status', 'processed', 'payment', pay_id, 'confirmed', ok, 'refunded', back, 'review', reasons, 'extra', left_amt);
+end $$;
+
+-- 3 · cantidad en las ventas sin turno (null: una unidad, como las ventas de antes)
+alter table public.walkins add column if not exists qty integer;
+alter table public.walkins drop constraint if exists walkins_qty_check;
+alter table public.walkins add constraint walkins_qty_check check (qty is null or qty between 1 and 999);
+
+-- 4 · resumen del mes con los gastos variables aparte (función nueva: la de antes no cambia lo que devuelve)
+create or replace function public.provider_month_summary(p_year int)
+returns table (month int, app int, man int, walk int, prod int, exp_fixed int, exp_products int, exp_variable int)
+language sql stable security definer set search_path = public as $$
+  with f as (select * from public.provider_finance(make_date(p_year,1,1), make_date(p_year,12,31))),
+  e as (select extract(month from x.spent_on)::int as em, x.category, x.amount, x.fixed_id is not null as fixed from public.expenses x
+        where x.provider_id = public.my_provider() and extract(year from x.spent_on) = p_year)
+  select m,
+    coalesce((select sum(f.app)::int from f where extract(month from f.day) = m), 0),
+    coalesce((select sum(f.man)::int from f where extract(month from f.day) = m), 0),
+    coalesce((select sum(f.walk)::int from f where extract(month from f.day) = m), 0),
+    coalesce((select sum(f.prod)::int from f where extract(month from f.day) = m), 0),
+    coalesce((select sum(e.amount)::int from e where e.em = m and e.category <> 'Productos' and e.fixed), 0),
+    coalesce((select sum(e.amount)::int from e where e.em = m and e.category = 'Productos'), 0),
+    coalesce((select sum(e.amount)::int from e where e.em = m and e.category <> 'Productos' and not e.fixed), 0)
+  from generate_series(1,12) m
+$$;
+revoke execute on function public.provider_month_summary(int) from public, anon;
+grant execute on function public.provider_month_summary(int) to authenticated;
+
+-- ===================== 20261106180000_verificacion_prueba.sql =====================
+-- Despliegue automático a prueba (docs/10): el informe que lee la verificación ("Verificar prueba" en GitHub Actions).
+-- Una sola función de lectura, security definer: los montos de la reserva que hizo la verificación (con lo que tendrían
+-- que dar según la seña fija y las comisiones), el estado de las tareas programadas, lo que respondieron las Edge
+-- Functions llamadas por el cron y la última migración aplicada. Nadie la puede llamar desde la app: solo el usuario
+-- tt_verificador, que se crea a mano en el proyecto de prueba y recibe el permiso aparte (docs/10, paso 2).
+-- Idempotente; no toca datos.
+
+create or replace function public.verificacion_prueba(p_booking bigint default null)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  out jsonb := jsonb_build_object('ahora', now());
+  b record; com numeric; parts int[]; dep int; x jsonb;
+begin
+  -- la reserva de la verificación: lo guardado y lo esperado (seña fija sobre el precio y charge_parts)
+  if p_booking is not null then
+    select bk.id, bk.status, bk.source, bk.price, bk.deposit, bk.client_fee, bk.mp_fee, bk.mp_fee_pct::float as mp_pct,
+           ps.deposit_pct, ps.payout_term,
+           exists (select 1 from public.mp_checkouts c where bk.id = any(c.booking_ids)) as checkout
+      into b
+      from public.bookings bk left join public.provider_settings ps on ps.provider_id = bk.provider_id
+     where bk.id = p_booking;
+    if found then
+      com := coalesce((select deposit_commission_pct from public.app_settings limit 1), 0);
+      dep := round(b.price * b.deposit_pct / 100.0);
+      parts := public.charge_parts(dep, b.price, com, b.mp_pct::numeric);
+      out := out || jsonb_build_object('reserva', jsonb_build_object(
+        'id', b.id, 'estado', b.status, 'origen', b.source, 'precio', b.price, 'sena_pct', b.deposit_pct, 'plazo', b.payout_term,
+        'sena', b.deposit, 'comision', b.client_fee, 'costo_mp', b.mp_fee, 'mp_pct', b.mp_pct, 'cobro_abierto', b.checkout,
+        'esperado', jsonb_build_object('sena', dep, 'comision', parts[1], 'costo_mp', parts[2], 'total', parts[3]),
+        'comision_pct', com));
+    end if;
+  end if;
+  -- tareas programadas (pg_cron): la última corrida de cada una
+  if to_regclass('cron.job') is not null and to_regclass('cron.job_run_details') is not null then
+    execute $q$
+      select coalesce(jsonb_agg(jsonb_build_object('tarea', j.jobname, 'activa', j.active, 'cron', j.schedule,
+               'estado', d.status, 'fin', d.end_time, 'mensaje', left(d.return_message, 200)) order by j.jobname), '[]')
+        from cron.job j
+        left join lateral (select status, end_time, return_message from cron.job_run_details r
+                            where r.jobid = j.jobid order by r.runid desc limit 1) d on true
+    $q$ into x;
+    out := out || jsonb_build_object('tareas', x);
+  end if;
+  -- lo que respondieron las Edge Functions llamadas por las tareas (pg_net), las últimas 2 horas, por código
+  if to_regclass('net._http_response') is not null then
+    execute $q$
+      select coalesce(jsonb_object_agg(k, n), '{}') from (
+        select case when timed_out then 'sin_respuesta' when status_code is null then 'error' else status_code::text end k, count(*) n
+          from net._http_response where created > now() - interval '2 hours' group by 1) t
+    $q$ into x;
+    out := out || jsonb_build_object('funciones', x);
+  end if;
+  -- la última migración aplicada con la CLI (supabase db push)
+  if to_regclass('supabase_migrations.schema_migrations') is not null then
+    execute 'select to_jsonb(max(version)) from supabase_migrations.schema_migrations' into x;
+    out := out || jsonb_build_object('migracion', x);
+  end if;
+  return out;
+end $$;
+
+revoke execute on function public.verificacion_prueba(bigint) from public, anon, authenticated;
+
+-- ===================== 20261106200000_bloques_5_6.sql =====================
+-- 7/11 · Bloques 5 y 6 (docs/01: D10, D24, D25). Idempotente; no borra datos.
+--
+-- Bloque 5 · cliente: el recordatorio de 2 h antes del turno y el saludo de cumpleaños dejan de mandarse, para todos
+-- (en la app, por email y por notificación). Queda el recordatorio del día anterior (r24). Los avisos viejos de esos
+-- tipos, las plantillas de cada profesional y el cumpleaños de sus clientes quedan en la base; lo que estaba en la cola
+-- sin mandar se marca como salteado.
+--
+-- Bloque 6 · admin: las fotos del DNI se borran en el momento en que el admin verifica al profesional (ya no a los 30
+-- días). Las borra la misma Edge Function dni-cleanup, con la API de Storage. Lo demás de D24 sigue igual (alta sin
+-- aprobar: 90 días después de la última foto; baja: en el momento; verificado sin fecha, de antes del 2b: las conserva).
+
+-- ---------- Bloque 5: solo el recordatorio del día anterior ----------
+create or replace function public.send_scheduled_notices() returns int
+language plpgsql security definer set search_path = public as $$
+declare r record; n int := 0;
+begin
+  for r in select b.id from public.bookings b
+           where b.source = 'app' and b.status = 'confirmed' and b.client_id is not null
+             and b.starts_at > now() + interval '2 hours' and b.starts_at <= now() + interval '24 hours' and b.created_at < b.starts_at - interval '24 hours'
+             and not exists (select 1 from public.client_messages m where m.provider_id = b.provider_id and m.user_id = b.client_id and m.kind = 'r24' and m.ref = b.id::text)
+           limit 5000 loop
+    perform public.notify_booking(r.id, 'r24'); n := n + 1;
+  end loop;
+  -- 7/11 · Bloque 5: sin el recordatorio de 2 h (r2) ni el saludo de cumpleaños (bday)
+  return n;
+end $$;
+revoke execute on function public.send_scheduled_notices() from public, anon, authenticated;
+
+-- lo que quedó en la cola sin mandar
+update public.email_outbox set status = 'skipped', skip_reason = 'stale'
+ where status = 'pending' and kind in ('r2', 'bday');
+update public.push_outbox set status = 'skipped', skip_reason = 'stale'
+ where status = 'pending' and kind in ('r2', 'bday');
+
+-- ---------- Bloque 6: las fotos del DNI se borran al verificar ----------
+create or replace function public.dni_photos_due(p_limit int default 100)
+returns table (folder text, reason text, paths text[])
+language sql stable security definer set search_path = public as $$
+  with files as (
+    select split_part(o.name, '/', 1) as folder, o.name, o.created_at
+      from storage.objects o where o.bucket_id = 'dni'
+  ), owner_of as (
+    select f.folder, max(f.created_at) as last_upload, lp.id as provider_id, lp.dni_verified, lp.dni_verified_at
+      from files f
+      left join lateral (
+        select p.id, p.dni_verified, pp.dni_verified_at
+          from public.providers p left join public.provider_private pp on pp.provider_id = p.id
+         where p.owner_id::text = f.folder and p.status <> 'deleted'
+         order by p.created_at desc limit 1) lp on true
+     group by f.folder, lp.id, lp.dni_verified, lp.dni_verified_at
+  ), due as (
+    select f.folder, f.name,
+           case
+             -- baja: la carpeta ya no es de ningún prestador (provider_teardown deja owner_id en null)
+             when w.provider_id is null then 'baja'
+             -- verificado (con fecha): en el momento (7/11 · Bloque 6; antes, a los 30 días). Sin fecha, de antes del 2b,
+             -- no: necesita las fotos para reactivarse
+             when w.dni_verified and w.dni_verified_at is not null then 'verificado'
+             -- sin aprobar: 90 días desde la última foto subida
+             when not w.dni_verified and w.last_upload <= now() - interval '90 days' then 'sin_aprobar'
+           end as reason
+      from files f join owner_of w on w.folder = f.folder
+  )
+  select d.folder, d.reason, array_agg(d.name order by d.name)
+    from due d where d.reason is not null
+   group by d.folder, d.reason
+   order by d.folder, d.reason
+   limit greatest(coalesce(p_limit, 100), 1)
+$$;
+revoke execute on function public.dni_photos_due(int) from public, anon, authenticated;
+grant execute on function public.dni_photos_due(int) to service_role;
+
+-- al verificar (admin_set_provider deja dni_verified_at), se pide el borrado ya, igual que en la baja. pg_net manda el
+-- pedido después del commit, así que dni-cleanup ve al profesional verificado. Si algo falla acá, la verificación sigue
+-- igual y la tarea diaria (tt-dni-cleanup) las borra después.
+create or replace function public.provider_verified_dni() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from pg_proc f join pg_namespace n on n.oid = f.pronamespace where n.nspname = 'net' and f.proname = 'http_post') then
+    begin
+      perform public.run_dni_cleanup();
+    exception when others then
+      raise warning 'provider_verified_dni: no se pudo pedir el borrado de las fotos (%): queda para la tarea diaria', sqlerrm;
+    end;
+  end if;
+  return null;
+end $$;
+drop trigger if exists provider_verified_dni on public.provider_private;
+create trigger provider_verified_dni after update of dni_verified_at on public.provider_private
+  for each row when (new.dni_verified_at is not null and old.dni_verified_at is null)
+  execute function public.provider_verified_dni();
+revoke execute on function public.provider_verified_dni() from public, anon, authenticated;
+
+-- ===================== 20261106210000_feriados.sql =====================
+-- 7/11 · Punto 4: feriados (docs/09, D39). Idempotente; no borra datos.
+--
+-- Qué feriados: los nacionales (inamovibles y trasladables) y los días no laborables con fines turísticos (puentes).
+-- No entran los provinciales ni los municipales.
+-- De dónde: la Edge Function holidays-sync trae la lista oficial del año en curso y del siguiente de una fuente pública
+-- (ArgentinaDatos) una vez por semana y la guarda acá. El admin la revisa y confirma una vez por año (panel → Comisión →
+-- Feriados); si la fuente falla, la carga o la corrige a mano. Los profesionales ven solo los años confirmados.
+-- Qué pasa: si el profesional no elige, el feriado queda abierto (como cualquier día). Siete días antes le llega un aviso
+-- (en la campanita y por notificación): «El lunes 24/11 es feriado (…). ¿Abrís?», con Abro / Cierro. Cierro usa el
+-- mismo bloqueo de días de Horarios (block_days): nadie reserva y los turnos de ese día se cancelan con el mismo aviso.
+
+-- ---------- Tablas ----------
+create table if not exists public.holidays (
+  day        date primary key,
+  name       text not null check (char_length(name) between 1 and 80),
+  kind       text not null check (kind in ('inamovible','trasladable','puente')),
+  source     text not null default 'api' check (source in ('api','admin')),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.holiday_years (
+  year           int primary key check (year between 2020 and 2100),
+  fetched_at     timestamptz,
+  fetch_error    text check (char_length(fetch_error) <= 300),
+  fetched_count  int,
+  -- la fuente trajo algo distinto después de confirmar el año (un traslado por decreto, por ejemplo): el admin lo revisa
+  source_changed boolean not null default false,
+  confirmed_at   timestamptz,
+  confirmed_by   uuid references auth.users(id) on delete set null
+);
+create table if not exists public.provider_holidays (
+  provider_id bigint not null references public.providers(id) on delete cascade,
+  day         date not null,
+  open        boolean not null,
+  decided_at  timestamptz not null default now(),
+  primary key (provider_id, day)
+);
+-- cerradas por defecto: se leen y se escriben solo con las funciones de abajo (provider_holidays, además, la ve su dueño)
+alter table public.holidays enable row level security;
+alter table public.holiday_years enable row level security;
+alter table public.provider_holidays enable row level security;
+revoke all on public.holidays, public.holiday_years, public.provider_holidays from public, anon, authenticated;
+grant select on public.provider_holidays to authenticated;
+grant select on public.holidays, public.holiday_years, public.provider_holidays to service_role;
+drop policy if exists provider_holidays_read on public.provider_holidays;
+create policy provider_holidays_read on public.provider_holidays for select to authenticated
+  using (provider_id = (select public.my_provider()));
+
+-- "lunes 24/11"
+create or replace function public.holiday_label(p_day date) returns text
+language sql immutable set search_path = public as $$
+  select (array['domingo','lunes','martes','miércoles','jueves','viernes','sábado'])[extract(dow from p_day)::int + 1]
+         || ' ' || to_char(p_day, 'DD/MM')
+$$;
+
+-- ---------- Lo que trae holidays-sync ----------
+-- p_rows: la lista de la fuente ([{fecha, tipo, nombre}]). Solo entran los tipos de arriba y las fechas de ese año.
+-- Año sin confirmar: se reemplaza lo que vino de la fuente (lo cargado a mano por el admin queda). Año confirmado: no se
+-- toca nada; si la fuente cambió, queda marcado para que el admin lo revise.
+create or replace function public.holidays_sync_save(p_year int, p_rows jsonb, p_error text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare y record; n int := 0; changed boolean := false; rows jsonb;
+begin
+  if p_year is null or p_year < 2020 or p_year > 2100 then raise exception 'bad_year'; end if;
+  insert into public.holiday_years (year) values (p_year) on conflict do nothing;
+  if p_error is not null then
+    update public.holiday_years set fetched_at = now(), fetch_error = left(p_error, 300) where year = p_year;
+    return jsonb_build_object('year', p_year, 'error', left(p_error, 300));
+  end if;
+  if jsonb_typeof(p_rows) is distinct from 'array' then raise exception 'bad_rows'; end if;
+  -- la lista limpia: [{day, name, kind}], una por fecha
+  select coalesce(jsonb_agg(jsonb_build_object('day', d, 'name', nm, 'kind', k) order by d), '[]') into rows from (
+    select distinct on (x.d) x.d, left(btrim(regexp_replace(coalesce(r->>'nombre', ''), '[[:cntrl:]<>]', '', 'g')), 80) as nm, x.k
+      from jsonb_array_elements(p_rows) r
+      cross join lateral (select case when (r->>'fecha') ~ '^\d{4}-\d{2}-\d{2}$' then (r->>'fecha')::date end as d,
+                                 lower(btrim(coalesce(r->>'tipo', ''))) as k) x
+     where x.d is not null and extract(year from x.d) = p_year and x.k in ('inamovible','trasladable','puente')
+       and btrim(regexp_replace(coalesce(r->>'nombre', ''), '[[:cntrl:]<>]', '', 'g')) <> ''
+     order by x.d) s;
+  n := jsonb_array_length(rows);
+  select * into y from public.holiday_years where year = p_year for update;
+  if y.confirmed_at is null then
+    if n > 0 then
+      delete from public.holidays h
+       where extract(year from h.day) = p_year and h.source = 'api'
+         and not exists (select 1 from jsonb_to_recordset(rows) i(day date, name text, kind text) where i.day = h.day);
+      insert into public.holidays (day, name, kind, source, updated_at)
+      select i.day, i.name, i.kind, 'api', now() from jsonb_to_recordset(rows) i(day date, name text, kind text)
+      on conflict (day) do update set name = excluded.name, kind = excluded.kind, updated_at = now()
+       where holidays.source = 'api' and (holidays.name, holidays.kind) is distinct from (excluded.name, excluded.kind);
+    end if;
+  else
+    changed := n > 0 and exists (
+      (select i.day, i.name, i.kind from jsonb_to_recordset(rows) i(day date, name text, kind text)
+       except select hh.day, hh.name, hh.kind from public.holidays hh where extract(year from hh.day) = p_year)
+      union all
+      (select hh.day, hh.name, hh.kind from public.holidays hh where extract(year from hh.day) = p_year and hh.source = 'api'
+       except select i.day, i.name, i.kind from jsonb_to_recordset(rows) i(day date, name text, kind text)));
+  end if;
+  update public.holiday_years set fetched_at = now(), fetch_error = case when n = 0 then 'la fuente no trajo feriados de ese año' end,
+         fetched_count = n, source_changed = source_changed or changed
+   where year = p_year;
+  return jsonb_build_object('year', p_year, 'count', n, 'confirmed', y.confirmed_at is not null, 'changed', changed);
+end $$;
+
+-- llamar a holidays-sync (cron semanal y botón del admin), con la URL y la clave del cron de Vault, como run_dni_cleanup
+create or replace function public.run_holidays_sync() returns bigint
+language plpgsql security definer set search_path = public as $$
+declare url text; key text;
+begin
+  select decrypted_secret into url from vault.decrypted_secrets where name = 'tt_project_url';
+  select decrypted_secret into key from vault.decrypted_secrets where name = 'tt_cron_secret';
+  if coalesce(url, '') = '' or coalesce(key, '') = '' then
+    raise warning 'run_holidays_sync: faltan tt_project_url o tt_cron_secret en Vault (ver docs/02)';
+    return null;
+  end if;
+  return net.http_post(
+    url := rtrim(url, '/') || '/functions/v1/holidays-sync',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || key, 'Content-Type', 'application/json'),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 30000);
+end $$;
+
+-- ---------- Admin: revisar, corregir y confirmar ----------
+create or replace function public.admin_holidays() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare cy int := extract(year from (now() at time zone 'America/Argentina/Buenos_Aires'))::int;
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object(
+      'year', g.y,
+      'fetched_at', hy.fetched_at, 'fetch_error', hy.fetch_error, 'fetched_count', hy.fetched_count,
+      'source_changed', coalesce(hy.source_changed, false), 'confirmed_at', hy.confirmed_at,
+      'days', (select coalesce(jsonb_agg(jsonb_build_object('day', h.day, 'name', h.name, 'kind', h.kind, 'source', h.source) order by h.day), '[]')
+                 from public.holidays h where extract(year from h.day) = g.y)) order by g.y), '[]')
+    from generate_series(cy, cy + 1) g(y) left join public.holiday_years hy on hy.year = g.y);
+end $$;
+
+create or replace function public.admin_holiday_save(p_day date, p_name text, p_kind text) returns void
+language plpgsql security definer set search_path = public as $$
+declare nm text := left(btrim(regexp_replace(coalesce(p_name, ''), '[[:cntrl:]<>]', '', 'g')), 80);
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if p_day is null or extract(year from p_day) < 2020 or extract(year from p_day) > 2100 then raise exception 'bad_day'; end if;
+  if nm = '' then raise exception 'bad_name'; end if;
+  if p_kind not in ('inamovible','trasladable','puente') then raise exception 'bad_kind'; end if;
+  insert into public.holiday_years (year) values (extract(year from p_day)::int) on conflict do nothing;
+  insert into public.holidays (day, name, kind, source, updated_at) values (p_day, nm, p_kind, 'admin', now())
+  on conflict (day) do update set name = excluded.name, kind = excluded.kind, source = 'admin', updated_at = now();
+end $$;
+
+create or replace function public.admin_holiday_delete(p_day date) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  delete from public.holidays where day = p_day;
+end $$;
+
+-- confirmar el año: desde ahí los profesionales lo ven (y les llegan los avisos)
+create or replace function public.admin_holidays_confirm(p_year int) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  if not exists (select 1 from public.holidays where extract(year from day) = p_year) then raise exception 'no_holidays'; end if;
+  insert into public.holiday_years (year) values (p_year) on conflict do nothing;
+  update public.holiday_years set confirmed_at = now(), confirmed_by = auth.uid(), source_changed = false where year = p_year;
+end $$;
+
+-- "Traer de nuevo" desde la fuente (la respuesta llega a los pocos segundos: el panel vuelve a pedir la lista)
+create or replace function public.admin_holidays_fetch() returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_admin() then raise exception 'forbidden'; end if;
+  return public.run_holidays_sync() is not null;
+end $$;
+
+-- ---------- El profesional ----------
+-- los próximos feriados de los años confirmados (hasta un año), con lo que eligió y si ese día atiende
+create or replace function public.my_holidays() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); tz text; today date;
+begin
+  if pid is null then return '[]'; end if;
+  tz := coalesce(public.provider_tz(pid), 'America/Argentina/Buenos_Aires'); today := (now() at time zone tz)::date;
+  return (select coalesce(jsonb_agg(jsonb_build_object(
+      'day', h.day, 'name', h.name, 'kind', h.kind, 'open', ph.open,
+      'works', exists (select 1 from public.provider_hours ph2 where ph2.provider_id = pid and ph2.dow = extract(dow from h.day)::int)) order by h.day), '[]')
+    from public.holidays h
+    join public.holiday_years hy on hy.year = extract(year from h.day)::int and hy.confirmed_at is not null
+    left join public.provider_holidays ph on ph.provider_id = pid and ph.day = h.day
+   where h.day >= today and h.day <= today + 366);
+end $$;
+
+-- Abro / Cierro. Cierro bloquea ese día con block_days (y devuelve lo mismo: los turnos cancelados para llamar a cada
+-- cliente); Abro, si antes lo había cerrado desde acá, lo desbloquea (los turnos que se cancelaron siguen cancelados).
+create or replace function public.holiday_decide(p_day date, p_open boolean) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); tz text; h record; prev boolean; res jsonb := '{}';
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  if p_open is null then raise exception 'bad_choice'; end if;
+  tz := coalesce(public.provider_tz(pid), 'America/Argentina/Buenos_Aires');
+  select hl.day, hl.name into h from public.holidays hl
+    join public.holiday_years hy on hy.year = extract(year from hl.day)::int and hy.confirmed_at is not null
+   where hl.day = p_day;
+  if h.day is null then raise exception 'not_holiday'; end if;
+  if h.day < (now() at time zone tz)::date then raise exception 'past_days'; end if;
+  select open into prev from public.provider_holidays where provider_id = pid and day = p_day;
+  if p_open then
+    if prev is false then
+      delete from public.bookings where provider_id = pid and source = 'block' and coalesce(service_name, '') like '🏖️ Feriado%'
+         and starts_at >= p_day::timestamp at time zone tz and starts_at < (p_day + 1)::timestamp at time zone tz;
+    end if;
+  else
+    res := public.block_days(p_day, p_day, 'Feriado: ' || h.name);
+  end if;
+  insert into public.provider_holidays (provider_id, day, open, decided_at) values (pid, p_day, p_open, now())
+  on conflict (provider_id, day) do update set open = excluded.open, decided_at = now();
+  update public.provider_notices set read_at = coalesce(read_at, now()) where provider_id = pid and kind = 'holiday' and ref = p_day::text;
+  return res || jsonb_build_object('day', p_day, 'open', p_open);
+end $$;
+
+-- ---------- El aviso, 7 días antes ----------
+alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
+alter table public.provider_notices add constraint provider_notices_kind_check
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect','new_follower','mp_term','holiday'));
+alter table public.push_outbox drop constraint if exists push_outbox_kind_check;
+alter table public.push_outbox add constraint push_outbox_kind_check
+  check (kind in ('conf','r24','r2','rev','bday','cancel','new_booking','client_cancel','cobros','mp_reconnect','new_follower','offer','news','holiday'));
+
+-- una vez por día (tt-holiday-notices): a cada profesional activo, por cada feriado de un año confirmado de acá a 7 días
+-- que cae en un día que atiende, que no tiene bloqueado y sobre el que no eligió nada. Una sola vez por feriado.
+create or replace function public.holiday_notices() returns int
+language plpgsql security definer set search_path = public as $$
+declare n int := 0;
+begin
+  insert into public.provider_notices (provider_id, kind, ref, body)
+  select p.id, 'holiday', h.day::text,
+         'El ' || public.holiday_label(h.day) || ' es feriado (' || h.name || '). ¿Abrís?'
+    from public.holidays h
+    join public.holiday_years hy on hy.year = extract(year from h.day)::int and hy.confirmed_at is not null
+    join public.providers p on p.status = 'active'
+   where h.day >= (now() at time zone coalesce(public.provider_tz(p.id), 'America/Argentina/Buenos_Aires'))::date
+     and h.day <= (now() at time zone coalesce(public.provider_tz(p.id), 'America/Argentina/Buenos_Aires'))::date + 7
+     and exists (select 1 from public.provider_hours ph where ph.provider_id = p.id and ph.dow = extract(dow from h.day)::int)
+     and not exists (select 1 from public.provider_holidays d where d.provider_id = p.id and d.day = h.day)
+     and not exists (select 1 from public.bookings b where b.provider_id = p.id and b.source = 'block' and coalesce(b.service_name, '') like '🏖️%'
+                       and b.starts_at >= h.day::timestamp at time zone coalesce(public.provider_tz(p.id), 'America/Argentina/Buenos_Aires')
+                       and b.starts_at < (h.day + 1)::timestamp at time zone coalesce(public.provider_tz(p.id), 'America/Argentina/Buenos_Aires'))
+  on conflict (provider_id, kind, ref) do nothing;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- el push del aviso de feriado: su propio tipo, vale hasta el día del feriado
+create or replace function public.provider_notices_push() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.push_enqueue((select owner_id from public.providers where id = new.provider_id),
+    case when new.kind in ('mp_reconnect','mp_connect') then 'mp_reconnect' when new.kind in ('new_follower','holiday') then new.kind else 'cobros' end,
+    'notice', new.id, null,
+    case when new.kind = 'new_follower' then now() + interval '1 day'
+         when new.kind = 'holiday' and new.ref ~ '^\d{4}-\d{2}-\d{2}$' then least(now() + interval '8 days', (new.ref::date)::timestamp at time zone 'America/Argentina/Buenos_Aires')
+         else now() + interval '3 days' end);
+  return null;
+end $$;
+
+-- los avisos del panel, con la fecha del feriado (ref) y lo que eligió (para no ofrecer Abro / Cierro dos veces)
+create or replace function public.my_provider_notices() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', n.id, 'kind', n.kind, 'body', n.body, 'at', n.created_at, 'read', n.read_at is not null,
+                                               'ref', case when n.kind = 'holiday' then n.ref end,
+                                               'open', case when n.kind = 'holiday' then (select d.open from public.provider_holidays d where d.provider_id = n.provider_id and d.day::text = n.ref) end)
+                            order by n.created_at desc), '[]')
+  from (select * from public.provider_notices where provider_id = public.my_provider() order by created_at desc limit 30) n
+$$;
+
+-- push_due: igual que en 20261104190000_seguidores.sql, más el aviso de feriado (holiday)
+create or replace function public.push_due(p_limit int default 100)
+returns table (id bigint, endpoint text, p256dh text, auth text, title text, body text, url text, tag text, ttl int, urgency text)
+language plpgsql security definer set search_path = public as $$
+declare r record; skip text; t text; b text; u text; who text; svc text; pname text; lt timestamp;
+        b_status text; b_start timestamptz; b_pid bigint; b_svc text; b_client text;
+        o_start timestamptz; o_pid bigint; o_slug text; o_body text;
+begin
+  for r in select o.id, o.kind, o.source, o.source_id, o.booking_id, o.expires_at, s.endpoint, s.p256dh, s.auth,
+                  coalesce(pr.push_notices, true) as wants, coalesce(pr.push_bookings, true) as wants_bookings,
+                  coalesce(pr.push_followers, true) as wants_followers
+             from public.push_outbox o
+             join public.push_subscriptions s on s.id = o.subscription_id
+             left join public.profiles pr on pr.id = o.user_id
+            where o.status = 'pending' and o.next_attempt_at <= now()
+            order by o.next_attempt_at, o.id
+            limit greatest(coalesce(p_limit, 100), 1)
+            for update of o skip locked loop
+    b_status := null; b_start := null; b_pid := null; b_svc := null; b_client := null;
+    o_start := null; o_pid := null; o_slug := null; o_body := null;
+    if r.booking_id is not null then
+      select bb.status, bb.starts_at, bb.provider_id, bb.service_name, bb.client_name into b_status, b_start, b_pid, b_svc, b_client
+        from public.bookings bb where bb.id = r.booking_id;
+    end if;
+    if r.kind = 'offer' then
+      select so.starts_at, so.provider_id, p.slug, m.body into o_start, o_pid, o_slug, o_body
+        from public.client_messages m
+        join public.slot_offers so on so.id = m.ref::bigint
+        join public.providers p on p.id = so.provider_id
+       where m.id = r.source_id and m.kind = 'offer';
+    end if;
+    skip := case when (public.push_optional(r.kind) and not r.wants) or (public.push_booking_kind(r.kind) and not r.wants_bookings)
+                   or (r.kind = 'new_follower' and not r.wants_followers) then 'opt_out'
+                 when r.expires_at <= now() then 'stale'
+                 when r.kind in ('conf','r24','r2','new_booking') and (b_status is distinct from 'confirmed' or b_start <= now()) then 'stale'
+                 when r.kind = 'client_cancel' and (b_start is null or b_start <= now()) then 'stale'
+                 when r.kind = 'offer' and (o_start is null or o_start <= now()) then 'stale'
+                 -- 7/11 · feriados: ya eligió Abro o Cierro
+                 when r.kind = 'holiday' and exists (select 1 from public.provider_notices n join public.provider_holidays d
+                                                       on d.provider_id = n.provider_id and d.day::text = n.ref where n.id = r.source_id) then 'stale'
+            end;
+    if skip is not null then
+      update public.push_outbox set status = 'skipped', skip_reason = skip where push_outbox.id = r.id;
+      continue;
+    end if;
+    t := null; b := null; u := null;
+    if r.source = 'message' then
+      select p.name into pname from public.client_messages m join public.providers p on p.id = m.provider_id where m.id = r.source_id;
+      lt := b_start at time zone public.provider_tz(b_pid);
+      case r.kind
+        when 'conf' then t := 'Turno confirmado'; b := pname || ' · ' || public.push_when(b_start, b_pid);
+        when 'r24'  then t := 'Mañana tenés turno'; b := pname || ' a las ' || to_char(lt, 'HH24:MI');
+        when 'r2'   then t := 'Hoy a las ' || to_char(lt, 'HH24:MI') || ' tenés turno'; b := pname || coalesce(' · ' || nullif(b_svc, ''), '');
+        when 'rev'  then t := '¿Qué tal tu turno?'; b := 'Contale a ' || pname || ' cómo te fue';
+        when 'bday' then t := '¡Feliz cumpleaños!'; b := 'De parte de ' || pname;
+        when 'offer' then t := 'Turno libre en ' || pname; b := o_body;
+        when 'news' then t := 'Novedad de ' || pname; select m.body into b from public.client_messages m where m.id = r.source_id;
+        else t := case when b_status = 'expired' then 'No pudimos confirmar tu turno' else 'Se canceló tu turno' end;
+             b := pname || '. Abrí TuTiempo para ver el detalle.';
+      end case;
+      u := case when r.kind = 'news' then '/' || (select p.slug from public.client_messages m join public.providers p on p.id = m.provider_id where m.id = r.source_id)
+                when r.kind = 'offer' then '/' || o_slug || '?dia=' || to_char(o_start at time zone public.provider_tz(o_pid), 'YYYY-MM-DD')
+                when r.booking_id is not null and r.kind in ('conf','r24','r2','cancel','rev') then '/turno/' || r.booking_id
+                else '/mis-turnos' end;
+    elsif r.source = 'booking' then
+      -- del cliente, solo el nombre de pila (sin apellido ni teléfono)
+      who := left(coalesce(nullif(split_part(trim(b_client), ' ', 1), ''), 'Un cliente'), 30);
+      svc := coalesce(nullif(b_svc, ''), 'Turno');
+      t := case r.kind when 'new_booking' then 'Nueva reserva' else 'Se canceló una reserva' end;
+      b := who || ' · ' || svc || ' · ' || public.push_when(b_start, b_pid);
+      u := '/panel/agenda?dia=' || to_char(b_start at time zone public.provider_tz(b_pid), 'YYYY-MM-DD');
+    else
+      -- C06 (V8): un seguidor nuevo, con su nombre de pila (lo guarda el aviso; nada más). 4/11: a la pestaña Seguidores
+      if r.kind = 'holiday' then
+        -- 7/11 · feriados: «El lunes 24/11 es feriado (…). ¿Abrís?», a Horarios (Próximos feriados)
+        select n.body into b from public.provider_notices n where n.id = r.source_id;
+        t := 'Feriado: ¿abrís?'; u := '/panel/horarios';
+      elsif r.kind = 'new_follower' then
+        select n.body into b from public.provider_notices n where n.id = r.source_id;
+        t := 'Nuevo seguidor'; b := left(coalesce(b, 'Alguien empezó a seguirte'), 120); u := '/panel/clientes?ver=seguidores';
+      -- C41/C42 (V6): el aviso de TuTiempo para conectar Mercado Pago por primera vez ("Avisarle" en el admin)
+      elsif r.kind = 'mp_reconnect' and (select n.kind from public.provider_notices n where n.id = r.source_id) = 'mp_connect' then
+        t := 'Conectá Mercado Pago'; b := 'Sin Mercado Pago no podés cobrar señas ni recibir reservas online. Conectalo desde tu perfil.';
+        u := '/panel/perfil';
+      else
+        t := case r.kind when 'mp_reconnect' then 'Volvé a conectar Mercado Pago' else 'Novedad en tus cobros' end;
+        b := case r.kind when 'mp_reconnect' then 'Hoy no podés cobrar señas. Conectalo desde tu perfil.' else 'Abrí tu panel para ver el detalle.' end;
+        u := case r.kind when 'mp_reconnect' then '/panel/perfil' else '/panel/agenda' end;
+      end if;
+    end if;
+    if t is null or b is null then
+      update public.push_outbox set status = 'skipped', skip_reason = 'stale' where push_outbox.id = r.id;
+      continue;
+    end if;
+    update public.push_outbox set next_attempt_at = now() + interval '2 minutes' where push_outbox.id = r.id;
+    id := r.id; endpoint := r.endpoint; p256dh := r.p256dh; auth := r.auth; title := left(t, 80); body := left(b, 160); url := u;
+    -- los avisos de un mismo turno se reemplazan entre sí en la pantalla (el recordatorio pisa a la confirmación)
+    tag := case when r.booking_id is not null then 'turno-' || r.booking_id else r.kind || '-' || r.source_id end;
+    -- cuánto la guarda el servicio de push si el dispositivo está apagado: hasta que vence, y nunca después del turno
+    ttl := greatest(60, least(2419200, extract(epoch from (least(r.expires_at, case when r.kind in ('conf','r24','r2','new_booking') then b_start end) - now()))::int));
+    urgency := case when r.kind in ('conf','cancel','r2','new_booking','client_cancel','mp_reconnect') then 'high' else 'normal' end;
+    return next;
+  end loop;
+end $$;
+
+revoke execute on function public.push_due(int) from public, anon, authenticated;
+grant execute on function public.push_due(int) to service_role;
+
+-- ---------- Tareas programadas ----------
+do $$ begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    -- el aviso de los feriados de acá a 7 días: todos los días a las 9:07 de Argentina (12:07 UTC)
+    perform cron.schedule('tt-holiday-notices', '7 12 * * *', 'select public.holiday_notices()');
+    -- traer la lista oficial: los lunes a las 6:23 de Argentina (9:23 UTC), con pg_net
+    if exists (select 1 from pg_extension where extname = 'pg_net') then
+      perform cron.schedule('tt-holidays', '23 9 * * 1', 'select public.run_holidays_sync()');
+    end if;
+  end if;
+end $$;
+
+-- ---------- Permisos ----------
+revoke execute on function public.holiday_label(date), public.holidays_sync_save(int, jsonb, text), public.run_holidays_sync(),
+  public.admin_holidays(), public.admin_holiday_save(date, text, text), public.admin_holiday_delete(date), public.admin_holidays_confirm(int),
+  public.admin_holidays_fetch(), public.my_holidays(), public.holiday_decide(date, boolean), public.holiday_notices(),
+  public.provider_notices_push(), public.my_provider_notices() from public, anon, authenticated;
+grant execute on function public.holidays_sync_save(int, jsonb, text), public.run_holidays_sync() to service_role;
+grant execute on function public.admin_holidays(), public.admin_holiday_save(date, text, text), public.admin_holiday_delete(date),
+  public.admin_holidays_confirm(int), public.admin_holidays_fetch(), public.my_holidays(), public.holiday_decide(date, boolean),
+  public.my_provider_notices() to authenticated;
+

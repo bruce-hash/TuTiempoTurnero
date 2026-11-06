@@ -10,6 +10,7 @@ import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
 import { cliStamps, setCliStamps, stampGoal } from "../../ui/sellos.js";
 import { toast } from "../../ui/toast.js";
+import { ic } from "../../ui/iconos.js";
 
 // bloqueo de días (vacaciones, feriados): formulario, aviso de turnos a cancelar y próximos bloqueos
 export function vDayBlocks() {
@@ -45,12 +46,12 @@ export function vDayBlocks() {
   });
   const from = form.from || dkey(addDays(1));
   const to = form.to || from;
-  return `<form class="panel" id="fDayBlock" novalidate><p class="lbl">🏖️ Bloquear días o semanas</p>
+  return `<form class="panel" id="fDayBlock" novalidate><p class="lbl">${ic("descanso")} Bloquear días o semanas</p>
    ${
      S.dbCancelled && S.dbCancelled.length
        ? `<div class="panel warnbox dbdone"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>Cancelamos ${S.dbCancelled.length} turno${S.dbCancelled.length > 1 ? "s" : ""} y avisamos a tus clientes</b><button type="button" class="xbtn" data-act="dbCancelClose" aria-label="Cerrar">✕</button></div>
      <p class="note" style="text-align:left;margin:4px 0 8px">A los que reservaron por la app les llegó el aviso. <b>TuTiempo no devuelve la seña:</b> llamá a cada cliente y devolvele la seña o pasale el turno a otro día. Eso lo arreglás vos.</p>
-     <ul class="ag">${S.dbCancelled.map((item) => `<li><span class="ag-t">${esc(item.time)}</span><div><b>${esc(item.name || "Cliente")}</b><span>${esc(dayLabel(item.date))} · ${esc(item.svc || "")}${item.paid ? " · seña " + money(item.paid) : ""}${item.app ? " · 📱 avisado en la app" : " · ✍ agendado a mano"}${item.tel ? ` · <a class="lnk" href="tel:${esc(String(item.tel).replace(/[^\d+]/g, ""))}">📞 ${esc(item.tel)}</a>` : ""}</span></div></li>`).join("")}</ul></div>`
+     <ul class="ag">${S.dbCancelled.map((item) => `<li><span class="ag-t">${esc(item.time)}</span><div><b>${esc(item.name || "Cliente")}</b><span>${esc(dayLabel(item.date))} · ${esc(item.svc || "")}${item.paid ? " · seña " + money(item.paid) : ""}${item.app ? ` · ${ic("celu")} avisado en la app` : ` · ${ic("editar")} agendado a mano`}${item.tel ? ` · <a class="lnk" href="tel:${esc(String(item.tel).replace(/[^\d+]/g, ""))}">${ic("telefono")} ${esc(item.tel)}</a>` : ""}</span></div></li>`).join("")}</ul></div>`
        : ""
    }
    <p class="note" style="text-align:left;margin:0 0 10px">Vacaciones, feriados, un curso… Esos días nadie puede reservarte. Si ya tenés turnos esos días, se cancelan y les avisamos por la app. La seña no la devuelve TuTiempo: vos los llamás para devolverla o darles otro turno. Antes te mostramos la lista.</p>
@@ -72,19 +73,23 @@ export function vDayBlocks() {
      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px"><button type="button" class="btn btn-ghost" data-act="dbAskNo">Volver</button><button type="button" class="btn btn-bad" data-act="dbConfirm">Bloquear y cancelar</button></div></div>`
        : '<button class="btn btn-pri btn-block" type="submit">Bloquear días</button>'
    }
-   ${runs.length ? `<p class="lbl" style="margin-top:14px">Próximos días bloqueados</p><ul class="ag">${runs.map((run) => `<li><span class="ag-t">🏖️</span><div><b>${esc(dayLabel(run.from))}${run.to !== run.from ? ` al ${esc(dayLabel(run.to))}` : ""}</b><span>${esc(run.why.replace(/^🏖️\s*/, ""))} · ${run.ids.length} día${run.ids.length > 1 ? "s" : ""} de atención</span></div><button type="button" class="btn btn-ghost btn-sm" data-act="dbDel" data-ids="${run.ids.join(",")}">Desbloquear</button></li>`).join("")}</ul>` : ""}
+   ${runs.length ? `<p class="lbl" style="margin-top:14px">Próximos días bloqueados</p><ul class="ag">${runs.map((run) => `<li><span class="ag-t">${ic("descanso")}</span><div><b>${esc(dayLabel(run.from))}${run.to !== run.from ? ` al ${esc(dayLabel(run.to))}` : ""}</b><span>${esc(run.why.replace(/^🏖️\s*/, ""))} · ${run.ids.length} día${run.ids.length > 1 ? "s" : ""} de atención</span></div><button type="button" class="btn btn-ghost btn-sm" data-act="dbDel" data-ids="${run.ids.join(",")}">Desbloquear</button></li>`).join("")}</ul>` : ""}
   </form>`;
 }
 // bloquea los días con horario entre from y to. En vivo lo hace la base (block_days); en la demo se cancelan
 // los turnos de esos días (sin devolver la seña: la devuelve el prestador) y se devuelven los sellos canjeados.
-export function blockDays(from, to, reason) {
+// 7/11 · Feriados: con holiday (la fecha), es el «Cierro» de un feriado: en vivo lo hace holiday_decide (el mismo
+// bloqueo, más la elección guardada); la respuesta es la misma.
+export function blockDays(from, to, reason, holiday) {
   const pid = ME();
   const conf = cfg(pid);
   S.dbAsk = null;
   if (LIVE) {
-    api.m
-      .blockDays(from, to, reason)
+    (holiday ? api.m.holidayDecide(holiday, false) : api.m.blockDays(from, to, reason))
       .then((res) => {
+        if (holiday) {
+          setHolidayChoice(holiday, false);
+        }
         S.dbCancelled = ((res && res.cancelled) || []).map((row) => ({
           name: row.name,
           date: row.day,
@@ -168,10 +173,27 @@ export function blockDays(from, to, reason) {
   }
   S.dbCancelled = cancelled.sort((one, other) => (one.date + one.time).localeCompare(other.date + other.time));
   S.db = null;
+  if (holiday) {
+    setHolidayChoice(holiday, false);
+  }
   toast(
     `Bloqueaste ${blockedCount} día${blockedCount === 1 ? "" : "s"}.${cancelled.length ? ` Cancelamos ${cancelled.length} turno${cancelled.length > 1 ? "s" : ""} y les avisamos. Llamalos para la seña.` : ""}`,
   );
   render();
+}
+// 7/11 · Feriados: guarda en pantalla lo que eligió (la lista de Horarios y el aviso de la campanita)
+export function setHolidayChoice(day, open) {
+  (store.HOLIDAYS || []).forEach((h) => {
+    if (h.day === day) {
+      h.open = open;
+    }
+  });
+  (S.notices || []).forEach((notice) => {
+    if (notice.kind === "holiday" && notice.ref === day) {
+      notice.open = open;
+      notice.read = true;
+    }
+  });
 }
 // demo: aviso al cliente de que el prestador canceló su turno
 export function pushCancel(booking) {

@@ -1,13 +1,13 @@
 import { isBusiness } from "../../lib/cuentas.js";
 import { esc } from "../../lib/dom.js";
 import { TODAY, nowHM } from "../../lib/fechas.js";
-import { ME, isFol } from "../../lib/prestadores.js";
-import { CAT } from "../../lib/rubros.js";
+import { ME } from "../../lib/prestadores.js";
 import { S } from "../../state.js";
-import { P, store } from "../../store.js";
+import { store } from "../../store.js";
 import { pushPanel } from "../../ui/avisos.js";
 import { photoPicker } from "../../ui/fotos.js";
 import { myUpcoming } from "./home.js";
+import { ic } from "../../ui/iconos.js";
 
 // eliminar cuenta (who "cli") o perfil de prestador ("pro"): primero el botón, después la confirmación
 export function delBox(who, upcoming) {
@@ -32,9 +32,9 @@ export function delBox(who, upcoming) {
 export function vCuenta() {
   const user = S.user;
   const upcoming = myUpcoming().length;
-  return `<div class="narrow stack" style="margin-top:20px"><h1 class="h1">${isBusiness() ? "Ajustes" : "Mi perfil"}</h1>
-   <div class="panel contact">${photoPicker(user, "upAv")}<div><b>${esc(user.name)}</b><div class="hint">${esc(user.email)}</div><label class="lnk" for="upAv" style="cursor:pointer">📷 ${user.photo ? "Cambiar foto" : "Agregar foto"}</label></div></div>
-   <button class="tcard" data-go="misturnos"><div class="tdate"><span>Turnos</span><b>${upcoming}</b></div><div class="tc-m"><b>📅 Mis turnos</b><span>${upcoming ? `Tenés ${upcoming} turno${upcoming > 1 ? "s" : ""} reservado${upcoming > 1 ? "s" : ""}` : "No tenés turnos reservados"}</span></div><span class="tc-go">›</span></button>
+  return `<div class="narrow stack" style="margin-top:20px"><h1 class="h1">Mi perfil</h1>
+   <div class="panel contact">${photoPicker(user, "upAv")}<div><b>${esc(user.name)}</b><div class="hint">${esc(user.email)}</div><label class="lnk" for="upAv" style="cursor:pointer">${ic("trabajos")} ${user.photo ? "Cambiar foto" : "Agregar foto"}</label></div></div>
+   <button class="tcard" data-go="misturnos"><div class="tdate"><span>Turnos</span><b>${upcoming}</b></div><div class="tc-m"><b>${ic("agenda")} Mis turnos</b><span>${upcoming ? `Tenés ${upcoming} turno${upcoming > 1 ? "s" : ""} reservado${upcoming > 1 ? "s" : ""}` : "No tenés turnos reservados"}</span></div><span class="tc-go">›</span></button>
    <form class="panel" id="fCuenta" novalidate><p class="lbl">Mis datos</p>
     <div class="f"><label for="un">Nombre</label><input id="un" value="${esc(user.name)}" autocomplete="off"></div>
     <div class="f"><label for="ut">Celular</label><input id="ut" value="${esc(S.form.tel)}" autocomplete="off"></div>
@@ -42,21 +42,22 @@ export function vCuenta() {
     <button class="btn btn-pri btn-block" type="submit">Guardar</button></form>
    <div class="panel"><p class="lbl">Avisos por email</p>
     <label class="chk" style="justify-content:flex-start;text-align:left"><input type="checkbox" id="uMail"${user.emailNotices === false ? "" : " checked"}> Recordatorios y novedades por email</label>
-    <p class="note" style="text-align:left;margin:8px 0 0">Los recordatorios de tus turnos, el pedido de reseña y el saludo de cumpleaños. La confirmación y las cancelaciones te llegan siempre por email, y todos los avisos siguen en Mis turnos.</p></div>
+    <p class="note" style="text-align:left;margin:8px 0 0">El recordatorio del día anterior a tu turno, el pedido de reseña y las novedades de tus profesionales. La confirmación y las cancelaciones te llegan siempre por email, y todos los avisos siguen en la campanita.</p></div>
    ${pushPanel("cliente")}
-   <div class="panel"><p class="lbl">Profesionales que seguís</p>${(() => {
-     const followed = P.filter((prov) => isFol(prov.id) && !prov.deleted);
-     if (followed.length) {
-       return `<ul class="ag">${followed.map((prov) => `<li><span class="ag-t">${(CAT[prov.cats[0]] || CAT.n).ic}</span><div><b>${esc(prov.name)}</b><span>Te avisamos cuando tenga lugar</span></div><button class="btn btn-ghost" data-go="perfil" data-id="${prov.id}">Ver</button></li>`).join("")}</ul>`;
-     } else {
-       return '<p class="note">Seguí a tus favoritos para enterarte cuando tienen lugar.</p>';
-     }
-   })()}</div>
-   <div class="panel"><p class="lbl">Seguridad</p><dl class="kv"><dt>Email</dt><dd>${esc(user.email)}</dd></dl>
-    <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="changePass">🔒 Cambiar contraseña</button></div>
-   ${S.isAdmin ? '<button class="btn btn-ghost btn-block" data-act="toAdmin">🛠️ Panel de TuTiempo (admin)</button>' : ""}
+   ${S.isAdmin ? `<button class="btn btn-ghost btn-block" data-act="toAdmin">${ic("admin")} Panel de TuTiempo (admin)</button>` : ""}
    ${S.barberAuth ? '<button class="btn btn-pri btn-block" data-act="toPanel">Ir a mi panel de profesional</button>' : '<p class="note">¿Tenés un negocio? <button class="lnk" data-act="bizStart">Registralo en TuTiempo</button></p>'}
+   <button class="btn btn-ghost btn-block" data-go="ajustes">${ic("candado")} Ajustes · Seguridad</button>
    <button class="btn btn-ghost btn-block" data-act="logout">Cerrar sesión</button>
+  </div>`;
+}
+// 4/11 · Bloque 4: Ajustes deja solo Seguridad (el email, cambiar la contraseña y eliminar la cuenta), para clientes y
+// para cuentas de negocio; lo demás está en Mi perfil (el profesional: la pestaña Perfil del panel)
+export function vAjustes() {
+  const user = S.user;
+  const upcoming = isBusiness() ? 0 : myUpcoming().length;
+  return `<div class="narrow stack" style="margin-top:20px"><h1 class="h1">Ajustes</h1>
+   <div class="panel"><p class="lbl">Seguridad</p><dl class="kv"><dt>Email</dt><dd>${esc(user.email)}</dd></dl>
+    <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="changePass">${ic("candado")} Cambiar contraseña</button></div>
    ${delBox("cli", upcoming)}
   </div>`;
 }

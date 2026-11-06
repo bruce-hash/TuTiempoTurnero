@@ -111,16 +111,22 @@ label.chk{display:flex;gap:8px;align-items:flex-start;font-weight:500;line-heigh
 .svcopts .f input{padding:7px 8px;font-size:13px}
 .apperr{max-width:480px;margin:40px auto;text-align:center}
 footer{background:var(--card);border-top:1px solid var(--line);margin-top:40px}
-footer .in{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:22px;text-align:center}
+/* 4/11: los bloques en una fila centrada (con grid auto-fit, la línea legal de ancho completo dejaba una columna vacía a la derecha) */
+footer .in{max-width:1100px;margin:0 auto;padding-inline:16px;padding-block:28px;display:flex;flex-wrap:wrap;justify-content:center;gap:22px 40px;text-align:center}
+footer .in>div{flex:1 1 180px;max-width:260px}
 footer .logo{justify-content:center}
 footer .logo .lg-i{height:28px}footer .logo .lg-t{height:18px}
 /* C04: el lema del manual, en Montserrat y en el color de la marca del rubro */
 .claim{font-family:"Montserrat",var(--font);font-weight:700;font-size:11px;letter-spacing:.05em;color:var(--brand);margin:8px 0 0}
 footer h4{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 footer ul{list-style:none;margin:0;padding:0;display:grid;gap:6px;font-size:14px;justify-items:center}
-footer .legal{grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px;font-size:12px;color:var(--muted)}
+footer .in>.legal{flex-basis:100%;max-width:none;border-top:1px solid var(--line);padding-top:14px;font-size:12px;color:var(--muted)}
 .lnk{color:var(--brand);background:none;border:0;padding:0;font-size:inherit}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--bar-bg);color:var(--bar-fg);border:1px solid var(--bar-bd);padding:10px 16px;border-radius:10px;font-size:14px;max-width:calc(100% - 32px);z-index:50}
+/* 4/11 · Bloque 1: deslizar para actualizar en la app instalada (src/lib/actualizar.js); arriba, fuera de la pantalla hasta que se tira */
+.ptr{position:fixed;left:50%;top:calc(-44px + env(safe-area-inset-top,0px));transform:translateX(-50%);margin-left:0;background:var(--card);color:var(--fg);border:1px solid var(--line);box-shadow:0 4px 14px rgba(0,0,0,.12);padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap;z-index:60;pointer-events:none;visibility:hidden}
+.ptr.on{visibility:visible}
+.ptr.ready{color:var(--brand);border-color:var(--brand-line)}
 .notif{position:fixed;top:calc(64px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 32px));background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:12px 14px;display:flex;gap:10px;align-items:center;z-index:40;font-size:14px}
 .notif div{flex:1;min-width:0}
 /* ===== v28 ===== */

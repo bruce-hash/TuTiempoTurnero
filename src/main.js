@@ -6,12 +6,14 @@ import "./styles/agenda.css";
 import "./styles/componentes.css";
 import "./styles/rubros.css";
 import "./styles/marketplace.css";
+import "./styles/iconos.css";
 import "./styles/compu.css";
 import "./actions/admin-balance.js";
 import "./actions/admin.js";
 import "./actions/negocio.js";
 import "./actions/auth.js";
 import "./actions/avisos.js";
+import "./actions/campanita.js";
 import "./actions/cambios.js";
 import "./actions/cliente.js";
 import "./actions/contrasena-nueva.js";
@@ -25,6 +27,7 @@ import "./actions/prestador-caja.js";
 import "./actions/prestador-clientes.js";
 import "./actions/prestador-finanzas.js";
 import "./actions/prestador-horarios.js";
+import "./actions/feriados.js";
 import "./actions/prestador-perfil.js";
 import "./actions/prestador-productos.js";
 import "./actions/reserva.js";
@@ -35,6 +38,8 @@ import { CONFIG_OK, LIVE, sb } from "./config.js";
 import { errMsg } from "./lib/errores.js";
 import { startPriceRefresh } from "./lib/precios.js";
 import { startAgendaRefresh } from "./lib/agenda-al-dia.js";
+import { startAppRefresh } from "./lib/actualizar.js";
+import { clearPendingPay, resumePendingPay } from "./lib/cobro-pendiente.js";
 import { refreshPush } from "./lib/push.js";
 import { unstashPending } from "./lib/pendiente.js";
 import { resumePending } from "./actions/pendiente.js";
@@ -42,7 +47,7 @@ import { startPwa } from "./lib/pwa.js";
 import { S } from "./state.js";
 import { P, store } from "./store.js";
 import { startRouter } from "./router.js";
-import { render } from "./ui/render.js";
+import { go, render } from "./ui/render.js";
 import { reloadTarget } from "./lib/recarga.js";
 import { toast } from "./ui/toast.js";
 import "./demo/index.js";
@@ -85,6 +90,7 @@ async function boot() {
       }
       if (event === "SIGNED_OUT") {
         S.user = null;
+        clearPendingPay(null);
         S.barberAuth = false;
         if (S.role === "barbero") {
           S.role = "cliente";
@@ -226,7 +232,12 @@ async function boot() {
     // ingreso y registro: la acción que pidió ingresar (link del email de la cuenta nueva o vuelta de Google) sigue sola
     if (S.user && S.pending) {
       await resumePending();
+    } else {
+      // 4/11 · Bloque 1: un cobro de Mercado Pago que quedó abierto (la app instalada en iPhone no recibe la vuelta)
+      await resumePendingPay(go);
     }
+    // y al volver a primer plano: el cobro pendiente o los datos de la pantalla; en la app instalada, deslizar para actualizar
+    startAppRefresh();
     return;
   } else {
     const bar = document.createElement("div");

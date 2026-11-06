@@ -13,11 +13,11 @@ conn = psycopg.connect(DSN, autocommit=True)
 F = 0
 
 
-def ok(name, cond):
+def ok(name, cond, detail=""):
     global F
     if not cond:
         F += 1
-    print(("OK   " if cond else "FAIL ") + name)
+    print(("OK   " if cond else "FAIL ") + name + ("" if cond or not detail else "  → " + detail))
 
 
 def q(sql, args=None, uid=None, role=None):
@@ -233,7 +233,7 @@ ok("reconectar Mercado Pago: lleva al perfil", mrs[1]["title"] == "Volvé a cone
 ok("V6 · «Avisarle» del admin: «Conectá Mercado Pago», al perfil, urgente", mrs[0]["title"] == "Conectá Mercado Pago" and mrs[0]["url"] == "/panel/perfil"
    and mrs[0]["urgency"] == "high" and "Conectalo desde tu perfil" in mrs[0]["body"])
 nf = by_kind["new_follower"][0]
-ok("C06: push «Nuevo seguidor» · «Ana empezó a seguirte.», lleva a Trabajos del panel", nf["title"] == "Nuevo seguidor" and nf["body"] == "Ana empezó a seguirte." and nf["url"] == "/panel/trabajos")
+ok("C06: push «Nuevo seguidor» · «Ana empezó a seguirte.», lleva a Clientes → Seguidores (4/11)", nf["title"] == "Nuevo seguidor" and nf["body"] == "Ana empezó a seguirte." and nf["url"] == "/panel/clientes?ver=seguidores")
 everything = " ".join(d["title"] + " " + d["body"] for d in D.values())
 ok("ninguna notificación lleva montos, DNI, apellido ni teléfono", "$" not in everything and "30111900" not in everything and "Pérez" not in everything and "2284" not in everything)
 ok("cada notificación va al endpoint de su dispositivo", {d["endpoint"] for d in D.values()} >= {ep_ana, ep_ana2, ep_owner, ep_owner2})
@@ -352,6 +352,100 @@ ok("las tablas tienen RLS y ningún permiso para anon/authenticated", one(
    "from pg_class c, unnest(array['anon','authenticated']) r where c.relname in ('push_subscriptions','push_outbox')"))
 ok("todas las funciones nuevas con search_path fijo", one(
    "select bool_and(p.proconfig::text like '%%search_path%%') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like any (array['push%%','run_push_send','client_messages_push','provider_notices_push','bookings_push','admin_push_health'])"))
+
+# ---------- 12. Seguidores y ofertas de horarios (4/11 · Bloque 3) ----------
+q("update profiles set push_notices = true, push_bookings = true where id = %s", (ana,))
+q("update push_outbox set status = 'skipped', skip_reason = 'stale' where status = 'pending'")
+q("insert into follows (user_id, provider_id) values (%s, %s), (%s, %s) on conflict do nothing", (ana, pid, otra, pid))
+fl = one("select provider_followers()", uid=owner)
+ok("4/11: la lista de seguidores, con «Ana P.» (nombre de pila e inicial) y nada más", fl["count"] == 2 and len(fl["items"]) == 2
+   and {i["name"] for i in fl["items"]} == {"Ana P.", "Otra C."} and all(set(i) == {"id", "photo", "since", "name", "client"} for i in fl["items"])
+   and "Pérez" not in json.dumps(fl) and "@" not in json.dumps(fl))
+ok("4/11: un cliente no ve seguidores de nadie; anon no la ejecuta", one("select provider_followers()", uid=ana) == {"count": 0, "items": []}
+   and err(q("select provider_followers()", role="anon")))
+def T0(h):
+    return f"(date_trunc('hour', now()) + interval '6 days' + interval '{int(h)} hours')"
+def offer(h, user=None, dur=1, uid=owner):
+    return q(f"select offer_slot({T0(h)}, {T0(h)} + interval '{int(dur)} hours', %s)", (user,), uid=uid)
+r = offer(1)
+ok("4/11: «Ofrecer» un hueco: les llega a los 2 seguidores", not err(r) and r[0][0]["sent"] == 2, str(r))
+oid = r[0][0]["id"] if not err(r) else None
+m = q("select user_id, body, ref from client_messages where kind = 'offer' and ref = %s order by user_id", (str(oid),))
+ok("4/11: …como aviso en la app («Tengo un turno libre el <día> DD/MM de HH:MM a HH:MM. ¿Lo querés?»)", len(m) == 2
+   and all(re.fullmatch(r"Tengo un turno libre el (domingo|lunes|martes|miércoles|jueves|viernes|sábado) \d\d/\d\d de \d\d:\d\d a \d\d:\d\d\. ¿Lo querés\?", x[1]) for x in m), str(m))
+ok("4/11: …y por push, uno por dispositivo", [x[0] for x in cola(ana, "offer")] == ["offer"] * one("select count(*) from push_subscriptions where user_id = %s", (ana,)) != [])
+D = due()
+off = [d for i, d in D.items() if one("select kind from push_outbox where id = %s", (i,)) == "offer"]
+slug = one("select slug from providers where id = %s", (pid,))
+ok("4/11: push «Turno libre en Barbería Push», con el horario, al perfil ese día", off and all(d["title"] == "Turno libre en Barbería Push" and d["body"].startswith("Tengo un turno libre el ")
+   and re.fullmatch(rf"/{slug}\?dia=\d{{4}}-\d\d-\d\d", d["url"]) for d in off) and "$" not in json.dumps(off), json.dumps(off)[:300])
+mm = [x for x in one("select my_messages()", uid=ana) if x["kind"] == "offer"]
+ok("4/11: Mis turnos recibe el horario ofrecido y la dirección del perfil (para «Reservar»)", len(mm) == 1 and mm[0]["slug"] == slug
+   and mm[0]["slot"]["starts"] and mm[0]["slot"]["ends"] and mm[0]["ref"] == str(oid))
+ok("4/11: el mismo hueco no se ofrece dos veces", err(offer(1), "offer_repeated"))
+b_off = one(f"insert into bookings (provider_id, client_name, source, status, starts_at, ends_at) values (%s, 'Bloqueo', 'block', 'confirmed', {T0(3)}, {T0(3)} + interval '30 minutes') returning id", (pid,))
+ok("4/11: un hueco que ya no está libre no se ofrece", err(offer(3), "offer_taken"))
+ok("4/11: ni uno que ya pasó", err(q("select offer_slot(now() - interval '1 hour', now(), null)", uid=owner), "offer_past"))
+ok("4/11: solo el prestador ofrece", err(offer(5, uid=ana), "not_provider") and err(q("select offer_slot(now() + interval '1 day', now() + interval '25 hours', null)", role="anon")))
+ok("4/11: hasta 5 ofertas a todos por día", all(not err(offer(h)) for h in (5, 6, 7, 8)) and err(offer(9), "offer_limit"))
+r1 = offer(9, user=ana)
+ok("4/11: «Ofrecer turno» a un seguidor: solo a esa persona (cuenta aparte del límite de 5)", not err(r1) and r1[0][0]["sent"] == 1
+   and one("select count(*) from client_messages where kind = 'offer' and ref = %s", (str(r1[0][0]["id"]),)) == 1, str(r1))
+ok("4/11: …y no a alguien que no lo sigue", err(offer(10, user=admin), "not_follower"))
+ok("4/11: el mismo hueco no se le ofrece dos veces a la misma persona", err(offer(9, user=ana), "offer_repeated"))
+q("update profiles set push_notices = false where id = %s", (otra,))
+r2 = offer(11, user=otra)
+ok("4/11: con «Recordatorios y avisos» apagado le llega el aviso en la app, sin push", not err(r2)
+   and one("select count(*) from client_messages where kind = 'offer' and user_id = %s and ref = %s", (otra, str(r2[0][0]["id"]))) == 1
+   and one("select count(*) from push_outbox where user_id = %s and kind = 'offer' and source_id = (select id from client_messages where ref = %s and user_id = %s and kind = 'offer')", (otra, str(r2[0][0]["id"]), otra)) == 0)
+ok("4/11: las ofertas las ve solo su prestador", one("select count(*) from slot_offers", uid=owner) == 7 and q("select * from slot_offers", uid=ana) == []
+   and err(q("select * from slot_offers", role="anon")) and err(q("insert into slot_offers (provider_id, starts_at, ends_at) values (%s, now() + interval '1 day', now() + interval '25 hours')", (pid,), uid=owner)))
+# Trabajos → "Avisar a tus seguidores": aviso con "Ver perfil" y push "Novedad de…"; comparte el tope de 5 por día con las
+# ofertas a todos (ya se usaron las 5 de hoy), así que se prueba con otro prestador
+own4 = mkuser("nov4@test.ar", "Nov Cuatro")
+pid4 = one("select register_provider('Novedades Push', 'Calle 4', array['b'], '2284 4', null)", uid=own4)
+q("update providers set status = 'active', dni_verified = true where id = %s", (pid4,))
+q("insert into follows (user_id, provider_id) values (%s, %s)", (ana, pid4))
+q("update push_outbox set status = 'skipped', skip_reason = 'stale' where status = 'pending'")
+rn = q("select notify_followers('Esta semana hay 2x1 en barba')", uid=own4)
+ok("4/11: «Avisar a tus seguidores» le llega a cada seguidor (aviso en la app)", not err(rn) and rn[0][0]["sent"] == 1
+   and q("select body from client_messages where kind = 'news' and user_id = %s and provider_id = %s", (ana, pid4)) == [("Esta semana hay 2x1 en barba",)], str(rn))
+Dn = [d for i, d in due().items() if one("select kind from push_outbox where id = %s", (i,)) == "news"]
+slug4 = one("select slug from providers where id = %s", (pid4,))
+ok("4/11: …con push «Novedad de Novedades Push» y el mensaje, al perfil", Dn and all(d["title"] == "Novedad de Novedades Push" and d["body"] == "Esta semana hay 2x1 en barba" and d["url"] == "/" + slug4 for d in Dn), json.dumps(Dn)[:300])
+ok("4/11: un mensaje vacío no sale", err(q("select notify_followers(' ')", uid=own4), "bad_message"))
+ok("4/11: ofertas a todos y novedades comparten el tope de 5 por día", all(not err(q("select notify_followers(%s)", (f"Novedad {i}",), uid=own4)) for i in range(3))
+   and not err(q("select offer_slot(date_trunc('hour', now()) + interval '8 days', date_trunc('hour', now()) + interval '8 days 1 hour', null)", uid=own4))
+   and err(q("select notify_followers('Una más')", uid=own4), "offer_limit")
+   and err(q("select offer_slot(date_trunc('hour', now()) + interval '8 days 2 hours', date_trunc('hour', now()) + interval '8 days 3 hours', null)", uid=own4), "offer_limit"))
+ok("4/11: posts no acepta inserts directos (así no se saltea el límite) y un cliente no avisa", err(q("insert into posts (provider_id, body) values (%s, 'x')", (pid4,), uid=own4))
+   and err(q("select notify_followers('hola a todos')", uid=ana), "not_provider") and err(q("select notify_followers('hola')", role="anon")))
+q("update bookings set status = 'cancelled_provider' where id = %s", (b_off,))
+q("delete from follows where user_id = %s and provider_id = %s", (otra, pid), uid=otra)
+fl2 = one("select provider_followers()", uid=owner)
+ok("4/11: quien deja de seguir sale de la lista y del número al toque", fl2["count"] == 1 and [i["name"] for i in fl2["items"]] == ["Ana P."]
+   and one("select followers from providers where id = %s", (pid,)) == 1)
+ok("4/11: funciones nuevas con search_path fijo y solo para cuentas con sesión", one(
+   "select bool_and(p.proconfig::text like '%%search_path%%') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname in ('provider_followers','offer_slot','follower_label')")
+   and not one("select has_function_privilege('anon', 'offer_slot(timestamptz,timestamptz,uuid)', 'execute') or has_function_privilege('anon', 'provider_followers()', 'execute')"))
+
+# ---------- 7/11 · feriados: el aviso de 7 días antes también va por push ----------
+hoyF = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))).date()
+fF = hoyF + dt.timedelta(days=4)
+q("update providers set status = 'active' where id = %s", (pid,))
+q("insert into provider_hours select %s, g, 1, '09:00', '18:00' from generate_series(0, 6) g on conflict do nothing", (pid,))
+q("select holidays_sync_save(%s, %s::jsonb)", (fF.year, json.dumps([{"fecha": str(fF), "tipo": "inamovible", "nombre": "Feriado Push"}])), role="service_role")
+q("select admin_holidays_confirm(%s)", (fF.year,), uid=admin)
+q("select holiday_notices()")
+hn = one("select id from provider_notices where provider_id = %s and kind = 'holiday'", (pid,))
+D = due()
+hp = [d for d in D.values() if d["tag"] == f"holiday-{hn}"]
+ok("feriados: el aviso va por push al profesional, a Horarios", hn and hp and hp[0]["title"] == "Feriado: ¿abrís?" and hp[0]["url"] == "/panel/horarios"
+   and "es feriado (Feriado Push). ¿Abrís?" in hp[0]["body"], str(hp))
+q("update push_outbox set next_attempt_at = now() where kind = 'holiday' and status = 'pending'")
+q("insert into provider_holidays (provider_id, day, open) values (%s, %s, true)", (pid, fF))
+due()
+ok("feriados: si ya eligió antes de que salga, no se manda", all(r[1] == "skipped" for r in cola(owner, "holiday")) and cola(owner, "holiday"))
 
 print("TODO OK" if F == 0 else f"{F} FALLAS")
 sys.exit(1 if F else 0)

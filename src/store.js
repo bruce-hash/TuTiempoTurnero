@@ -2,6 +2,8 @@
 // Cada módulo los lee y los reasigna como store.X. Los valores iniciales se cargan en el módulo de cada uno.
 export const store = {
   // en producción arrancan vacíos; en el modo demo los carga src/demo/estado.js
+  // 4/11: quienes siguen al prestador (Clientes → Seguidores); null hasta que se piden
+  FOLLOWERS: null,
   COMM: { followers: 0, reviews: [], media: [] },
   COMMBY: {},
 };

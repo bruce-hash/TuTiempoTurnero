@@ -784,6 +784,12 @@ ok("D30: el prestador elige su plazo (y solo el suyo)", not err(q("update provid
    and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10"
    and err(q("update provider_settings set payout_term = 'd7' where provider_id = %s", (pid,), uid=owner))
    and q("update provider_settings set payout_term = 'instant' where provider_id = %s returning 1", (pid,), uid=cli) == [])
+# 4/11: al guardar desde la app la seña queda en 30% (ps_fixed_deposit). Las cuentas de D30 de acá abajo son con la seña
+# del 50% de antes, para no rehacer los ejemplos de la propuesta: se vuelve a poner sin sesión (la seña fija se prueba en
+# su sección, al final)
+ok("4/11: el profesional que cambió su plazo desde la app quedó con la seña fija del 30%",
+   one("select deposit_pct from provider_settings where provider_id = %s", (pid,)) == 30)
+q("update provider_settings set deposit_pct = 50 where provider_id = %s", (pid,))
 viejo = one("select id from bookings where provider_id = %s and status = 'confirmed' and mp_fee = 0 order by id limit 1", (pid,))
 r30 = book(sv, at(28, 9), cli)[0][0]; b30 = r30["booking_ids"][0]
 ok("D30: reserva con plazo 10 días: seña $5.000 + TuTiempo $1.000 + Mercado Pago $337 = $6.337 (⌈6.000 / 0,9469⌉)",
@@ -846,43 +852,55 @@ ok("D30 auto: mp_term_match reconoce el plazo del prestador, otro plazo (con y s
    and one("select mp_term_match(6337, 338, 'd10')") == "d10" and one("select mp_term_match(6337, 339, 'd10')") is None
    and one("select mp_term_match(6337, 400, 'd10')") is None)
 ok("D30 auto: mp_term_match no se llama desde la app", err(q("select mp_term_match(6337, 336, 'd10')", uid=owner)) and err(q("select mp_term_match(6337, 336, 'd10')", role="anon")))
+# 4/11 · Bloque 4: el plazo lo elige el profesional; la detección ya no lo cambia sola: avisa y el pago va a Para revisar
 q("update provider_settings set payout_term = 'instant' where provider_id = %s", (pid,))
 r40 = book(sv, at(29, 9), cli)[0][0]; b40 = r40["booking_ids"][0]
 tot40 = one("select (charge_parts(5000, 10000, 10, 7.61))[3]")
-ok("D30 auto: arranca en «al instante», el % más alto (seña $5.000 + $1.000 + Mercado Pago 7,61%)", r40["amount_due"] == tot40 == 6495)
+ok("D30: con «al instante» el cliente paga el % de ese plazo (seña $5.000 + $1.000 + Mercado Pago 7,61%)", r40["amount_due"] == tot40 == 6495)
 res40 = pay([b40], "P-AUTO-35", tot40, 1000, pid, acc1, {"id": "P-AUTO-35", "status": "approved",
             "fee_details": [{"type": "mercadopago_fee", "amount": round(tot40 * 1.80 / 100, 2)}, {"type": "application_fee", "amount": 1000}]})
-ok("D30 auto: Mercado Pago descontó el % de 35 días: el turno se confirma sin revisión y el prestador queda en 35 días",
-   res40["confirmed"] == 1 and q("select outcome, review_reasons from payments where mp_payment_id = 'P-AUTO-35'")[0] == ("confirmed", [])
-   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d35")
+ok("4/11: Mercado Pago descontó el % de 35 días: el turno se confirma, el pago va a Para revisar y el plazo NO cambia solo",
+   res40["confirmed"] == 1 and q("select outcome, review_reasons from payments where mp_payment_id = 'P-AUTO-35'")[0] == ("review", ["mp_term_mismatch"])
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "instant" and bk(b40)[0] == "confirmed")
 n40 = one("select body from provider_notices where provider_id = %s and kind = 'mp_term' and ref = 'plazo-d35-P-AUTO-35'", (pid,))
-ok("D30 auto: el prestador recibe el aviso «Detectamos que tu cuenta acredita a 35 días; desde ahora tus clientes pagan menos»",
-   n40 is not None and "Detectamos que tu cuenta de Mercado Pago acredita a 35 días; desde ahora tus clientes pagan menos." in n40)
+ok("4/11: el profesional recibe el aviso con los dos plazos (el de la comisión y el que eligió en Horarios)",
+   n40 is not None and "Mercado Pago te cobró la comisión de acreditar a 35 días ($117)" in n40
+   and "en Horarios tenés elegido al instante (pago n° P-AUTO-35)" in n40 and "cambiá el plazo en Horarios" in n40)
 r41 = book(sv, at(29, 10), cli)[0][0]; b41 = r41["booking_ids"][0]
-ok("D30 auto: el turno siguiente ya se cobra con el % de 35 días ($6.110 en vez de $6.495)",
-   r41["amount_due"] == one("select (charge_parts(5000, 10000, 10, 1.80))[3]") == 6110 and bk(b41, "mp_fee_pct::float")[0] == 1.8)
-pay([b41], "P-AUTO-IVA", 6110, 1000, pid, acc1, {"id": "P-AUTO-IVA", "status": "approved",
-    "fee_details": [{"type": "mercadopago_fee", "amount": iva(6110, 1.80)}, {"type": "application_fee", "amount": 1000}]})
-ok("D30 auto: con el IVA incluido sigue siendo 35 días: sin revisión, sin otro aviso y sin cambiar el plazo",
-   one("select outcome from payments where mp_payment_id = 'P-AUTO-IVA'") == "confirmed"
-   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d35"
+ok("4/11: el turno siguiente se sigue cobrando con el plazo que eligió ($6.495, no el de 35 días)",
+   r41["amount_due"] == 6495 and bk(b41, "mp_fee_pct::float")[0] == 7.61)
+pay([b41], "P-AUTO-OK", 6495, 1000, pid, acc1, {"id": "P-AUTO-OK", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": iva(6495, 7.61)}, {"type": "application_fee", "amount": 1000}]})
+ok("4/11: si la comisión es la del plazo elegido (con el IVA incluido): sin revisión y sin otro aviso",
+   one("select outcome from payments where mp_payment_id = 'P-AUTO-OK'") == "confirmed"
    and one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_term'", (pid,)) == 1)
 r42 = book(sv, at(29, 11), cli)[0][0]; b42 = r42["booking_ids"][0]
-pay([b42], "P-AUTO-RARO", 6110, 1000, pid, acc1, {"id": "P-AUTO-RARO", "status": "approved",
+pay([b42], "P-AUTO-RARO", 6495, 1000, pid, acc1, {"id": "P-AUTO-RARO", "status": "approved",
     "fee_details": [{"type": "mercadopago_fee", "amount": 200}, {"type": "application_fee", "amount": 1000}]})
-ok("D30 auto: una comisión que no es la de ningún plazo va a Para revisar (como antes) y el plazo no cambia",
+ok("D30: una comisión que no es la de ningún plazo va a Para revisar (como antes) y el plazo no cambia",
    q("select outcome, review_reasons from payments where mp_payment_id = 'P-AUTO-RARO'")[0] == ("review", ["mp_cost_mismatch"])
-   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d35" and bk(b42)[0] == "confirmed")
-r43 = book(sv, at(29, 12), cli)[0][0]; b43 = r43["booking_ids"][0]
-pay([b43], "P-AUTO-SUBE", 6110, 1000, pid, acc1, {"id": "P-AUTO-SUBE", "status": "approved",
-    "fee_details": [{"type": "mercadopago_fee", "amount": round(6110 * 5.31 / 100)}, {"type": "application_fee", "amount": 1000}]})
-n43 = one("select body from provider_notices where provider_id = %s and kind = 'mp_term' and ref = 'plazo-d10-P-AUTO-SUBE'", (pid,))
-ok("D30 auto: si el plazo real es más caro (10 días), se cambia igual y el aviso no dice que pagan menos",
-   one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10" and n43 is not None
-   and "acredita a 10 días" in n43 and "pagan menos" not in n43 and bk(b43)[0] == "confirmed")
-ok("D30 auto: el prestador lo sigue pudiendo cambiar a mano", not err(q("update provider_settings set payout_term = 'd18' where provider_id = %s", (pid,), uid=owner))
-   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d18")
-q("update provider_settings set payout_term = 'd10' where provider_id = %s", (pid,))
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "instant" and bk(b42)[0] == "confirmed")
+ok("4/11: el profesional elige su plazo en Horarios (y la seña sigue en 30%)", not err(q("update provider_settings set payout_term = 'd35' where provider_id = %s", (pid,), uid=owner))
+   and q("select payout_term, deposit_pct from provider_settings where provider_id = %s", (pid,))[0] == ("d35", 30))
+q("update provider_settings set payout_term = 'd10', deposit_pct = 50 where provider_id = %s", (pid,))
+
+# ---------- 4/11 · Bloque 4: seña fija del 30% para todos ----------
+ok("4/11: la seña por defecto es del 30% (sin la opción del total)",
+   one("select column_default from information_schema.columns where table_name = 'provider_settings' and column_name = 'deposit_pct'") == "30"
+   and one("select column_default from information_schema.columns where table_name = 'provider_settings' and column_name = 'pay_mode'") == "'deposit'::text")
+ok("4/11: un profesional nuevo arranca con la seña del 30%", q("select pay_mode, deposit_pct from provider_settings where provider_id = %s", (pid_x,))[0] == ("deposit", 30))
+q("update provider_settings set deposit_pct = 50, pay_mode = 'full' where provider_id = %s", (pid,), uid=owner)
+ok("4/11: desde la app no se puede elegir otra seña ni cobrar el total (queda en 30%)",
+   q("select pay_mode, deposit_pct from provider_settings where provider_id = %s", (pid,))[0] == ("deposit", 30))
+q("insert into provider_settings (provider_id, pay_mode, deposit_pct) values (%s, 'full', 80) on conflict (provider_id) do update set pay_mode = excluded.pay_mode, deposit_pct = excluded.deposit_pct", (pid,), uid=owner)
+ok("4/11: tampoco con un upsert (como guarda Horarios)", q("select pay_mode, deposit_pct from provider_settings where provider_id = %s", (pid,))[0] == ("deposit", 30))
+q("select admin_set_fees(10, 0, 0, 0, 0)", uid=adm)
+r44 = book(sv, at(29, 13), cli)[0][0]
+ok("4/11: la reserva nueva lleva la seña del 30% ($3.000 de $10.000) + la comisión del precio ($1.000)",
+   r44["amount_due"] == 4000 and bk(r44["booking_ids"][0], "deposit, client_fee") == (3000, 1000))
+q("select cancel_by_client(%s)", (r44["booking_ids"][0],), uid=cli)
+q("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+q("update provider_settings set payout_term = 'd10', deposit_pct = 50 where provider_id = %s", (pid,))
 
 # ---------- D34 · la comisión de TuTiempo sale del PRECIO del turno, no de la seña ----------
 q("select admin_set_fees(10, 0, 0, 0, 0)", uid=adm)

@@ -1,9 +1,9 @@
-import { registerClick, registerSubmit } from "./registro.js";
+import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
 import { money } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
-import { TODAY, dayLabel, toMin } from "../lib/fechas.js";
+import { TODAY, addDays, dayLabel, dkey, toMin } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { busy, cfg, cli, freed, overlaps, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
@@ -14,21 +14,23 @@ import { toast } from "../ui/toast.js";
 import { pushCancel } from "../views/prestador/bloqueo-dias.js";
 import { feeOf } from "../views/prestador/finanzas.js";
 import { pushNotice } from "../views/prestador/mensajes.js";
+import { sendOffer } from "./ofrecer.js";
 
 registerClick("selClose", (ev, el, act) => {
   S.sel = null;
   S.bAsk = null;
   render();
 });
-// “Ofrecer” un hueco libre: se publica como aviso a los seguidores
+// “Ofrecer” un hueco libre: a cada seguidor le llega un aviso en la app y un push para reservarlo (4/11; antes se
+// guardaba como publicación y no le llegaba a nadie)
 registerClick("offerGap", (ev, el, act) => {
-  S.offered[el.dataset.g] = true;
   const [day, from] = el.dataset.g.split("|");
-  api.m.post(`Tengo lugar ${dayLabel(day).toLowerCase()} de ${from} a ${el.dataset.z}. Reservá en TuTiempo.`);
-  toast(
-    `Avisamos a ${store.COMM.followers} seguidores: “Tengo lugar ${dayLabel(day).toLowerCase()} de ${from} a ${el.dataset.z}”`,
-  );
-  render();
+  el.disabled = true;
+  sendOffer(day, from, el.dataset.z).then((done) => {
+    if (!done) {
+      el.disabled = false;
+    }
+  });
 });
 // el cliente vino: suma la visita y, si el servicio da sellos y reservó por la app, un sello
 registerClick("bDone", (ev, el, act) => {
@@ -52,10 +54,10 @@ registerClick("bDone", (ev, el, act) => {
     const have = cliStamps(booking.cliente, svc) + 1;
     setCliStamps(booking.cliente, svc, have);
     booking.stamped = true;
-    stampMsg = ` 🎟️ Sumó un sello en ${svc[0]} (${Math.min(have, goal)}/${goal})${have >= goal ? ": ¡ya tiene su premio!" : "."}`;
+    stampMsg = ` Sumó un sello en ${svc[0]} (${Math.min(have, goal)}/${goal})${have >= goal ? ": ¡ya tiene su premio!" : "."}`;
   }
   if (booking.mine) {
-    pushNotice(ME(), "rev", booking, booking.stamped ? ` 🎟️ Sumaste 1 sello en tu tarjeta de ${booking.svc}.` : "");
+    pushNotice(ME(), "rev", booking, booking.stamped ? ` Sumaste 1 sello en tu tarjeta de ${booking.svc}.` : "");
   }
   if (booking.date === TODAY()) {
     S.jobsToday++;
@@ -123,6 +125,24 @@ registerClick("manOpen", (ev, el, act) => {
   S.blockOpen = false;
   S.manSvc = 0;
   render();
+});
+// 4/11 · Bloque 4: agendar a mano otro día (también desde la ficha del cliente): la agenda pasa a ese día y el
+// formulario sigue abierto con lo que ya se escribió
+registerChange("mday", (ev) => {
+  const value = ev.target.value;
+  if (!value || value < TODAY() || value > dkey(addDays(30))) {
+    ev.target.value = S.aday || TODAY();
+    return;
+  }
+  S.manName = ($("#mcl") || {}).value || "";
+  S.manTel = ($("#mtel") || {}).value || "";
+  S.manSvc = +(($("#msv") || {}).value || 0);
+  S.aday = value;
+  render();
+  const form = $("#fManual");
+  if (form && form.scrollIntoView) {
+    form.scrollIntoView({ block: "nearest" });
+  }
 });
 registerClick("manClose", (ev, el, act) => {
   S.manOpen = false;
@@ -224,6 +244,7 @@ registerSubmit("fManual", (ev) => {
   }
   S.manOpen = false;
   S.manName = "";
+  S.manTel = "";
   if (!store.CLIENTS[client]) {
     store.CLIENTS[client] = {
       v: 0,

@@ -76,3 +76,8 @@ registerChange("bPushFl", (ev) => {
   api.m.setPushPrefs({ push_followers: on });
   toast(on ? "Listo: te avisamos cuando alguien empiece a seguirte." : "Listo: ya no te avisamos los seguidores nuevos por notificación (los seguís viendo en tu panel).");
 });
+
+// 4/11 · Bloque 1: "Actualizar" del menú de cuenta en la app instalada (la misma dirección, la página entera de nuevo)
+registerClick("appReload", () => {
+  location.reload();
+});

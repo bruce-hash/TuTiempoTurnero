@@ -58,6 +58,22 @@ const vapidPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "
 const VAPID_PUB = b64uBytes(new Uint8Array(await crypto.subtle.exportKey("raw", vapidPair.publicKey)));
 const VAPID_PRIV = (await crypto.subtle.exportKey("jwk", vapidPair.privateKey)).d!;
 const ps = pushFalso(VAPID_PUB);
+// 7/11 · feriados: una fuente falsa con la forma de ArgentinaDatos (GET /<año>); ferModo la hace caer o cambiar
+let ferModo: "ok" | "caida" | "cambio" = "ok";
+const ferLista = (y: number) => [
+  { fecha: `${y}-01-01`, tipo: "inamovible", nombre: "Año nuevo" },
+  { fecha: `${y}-03-23`, tipo: "puente", nombre: "Día no laborable con fines turísticos" },
+  { fecha: `${y}-04-02`, tipo: "inamovible", nombre: "Día del Veterano y de los Caídos en la Guerra de Malvinas" },
+  { fecha: `${y}-06-17`, tipo: "trasladable", nombre: ferModo === "cambio" ? "Paso a la Inmortalidad del Gral. Güemes (trasladado)" : "Paso a la Inmortalidad del Gral. Güemes" },
+  { fecha: `${y}-04-03`, tipo: "no laborable", nombre: "Viernes Santo (no entra)" },
+  { fecha: `${y}-11-20`, tipo: "provincial", nombre: "Un feriado provincial (no entra)" },
+];
+const ferSrv = Deno.serve({ port: 0, hostname: "127.0.0.1", onListen() {} }, (req) => {
+  const y = Number(new URL(req.url).pathname.split("/").pop());
+  if (ferModo === "caida") return new Response("caído", { status: 503 });
+  return Response.json(ferLista(y));
+});
+const FER_URL = `http://127.0.0.1:${(ferSrv.addr as Deno.NetAddr).port}`;
 const SITE = "http://sitio.test", WHSEC = "whsec-prueba";
 const SERVICE = await jwt({ role: "service_role" });
 const rnd = (n: number) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n))));
@@ -68,13 +84,14 @@ for (const [k, v] of Object.entries({
   CRON_SECRET: CRON, MP_TOKENS_KEY: TOKENS_KEY, MP_OWNER_USER_ID: OWNER_MP,
   RESEND_API_KEY: RESEND_KEY, EMAIL_FROM: "TuTiempo <avisos@tutiempo.com.ar>", EMAIL_REPLY_TO: "soporte@tutiempo.com.ar",
   EMAIL_API_URL: rs.url, EMAIL_GAP_MS: "0",
+  HOLIDAYS_API_URL: FER_URL,
   VAPID_PUBLIC_KEY: VAPID_PUB, VAPID_PRIVATE_KEY: VAPID_PRIV, VAPID_SUBJECT: "mailto:contacto@tutiempo.com.ar", PUSH_TEST_ORIGINS: ps.origin,
 })) Deno.env.set(k, v);
 const handlers: Record<string, (req: Request) => Promise<Response>> = {};
 let loading = "";
 const realServe = Deno.serve.bind(Deno);   // el de verdad, para los servidores falsos de la prueba
 (Deno as any).serve = (h: any) => { handlers[loading] = typeof h === "function" ? h : h.handler; return { finished: Promise.resolve(), shutdown: async () => {} }; };
-for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "mp-reconcile", "dni-cleanup", "email-send", "push-send"]) {
+for (const n of ["mp-oauth", "mp-create-preference", "mp-webhook", "mp-refunds", "mp-reconcile", "dni-cleanup", "email-send", "push-send", "holidays-sync"]) {
   loading = n;
   await import(`../../supabase/functions/${n}/index.ts`);
 }
@@ -95,10 +112,10 @@ async function webhook(pid: number, acc: number | null, payId: string, { firma =
 const evento = async (payId: string, reason: string) =>
   Number(await one("select count(*) from mp_webhook_events where mp_payment_id = $1 and reason = $2", [payId, reason]));
 const refundsRun = async (key = CRON) => fn("mp-refunds", new Request("https://fn.test/functions/v1/mp-refunds", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
-async function preference(uid: string, ids: number[]) {
+async function preference(uid: string, ids: number[], extra: Record<string, unknown> = {}) {
   return fn("mp-create-preference", new Request("https://fn.test/functions/v1/mp-create-preference", {
     method: "POST", headers: { Authorization: `Bearer ${await jwt({ sub: uid, role: "authenticated" })}`, Origin: SITE, "Content-Type": "application/json" },
-    body: JSON.stringify({ booking_ids: ids }) }));
+    body: JSON.stringify({ booking_ids: ids, ...extra }) }));
 }
 async function oauth(uid: string, code: string) {
   const r = await fn("mp-oauth", new Request("https://fn.test/functions/v1/mp-oauth", {
@@ -173,11 +190,31 @@ ok("mp-create-preference: monto y comisión salen de la base", pref?.body.items[
   ok("Paso 1: la vuelta lleva a la pantalla del turno con el token de regreso (no al inicio)",
      back.origin === SITE && back.pathname === `/turno/${b1[0]}` && /^[0-9a-f]{64}$/.test(back.searchParams.get("pago") ?? "") && back.searchParams.get("mp") === "success"
      && pref?.body.back_urls.failure.includes(`pago=${back.searchParams.get("pago")}`), pref?.body.back_urls?.success);
+  const rb = await body(r);
+  ok("4/11: la respuesta trae el token de regreso y el turno (la app instalada los guarda), y en el navegador la vuelta no lleva app=1",
+     rb.token === back.searchParams.get("pago") && rb.booking === b1[0] && !back.searchParams.has("app"), JSON.stringify(rb));
   ok("Paso 1: el cobro queda anotado (sha256 del token, los turnos en el orden del external_reference y la cuenta que cobra)",
      Number(await one("select count(*) from mp_checkouts where token_hash = checkout_hash($1) and array_to_string(booking_ids, ',') = $2 and mp_account_id = $3 and closed_at is null",
        [back.searchParams.get("pago"), pref?.body.external_reference, A.id])) === 1
      && Number(await one("select count(*) from mp_checkouts where token_hash = $1", [back.searchParams.get("pago")])) === 0);
 }
+{
+  // 4/11 · Bloque 1: desde la app instalada (app: true) las tres vueltas llevan app=1; cualquier otro valor, no
+  const bApp = await book();
+  const ra = await preference(cli, bApp, { app: true });
+  const urls = mp.preferencias.at(-1)!.body.back_urls;
+  ok("4/11: desde la app instalada, las tres vueltas (success, failure, pending) llevan app=1 y el mismo token",
+     ra.status === 200 && ["success", "failure", "pending"].every((k) => new URL(urls[k]).searchParams.get("app") === "1" && new URL(urls[k]).searchParams.get("pago") === new URL(urls.success).searchParams.get("pago")),
+     `${ra.status} ${JSON.stringify(urls)}`);
+  const bRaro = await book();
+  const rr = await preference(cli, bRaro, { app: "1" });
+  ok("4/11: app que no es true no marca la vuelta", rr.status === 200 && !new URL(mp.preferencias.at(-1)!.body.back_urls.success).searchParams.has("app"));
+  // esos dos turnos y cobros no siguen (las pruebas de más abajo cuentan los cobros abiertos)
+  const extra = [...bApp, ...bRaro];
+  await q("delete from mp_checkouts where booking_ids && $1::bigint[]", [extra]);
+  await q("delete from bookings where id = any($1::bigint[])", [extra]);
+}
+
 
 // ---------- 3. Webhook: pago aprobado ----------
 mp.pago({ id: "9001", collector: "1001", status: "approved", amount: 6000, fee: 1000, ref: b1.join(",") });
@@ -254,15 +291,16 @@ ok("D30: si Mercado Pago cobró un % que no es de ningún plazo → turno confir
    r.status === 200 && (await st(b31[0])) === "confirmed"
    && JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9031'")) === '["mp_cost_mismatch"]'
    && String(await one("select body from provider_notices where provider_id = $1 and kind = 'mp_cost'", [pid])).includes("($400) en vez de 5,31% ($336)"));
-// D30 automático: la comisión es la de «al instante» → el webhook le cambia el plazo al prestador y le avisa
+// 4/11 · Bloque 4: la comisión es la de «al instante» → el webhook NO cambia el plazo: confirma, manda el pago a revisar
+// (mp_term_mismatch) y le avisa al profesional con los dos plazos
 const b32 = await book();
 mp.pago({ id: "9032", collector: "1001", status: "approved", amount: 6337, fee: 1000, mpfee: 482.25, ref: b32.join(",") });
 r = await webhook(pid, A.id, "9032");
-ok("D30: si la comisión es la de otro plazo (al instante) → confirmado sin revisión, el prestador queda en ese plazo y recibe el aviso",
+ok("4/11: si la comisión es la de otro plazo (al instante) → confirmado, para revisar, el plazo no cambia y el profesional recibe el aviso",
    r.status === 200 && (await st(b32[0])) === "confirmed"
-   && JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9032'")) === "[]"
-   && (await one("select payout_term from provider_settings where provider_id = $1", [pid])) === "instant"
-   && String(await one("select body from provider_notices where provider_id = $1 and kind = 'mp_term'", [pid])).includes("acredita al instante"));
+   && JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9032'")) === '["mp_term_mismatch"]'
+   && (await one("select payout_term from provider_settings where provider_id = $1", [pid])) === "d10"
+   && String(await one("select body from provider_notices where provider_id = $1 and kind = 'mp_term'", [pid])).includes("comisión de acreditar al instante"));
 await q("update app_settings set mp_pct_instant = 0, mp_pct_d10 = 0");
 await q("update provider_settings set payout_term = 'instant' where provider_id = $1", [pid]);
 
@@ -535,7 +573,8 @@ const dniUser = async (email: string, dni: string) => {
 const ver = await dniUser("verificado@fn.test", "30111701"), nueva = await dniUser("nueva@fn.test", "30111702"), baja = await dniUser("baja@fn.test", "30111703");
 ok("D24) las fotos subidas están en disco y en storage.objects", (await Promise.all([...ver.fotos, ...nueva.fotos, ...baja.fotos].map(async (f) => (await archivo(f)) && (await fila(f)) === 1))).every(Boolean));
 await q("update providers set status = 'active', dni_verified = true where id = $1", [ver.pid]);
-await q("update provider_private set dni_verified_at = now() - interval '31 days' where provider_id = $1", [ver.pid]);
+// 7/11 · Bloque 6: verificado recién (antes, a los 30 días); el pedido que deja la verificación lo cubre test_db.py
+await q("update provider_private set dni_verified_at = now() where provider_id = $1", [ver.pid]);
 // caso 2: la baja pide el borrado en el momento, pero esa llamada no llega (acá no hay URL ni clave en Vault, como con
 // la red o la función caídas): la baja se hace igual y las fotos las borra la corrida del cron
 await q("delete from net.requests");
@@ -546,7 +585,7 @@ r = await dniRun("otra-clave-cualquiera-de-mas-de-32-caracteres");
 ok("D24) dni-cleanup sin la clave del cron: 403 y no borra nada", r.status === 403 && (await archivo(ver.fotos[0])));
 r = await dniRun();
 let dj = await body(r);
-ok("D24) la corrida del cron borra las fotos del verificado hace 31 días y las de la baja (caso 2)", r.status === 200 && dj.files === 4 && dj.failed === 0, JSON.stringify(dj));
+ok("D24) dni-cleanup borra las fotos del recién verificado (Bloque 6) y las de la baja (caso 2)", r.status === 200 && dj.files === 4 && dj.failed === 0, JSON.stringify(dj));
 ok("D24) …el archivo ya no existe y su fila tampoco", (await Promise.all([...ver.fotos, ...baja.fotos].map(async (f) => !(await archivo(f)) && (await fila(f)) === 0))).every(Boolean));
 ok("D24) …el verificado queda con dni_paths vacío, la fecha del borrado y su verificación",
    (await q("select pp.dni_paths, pp.dni_photos_deleted_at is not null as borrado, pp.dni_number, p.dni_verified from provider_private pp join providers p on p.id = pp.provider_id where p.id = $1", [ver.pid]))
@@ -1052,6 +1091,35 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
      && rev.webhook_events.some((e: any) => e.reason === "bad_signature" && e.detail && e.hits >= 1), JSON.stringify(rev?.webhook_alert ?? rev));
 }
 
+// ---------- 7/11 · feriados: holidays-sync trae la lista oficial y la base guarda solo lo que entra ----------
+{
+  const run = async (key = CRON) => fn("holidays-sync", new Request("https://fn.test/functions/v1/holidays-sync", { method: "POST", headers: { Authorization: `Bearer ${key}` } }));
+  const y = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric" }).format(new Date()));
+  let r = await run("otra-clave-cualquiera-de-mas-de-32-caracteres");
+  ok("feriados) holidays-sync sin la clave del cron: 403", r.status === 403);
+  r = await run();
+  let j = await body(r);
+  ok("feriados) trae el año en curso y el siguiente", r.status === 200 && j.years?.length === 2 && j.years.every((x: any) => x.count === 4), JSON.stringify(j));
+  const dias = async (yy: number) => (await q("select to_char(day, 'MM-DD') d, kind from holidays where extract(year from day) = $1 order by day", [yy])).map((x: any) => `${x.d} ${x.kind}`);
+  ok("feriados) entran inamovibles, trasladables y puentes; no los no laborables ni los provinciales",
+     JSON.stringify(await dias(y)) === JSON.stringify(["01-01 inamovible", "03-23 puente", "04-02 inamovible", "06-17 trasladable"]), JSON.stringify(await dias(y)));
+  await run();
+  ok("feriados) una segunda corrida no duplica", Number(await one("select count(*) from holidays where extract(year from day) = $1", [y])) === 4);
+  ferModo = "caida";
+  r = await run(); j = await body(r);
+  ok("feriados) si la fuente se cae, quedan las fechas que ya había y el error para el admin",
+     r.status === 200 && Number(await one("select count(*) from holidays where extract(year from day) = $1", [y])) === 4
+     && /503/.test(await one("select fetch_error from holiday_years where year = $1", [y])));
+  ferModo = "ok"; await run();
+  ok("feriados) …y cuando vuelve, se borra el error", (await one("select fetch_error from holiday_years where year = $1", [y])) === null);
+  await q("update holiday_years set confirmed_at = now() where year = $1", [y]);
+  ferModo = "cambio"; await run();
+  ok("feriados) con el año confirmado, un cambio de la fuente no toca nada: queda marcado para revisar",
+     (await one("select name from holidays where day = make_date($1, 6, 17)", [y])) === "Paso a la Inmortalidad del Gral. Güemes"
+     && (await one("select source_changed from holiday_years where year = $1", [y])) === true);
+  ferModo = "ok";
+}
+
 const cfg = fileURLToPath(new URL("./deno.json", import.meta.url));
 const util = new URL("../../supabase/functions/_shared/util.ts", import.meta.url).href;
 const leer = async (extra: Record<string, string>) => {
@@ -1066,5 +1134,6 @@ ok("con MP_API_URL (solo pruebas), usan esa", (await leer({ MP_API_URL: "http://
 await db.end();
 await mp.cerrar();
 await rs.cerrar();
+await ferSrv.shutdown();
 console.log(F ? `${F} FALLAS` : "TODO OK");
 Deno.exit(F ? 1 : 0);

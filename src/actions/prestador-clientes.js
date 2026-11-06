@@ -1,3 +1,5 @@
+import { loadFollowers } from "../views/prestador/seguidores.js";
+import { sendOffer } from "./ofrecer.js";
 import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
@@ -336,4 +338,37 @@ registerSubmit("fContact", (ev) => {
   toast("Contacto guardado");
   render();
   return;
+});
+
+// 4/11 · Bloque 3: Clientes → Clientes / Seguidores
+registerClick("ctab", (ev, el, act) => {
+  S.ctab = el.dataset.t === "seguidores" ? "seguidores" : "clientes";
+  S.offerFor = null;
+  if (S.ctab === "seguidores") {
+    // al entrar, la lista al día (quien siguió o dejó de seguir desde la última vez)
+    loadFollowers(true);
+  }
+  render();
+});
+// "Ofrecer turno" a un seguidor: abre los huecos libres de los próximos 7 días
+registerClick("folOffer", (ev, el, act) => {
+  S.offerFor = S.offerFor === el.dataset.id ? null : el.dataset.id;
+  render();
+});
+registerClick("folOfferClose", (ev, el, act) => {
+  S.offerFor = null;
+  render();
+});
+registerClick("folOfferGo", (ev, el, act) => {
+  const fol = (store.FOLLOWERS || []).find((item) => item.id === el.dataset.id);
+  const [day, from] = el.dataset.g.split("|");
+  el.disabled = true;
+  sendOffer(day, from, el.dataset.z, el.dataset.id, fol && fol.name).then((done) => {
+    if (done) {
+      S.offerFor = null;
+      render();
+    } else {
+      el.disabled = false;
+    }
+  });
 });

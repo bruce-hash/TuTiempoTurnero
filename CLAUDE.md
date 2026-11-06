@@ -63,17 +63,45 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     El prestador va siempre a su Agenda. D33: una cuenta es de cliente o de negocio (`isBusiness()` en `src/lib/cuentas.js`;
     la de negocio no reserva, no sigue ni reseña: aviso en `src/actions/cuentas.js`; en la base, triggers `business_account`
     y `client_history`). Registrá tu negocio: `src/views/auth/negocio.js` + `src/actions/negocio.js`
-    (5 pasos, `setup_step`/`my_setup` en la base, `src/lib/alta.js` dice qué falta). El código por email es solo para
-    cuentas que existen (`shouldCreateUser: false`).
+    (5 pasos, `setup_step`/`my_setup` en la base, `src/lib/alta.js` dice qué falta). Desde el 4/11 no hay ingreso con código
+    por email; «Crear cuenta» va siempre en la ventana (`S.authOnPage` encima de `/ingresar`). Cambiar contraseña:
+    la actual con `sbScratch()` (no toca la sesión) y el código de `reauthenticate()` como `nonce`.
   - V3b (C22): `src/lib/agenda-al-dia.js` vuelve a pedir los turnos de la Agenda cada 30 s y al volver a la pestaña (sin
     Realtime) y solo dibuja si cambió algo; no toca la pantalla con un guardado pendiente, un formulario abierto o alguien escribiendo.
   - V4 resto: C31 gastos fijos en `src/lib/fijos.js` (qué corre cada mes; en la demo, la misma regla) y en la base
     (`fixed_expenses`, `fixed_expenses_sync` al abrir el panel, `fixed_expense_save`/`_stop` desde un mes; un mes cerrado
-    no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost` y «Vendí uno».
+    no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost`; las ventas, con «Vender producto» en la Caja del día (`saleForm`, 7/11).
   - V5 resto (C29): interruptor global de sellos (`app_settings.stamps_on`, `stampsOn()` en `src/ui/sellos.js`; todo lo de
     sellos pregunta ahí). En la base, `stamp_add` no suma ni canjea con los sellos apagados (`stamps_off`); los datos quedan.
   - V8 (C06): seguidor nuevo → `provider_notices` `new_follower` (trigger `follows_notice`, nombre de pila, una vez por
     persona) y push «Nuevo seguidor» con su interruptor propio (`profiles.push_followers`, «Nuevos seguidores»).
+  - 4/11 B1 (`docs/08-pago-app-instalada.md`): `src/lib/cobro-pendiente.js` guarda el cobro abierto antes de ir a Mercado
+    Pago (turno y token, `tt_cobro`) y al abrir o volver a la app lo confirma sola (no depende de la vuelta, que en iPhone se
+    abre en Safari; la vuelta lleva `app=1` y dice «Volvé a la app»). `src/lib/actualizar.js`: datos de la pantalla al
+    volver a primer plano y, en la app instalada, deslizar para actualizar y «Actualizar» en el menú.
+  - 4/11 B3 (D35): Clientes → Seguidores (`src/views/prestador/seguidores.js`, `provider_followers`); «Ofrecer» de la
+    Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
+    «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
+    de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
+  - D36: la campanita de avisos de la cabecera (`src/ui/campanita.js` + `src/actions/campanita.js`): `S.inbox` del
+    cliente (con `msgAction`) y `S.notices` del profesional. Mis turnos y el panel ya no muestran avisos.
+  - D37: íconos propios, sin emojis en la interfaz: `ic("nombre")` de `src/lib/iconos.js` (SVG en línea, trazo del color
+    del texto y detalle verde en `--ic-a`; tamaños por lugar en `src/styles/iconos.css`; `src/ui/iconos.js` lo reexporta).
+    Un ícono nuevo se agrega ahí. Los textos planos (toast, confirm, push, title, placeholder, `<option>`) van sin ícono.
+    `pruebas/unidad.mjs` falla si vuelve a aparecer un emoji en `src/` (fuera de comentarios y de `src/demo/`).
+  - 4/11 · Bloque 4 (D06, D30, D38): seña fija del 30% (`src/views/prestador/plazo.js`: `DEPOSIT_PCT`, `depositNote`,
+    `termPicker`; en la base, el trigger `ps_fixed_deposit` la fuerza en todo pedido con sesión). El plazo de Mercado Pago
+    lo elige el profesional (Horarios y el alta); si un cobro trae la comisión de otro plazo, `confirm_payment_core` no
+    lo cambia: `mp_term_mismatch` en Para revisar y aviso `mp_term` (lleva a Horarios). Caja del día de otra fecha
+    (`S.cajaDay`, `store.WALKDAY`, `api.walkinsOn`), ventas con cantidad (`walkins.qty`), gastos variables aparte
+    (`provider_month_summary`), Ajustes solo Seguridad (`vAjustes`, `/cuenta/ajustes`).
+  - 7/11 · Feriados (D39): `holidays-sync` (Edge Function, ArgentinaDatos; `HOLIDAYS_API_URL` solo pruebas) guarda la lista en
+    `holidays` (`holidays_sync_save`); el admin la confirma por año (`holiday_years`, Comisión → Feriados). El profesional:
+    `src/views/prestador/feriados.js` (Horarios → Próximos feriados), `src/actions/feriados.js` (Abro / Cierro → `holiday_decide`;
+    Cierro = `block_days`), aviso `holiday` 7 días antes (`holiday_notices`, campanita y push). Cuentas puras en `src/lib/feriados.js`.
+  - 7/11 · Legales: `/privacidad` (`src/views/legal/privacidad.js`) y `/terminos` (`terminos.js`), con la marca «Borrador
+    pendiente de revisión legal»; lo que falta revisar y las contradicciones con el PDF original, en `docs/11-legales.md`. Si
+    cambia una regla de `docs/01-decisiones.md` (seña, comisión, devoluciones, borrado de datos), cambiá también estos textos.
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma
@@ -94,7 +122,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   (el CI falla si no son idénticos).
 - `supabase/functions/`: Edge Functions de Mercado Pago (desde el Paso 1, `mp-reconcile` le pregunta a Mercado Pago por los
   cobros sin pago registrado, cron `tt-mp-sync`; el webhook y la consulta registran el pago con `_shared/pago.ts`; cada
-  cobro queda en `mp_checkouts` con su token de regreso, D28), `dni-cleanup` (borra las fotos del DNI, D24), `push-send` (notificaciones
+  cobro queda en `mp_checkouts` con su token de regreso, D28), `dni-cleanup` (borra las fotos del DNI, D24), `holidays-sync` (feriados, D39), `push-send` (notificaciones
   push, Bloque C: cola `push_outbox`, cifrado y VAPID en `_shared/webpush.ts`, secretos `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y
   `VAPID_SUBJECT`; `PUSH_TEST_ORIGINS` solo en pruebas) y `email-send` (avisos por
   email con Resend, Bloque 3; el HTML sale de `_shared/email.ts`); `_shared/util.ts` compartido. Desde el Bloque 1 las llaves están
@@ -107,6 +135,11 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   Claves del proyecto: `projectKey()` usa las nuevas (`SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS`) si están, si no las
   viejas; `caller()` verifica la sesión ES256/RS256 con el JWKS del proyecto y la HS256 con Auth (H31). Ninguna función usa `verify_jwt`.
 - `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: prestadores ficticios. Solo para pruebas locales (pide `set tt.ejemplos = 'si'` antes).
+- Despliegue a prueba (docs/10): `.github/workflows/desplegar-prueba.yml` (botón: `supabase db push`, Edge Functions que
+  cambiaron, build con `tools/preparar_prueba.mjs`, FTPS con `tools/subir_prueba.sh`, etiqueta `prueba-desplegada`) y
+  `verificar-prueba.yml` (botón y todas las noches: `pruebas/verificar_prueba.mjs`; en la base lee solo
+  `verificacion_prueba()`, que nadie puede llamar salvo el usuario `tt_verificador`). En cada PR, `npm run test:verificar`
+  corre el mismo recorrido contra el entorno local. Producción no tiene despliegue automático.
 - `pruebas/`: pruebas del cliente; `unidad.mjs` (reglas de los formularios sin navegador); `ancho.mjs` (ninguna pantalla más
   ancha que la ventana en 390 y 1366 px y nada con `hidden` a la vista); `test_db.py`, `test_cobros.py` (base: pagos,
   devoluciones, cuentas de MP) y `test_emails.py` (avisos por email: cola, reintentos, opción del cliente);
@@ -149,7 +182,7 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
   `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py`, `pruebas/test_push.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` y `npm run test:webpush` si tocás las
   Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:unidad`, `npm run test:crawl`,
-  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:pwa` y `npm run test:comparar` (navegador
+  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:verificar`, `npm run test:pwa` y `npm run test:comparar` (navegador
   real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` y `npm run test:litespeed` si tocás el
   `.htaccess` (Apache local y OpenLiteSpeed en docker; en el CI, contenedores `httpd:2.4` y `openlitespeed`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la

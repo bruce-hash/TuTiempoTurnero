@@ -3,6 +3,7 @@ import { esc } from "../../lib/dom.js";
 import { longLabel } from "../../lib/fechas.js";
 import { S } from "../../state.js";
 import { render } from "../../ui/render.js";
+import { ic } from "../../ui/iconos.js";
 
 // Paso 1 (v4): pantalla de regreso de Mercado Pago SIN sesión (/turno/<id>?pago=<token>). Pasa, por ejemplo, cuando se
 // paga desde la app instalada: Mercado Pago vuelve al navegador, que no tiene la sesión. Con el token de la vuelta muestra
@@ -63,34 +64,47 @@ export function vPagoVuelta() {
   const login = (label) =>
     `<button class="btn btn-pri btn-block" data-act="payLogin">${label}</button><p class="note" style="margin-top:8px">Si pagaste desde la app instalada, Mercado Pago te trajo al navegador: ingresá con la misma cuenta.</p>`;
   const card = (icon, title, body, actions) =>
-    `<div class="narrow stack pay-back" style="margin-top:24px;text-align:center"><div class="panel"><div style="font-size:40px" aria-hidden="true">${icon}</div><h1 class="h1">${title}</h1>${body}${actions}</div></div>`;
+    `<div class="narrow stack pay-back" style="margin-top:24px;text-align:center"><div class="panel"><div class="hero-ic">${icon}</div><h1 class="h1">${title}</h1>${body}${actions}</div></div>`;
+  // 4/11: pagó desde la app instalada y Mercado Pago abrió la vuelta en el navegador (en iPhone, Safari no tiene la
+  // sesión de la app): el pago está, el turno se ve en la app, que lo confirma sola al volver
+  if (S.payFromApp && (st.state === "confirmed" || st.state === "partial" || (st.state === "waiting" && S.payBack !== "failure"))) {
+    return card(
+      ic("ok"),
+      "Pago recibido",
+      `${what}<p class="lead" style="font-weight:700">Volvé a la app TuTiempo para ver tu turno.</p><p class="note">${st.state === "waiting" ? "Mercado Pago nos está avisando: en la app se confirma solo en unos segundos." : "Te llega la confirmación por email."}</p>`,
+      '<p class="note" style="margin-top:8px">¿No tenés la app a mano? <button class="lnk" data-act="payLogin">Ingresá acá con tu cuenta</button>.</p>',
+    );
+  }
+  if (S.payFromApp && st.state === "waiting" && S.payBack === "failure") {
+    return card("✕", "El pago no se completó", `${what}<p class="lead" style="font-weight:700">Volvé a la app TuTiempo para intentarlo de nuevo.</p><p class="note">Tu horario sigue reservado unos minutos.</p>`, "");
+  }
   switch (st.state) {
     case "confirmed":
-      return card("✅", "¡Listo! Tenés turno", `${what}<p class="note">Te llega la confirmación por email.</p>`, login("Ingresá para ver tu turno"));
+      return card(ic("ok"), "¡Listo! Tenés turno", `${what}<p class="note">Te llega la confirmación por email.</p>`, login("Ingresá para ver tu turno"));
     case "partial":
       return card(
-        "✅",
+        ic("ok"),
         `Se confirmaron ${st.confirmed} de ${st.n} turnos`,
         `${what}<p class="note">Lo que pagaste por los demás se devuelve solo a tu Mercado Pago.</p>`,
         login("Ingresá para ver tus turnos"),
       );
     case "refunded":
       return card(
-        "💳",
+        ic("sena"),
         "No pudimos confirmar tu turno",
         `${what}<p class="note">El horario ya no estaba libre cuando llegó el pago: te devolvemos lo que pagaste a tu Mercado Pago, sin que hagas nada.</p>`,
         login("Ingresá para elegir otro horario"),
       );
     case "waiting":
       return card(
-        "⏳",
+        ic("espera"),
         S.payBack === "failure" ? "El pago no se completó" : "Estamos confirmando tu pago",
         `${what}<p class="note">${S.payBack === "failure" ? "Tu horario sigue reservado unos minutos: ingresá para volver a intentarlo." : "Mercado Pago nos avisa en segundos. Tu horario queda reservado mientras tanto: esta pantalla se actualiza sola."}</p>`,
         login("Ingresá a tu cuenta"),
       );
     case "checking":
       return card(
-        "⏳",
+        ic("espera"),
         "Estamos revisando tu pago con Mercado Pago",
         `${what}<p class="note">El horario se liberó mientras pagabas. Si el pago se aprobó, en unos minutos te confirmamos el turno o te devolvemos la plata, sin que hagas nada. Te avisamos por email.</p>`,
         login("Ingresá a tu cuenta"),
@@ -103,8 +117,8 @@ export function vPagoVuelta() {
         login("Ingresá para elegir otro horario"),
       );
     case "error":
-      return card("⚠", "No pudimos ver el estado de tu pago", '<p class="note">Revisá tu conexión: esta pantalla vuelve a intentarlo sola.</p>', login("Ingresá a tu cuenta"));
+      return card(ic("aviso"), "No pudimos ver el estado de tu pago", '<p class="note">Revisá tu conexión: esta pantalla vuelve a intentarlo sola.</p>', login("Ingresá a tu cuenta"));
     default:
-      return card("🔎", "No encontramos este pago", '<p class="note">Ingresá para ver tus turnos.</p>', login("Ingresá a tu cuenta"));
+      return card(ic("buscar"), "No encontramos este pago", '<p class="note">Ingresá para ver tus turnos.</p>', login("Ingresá a tu cuenta"));
   }
 }

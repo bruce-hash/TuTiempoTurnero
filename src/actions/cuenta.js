@@ -23,6 +23,8 @@ registerClick("toAdmin", (ev, el, act) => {
 });
 registerClick("changePass", (ev, el, act) => {
   S.npMode = "change";
+  S.npStep = null;
+  S.npNew = null;
   go("newpass");
 });
 registerClick("toPanel", (ev, el, act) => {
@@ -30,7 +32,7 @@ registerClick("toPanel", (ev, el, act) => {
     return;
   }
   S.role = "barbero";
-  S.btab = "agenda";
+  S.btab = el.dataset.tab === "perfil" ? "perfil" : "agenda";
   render();
   window.scrollTo(0, 0);
 });

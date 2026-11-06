@@ -13,6 +13,7 @@ import { stampCfg, stampSvcs, stampsOn } from "../../ui/sellos.js";
 import { delBox } from "../cliente/cuenta.js";
 import { vMensajes } from "./mensajes.js";
 import { setupSteps } from "./verificacion.js";
+import { ic } from "../../ui/iconos.js";
 
 // editor de rubros y servicios: trabaja sobre una copia (S.edSvcs) que se crea al abrirlo
 function svcEditor(prov) {
@@ -43,7 +44,7 @@ function svcEditor(prov) {
        ) => `<div class="svcrow3"><label class="sfl sfn"><span>Nombre del servicio</span><input id="sn${index}" value="${esc(svc[0])}" autocomplete="off" placeholder="Ej: Corte de cabello"></label><button type="button" class="xbtn" data-act="svcDel" data-i="${index}" aria-label="Quitar servicio">✕</button><label class="sfl"><span>Duración (minutos)</span><input id="sd${index}" value="${svc[1]}" inputmode="numeric" placeholder="30"></label><label class="sfl"><span>Precio ($)</span><input id="sp${index}" value="${svc[2]}" inputmode="numeric" placeholder="10000"></label>
      <button type="button" class="lnk svcmore" data-act="svcOpts" data-i="${index}">${(S.edOpen || {})[index] ? "▾ Ocultar" : "▸ Indicaciones antes del turno"}</button>
      ${(S.edOpen || {})[index] ? svcOpts(svc, index) : ""}
-     ${cats.length > 1 ? `<select id="sc${index}" aria-label="Rubro del servicio">${cats.map((cat) => `<option value="${cat}" ${svc[3] === cat ? "selected" : ""}>${catInfo(cat).ic} ${catInfo(cat).one}</option>`).join("")}</select>` : ""}</div>`,
+     ${cats.length > 1 ? `<select id="sc${index}" aria-label="Rubro del servicio">${cats.map((cat) => `<option value="${cat}" ${svc[3] === cat ? "selected" : ""}>${catInfo(cat).one}</option>`).join("")}</select>` : ""}</div>`,
      )
      .join("")}</div>
    <p class="note" style="text-align:left;margin:4px 0 6px">${cats.length > 1 ? "Elegí el rubro de cada servicio: así aparecés en cada rubro con sus precios." : ""}</p>
@@ -154,12 +155,12 @@ const MP_BACK = {
 };
 const mpBackNote = () =>
   S.mpBack && S.mpBack !== "ok" && S.mp !== "ok"
-    ? `<p class="note mp-back" role="alert">⚠ ${MP_BACK[S.mpBack] || MP_BACK.error}</p>`
+    ? `<p class="note mp-back" role="alert">${ic("aviso")} ${MP_BACK[S.mpBack] || MP_BACK.error}</p>`
     : "";
 
 // v2: de dónde sale el plazo de acreditación (lo mismo en el paso "Seña y cobro" del alta y en Perfil → Cobros)
 export const mpTermNote = (style = "") =>
-  `<p class="note mpterm" style="text-align:left;${style}">📆 <b>Plazo de acreditación:</b> se elige en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos), no en TuTiempo. La app lo detecta sola con tu primer cobro. <b>Sin Mercado Pago conectado no recibís reservas.</b></p>`;
+  `<p class="note mpterm" style="text-align:left;${style}">${ic("agenda")} <b>Plazo de acreditación:</b> elegí en Horarios el mismo que tenés en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos). Si un cobro no coincide, te avisamos. <b>Sin Mercado Pago conectado no recibís reservas.</b></p>`;
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
 // En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
 export function vBPerfil(prov) {
@@ -187,8 +188,8 @@ export function vBPerfil(prov) {
    }
    ${mpTermNote("margin:10px 0 0")}
   </div>
-  <div class="panel"><p class="lbl">Foto de perfil</p><div class="contact" style="gap:14px">${photoPicker(prov, "upPhoto")}<div><b>${esc(prov.name)}</b><p class="note" style="text-align:left;margin:2px 0 0">Aparece en tu perfil, en el listado y en tus historias.</p><label class="btn btn-ghost btn-sm" for="upPhoto" style="margin-top:6px;cursor:pointer">📷 ${prov.photo ? "Cambiar foto" : "Subir foto"}</label></div></div></div>
-  <div class="panel"><div class="swrow"><div><b>💵 Aceptar el resto en efectivo</b><div class="hint">${cfg(ME()).cash !== false ? "La seña va por Mercado Pago y el resto lo pueden pagar en efectivo" : "La seña y el resto, con Mercado Pago"}</div></div><button class="tg" data-act="cashToggle" aria-pressed="${cfg(ME()).cash !== false}" aria-label="Aceptar efectivo"></button></div>
+  <div class="panel"><p class="lbl">Foto de perfil</p><div class="contact" style="gap:14px">${photoPicker(prov, "upPhoto")}<div><b>${esc(prov.name)}</b><p class="note" style="text-align:left;margin:2px 0 0">Aparece en tu perfil, en el listado y en tus historias.</p><label class="btn btn-ghost btn-sm" for="upPhoto" style="margin-top:6px;cursor:pointer">${ic("trabajos")} ${prov.photo ? "Cambiar foto" : "Subir foto"}</label></div></div></div>
+  <div class="panel"><div class="swrow"><div><b>${ic("efectivo")} Aceptar el resto en efectivo</b><div class="hint">${cfg(ME()).cash !== false ? "La seña va por Mercado Pago y el resto lo pueden pagar en efectivo" : "La seña y el resto, con Mercado Pago"}</div></div><button class="tg" data-act="cashToggle" aria-pressed="${cfg(ME()).cash !== false}" aria-label="Aceptar efectivo"></button></div>
    <p class="note" style="text-align:left;margin:8px 0 0">La seña siempre se paga con Mercado Pago al reservar. Si el cliente no viene, la seña queda para vos.</p></div>
   ${(() => {
     // C29: con los sellos apagados en TuTiempo, la configuración no se muestra (lo guardado queda)
@@ -198,7 +199,7 @@ export function vBPerfil(prov) {
     const conf = stampCfg(ME());
     const noGoals = !Object.keys(conf.goals || {}).length;
     const earning = stampSvcs(prov);
-    return `<form class="panel" id="fStamps" novalidate><div class="swrow"><div><b>🎟️ Tarjetas de sellos</b><div class="hint">${conf.on && earning.length ? `Activas en ${earning.length} servicio${earning.length > 1 ? "s" : ""}` : "Premiá a tus clientes que vuelven"}</div></div>
+    return `<form class="panel" id="fStamps" novalidate><div class="swrow"><div><b>${ic("sellos")} Tarjetas de sellos</b><div class="hint">${conf.on && earning.length ? `Activas en ${earning.length} servicio${earning.length > 1 ? "s" : ""}` : "Premiá a tus clientes que vuelven"}</div></div>
       <label class="tgl2"><input type="checkbox" id="stOn" ${conf.on ? "checked" : ""}><span>Activa</span></label></div>
      <p class="note" style="text-align:left;margin:8px 0 10px">Cada servicio tiene su propia tarjeta. Marcá los que suman sello y cuántos sellos necesita cada uno (de 15 a 20). Con la tarjeta llena, ese mismo servicio sale gratis. Los sellos son solo tuyos: no sirven con otros profesionales.</p>
      <div class="stlist">${prov.svcs
@@ -222,5 +223,5 @@ export function vBPerfil(prov) {
   ${pushPanel("prestador")}
   <div class="panel"><p class="lbl">Verificación</p><dl class="kv">${verifRow(prov)}<dt>Email</dt><dd>${esc(LIVE ? (S.user ? S.user.email : "") : prov.id === 21 ? "sofia@tutiempo.demo" : "filo@tutiempo.demo")}</dd></dl></div>
   ${delBox("pro")}
-  <button class="btn btn-ghost btn-block" data-act="preview">👁 Ver mi perfil como cliente</button>`;
+  <button class="btn btn-ghost btn-block" data-act="preview">${ic("ver")} Ver mi perfil como cliente</button>`;
 }

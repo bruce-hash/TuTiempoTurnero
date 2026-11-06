@@ -1,6 +1,5 @@
 import { LIVE } from "../../config.js";
 import { esc } from "../../lib/dom.js";
-import { relDate } from "../../lib/fechas.js";
 import { ME, avatar, pr } from "../../lib/prestadores.js";
 import { CAT, catInfo, catName, pcat } from "../../lib/rubros.js";
 import { cfg } from "../../lib/turnero.js";
@@ -19,6 +18,7 @@ import { MSG_DEF } from "./mensajes.js";
 import { vBPerfil } from "./perfil.js";
 import { vBProductos } from "./productos.js";
 import { setupCard } from "./verificacion.js";
+import { ic } from "../../ui/iconos.js";
 
 export const STORE = {};
 // datos vacíos del panel de un prestador: en vivo los completa la base (loadMine); en la demo, src/demo/panel.js
@@ -60,14 +60,14 @@ export function useProvider(pid) {
 // v2: el orden que pidió el cliente; todas a la vista (en el celular, 4 × 2 con ícono y etiqueta chica; en la compu, la
 // columna de la izquierda)
 export const BTABS = [
-  ["agenda", "Agenda", "📅"],
-  ["horarios", "Horarios", "🕒"],
-  ["finanzas", "Finanzas", "💰"],
-  ["productos", "Productos", "🧴"],
-  ["stats", "Estadísticas", "📊"],
-  ["clientes", "Clientes", "👥"],
-  ["comunidad", "Trabajos", "📸"],
-  ["perfil", "Perfil", "⚙️"],
+  ["agenda", "Agenda", ic("agenda")],
+  ["horarios", "Horarios", ic("horarios")],
+  ["finanzas", "Finanzas", ic("finanzas")],
+  ["productos", "Productos", ic("productos")],
+  ["stats", "Estadísticas", ic("estadisticas")],
+  ["clientes", "Clientes", ic("clientes")],
+  ["comunidad", "Trabajos", ic("trabajos")],
+  ["perfil", "Perfil", ic("ajustes")],
 ];
 // cambia de pestaña del panel y cierra lo que hubiera abierto (setBtab no dibuja: lo usa también el enrutador)
 export function selectBtab(tab) {
@@ -97,30 +97,20 @@ export function setBtab(tab) {
   S.manOpen = false;
   S.blockOpen = false;
 }
-// avisos sin leer: de cobros (Bloque 1: pagos devueltos desde Mercado Pago, contracargos y reclamos; conectar Mercado
-// Pago) y, desde C06 (V8), los seguidores nuevos
-function noticesPanel() {
-  const unread = (S.notices || []).filter((notice) => !notice.read);
-  if (!unread.length) {
-    return "";
-  }
-  return `<div class="panel inbox pb-notices"><p class="lbl">🔔 ${unread.every((notice) => notice.kind === "new_follower") ? "Seguidores nuevos" : "Avisos"} <span class="cnt">${unread.length}</span></p><ul class="ag">${unread
-    .slice(0, 5)
-    .map((notice) => `<li class="unread"><div><span class="msgb">${esc(notice.body)}</span><span class="hint">${esc(relDate(notice.at))}</span></div></li>`)
-    .join("")}</ul><button class="btn btn-ghost btn-sm" data-act="noticesRead">Entendido</button></div>`;
-}
+// 4/11: los avisos del panel (cobros, Mercado Pago, seguidores nuevos) pasaron a la campanita de la cabecera
+// (src/ui/campanita.js)
 // panel del prestador: cabecera (rubros, turnos online), pestañas y la sección elegida
 export function vBarbero() {
   const prov = pr(ME());
   const tabs = BTABS;
   const conf = cfg(ME());
   const head = `<div class="panel bhead"><div class="contact">${avatar(prov)}<div><b>${esc(prov.name)}</b><div class="cchips" style="justify-content:flex-start;margin-top:4px">${prov.cats.map((cat) => `<button class="cchip seg-${cat}" data-pctx="${cat}" aria-pressed="${cat === pcat(prov, S.pctx)}">${CAT[cat] ? catInfo(cat).ic : ""} ${esc(catName(cat))}</button>`).join("")}</div></div></div>
-   <div class="swrow"><div><b>📅 Turnos online</b><div class="hint">${!conf.on ? "⚪ Nadie puede reservar online" : LIVE && S.mp !== "ok" ? "⚠ Sin Mercado Pago conectado: hoy nadie puede reservarte online" : "🟢 Tus clientes pueden reservar y pagar"}</div>${conf.on && LIVE && S.mp !== "ok" ? '<button class="lnk" data-btab="perfil">Conectar Mercado Pago</button>' : ""}</div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div>`;
+   <div class="swrow"><div><b>${ic("agenda")} Turnos online</b><div class="hint">${!conf.on ? `${ic("estado-off")} Nadie puede reservar online` : LIVE && S.mp !== "ok" ? `${ic("aviso")} Sin Mercado Pago conectado: hoy nadie puede reservarte online` : `${ic("estado-on")} Tus clientes pueden reservar y pagar`}</div>${conf.on && LIVE && S.mp !== "ok" ? '<button class="lnk" data-btab="perfil">Conectar Mercado Pago</button>' : ""}</div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div>`;
   const tabBar = `<div class="btabw"><div class="btabs" role="tablist" aria-label="Secciones del panel">${tabs.map(([id, label, icon]) => `<button role="tab" data-btab="${id}" aria-selected="${S.btab === id}"><span class="bt-i" aria-hidden="true">${icon}</span><span class="bt-l">${label}</span>${id === "agenda" && S.newT ? '<i class="dotn"></i>' : ""}</button>`).join("")}</div></div>`;
   const body = (
     {
       // v2: "Ver mi perfil como cliente" salió de la cabecera y del menú de cuenta: queda acá, al final de la Agenda
-      agenda: () => setupCard() + pushCard("prestador") + vBAgendaT() + '<button class="btn btn-ghost btn-block ag-prev" data-act="preview">👁 Ver mi perfil como cliente</button>',
+      agenda: () => setupCard() + pushCard("prestador") + vBAgendaT() + `<button class="btn btn-ghost btn-block ag-prev" data-act="preview">${ic("ver")} Ver mi perfil como cliente</button>`,
       clientes: () => vBClientes(),
       finanzas: () => vBFinanzas(),
       horarios: () => vBHorarios(),
@@ -132,5 +122,5 @@ export function vBarbero() {
   )();
   // en la compu: menú lateral (cabecera y pestañas) y la sección a la derecha; en el celular, todo en una columna, en el
   // orden de siempre (cabecera, avisos, pestañas, sección: ver .pb en compu.css)
-  return `<div class="narrow stack cols2 pb" style="margin-top:20px"><div class="pb-side">${head}${tabBar}</div><div class="pb-main">${noticesPanel()}${body}</div></div>`;
+  return `<div class="narrow stack cols2 pb" style="margin-top:20px"><div class="pb-side">${head}${tabBar}</div><div class="pb-main">${body}</div></div>`;
 }

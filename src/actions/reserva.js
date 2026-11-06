@@ -18,6 +18,7 @@ import { go, render } from "../ui/render.js";
 import { myStamps, setMyStamps, stampGoal, svcByKey } from "../ui/sellos.js";
 import { notif, toast } from "../ui/toast.js";
 import { pushNotice } from "../views/prestador/mensajes.js";
+import { ic } from "../ui/iconos.js";
 
 // reserva en vivo: book() crea el turno en la base y, si hay que pagar, redirige a Mercado Pago.
 // Si el horario se ocupó mientras tanto, vuelve al perfil con los horarios actualizados.
@@ -354,7 +355,7 @@ registerSubmit("fTurno", (ev) => {
     }
     pushNotice(prov.id, "conf", first);
     notif(
-      `<span class="mp" style="background:var(--brand)">🔔</span><div><b>${esc(prov.name)}</b> ya tiene tu turno en su agenda.<br><span class="hint">En la demo, entrá como Profesional y abrí Agenda para verlo.</span></div>`,
+      `<span class="mp" style="background:var(--brand)">${ic("campana")}</span><div><b>${esc(prov.name)}</b> ya tiene tu turno en su agenda.<br><span class="hint">En la demo, entrá como Profesional y abrí Agenda para verlo.</span></div>`,
     );
   }
   S.slot = null;
