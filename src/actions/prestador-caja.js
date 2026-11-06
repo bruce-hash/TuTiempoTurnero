@@ -1,49 +1,81 @@
 import { registerChange, registerClick, registerInput, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
-import { PESOS_ERR, money, parsePesos } from "../lib/dinero.js";
+import { PESOS_ERR, money, parsePesos, parseWhole } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
-import { TODAY } from "../lib/fechas.js";
+import { TODAY, addDays, dkey, nowHM } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { cli } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
-import { cashLines, closeDay, dayLines, finTot, ymk } from "../views/prestador/finanzas.js";
+import { CAJA_BACK, cashLines, closeDay, dayLines, finTot, ymk } from "../views/prestador/finanzas.js";
 import { medioToDb } from "../lib/medios.js";
 import { checkSplit, restOf } from "../lib/resto.js";
 
 registerClick("reopenDay", (ev, el, act) => {
-  delete store.CLOSINGS["day|" + TODAY()];
-  api.m.reopenCash("day", TODAY());
+  // 4/11: hoy o el día que se está mirando con el calendario
+  const day = el.dataset.d || TODAY();
+  delete store.CLOSINGS["day|" + day];
+  api.m.reopenCash("day", day);
+  toast("Volviste a abrir la caja. Cuando esté todo, cerrala de nuevo.");
   render();
   return;
 });
-// cerrar días anteriores del mes que quedaron abiertos (uno o todos), sin detalle de efectivo
+// cerrar días anteriores que quedaron abiertos (uno o todos los del mes), sin detalle de efectivo
 registerClick(["closePast", "closeAllPast"], (ev, el, act) => {
   const today = TODAY();
-  const days = store.FIN.filter(
-    (day) =>
-      ymk(day.date) === ymk(today) &&
-      day.date < today &&
-      finTot(day) > 0 &&
-      !store.CLOSINGS["day|" + day.date] &&
-      (act === "closeAllPast" || day.date === el.dataset.d),
-  );
-  days.forEach((day) => {
+  const totalOf = (date) => {
+    const fin = store.FIN.find((day) => day.date === date);
+    return fin ? finTot(fin) : cashLines(dayLines(date)).reduce((sum, line) => sum + line.m, 0);
+  };
+  const days =
+    act === "closePast"
+      ? [el.dataset.d].filter((date) => date && date < today && !store.CLOSINGS["day|" + date])
+      : store.FIN.filter((day) => ymk(day.date) === ymk(today) && day.date < today && finTot(day) > 0 && !store.CLOSINGS["day|" + day.date]).map((day) => day.date);
+  days.forEach((date) => {
     const closing = {
-      income: finTot(day),
+      income: totalOf(date),
       cash: 0,
       mp: 0,
       counted: null,
       at: "—",
     };
-    store.CLOSINGS["day|" + day.date] = closing;
-    api.m.closeCash("day", day.date, closing);
+    store.CLOSINGS["day|" + date] = closing;
+    api.m.closeCash("day", date, closing);
   });
   toast(`Cerraste ${days.length} día${days.length === 1 ? "" : "s"}.`);
   render();
   return;
+});
+// 4/11 · Bloque 4: el calendario de la Caja del día (abre el selector de fecha del celular o la compu)
+registerClick("cajaCal", (ev, el, act) => {
+  if (el.showPicker) {
+    try {
+      el.showPicker();
+    } catch (err) {}
+  }
+});
+registerChange("cajaDay", (ev) => {
+  const day = ev.target.value;
+  const today = TODAY();
+  S.cajaDay = day && day < today && day >= dkey(addDays(-CAJA_BACK)) ? day : null;
+  S.walkOpen = false;
+  S.movEd = null;
+  S.movDel = null;
+  if (S.cajaDay && !store.WALKDAY[S.cajaDay]) {
+    api
+      .walkinsOn(S.cajaDay)
+      .catch(() => {
+        store.WALKDAY[day] = [];
+      })
+      .then(render);
+  }
+  render();
+});
+registerClick("cajaHoy", (ev, el, act) => {
+  S.cajaDay = null;
+  render();
 });
 registerClick("walkOpen", (ev, el, act) => {
   S.walkOpen = true;
@@ -93,10 +125,10 @@ registerClick("movDelYes", (ev, el, act) => {
     return render();
   }
   api.m.delWalk(walk);
-  // una venta borrada devuelve la unidad al stock
-  const prod = walk.kind === "prod" && store.PRODS.find((item) => (walk.pid && item.id === walk.pid) || item.n === walk.svc);
+  // una venta borrada devuelve sus unidades al stock (4/11: con la cantidad vendida)
+  const prod = walk.kind === "prod" && store.PRODS.find((item) => (walk.pid && item.id === walk.pid) || item.n === walk.svc || walk.svc.startsWith(item.n + " × "));
   if (prod) {
-    prod.stock++;
+    prod.stock += walk.qty || 1;
     api.m.setStock(prod);
   }
   toast("Borraste " + walk.svc + " de las " + walk.hora);
@@ -220,12 +252,18 @@ registerSubmit("fRest", (ev) => {
   toast(`Anotado: ${parts.map((part) => money(part.m) + " en " + part.medio.toLowerCase()).join(" y ")}`);
   render();
 });
+// 4/11 · Bloque 4: con un producto se pide la cantidad (no la hora) y "Cobraste" es precio × cantidad
+const prodOf = (value) => (value && value[0] === "p" ? store.PRODS[+value.slice(1)] : null);
 registerChange("wsv", (ev) => {
   const prov = pr(ME());
   const value = ev.target.value;
+  const prod = prodOf(value);
   $("#wotroBox").hidden = value !== "otro";
-  if (value[0] === "p") {
-    $("#wpr").value = store.PRODS[+value.slice(1)].p;
+  $("#whrBox").hidden = !!prod;
+  $("#wqtyBox").hidden = !prod;
+  if (prod) {
+    $("#wqty").value = "1";
+    $("#wpr").value = prod.p;
   } else if (value !== "otro") {
     $("#wpr").value = prov.svcs[+value][2];
   } else {
@@ -234,20 +272,37 @@ registerChange("wsv", (ev) => {
   }
   return;
 });
+registerInput("wqty", () => {
+  const prod = prodOf($("#wsv").value);
+  const qty = parseWhole($("#wqty").value);
+  if (prod && qty > 0) {
+    $("#wpr").value = String(prod.p * qty);
+  }
+});
 // servicio sin turno o venta de producto cargado en la caja (sin comisión; la propina no se pide: va en 0)
 registerSubmit("fWalk", (ev) => {
   const prov = pr(ME());
   const value = $("#wsv").value;
-  const isProd = value[0] === "p";
-  const prod = isProd ? store.PRODS[+value.slice(1)] : null;
-  const label = isProd ? prod.n : value === "otro" ? $("#wotro").value.trim() : prov.svcs[+value][0];
+  const prod = prodOf(value);
+  const isProd = !!prod;
+  const qty = isProd ? parseWhole($("#wqty").value) : 1;
+  const label = isProd ? (qty > 1 ? `${prod.n} × ${qty}` : prod.n) : value === "otro" ? $("#wotro").value.trim() : prov.svcs[+value][0];
   if (isProd && prod.stock <= 0) {
     $("#werr").textContent = "No te queda stock de ese producto.";
     return;
   }
+  if (isProd && (isNaN(qty) || qty < 1)) {
+    $("#werr").textContent = "Escribí la cantidad con números enteros (1 o más).";
+    return;
+  }
+  if (isProd && qty > prod.stock) {
+    $("#werr").textContent = `Te ${prod.stock === 1 ? "queda 1 unidad" : `quedan ${prod.stock} unidades`} de ${prod.n}.`;
+    return;
+  }
   const price = parsePesos($("#wpr").value);
   const tip = 0;
-  const time = $("#whr").value;
+  // un producto se vende ahora (la hora no se pide)
+  const time = isProd ? nowHM() : $("#whr").value;
   if (!label) {
     $("#werr").textContent = "Escribí qué servicio hiciste.";
     return;
@@ -266,7 +321,7 @@ registerSubmit("fWalk", (ev) => {
   }
   const client = $("#wcl").value.trim();
   if (isProd) {
-    prod.stock--;
+    prod.stock -= qty;
   } else if (client) {
     const stats = cli(client);
     stats.v++;
@@ -282,6 +337,7 @@ registerSubmit("fWalk", (ev) => {
     cliente: client,
     kind: isProd ? "prod" : "svc",
     pid: (isProd && prod.id) || null,
+    qty: isProd ? qty : null,
   };
   S.walk.push(walk);
   api.m.addWalk(walk);
@@ -290,7 +346,7 @@ registerSubmit("fWalk", (ev) => {
   }
   S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
   S.walkOpen = false;
-  toast(isProd ? `Venta guardada: ${label}. Quedan ${prod.stock} en stock.` : `Guardado: ${label} · ${money(price)}`);
+  toast(isProd ? `Venta guardada: ${label} · ${money(price)}. Quedan ${prod.stock} en stock.` : `Guardado: ${label} · ${money(price)}`);
   render();
   return;
 });

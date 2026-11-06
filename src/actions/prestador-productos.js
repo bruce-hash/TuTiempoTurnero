@@ -2,7 +2,7 @@ import { registerClick, registerInput, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { PESOS_ERR, money, parsePesos, parseWhole } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
-import { TODAY, nowHM } from "../lib/fechas.js";
+import { TODAY } from "../lib/fechas.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -138,41 +138,31 @@ registerSubmit("fProd", (ev) => {
       cost: cost,
     };
     store.PRODS.push(prod);
-    api.m.addProduct(prod);
+    // 4/11 · Bloque 4: el stock inicial, con su precio de compra, entra en los gastos de productos del mes
+    const spent = cost && stock > 0 ? stock * cost : 0;
+    const expense = spent ? { id: store.GID++, c: `Stock inicial: ${prod.n} × ${stock}`.slice(0, 80), m: spent, cat: "Productos", d: TODAY(), qty: stock } : null;
+    if (expense) {
+      store.GASTOS.push(expense);
+    }
+    Promise.resolve(api.m.addProduct(prod))
+      .then(() => {
+        if (expense) {
+          expense.prodId = prod.id || null;
+          return api.m.addExpense(expense);
+        }
+      })
+      .catch(() => {});
+    S.prodOpen = false;
+    toast(`Agregaste ${name}.${spent ? ` Gasto de productos cargado: ${money(spent)}.` : ""} Las ventas se cargan en Finanzas → Caja del día.`);
+    render();
+    return;
   }
   S.prodOpen = false;
-  toast(`Agregaste ${name}. Cuando vendas uno, tocá «Vendí uno» (o cargalo en Finanzas → Caja del día).`);
+  toast(`Agregaste ${name}. Las ventas se cargan en Finanzas → Caja del día.`);
   render();
   return;
 });
 
-// C36 (V4): "Vendí uno" desde Productos: elige el medio y la venta entra en la Caja del día (un movimiento de producto)
-registerClick("prodSell", (ev, el, act) => {
-  S.sellI = +el.dataset.i;
-  S.buyI = null;
-  S.prodDel = null;
-  render();
-});
-registerClick("prodSellNo", (ev, el, act) => {
-  S.sellI = null;
-  render();
-});
-registerClick("prodSellMedio", (ev, el, act) => {
-  const prod = store.PRODS[+el.dataset.i];
-  S.sellI = null;
-  if (!prod || prod.stock <= 0) {
-    toast("No te queda stock de ese producto.");
-    return render();
-  }
-  prod.stock--;
-  const walk = { svc: prod.n, precio: prod.p, propina: 0, hora: nowHM(), medio: el.dataset.m, cliente: "", kind: "prod", pid: prod.id || null };
-  S.walk.push(walk);
-  S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
-  api.m.addWalk(walk);
-  api.m.setStock(prod);
-  toast(`Venta cargada en la Caja del día: ${prod.n} · ${money(prod.p)} (${el.dataset.m.toLowerCase()}). Quedan ${prod.stock}.`);
-  render();
-});
 // C36: con el precio de compra cargado, "Compré más" calcula el total al escribir la cantidad (se puede cambiar)
 registerInput("bq", () => {
   const prod = store.PRODS[S.buyI];
