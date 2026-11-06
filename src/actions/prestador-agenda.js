@@ -1,9 +1,9 @@
-import { registerClick, registerSubmit } from "./registro.js";
+import { registerChange, registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
 import { money } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
-import { TODAY, dayLabel, toMin } from "../lib/fechas.js";
+import { TODAY, addDays, dayLabel, dkey, toMin } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { busy, cfg, cli, freed, overlaps, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
@@ -126,6 +126,24 @@ registerClick("manOpen", (ev, el, act) => {
   S.manSvc = 0;
   render();
 });
+// 4/11 · Bloque 4: agendar a mano otro día (también desde la ficha del cliente): la agenda pasa a ese día y el
+// formulario sigue abierto con lo que ya se escribió
+registerChange("mday", (ev) => {
+  const value = ev.target.value;
+  if (!value || value < TODAY() || value > dkey(addDays(30))) {
+    ev.target.value = S.aday || TODAY();
+    return;
+  }
+  S.manName = ($("#mcl") || {}).value || "";
+  S.manTel = ($("#mtel") || {}).value || "";
+  S.manSvc = +(($("#msv") || {}).value || 0);
+  S.aday = value;
+  render();
+  const form = $("#fManual");
+  if (form && form.scrollIntoView) {
+    form.scrollIntoView({ block: "nearest" });
+  }
+});
 registerClick("manClose", (ev, el, act) => {
   S.manOpen = false;
   render();
@@ -226,6 +244,7 @@ registerSubmit("fManual", (ev) => {
   }
   S.manOpen = false;
   S.manName = "";
+  S.manTel = "";
   if (!store.CLIENTS[client]) {
     store.CLIENTS[client] = {
       v: 0,

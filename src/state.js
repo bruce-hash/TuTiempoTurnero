@@ -75,6 +75,7 @@ export const fresh = () => ({
   gOpen: false,
   mEdit: null,
   manName: "",
+  manTel: "",
   wk: null,
   rep: 0,
   sel: null,
