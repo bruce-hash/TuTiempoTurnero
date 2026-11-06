@@ -391,3 +391,12 @@ body.am-open{overflow:hidden}
 .holyear{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
 .holyear-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
 .holerr{color:var(--bad,#b42318)}
+/* 7/11 · Legales: /privacidad y /terminos, con la marca de borrador */
+.legal-doc{text-align:left}
+.legal-doc h2{font-size:16px;margin:18px 0 6px}
+.legal-doc p,.legal-doc li{font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+.legal-doc ul{padding-left:18px;margin:6px 0}
+.legal-doc li{margin:4px 0}
+.legal-ver{margin:10px 0 0}
+.legal-draft{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--bad-soft);color:var(--fg);border:1px solid var(--bad-line);font-size:14px}
+.biz-legal{text-align:left;margin:12px 0 0}

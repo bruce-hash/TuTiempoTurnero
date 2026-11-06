@@ -22,7 +22,7 @@ const back = (mode) => `<button type="button" class="lnk am-back" data-act="auth
 // "Continuar con Google": la cuenta que se crea así también acepta los términos (ajuste del 1/11)
 const google = () =>
   `<button type="button" class="gbtn" data-act="google">${GLOGO} Continuar con Google</button>
-   <p class="gterms">Al continuar, aceptás los <button type="button" class="lnk" data-go="terminos">Términos</button> y la <button type="button" class="lnk" data-go="terminos">Política de privacidad</button>.</p>
+   <p class="gterms">Al continuar, aceptás los <button type="button" class="lnk" data-go="terminos">Términos</button> y la <button type="button" class="lnk" data-go="privacidad">Política de privacidad</button>.</p>
    <div class="or">o con tu email</div>`;
 const foot = (html) => `<div class="am-foot">${html}</div>`;
 // demo: las cuentas de ejemplo (cliente y prestadores)
@@ -82,7 +82,7 @@ export function authBody() {
         : `<div class="f"><label for="au_t">Celular <span class="hint">(opcional)</span></label><input id="au_t" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="2284 123456" value="${esc(login.tel || "")}"><span class="hint">Lo ve solo el profesional con el que reservás, para avisarte si cambia el turno.</span></div>`
     }
     ${pwField("au_p", "Contraseña", "new-password", true)}
-    <label class="chk"><input type="checkbox" id="au_ok"> <span>Acepto los <u class="lnk" role="link" tabindex="0" data-go="terminos" style="cursor:pointer">términos y la política de privacidad</u>.</span></label>
+    <label class="chk"><input type="checkbox" id="au_ok"> <span>Acepto los <u class="lnk" role="link" tabindex="0" data-go="terminos" style="cursor:pointer">términos y condiciones</u> y la <u class="lnk" role="link" tabindex="0" data-go="privacidad" style="cursor:pointer">política de privacidad</u>.</span></label>
     <div class="err" id="aerr">${esc(login.err || "")}</div>
     ${captchaBox("fSignup")}<button class="btn btn-pri btn-block" type="submit">${biz ? "Crear cuenta y seguir con mi negocio" : "Crear cuenta"}</button>
    </form>

@@ -72,8 +72,8 @@ for (const marca of DATOS) {
 }
 if (!fallas) ok(`siembra (${SIEMBRA.join(", ")}) solo en src/demo/ y sin sus datos en dist/`);
 // Emails (Bloque 2b): las cuentas de demo usan solo el dominio tutiempo.demo; fuera de eso, solo los ejemplos de los
-// textos de ayuda y el contacto de TuTiempo
-const EMAILS_OK = ["contacto@tutiempo.com.ar", "nombre@gmail.com", "tu@email.com"];
+// textos de ayuda, el contacto de TuTiempo y el remitente de sus avisos (que nombra la Política de privacidad)
+const EMAILS_OK = ["contacto@tutiempo.com.ar", "avisos@tutiempo.com.ar", "nombre@gmail.com", "tu@email.com"];
 const conEmail = [...listar(path.join(ROOT, "src")), path.join(ROOT, "index.html")].filter((f) => /\.(js|html)$/.test(f));
 const ajenos = conEmail.flatMap((f) =>
   [...fs.readFileSync(f, "utf8").matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g)]
