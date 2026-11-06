@@ -1104,5 +1104,19 @@ q("select register_provider('Negocio C44', 'Calle 44', array['b'], '2284 4444', 
 ok("C44: una cuenta de negocio no cuenta como cliente", q("select admin_client_counts()", uid=adm44)[0][0]["clients"] == antes + 1)
 ok("C44: solo el admin lo ve", err(q("select admin_client_counts()", uid=neg44), "forbidden") and err(q("select admin_client_counts()", role="anon")))
 
+# ---------- Despliegue a prueba (docs/10): el informe de la verificación ----------
+bv = q("select id from bookings where source = 'app' order by id desc limit 1")[0][0]
+rv = q("select verificacion_prueba(%s)", (bv,))[0][0]
+ok("verificación: el informe trae la reserva con lo guardado y lo esperado (seña fija y comisiones)",
+   rv["reserva"]["id"] == bv and set(rv["reserva"]["esperado"]) == {"sena", "comision", "costo_mp", "total"}
+   and rv["reserva"]["esperado"]["sena"] == round(rv["reserva"]["precio"] * rv["reserva"]["sena_pct"] / 100), str(rv.get("reserva")))
+ok("verificación: sin turno trae solo el estado general", "reserva" not in q("select verificacion_prueba(null)")[0][0])
+ok("verificación: ni la app ni un usuario la pueden llamar",
+   err(q("select verificacion_prueba(null)", role="anon")) and err(q("select verificacion_prueba(null)", uid=neg44)))
+q("do $$ begin if not exists (select 1 from pg_roles where rolname = 'tt_verificador') then create role tt_verificador nologin; end if; end $$")
+q("grant usage on schema public to tt_verificador; grant execute on function public.verificacion_prueba(bigint) to tt_verificador")
+ok("verificación: el usuario tt_verificador la puede llamar (y no lee tablas)",
+   not err(q("set local role tt_verificador; select verificacion_prueba(null)")) and err(q("set local role tt_verificador; select count(*) from bookings")))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

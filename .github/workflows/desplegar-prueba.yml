@@ -1,0 +1,124 @@
+# Desplegar prueba (docs/10): un botón en Actions. Solo desde developer y solo al entorno "prueba" (sus secretos viven
+# en ese entorno de GitHub; no hay ningún secreto de producción acá).
+#  1. pruebas rápidas (sql:check, unidad, sin demo)
+#  2. base: supabase db push (las migraciones nuevas; son idempotentes)
+#  3. Edge Functions que cambiaron desde el último despliegue (si cambió _shared/, todas)
+#  4. build con el config.js de prueba, robots.txt (Disallow) y version.json (el commit)
+#  5. subida por FTPS a la carpeta de prueba.tutiempo.com.ar, borrando lo viejo (frena si la cuenta ve la raíz de Laravel)
+#  6. etiqueta prueba-desplegada en el commit subido, y al final "Verificar prueba"
+name: Desplegar prueba
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prueba
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    name: Base, funciones y sitio de prueba
+    runs-on: ubuntu-24.04
+    environment: prueba
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PRUEBA_PROJECT_REF: ${{ secrets.PRUEBA_PROJECT_REF }}
+      PRUEBA_DB_PASSWORD: ${{ secrets.PRUEBA_DB_PASSWORD }}
+    steps:
+      - name: Solo desde developer
+        if: github.ref != 'refs/heads/developer'
+        run: |
+          echo "::error::Desplegar prueba corre solo desde developer (elegido: ${GITHUB_REF})"
+          exit 1
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Secretos del entorno prueba
+        env:
+          PRUEBA_SUPABASE_URL: ${{ secrets.PRUEBA_SUPABASE_URL }}
+          PRUEBA_SUPABASE_ANON_KEY: ${{ secrets.PRUEBA_SUPABASE_ANON_KEY }}
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          faltan=""
+          for n in SUPABASE_ACCESS_TOKEN PRUEBA_PROJECT_REF PRUEBA_DB_PASSWORD PRUEBA_SUPABASE_URL PRUEBA_SUPABASE_ANON_KEY FTP_HOST FTP_USER FTP_PASSWORD; do
+            [ -n "${!n}" ] || faltan="$faltan $n"
+          done
+          if [ -n "$faltan" ]; then echo "::error::Faltan secretos en el entorno prueba:$faltan (docs/10)"; exit 1; fi
+          case "$PRUEBA_SUPABASE_URL" in *"$PRUEBA_PROJECT_REF"*) ;; *) echo "::error::PRUEBA_SUPABASE_URL no es la del proyecto PRUEBA_PROJECT_REF"; exit 1;; esac
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Pruebas rápidas antes de subir (sql:check · unidad · sin demo)
+        run: |
+          npm run sql:check
+          npm run test:unidad
+          npm run test:sin-demo
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Base de prueba (supabase db push)
+        run: |
+          supabase link --project-ref "$PRUEBA_PROJECT_REF" --password "$PRUEBA_DB_PASSWORD"
+          supabase db push --password "$PRUEBA_DB_PASSWORD" --include-all
+
+      - name: Edge Functions que cambiaron
+        run: |
+          funcs=$(bash tools/funciones_a_desplegar.sh)
+          if [ -z "$funcs" ]; then echo "Ninguna Edge Function cambió desde el último despliegue."; exit 0; fi
+          for f in $funcs; do
+            echo "::group::$f"
+            supabase functions deploy "$f" --project-ref "$PRUEBA_PROJECT_REF" --no-verify-jwt
+            echo "::endgroup::"
+          done
+          { echo "### Edge Functions desplegadas"; for f in $funcs; do echo "- $f"; done; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build con el config.js de prueba
+        env:
+          PRUEBA_SUPABASE_URL: ${{ secrets.PRUEBA_SUPABASE_URL }}
+          PRUEBA_SUPABASE_ANON_KEY: ${{ secrets.PRUEBA_SUPABASE_ANON_KEY }}
+          PRUEBA_TURNSTILE_SITE_KEY: ${{ secrets.PRUEBA_TURNSTILE_SITE_KEY }}
+          PRUEBA_VAPID_PUBLIC_KEY: ${{ secrets.PRUEBA_VAPID_PUBLIC_KEY }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          npm run build
+          node tools/preparar_prueba.mjs dist
+
+      - name: Subir a Hostinger (FTPS, solo la carpeta de prueba)
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+          bash tools/subir_prueba.sh
+
+      - name: Marcar el commit desplegado (etiqueta prueba-desplegada)
+        run: |
+          git tag -f prueba-desplegada "$GITHUB_SHA"
+          git push -f origin refs/tags/prueba-desplegada
+          echo "Desplegado ${GITHUB_SHA::7} en https://prueba.tutiempo.com.ar" >> "$GITHUB_STEP_SUMMARY"
+
+  verificar:
+    name: Verificar prueba
+    needs: desplegar
+    uses: ./.github/workflows/verificar-prueba.yml
+    with:
+      sha: ${{ github.sha }}
+    secrets: inherit
