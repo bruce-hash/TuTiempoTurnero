@@ -108,7 +108,7 @@ const FAKE = (pass) => `(() => {
   await open(page, "/ingresar");
   await page.fill("#ai_e", "capi@test.ar"); await page.fill("#ai_p", "Capi2026xx"); await page.click("#fLogin button[type=submit]");
   await page.waitForFunction(() => window.S && S.user, null, { timeout: 8000 }).catch(() => {});
-  await open(page, "/cuenta"); await page.click("[data-act=changePass]"); await page.waitForSelector("#np0", { timeout: 8000 }).catch(() => {});
+  await open(page, "/cuenta/ajustes"); await page.click("[data-act=changePass]"); await page.waitForSelector("#np0", { timeout: 8000 }).catch(() => {});
   await page.waitForFunction(() => (window.__tt || []).some((w) => w.action === "fnewpass"), null, { timeout: 5000 }).catch(() => {});
   const tokensAntes = (await log()).filter((x) => x.captcha === "/token").length;
   await page.fill("#np0", "Capi2026xx"); await page.fill("#np1", "Capi2027yy"); await page.fill("#np2", "Capi2027yy"); await page.click("#fNewPass button[type=submit]");

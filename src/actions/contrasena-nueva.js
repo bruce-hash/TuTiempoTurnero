@@ -101,7 +101,7 @@ registerSubmit("fNewPassCode", (ev) => {
     resetChange();
     S.npMode = null;
     toast("Listo: tu contraseña cambió.");
-    go("cuenta");
+    go("ajustes");
   };
   if (!LIVE) {
     if (code !== "123456") {
@@ -142,7 +142,7 @@ registerClick("npResend", (ev, el, act) => {
 registerClick("npCancel", (ev, el, act) => {
   resetChange();
   S.npMode = null;
-  go("cuenta");
+  go("ajustes");
 });
 
 // guardar la contraseña nueva desde el link de recuperación (desde Seguridad: startChange, en dos pasos)

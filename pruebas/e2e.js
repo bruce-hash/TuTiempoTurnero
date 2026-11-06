@@ -128,34 +128,34 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("contraseña incorrecta avisa (y propone recuperarla, no un código)", (await pg.locator("#ai_p_err").innerText().catch(() => "")).includes("recuperá tu contraseña"));
   await pg.fill("#ai_p", "cliente12345"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector("#fTurno"); await wait();
   ok("vuelve al pago ya logueado", (await txt()).includes("Confirmá tu turno"));
-  ok("checkout: seña obligatoria y el resto en efectivo o Mercado Pago, sin preguntas ni saldo", (await pg.locator("[data-paym=mp]").count()) === 1 && (await pg.locator("[data-paym=cash]").count()) === 1 && !(await pg.locator(".intake").count()) && !(await txt()).includes("Saldo") && (await txt()).includes("$6.000"));
-  ok("D34: la comisión va aparte de la seña, sobre el precio (10% del servicio = $1.200) y se paga $7.200", (await pg.locator(".feerow").innerText()).includes("10% del servicio") && (await pg.locator(".feerow").innerText()).includes("$1.200") && (await pg.locator("#fTurno .tot").innerText()).includes("$7.200") && (await pg.locator("#fTurno button[type=submit]").innerText()).includes("$7.200"));
+  ok("checkout: seña obligatoria (4/11: fija del 30%, $3.600 de $12.000) y el resto en efectivo o Mercado Pago, sin preguntas ni saldo", (await pg.locator("[data-paym=mp]").count()) === 1 && (await pg.locator("[data-paym=cash]").count()) === 1 && !(await pg.locator(".intake").count()) && !(await txt()).includes("Saldo") && (await txt()).includes("$3.600"));
+  ok("D34: la comisión va aparte de la seña, sobre el precio (10% del servicio = $1.200) y se paga $4.800 (4/11: con la seña fija del 30%)", (await pg.locator(".feerow").innerText()).includes("10% del servicio") && (await pg.locator(".feerow").innerText()).includes("$1.200") && (await pg.locator("#fTurno .tot").innerText()).includes("$4.800") && (await pg.locator("#fTurno button[type=submit]").innerText()).includes("$4.800"));
   // C52 (V8): el prestador cambia el precio mientras la clienta está en la confirmación
   const holdsAntes = (await q("select count(*)::int c from bookings where status = 'hold'"))[0].c;
   await db.query("update services set price = 14000 where name = 'Esmaltado semipermanente'");
   await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /El precio cambió/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
   ok("C52: si el precio cambió, no cobra: muestra el nuevo total (y el de antes) y pide confirmar de nuevo",
-     /El precio cambió mientras mirabas: ahora pagás \$8\.400 \(antes \$7\.200\)/.test(await pg.locator("#terr").innerText()) && (await pg.locator("#fTurno .tot").innerText()).includes("$8.400")
+     /El precio cambió mientras mirabas: ahora pagás \$5\.600 \(antes \$4\.800\)/.test(await pg.locator("#terr").innerText()) && (await pg.locator("#fTurno .tot").innerText()).includes("$5.600")
      && (await q("select count(*)::int c from bookings where status = 'hold'"))[0].c === holdsAntes && new URL(pg.url()).pathname.endsWith("/reservar"));
   await db.query("update services set price = 12000 where name = 'Esmaltado semipermanente'");
-  await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /antes \$8\.400/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
-  ok("C52: …y si vuelve al precio de antes, lo avisa igual", (await pg.locator("#fTurno .tot").innerText()).includes("$7.200"));
+  await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /antes \$5\.600/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("C52: …y si vuelve al precio de antes, lo avisa igual", (await pg.locator("#fTurno .tot").innerText()).includes("$4.800"));
   // D30 (V1): el admin carga los % de Mercado Pago y la prestadora elige "10 días" mientras la clienta está en la confirmación
   await db.query("update app_settings set mp_pct_instant = 7.61, mp_pct_d10 = 5.31");
   await db.query("update provider_settings set payout_term = 'd10' where provider_id = (select id from providers where name like 'Sofía%')");
-  await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /antes \$7\.200/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  await pg.click("#fTurno button[type=submit]"); await pg.waitForFunction(() => /antes \$4\.800/.test(document.querySelector("#terr")?.textContent || ""), null, { timeout: 8000 }).catch(() => {}); await wait(300);
   const fr30 = await pg.locator("#fTurno .feerow").allInnerTexts();
-  ok("D30: antes de cobrar avisa el total nuevo con el costo de Mercado Pago ($6.000 + $1.200 + $404 = $7.604)",
-     /ahora pagás \$7\.604 \(antes \$7\.200\)/.test(await pg.locator("#terr").innerText()) && (await pg.locator("#fTurno .tot").innerText()).includes("$7.604"));
+  ok("D30: antes de cobrar avisa el total nuevo con el costo de Mercado Pago ($3.600 + $1.200 + $270 = $5.070)",
+     /ahora pagás \$5\.070 \(antes \$4\.800\)/.test(await pg.locator("#terr").innerText()) && (await pg.locator("#fTurno .tot").innerText()).includes("$5.070"));
   ok("D30: el resumen muestra los tres conceptos por separado (seña, comisión de TuTiempo y costo de Mercado Pago con su plazo)",
-     fr30.length === 2 && fr30[0].includes("10% del servicio") && fr30[0].includes("$1.200") && /acreditación en 10 días, 5,31% del total/.test(fr30[1]) && fr30[1].includes("$404")
+     fr30.length === 2 && fr30[0].includes("10% del servicio") && fr30[0].includes("$1.200") && /acreditación en 10 días, 5,31% del total/.test(fr30[1]) && fr30[1].includes("$270")
      && (await pg.locator("#fTurno").innerText()).includes("Se suma la comisión de TuTiempo y el costo de Mercado Pago"));
   await Promise.all([pg.waitForURL(/mp=success/).catch(() => {}), pg.click("#fTurno button[type=submit]")]);
   await pg.waitForSelector(".booked", { timeout: 8000 }).catch(() => {}); await wait(800);
   ok("vuelve de Mercado Pago con el turno confirmado", await pg.isVisible(".booked"));
   const bk30 = (await q("select deposit, client_fee, mp_fee, paid_mp, app_fee, paid_mp_fee, status from bookings where client_id = (select id from auth.users where email='ana@test.ar') order by id desc limit 1"))[0];
   ok("D30: en la base: seña completa para la prestadora, comisión de TuTiempo y lo de Mercado Pago aparte",
-     bk30 && bk30.status === "confirmed" && bk30.deposit === 6000 && bk30.client_fee === 1200 && bk30.mp_fee === 404 && bk30.paid_mp === 6000 && bk30.app_fee === 1200 && bk30.paid_mp_fee === 404, JSON.stringify(bk30));
+     bk30 && bk30.status === "confirmed" && bk30.deposit === 3600 && bk30.client_fee === 1200 && bk30.mp_fee === 270 && bk30.paid_mp === 3600 && bk30.app_fee === 1200 && bk30.paid_mp_fee === 270, JSON.stringify(bk30));
   await db.query("update app_settings set mp_pct_instant = 0, mp_pct_d10 = 0");
   await db.query("update provider_settings set payout_term = 'instant' where provider_id = (select id from providers where name like 'Sofía%')");
   {
@@ -188,7 +188,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   const conf = await q("select m.body, m.kind from client_messages m join auth.users u on u.id=m.user_id where u.email='ana@test.ar' and m.kind='conf'");
   ok("aviso de confirmación en la app (sin WhatsApp)", conf.length === 1 && conf[0].body.includes("Sofía Benítez Studio"));
   ok("en la base: comisión cobrada aparte y guardada", (await q("select app_fee, client_fee from bookings where client_id = (select id from auth.users where email='ana@test.ar')"))[0].app_fee === 1200);
-  ok("v30/D30: el aviso dice seña + comisiones (TuTiempo y Mercado Pago)", (await pg.locator(".booked .bk-must").innerText()).includes("$6.000 + $1.604 de comisiones"));
+  ok("v30/D30: el aviso dice seña + comisiones (TuTiempo y Mercado Pago)", (await pg.locator(".booked .bk-must").innerText()).includes("$3.600 + $1.470 de comisiones"));
   ok("Paso 1: la vuelta de Mercado Pago llega a /turno/<id> (no al inicio)", /^\/turno\/\d+$/.test(new URL(pg.url()).pathname));
   {
     // Paso 1: pagó desde la app instalada y Mercado Pago volvió al navegador, que no tiene la sesión
@@ -364,7 +364,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     }
   }
   const bk = await q("select status, deposit, paid_mp, cashback from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
-  ok("en la base: confirmado, seña 50% y sin cashback", bk.length === 1 && bk[0].status === "confirmed" && bk[0].deposit === 6000 && bk[0].paid_mp === 6000 && bk[0].cashback === 0);
+  ok("en la base: confirmado, seña 30% (4/11) y sin cashback", bk.length === 1 && bk[0].status === "confirmed" && bk[0].deposit === 3600 && bk[0].paid_mp === 3600 && bk[0].cashback === 0);
   const bx = await q("select price, addons, intake, buffer_min, extract(epoch from busy_until - ends_at)::int gap, extract(epoch from ends_at - starts_at)::int dur from bookings where client_id = (select id from auth.users where email='ana@test.ar')");
   ok("en la base: precio del servicio y sin descanso (C39)", bx[0].price === 12000 && bx[0].addons.length === 0 && bx[0].buffer_min === 0 && bx[0].gap === 0 && bx[0].dur === 60 * 60);
   ok("sin saldo TuTiempo", (await q("select balance from wallets w join auth.users u on u.id=w.user_id where u.email='ana@test.ar'"))[0].balance === 0);
@@ -379,7 +379,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("Bloque D: Esc cierra y vuelve al botón", await pg.evaluate(() => document.getElementById("acctMenu").hidden && document.activeElement === document.querySelector("nav .acct-btn") && document.querySelector("nav .acct-btn").getAttribute("aria-expanded") === "false"));
   await pg.click("nav .acct-btn"); await wait(150); await pg.mouse.click(20, 400); await wait(150);
   ok("Bloque D: tocar afuera lo cierra", await pg.evaluate(() => document.getElementById("acctMenu").hidden));
-  ok("Bloque D: el menú del cliente tiene Mi perfil, Mis turnos, Registrá tu negocio y Cerrar sesión (sin paneles)", await pg.evaluate(() => [...document.querySelectorAll("#acctMenu [role=menuitem]")].map((b) => b.dataset.go || b.dataset.act).join(",") === "cuenta,misturnos,bizStart,logout"));
+  ok("Bloque D: el menú del cliente tiene Mi perfil, Mis turnos, Ajustes (4/11), Registrá tu negocio y Cerrar sesión (sin paneles)", await pg.evaluate(() => [...document.querySelectorAll("#acctMenu [role=menuitem]")].map((b) => b.dataset.go || b.dataset.act).join(",") === "cuenta,misturnos,ajustes,bizStart,logout"));
   await menu("[data-go=misturnos]");
   ok("mis turnos desde la base", (await pg.locator(".tcard").count()) >= 1 && (await txt()).includes("Sofía"));
   ok("mis turnos: confirmado sin pedir asistencia ni mostrar saldo", (await txt()).includes("Confirmado") && !(await txt()).includes("Confirmá tu asistencia") && !(await txt()).includes("Saldo"));
@@ -420,7 +420,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("C06: seguir le deja al prestador «Ana empezó a seguirte.»", (await q("select body from provider_notices where kind='new_follower'"))[0]?.body === "Ana empezó a seguirte."
      && (await q("select count(*)::int c from push_outbox where kind='new_follower'"))[0].c >= 0);
   await menu("[data-go=cuenta]");
-  ok("mi perfil muestra a quién sigo, sin saldo", (await txt()).includes("Sofía") && !(await txt()).includes("Saldo TuTiempo"));
+  ok("4/11: mi perfil ya no muestra «Profesionales que seguís» (ni saldo) ni Seguridad", !(await txt()).includes("Profesionales que seguís") && !(await txt()).includes("Saldo TuTiempo") && !(await txt()).includes("Cambiar contraseña"));
   const PNG = { name: "foto.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8DwnwEJMDKgAhQZKgAAZHwCArkOvB0AAAAASUVORK5CYII=", "base64") };
   await pg.setInputFiles("#upAv", PNG); await wait(1200);
   const av = await q("select p.avatar_path from profiles p join auth.users u on u.id=p.id where u.email='ana@test.ar'");
@@ -591,22 +591,23 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Cera C36"); await pg.fill("#pnp", "8000"); await pg.fill("#pnc", "4500"); await pg.fill("#pns", "2");
     await pg.click("#fProd button[type=submit]");
     ok("C36: el producto guarda el precio de compra y muestra lo que ganás", await until("select cost from products where name='Cera C36'", [], (r) => r[0]?.cost === 4500) && /compra \$4\.500 · ganás \$3\.500/.test(await txt()));
-    await wait(500);
-    await pg.click('.plist li:has-text("Cera C36") [data-act=prodSell]'); await wait(200);
-    {
-      // v2 · Profesional: con «Vendí uno» abierto, el nombre no queda apretado ni debajo de los controles de cantidad
-      const r = await pg.locator('.plist li:has-text("Cera C36")').evaluate((li) => {
-        const box = (sel) => li.querySelector(sel).getBoundingClientRect();
-        const m = box(".pl-m"), s = box(".pl-s"), a = box(".movask"), l = li.getBoundingClientRect();
-        return { name: m.width, overlap: m.right > s.left && m.bottom > s.top && m.top < s.bottom, ask: a.width / l.width };
-      });
-      ok("v2: Productos con «Vendí uno» abierto: nombre a lo ancho, sin pisarse con la cantidad, y el cuadro de la venta debajo", r.name > 150 && !r.overlap && r.ask > 0.95, JSON.stringify(r));
-    }
-    await pg.click('.plist li:has-text("Cera C36") [data-act=prodSellMedio][data-m="Transferencia"]');
-    ok("C36: «Vendí uno» la carga en la Caja del día con su medio y descuenta el stock", await until("select amount, method from walkins where kind='product' and description='Cera C36'", [], (r) => r.length === 1 && r[0].amount === 8000 && r[0].method === "transfer")
-       && (await q("select stock from products where name='Cera C36'"))[0].stock === 1);
+    // 4/11 · Bloque 4: el stock inicial (2 × $4.500) entra en los gastos de productos del mes, ligado al producto
+    ok("4/11: el stock inicial suma a Gastos de productos (stock × precio de compra)",
+       await until("select e.amount, e.category, e.qty, e.product_id = p.id same from expenses e join products p on p.name = 'Cera C36' where e.concept like 'Stock inicial: Cera C36%'", [],
+                   (r) => r.length === 1 && r[0].amount === 9000 && r[0].category === "Productos" && r[0].qty === 2 && r[0].same === true));
+    ok("4/11: Productos ya no tiene «Vendí uno» (las ventas se cargan en Finanzas)", (await pg.locator("[data-act=prodSell]").count()) === 0 && !/Vendí uno/.test(await txt()));
+    // la venta desde la Caja del día: con un producto pide Cantidad (no la hora) y cobra precio × cantidad
     await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(300);
-    ok("C36: …y se ve en los movimientos de hoy", (await pg.locator('.movs li:has-text("Cera C36")').count()) === 1);
+    await pg.click("[data-act=walkOpen]"); await wait(200);
+    const pv36 = await pg.evaluate(() => [...document.querySelectorAll("#wsv option")].find((o) => /Cera C36/.test(o.textContent))?.value);
+    await pg.selectOption("#wsv", pv36); await wait(200);
+    ok("4/11: con un producto, el formulario pide Cantidad (1) en vez de Hora", (await pg.isHidden("#whrBox")) && (await pg.inputValue("#wqty")) === "1" && (await pg.inputValue("#wpr")) === "8000");
+    await pg.fill("#wqty", "2"); await pg.dispatchEvent("#wqty", "input"); await wait(100);
+    ok("4/11: …y «Cobraste» pasa a precio × cantidad ($16.000)", (await pg.inputValue("#wpr")) === "16000");
+    await pg.click('#fWalk [data-medio="Transferencia"]'); await pg.click("#fWalk button[type=submit]");
+    ok("4/11: la venta de 2 queda en la caja con su cantidad y descuenta 2 del stock", await until("select amount, method, qty from walkins where kind='product' and description='Cera C36 × 2'", [], (r) => r.length === 1 && r[0].amount === 16000 && r[0].method === "transfer" && r[0].qty === 2)
+       && await until("select stock from products where name='Cera C36'", [], (r) => r[0].stock === 0));
+    ok("C36: …y se ve en los movimientos de hoy", (await pg.locator('.movs li:has-text("Cera C36 × 2")').count()) === 1);
   }
   // rubros y servicios: sumar Masajes
   await pg.click("[data-btab=perfil]"); await wait(300);
@@ -627,7 +628,36 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.selectOption("#hno", "120"); await wait(1400);
   ok("C37: Horarios se guarda solo al cambiar, sin botón Guardar", (await pg.locator("#fHorarios button[type=submit]").count()) === 0
      && (await q("select notice_min, buffer_min from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].notice_min === 120
-     && (await pg.locator("#hSaved").innerText()).includes("Guardado"));
+     && /Cambios guardados · \d\d:\d\d h/.test(await pg.locator("#hSaved").innerText()));
+  // 4/11 · Bloque 4: la seña fija del 30% se muestra (sin elegir) y el plazo de Mercado Pago lo elige el profesional
+  ok("4/11: Horarios muestra la seña fija del 30% (sin el selector de seña ni «El total»)", (await pg.locator("#hpay").count()) === 0 && /Seña: 30% del servicio/.test(await pg.locator("#fHorarios").innerText()));
+  ok("4/11: Horarios tiene el acceso a «Bloquear días o semanas» arriba, antes de los horarios",
+     await pg.evaluate(() => { const a = document.querySelector("[data-act=toDayBlock]"); const d = document.querySelector(".hdays"); return !!a && !!d && !!(a.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING); }));
+  await pg.click('label.termopt:has(input[value="d10"])'); await wait(1400);
+  ok("4/11: elegir «10 días» se guarda solo (y la seña sigue en 30%)",
+     (await until("select payout_term, deposit_pct from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'", [], (r) => r[0].payout_term === "d10" && r[0].deposit_pct === 30))
+     && /Cambios guardados/.test(await pg.locator("#hSaved").innerText()));
+  await pg.click("[data-act=toDayBlock]"); await wait(600);
+  ok("4/11: «Bloquear días o semanas» lleva al formulario de bloqueo", await pg.evaluate(() => { const r = document.querySelector("#fDayBlock").getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; }));
+  await db.query("update provider_settings set payout_term = 'instant' where provider_id = (select id from providers where name like 'Sofía%')");
+  // 4/11 · Bloque 4: agendar a mano desde la ficha del cliente, eligiendo el día (no solo hoy)
+  {
+    await pg.click("[data-btab=clientes]"); await wait(300);
+    await pg.click('.clist [data-cli]'); await wait(300);
+    const who = await pg.evaluate(() => S.cli);
+    await pg.click("[data-act=cliAgendar]"); await wait(400);
+    const target = await pg.evaluate(() => {
+      for (let off = 2; off < 12; off++) { const d = dkey(addDays(off)); if (slotsFor(S.me, d, pr(S.me).svcs[0][1]).list.some((x) => x.free)) return d; }
+      return null;
+    });
+    await pg.fill("#mday", target); await pg.dispatchEvent("#mday", "change"); await wait(400);
+    ok("4/11: agendar desde la ficha deja elegir el día y conserva el cliente", (await pg.inputValue("#mday")) === target && (await pg.inputValue("#mcl")) === who && (await pg.locator("#fManual .lbl").innerText()).length > 0);
+    const hr = await pg.inputValue("#mhr");
+    await pg.click("#fManual button[type=submit]");
+    ok("4/11: el turno agendado a mano queda ese día en la base",
+       await until("select count(*)::int c from bookings b join providers p on p.id=b.provider_id where p.name like 'Sofía%' and b.source='manual' and b.client_name=$1 and to_char(b.starts_at at time zone 'America/Argentina/Buenos_Aires','YYYY-MM-DD HH24:MI')=$2", [who, target + " " + hr], (r) => r[0].c === 1));
+    await pg.click("[data-btab=horarios]"); await wait(300);
+  }
   await db.query("update provider_settings set notice_min = 0 where provider_id = (select id from providers where name like 'Sofía%')");
   // un día abierto dentro de 3 a 4 semanas (lejos de los turnos de la prueba) para el happy hour y la agenda
   const hhSel = "select happy_on, happy_pct, happy_days, happy_from::text f, happy_to::text t from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'";
@@ -741,12 +771,12 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.click("[data-act=dbConfirm]"); await wait(1500);
   const bc = await q("select id, status, refund_pending, settle_by_provider from bookings where source='app' and pay_method='mp'");
   ok("v31: el turno de Ana se canceló sin devolución automática (la arregla el prestador)", bc[0].status === "cancelled_provider" && bc[0].refund_pending === 0 && bc[0].settle_by_provider === true);
-  ok("v31: la lista le dice al prestador que llame, con la seña ($6.000)", /TuTiempo no devuelve la seña/i.test(await pg.locator(".dbdone").innerText()) && (await pg.locator(".dbdone").innerText()).includes("$6.000"));
+  ok("v31: la lista le dice al prestador que llame, con la seña ($3.600)", /TuTiempo no devuelve la seña/i.test(await pg.locator(".dbdone").innerText()) && (await pg.locator(".dbdone").innerText()).includes("$3.600"));
   ok("al prestador le queda la lista de cancelados", (await pg.locator(".dbdone li").count()) >= 1 && /ana/i.test(await pg.locator(".dbdone").innerText()));
   // Ana tiene dos turnos ese día (el pagado por Mercado Pago y el de resto en efectivo): se cancelan los dos y le llega
   // un aviso por cada uno. Se mira el de este turno (ref = id del turno), no el primero que devuelva la base.
   const cn = await q("select m.body from client_messages m join auth.users u on u.id=m.user_id where u.email='ana@test.ar' and m.kind='cancel' and m.ref=$1", [String(bc[0].id)]);
-  ok("a Ana le llegó el aviso para reprogramar", cn.length >= 1 && cn[0].body.includes("tuvo que cancelar") && cn[0].body.includes("se va a comunicar con vos") && cn[0].body.includes("$6.000"));
+  ok("a Ana le llegó el aviso para reprogramar", cn.length >= 1 && cn[0].body.includes("tuvo que cancelar") && cn[0].body.includes("se va a comunicar con vos") && cn[0].body.includes("$3.600"));
   const dayBlk = await q("select count(*)::int c from provider_busy((select id from providers where name like 'Sofía%'), $1::date, $1::date) where day_block", [d]);
   ok("ese día queda Cerrado para los clientes", dayBlk[0].c === 1);
   // seguridad como prestadora
@@ -1099,7 +1129,8 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("v2: «Ver mi perfil como cliente» está en la Agenda y no en la cabecera del panel", (await pg.locator(".pb-main [data-act=preview]").count()) === 1 && (await pg.locator(".bhead [data-act=preview], .pb-side > [data-act=preview]").count()) === 0);
     await pg.click("nav .acct-btn"); await pg.waitForSelector("#acctMenu:not([hidden])");
     const m = await pg.locator("#acctMenu").innerText();
-    ok("v2: en el menú de cuenta del profesional, «Ajustes» en lugar de «Mi perfil» y sin «Ver mi perfil público»", /Ajustes/.test(m) && !/Mi perfil|Ver mi perfil público/.test(m), m);
+    ok("4/11: en el menú de cuenta del profesional, «Mi perfil» (la pestaña Perfil) y «Ajustes» (Seguridad), sin «Ver mi perfil público»",
+       /Mi perfil/.test(m) && /Ajustes/.test(m) && !/Ver mi perfil público/.test(m) && (await pg.locator('#acctMenu [data-act=toPanel][data-tab=perfil]').count()) === 1, m);
     await pg.keyboard.press("Escape"); await wait(200);
     await pg.click("[data-btab=horarios]"); await wait(300);
     ok("v2: Horarios ya no tiene «Copiar link» (queda en Trabajos)", (await pg.locator(".pb-main [data-act=copiarLink]").count()) === 0);
@@ -1112,7 +1143,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
       ok(`v2: «${label}» deja su sección justo debajo de la cabecera fija`, pos[1] >= pos[0] && pos[1] - pos[0] <= 30, JSON.stringify(pos));
     }
     await pg.click("[data-btab=perfil]"); await wait(300);
-    ok("v2: Perfil explica de dónde sale el plazo de acreditación", /se elige en tu cuenta de Mercado Pago[\s\S]*detecta sola con tu primer cobro[\s\S]*Sin Mercado Pago conectado no recibís reservas/.test(await txt()));
+    ok("4/11: Perfil explica que el plazo de acreditación se elige en Horarios (el mismo de su cuenta de Mercado Pago)", /elegí en Horarios el mismo que tenés en tu cuenta de Mercado Pago[\s\S]*Sin Mercado Pago conectado no recibís reservas/.test(await txt()));
     await pg.click("[data-btab=agenda]"); await wait(300);
   }
   ok("Bloque 1: abrir la campanita marca los avisos leídos (4/11; antes, «Entendido»)", (await pg.locator("nav .bell-n").count()) === 0 && (await q("select count(*)::int c from provider_notices n join providers p on p.id=n.provider_id where p.name like 'Sofía%' and n.read_at is null"))[0].c === 0);
@@ -1151,7 +1182,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("D22: el premio queda reservado sin pago", (await q("select count(*)::int c from bookings where pay_method = 'reward' and status = 'confirmed'"))[0].c === rewardsBefore + 1);
   {
     // 4/11 · Bloque 2: Seguridad → Cambiar contraseña: la actual, la nueva y el código que manda Supabase (reautenticación)
-    await pg.goto(BASE + "/cuenta"); await pg.waitForSelector("[data-act=changePass]", { timeout: 8000 }).catch(() => {});
+    await pg.goto(BASE + "/cuenta/ajustes"); await pg.waitForSelector("[data-act=changePass]", { timeout: 8000 }).catch(() => {});
     await pg.click("[data-act=changePass]"); await pg.waitForSelector("#np0", { timeout: 8000 }).catch(() => {});
     const reauths = async () => (await (await fetch(BASE + "/__log")).json()).filter((x) => x.reauth).length;
     const r0 = await reauths();
@@ -1164,9 +1195,9 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("4/11: con la actual bien, Supabase manda el código de reautenticación y la app lo pide", (await pg.locator("#np_c").count()) === 1 && (await reauths()) === r0 + 1 && /Revisá tu email/.test(await txt()));
     probing = true; await pg.fill("#np_c", "111111"); await pg.click("#fNewPassCode button[type=submit]"); await wait(800); probing = false;
     ok("4/11: con un código equivocado no cambia", (await pg.locator("#nperr").innerText()).includes("El código no es correcto") && (await q("select encrypted_password p from auth.users where email='ana@test.ar'"))[0].p === "cliente12345");
-    await pg.fill("#np_c", "123456"); await pg.click("#fNewPassCode button[type=submit]"); await pg.waitForURL(/\/cuenta$/, { timeout: 8000 }).catch(() => {}); await wait(400);
+    await pg.fill("#np_c", "123456"); await pg.click("#fNewPassCode button[type=submit]"); await pg.waitForURL(/\/cuenta\/ajustes$/, { timeout: 8000 }).catch(() => {}); await wait(400);
     ok("4/11: con el código bien, la contraseña cambia y sigue con la sesión abierta",
-       (await q("select encrypted_password p from auth.users where email='ana@test.ar'"))[0].p === "Nueva2026ana" && new URL(pg.url()).pathname === "/cuenta" && (await pg.locator("nav .acct-btn").count()) === 1);
+       (await q("select encrypted_password p from auth.users where email='ana@test.ar'"))[0].p === "Nueva2026ana" && new URL(pg.url()).pathname === "/cuenta/ajustes" && (await pg.locator("nav .acct-btn").count()) === 1);
     // la de antes, para lo que sigue
     await db.query("update auth.users set encrypted_password = 'cliente12345' where email = 'ana@test.ar'");
   }
@@ -1238,12 +1269,15 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await p2b.click("#fBiz3 button[type=submit]"); await p2b.waitForSelector("[data-act=bizNext]", { timeout: 8000 }).catch(() => {}); await p2b.waitForTimeout(300);
   const hrs = await q("select dow, opens::text o, closes::text c from provider_hours where provider_id=$1 order by dow", [np.id]);
   ok("alta paso 3: martes a sábado de 10 a 20 en la base", hrs.length === 5 && hrs.every((h, i) => h.dow === i + 2 && h.o.startsWith("10:00") && h.c.startsWith("20:00")), JSON.stringify(hrs));
-  ok("D30: el alta no pregunta el plazo de Mercado Pago (se detecta solo)", !(await p2b.locator("[data-act=bizTerm], #hterm").count()));
-  ok("v2: «Seña y cobro» explica que el plazo se elige en Mercado Pago, que se detecta con el primer cobro y que sin MP no hay reservas",
-     /se elige en tu cuenta de Mercado Pago[\s\S]*detecta sola con tu primer cobro[\s\S]*Sin Mercado Pago conectado no recibís reservas/.test(await p2b.locator("#app").innerText()));
-  await p2b.click('[data-act=bizPay][data-v="40"]'); await p2b.click("[data-act=bizNext]"); await p2b.waitForTimeout(800);
+  // 4/11 · Bloque 4: la seña es fija (30%) y el profesional elige su plazo de Mercado Pago (con la tabla del admin)
+  ok("4/11: el alta muestra la seña fija del 30% (sin elegir otra ni el total) y los 4 plazos",
+     (await p2b.locator("[data-act=bizPay]").count()) === 0 && /Seña: 30% del servicio/.test(await p2b.locator("#app").innerText())
+     && (await p2b.locator('input[name="hterm"]').count()) === 4 && (await p2b.locator('input[name="hterm"][value="instant"]').isChecked()));
+  ok("4/11: «Seña y cobro» explica que el plazo es el de su cuenta de Mercado Pago y que sin MP no hay reservas",
+     /mismo plazo que tenés en tu cuenta de Mercado Pago[\s\S]*Sin Mercado Pago conectado no recibís reservas/.test(await p2b.locator("#app").innerText()));
+  await p2b.click('label.termopt:has(input[value="d18"])'); await p2b.click("[data-act=bizNext]"); await p2b.waitForTimeout(800);
   const st2 = (await q("select deposit_pct, pay_mode, payout_term, setup_done from provider_settings where provider_id=$1", [np.id]))[0];
-  ok("alta paso 4: seña del 40%, plazo «al instante» (D30) y se puede seguir sin Mercado Pago", st2.deposit_pct === 40 && st2.pay_mode === "deposit" && st2.payout_term === "instant" && JSON.stringify(st2.setup_done) === "[1,2,3,4]" && new URL(p2b.url()).pathname === "/registrar-negocio/5");
+  ok("alta paso 4: seña del 30%, el plazo que eligió (18 días) y se puede seguir sin Mercado Pago", st2.deposit_pct === 30 && st2.pay_mode === "deposit" && st2.payout_term === "d18" && JSON.stringify(st2.setup_done) === "[1,2,3,4]" && new URL(p2b.url()).pathname === "/registrar-negocio/5", JSON.stringify(st2));
   ok("alta paso 5: con «Exigir DNI», pide número, frente y dorso", await p2b.isVisible("#fDni") && await p2b.isVisible("#dniFront") && await p2b.isVisible("#dniBack"));
   ok("D24: el paso avisa cuánto se guardan las fotos", (await p2b.innerText("body")).includes("Guardamos las fotos hasta 30 días después de verificarte"));
   await p2b.click("[data-act=bizFinish]"); await p2b.waitForTimeout(300);

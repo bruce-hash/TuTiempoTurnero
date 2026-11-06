@@ -17,7 +17,7 @@ import { vNegocio } from "../views/auth/negocio.js";
 import { vNewPass } from "../views/auth/contrasena-nueva.js";
 import { vLogin } from "../views/auth/login.js";
 import { vCheckoutTurno } from "../views/cliente/checkout.js";
-import { vCuenta } from "../views/cliente/cuenta.js";
+import { vAjustes, vCuenta } from "../views/cliente/cuenta.js";
 import { storyTick, vStory } from "../views/cliente/historias.js";
 import { myUpcoming, vHome } from "../views/cliente/home.js";
 import { vMisTurnos } from "../views/cliente/mis-turnos.js";
@@ -41,7 +41,7 @@ function nav() {
       email,
       items: [
         [ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"'],
-        ...(S.user ? [[ic("perfil"), "Mi perfil", 'data-act="asClient" data-to="cuenta"'], [ic("misturnos"), "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
+        ...(S.user ? [[ic("perfil"), "Mi perfil", 'data-act="asClient" data-to="cuenta"'], [ic("misturnos"), "Mis turnos", 'data-act="asClient" data-to="misturnos"', count], [ic("candado"), "Ajustes", 'data-act="asClient" data-to="ajustes"']] : []),
         ...(S.barberAuth ? [[ic("negocio"), "Panel de profesional", 'data-act="toPanel"']] : []),
         ...installItem(),
         ...(S.user ? [[ic("salir"), "Cerrar sesión", 'data-act="logout"']] : [[ic("salir"), "Salir del panel", 'data-act="salirAdmin"']]),
@@ -59,8 +59,9 @@ function nav() {
       items: [
         // D33: una cuenta de negocio no reserva (sin Mis turnos ni "Reservar como cliente")
         [ic("agenda"), "Mi agenda", 'data-act="toPanel"'],
-        // v2: "Mi perfil" se llama "Ajustes" y "Ver mi perfil público" pasó a la Agenda
-        ...(S.user ? [[ic("ajustes"), "Ajustes", 'data-act="asClient" data-to="cuenta"']] : []),
+        // 4/11 · Bloque 4: "Mi perfil" es la pestaña Perfil del panel y "Ajustes", solo Seguridad
+        [ic("perfil"), "Mi perfil", 'data-act="toPanel" data-tab="perfil"'],
+        ...(S.user ? [[ic("candado"), "Ajustes", 'data-act="asClient" data-to="ajustes"']] : []),
         ...(S.isAdmin ? [[ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
         ...installItem(),
         [ic("salir"), "Cerrar sesión", 'data-act="salirBarbero"'],
@@ -76,6 +77,7 @@ function nav() {
         items: [
           [ic("perfil"), "Mi perfil", 'data-go="cuenta"'],
           [ic("misturnos"), "Mis turnos", 'data-go="misturnos"', count],
+          [ic("candado"), "Ajustes", 'data-go="ajustes"'],
           ...(S.barberAuth ? [[ic("agenda"), "Mi agenda", 'data-act="toPanel"']] : []),
           ...(S.isAdmin ? [[ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
           ...installItem(),
@@ -237,6 +239,9 @@ function renderMain() {
         break;
       case "cuenta":
         html = S.user ? vCuenta() : vLogin(false);
+        break;
+      case "ajustes":
+        html = S.user ? vAjustes() : vLogin(false);
         break;
       case "terminos":
         html = vTerminos();

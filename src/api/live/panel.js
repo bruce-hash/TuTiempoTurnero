@@ -12,6 +12,20 @@ import { medioFromDb } from "../../lib/medios.js";
 import { avatarUrl } from "../../ui/fotos.js";
 import { restMissing } from "../../lib/resto.js";
 
+// lo cargado sin turno o una venta, como lo usa la Caja del día (4/11: con la cantidad de unidades)
+export const walkFromDb = (row) => ({
+  id: row.id,
+  svc: row.description,
+  precio: row.amount,
+  propina: row.tip,
+  hora: isoToLocal(row.at).time,
+  medio: medioFromDb(row.method) || "Efectivo",
+  pid: row.product_id || null,
+  cliente: row.client_name || "",
+  kind: row.kind === "product" ? "prod" : "svc",
+  qty: row.qty || 1,
+});
+
 // C22 (V3b): la consulta de los turnos del panel y cómo se pasan a la agenda. Los usan la carga completa (loadMine) y la
 // que vuelve a pedir solo los turnos cada 30 segundos y al volver a la pestaña (refreshAgenda).
 const bookingsQuery = (pid, from, to) =>
@@ -205,17 +219,7 @@ export const livePanel = {
         at: isoToLocal(row.closed_at).time,
       };
     });
-    S.walk = (walkins || []).map((row) => ({
-      id: row.id,
-      svc: row.description,
-      precio: row.amount,
-      propina: row.tip,
-      hora: isoToLocal(row.at).time,
-      medio: medioFromDb(row.method) || "Efectivo",
-      pid: row.product_id || null,
-      cliente: row.client_name || "",
-      kind: row.kind === "product" ? "prod" : "svc",
-    }));
+    S.walk = (walkins || []).map(walkFromDb);
     store.MSGS = MSG_DEF(p0cat(pid)).map((tpl) => {
       const saved = (templates || []).find((row) => row.key === tpl.k);
       if (saved) {
@@ -272,11 +276,26 @@ export const livePanel = {
     }));
     return store.MTOT[year];
   },
-  // C33 (V4): el año mes por mes, separado por origen y tipo de gasto (provider_month_breakdown)
+  // C33 (V4): el año mes por mes, separado por origen y tipo de gasto (4/11: provider_month_summary, con los gastos
+  // variables aparte de los fijos)
   async monthBreakdown(year) {
-    const rows = await call(sb.rpc("provider_month_breakdown", { p_year: year }));
-    store.MBRK[year] = (rows || []).map((row) => ({ app: row.app, man: row.man, walk: row.walk, prod: row.prod, fixed: row.exp_fixed, buys: row.exp_products }));
+    const rows = await call(sb.rpc("provider_month_summary", { p_year: year }));
+    store.MBRK[year] = (rows || []).map((row) => ({ app: row.app, man: row.man, walk: row.walk, prod: row.prod, fixed: row.exp_fixed, buys: row.exp_products, variable: row.exp_variable }));
     return store.MBRK[year];
+  },
+  // 4/11 · Bloque 4: lo cargado sin turno (y las ventas) de otro día, para la Caja del día de esa fecha
+  async walkinsOn(day) {
+    const rows = await call(
+      sb
+        .from("walkins")
+        .select("*")
+        .eq("provider_id", S.me)
+        .gte("at", localToIso(day, "00:00"))
+        .lt("at", localToIso(dkey(addDays(1, day)), "00:00"))
+        .order("at"),
+    );
+    store.WALKDAY[day] = (rows || []).map(walkFromDb);
+    return store.WALKDAY[day];
   },
   // 4/11 · Bloque 3: quienes siguen al prestador (Clientes → Seguidores): "Ana G.", foto, desde cuándo y su ficha si ya
   // es cliente. El número que se muestra en el panel sale de acá (al día).

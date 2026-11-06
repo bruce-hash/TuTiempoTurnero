@@ -1,6 +1,7 @@
 import { openAuth } from "./auth.js";
 import { signOutHere } from "./cuentas.js";
 import { registerChange, registerClick, registerSubmit } from "./registro.js";
+import { DEPOSIT_PCT } from "../views/prestador/plazo.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
 import { bizStartPath, dniDone, nextStep } from "../lib/alta.js";
@@ -327,18 +328,20 @@ registerSubmit("fBiz3", async (ev) => {
 });
 
 // ---------- Paso 4 · Seña y cobro ----------
-registerClick("bizPay", (ev, el, act) => {
-  S.biz.pay = el.dataset.v;
-  render();
+// el plazo elegido en el paso 4 no se pierde si la pantalla se vuelve a dibujar antes de seguir
+document.addEventListener("change", (ev) => {
+  if (ev.target && ev.target.name === "hterm" && ev.target.closest(".biz")) {
+    S.biz.term = ev.target.value;
+  }
 });
 async function saveStep4() {
   const conf = cfg(ME());
-  const pay = S.biz.pay || (conf.pay === "total" ? "total" : String(conf.pct || 50));
-  conf.pay = pay === "total" ? "total" : "sena";
-  if (pay !== "total") {
-    conf.pct = +pay;
-  }
-  // D30: el plazo de Mercado Pago no se pregunta: arranca en "al instante" y la base lo detecta con el primer cobro
+  // 4/11 · Bloque 4: seña fija del 30% y el plazo de Mercado Pago que eligió (la base no acepta otra seña)
+  conf.pay = "sena";
+  conf.pct = DEPOSIT_PCT;
+  const picked = document.querySelector('input[name="hterm"]:checked');
+  conf.term = (picked && picked.value) || conf.term || "instant";
+  S.biz.term = conf.term;
   await api.m.saveSettings(conf);
   await mark(4);
 }

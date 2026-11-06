@@ -160,7 +160,7 @@ const mpBackNote = () =>
 
 // v2: de dónde sale el plazo de acreditación (lo mismo en el paso "Seña y cobro" del alta y en Perfil → Cobros)
 export const mpTermNote = (style = "") =>
-  `<p class="note mpterm" style="text-align:left;${style}">${ic("agenda")} <b>Plazo de acreditación:</b> se elige en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos), no en TuTiempo. La app lo detecta sola con tu primer cobro. <b>Sin Mercado Pago conectado no recibís reservas.</b></p>`;
+  `<p class="note mpterm" style="text-align:left;${style}">${ic("agenda")} <b>Plazo de acreditación:</b> elegí en Horarios el mismo que tenés en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos). Si un cobro no coincide, te avisamos. <b>Sin Mercado Pago conectado no recibís reservas.</b></p>`;
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
 // En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
 export function vBPerfil(prov) {

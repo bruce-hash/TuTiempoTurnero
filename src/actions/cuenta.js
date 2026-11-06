@@ -32,7 +32,7 @@ registerClick("toPanel", (ev, el, act) => {
     return;
   }
   S.role = "barbero";
-  S.btab = "agenda";
+  S.btab = el.dataset.tab === "perfil" ? "perfil" : "agenda";
   render();
   window.scrollTo(0, 0);
 });

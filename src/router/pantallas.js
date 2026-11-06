@@ -1,6 +1,7 @@
 // Enrutador (Bloque B) · de la dirección al estado: al abrir una URL (carga, recarga o atrás/adelante) arma S con la
 // pantalla, el prestador, la pestaña, el horario elegido… Si la pantalla pide sesión y no la hay, va al ingreso y
 // guarda adónde volver.
+import { isBusiness } from "../lib/cuentas.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
 import { TODAY } from "../lib/fechas.js";
@@ -303,12 +304,22 @@ export async function applyUrl(href) {
     }
     case "mis-turnos":
     case "cuenta":
+      // 4/11 · Bloque 4: /cuenta/ajustes (solo Seguridad)
+      if (first === "cuenta" && parts.length === 2 && parts[1] === "ajustes") {
+        if (needUser(path)) {
+          showClient("ajustes");
+        }
+        return;
+      }
       if (parts.length !== 1) {
         return showNotFound(path);
       }
-      // D33: una cuenta de negocio no tiene Mis turnos (no reserva)
+      // D33: una cuenta de negocio no tiene Mis turnos (no reserva); su "Mi perfil" es la pestaña Perfil del panel
       if (first === "mis-turnos" && S.user && S.barberAuth && !S.isAdmin) {
         return applyUrl("/panel/agenda");
+      }
+      if (first === "cuenta" && S.user && isBusiness() && !S.isAdmin) {
+        return applyUrl("/panel/perfil");
       }
       if (needUser(path)) {
         showClient(first === "cuenta" ? "cuenta" : "misturnos");

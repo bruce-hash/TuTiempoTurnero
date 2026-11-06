@@ -55,6 +55,10 @@ function noticeAction(notice) {
   if (notice.kind === "mp_connect" || notice.kind === "mp_reconnect") {
     return go("perfil", "Conectar Mercado Pago");
   }
+  // 4/11 · Bloque 4: Mercado Pago cobró la comisión de otro plazo: a Horarios, donde se elige
+  if (notice.kind === "mp_term") {
+    return go("horarios", "Revisar el plazo");
+  }
   return "";
 }
 function clientList() {

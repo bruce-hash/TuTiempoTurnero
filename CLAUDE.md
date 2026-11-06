@@ -89,6 +89,12 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     del texto y detalle verde en `--ic-a`; tamaños por lugar en `src/styles/iconos.css`; `src/ui/iconos.js` lo reexporta).
     Un ícono nuevo se agrega ahí. Los textos planos (toast, confirm, push, title, placeholder, `<option>`) van sin ícono.
     `pruebas/unidad.mjs` falla si vuelve a aparecer un emoji en `src/` (fuera de comentarios y de `src/demo/`).
+  - 4/11 · Bloque 4 (D06, D30, D38): seña fija del 30% (`src/views/prestador/plazo.js`: `DEPOSIT_PCT`, `depositNote`,
+    `termPicker`; en la base, el trigger `ps_fixed_deposit` la fuerza en todo pedido con sesión). El plazo de Mercado Pago
+    lo elige el profesional (Horarios y el alta); si un cobro trae la comisión de otro plazo, `confirm_payment_core` no
+    lo cambia: `mp_term_mismatch` en Para revisar y aviso `mp_term` (lleva a Horarios). Caja del día de otra fecha
+    (`S.cajaDay`, `store.WALKDAY`, `api.walkinsOn`), ventas con cantidad (`walkins.qty`), gastos variables aparte
+    (`provider_month_summary`), Ajustes solo Seguridad (`vAjustes`, `/cuenta/ajustes`). Feriados: propuesta en docs/09.
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma

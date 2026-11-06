@@ -100,6 +100,7 @@ Object.assign(LM, {
           method: medioToDb(walk.medio),
           client_name: walk.cliente || null,
           product_id: walk.pid || null,
+          qty: walk.kind === "prod" ? walk.qty || 1 : null,
         })
         .select("id")
         .single(),

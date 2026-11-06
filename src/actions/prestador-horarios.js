@@ -2,7 +2,7 @@ import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { parseWhole } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
-import { TODAY, addDays, dkey, pad, toMin } from "../lib/fechas.js";
+import { TODAY, addDays, dkey, nowHM, pad, toMin } from "../lib/fechas.js";
 import { ME } from "../lib/prestadores.js";
 import { busy, cfg, isDayBlock, ranges } from "../lib/turnero.js";
 import { S } from "../state.js";
@@ -11,7 +11,20 @@ import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { blockDays } from "../views/prestador/bloqueo-dias.js";
 import { lowWindows } from "../views/prestador/estadisticas.js";
+import { savedState, savedText } from "../views/prestador/horarios.js";
+import { DEPOSIT_PCT } from "../views/prestador/plazo.js";
 
+// 4/11 · Bloque 4: desde arriba de Horarios, directo al bloqueo de días
+registerClick("toDayBlock", (ev, el, act) => {
+  const box = $("#fDayBlock");
+  if (box && box.scrollIntoView) {
+    box.scrollIntoView({ block: "start", behavior: "smooth" });
+    const first = $("#dbf");
+    if (first) {
+      first.focus({ preventScroll: true });
+    }
+  }
+});
 registerClick("dbConfirm", (ev, el, act) => {
   const ask = S.dbAsk;
   if (!ask) {
@@ -274,15 +287,10 @@ function saveHorarios(auto) {
   conf.buffer = 0;
   conf.ahead = 31;
   conf.notice = +$("#hno").value;
-  const pay = $("#hpay").value;
-  if (pay === "total") {
-    conf.pay = "total";
-  } else {
-    conf.pay = "sena";
-    conf.pct = +pay.replace("sena", "");
-  }
-  // D30: plazo de acreditación de Mercado Pago
-  conf.term = ($("#hterm") || {}).value || conf.term || "instant";
+  // 4/11 · Bloque 4: seña fija del 30% (la base no acepta otra) y el plazo de Mercado Pago que eligió
+  conf.pay = "sena";
+  conf.pct = DEPOSIT_PCT;
+  conf.term = (document.querySelector('#fHorarios input[name="hterm"]:checked') || {}).value || conf.term || "instant";
   conf.strict = false;
   conf.happy = {
     on: $("#hhon").checked,
@@ -292,10 +300,30 @@ function saveHorarios(auto) {
     days: [0, 1, 2, 3, 4, 5, 6].filter((dow) => $("#hhd" + dow).checked),
   };
   S.hErr = null;
-  api.m.saveSettings(conf);
+  // 4/11: "Guardando…" hasta que la base confirma; después "✓ Cambios guardados · hh:mm" (o el error), sin volver a
+  // dibujar la pantalla (para no sacarle el foco a quien sigue tocando)
+  S.hSaving = true;
+  S.hSaveErr = false;
+  const showSaved = () => {
+    const el = $("#hSaved");
+    if (el) {
+      el.className = "hsaved " + savedState();
+      el.textContent = savedText();
+    }
+  };
+  Promise.resolve(api.m.saveSettings(conf))
+    .then(() => {
+      S.hSaving = false;
+      S.hSavedAt = nowHM();
+      showSaved();
+    })
+    .catch(() => {
+      S.hSaving = false;
+      S.hSaveErr = true;
+      showSaved();
+    });
   // el foco queda donde estaba (el render vuelve a dibujar el formulario)
   const focused = document.activeElement && document.activeElement.id;
-  S.hSavedAt = Date.now();
   render();
   if (focused && document.getElementById(focused)) {
     document.getElementById(focused).focus();

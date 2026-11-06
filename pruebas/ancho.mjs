@@ -114,7 +114,9 @@ for (const [name, viewport] of [["celular", { width: 390, height: 844 }], ["comp
   const bellBox = await page.evaluate(() => { const r = document.querySelector(".bellpanel").getBoundingClientRect(); return [r.left, r.right, document.documentElement.clientWidth]; });
   ok(`${name} · campanita (cliente): la lista entra en la pantalla`, bellBox[0] >= 0 && bellBox[1] <= bellBox[2], JSON.stringify(bellBox));
   await page.keyboard.press("Escape");
-  // 4/11: Seguridad → Cambiar contraseña (la actual y la nueva; después el código del email)
+  // 4/11 · Bloque 4: Ajustes (solo Seguridad) → Cambiar contraseña (la actual y la nueva; después el código del email)
+  await page.evaluate(() => go("ajustes"));
+  await check("ajustes");
   await page.click("[data-act=changePass]");
   await check("cambiar contraseña");
   await page.fill("#np0", "cliente123"); await page.fill("#np1", "Nueva2026zz"); await page.fill("#np2", "Nueva2026zz");

@@ -72,6 +72,11 @@ export const demoApi = {
     return store.FOLLOWERS;
   },
   async myOffers() {},
+  // 4/11 · Bloque 4: en la demo no hay ventas guardadas de otros días
+  async walkinsOn(day) {
+    store.WALKDAY[day] = store.WALKDAY[day] || [];
+    return store.WALKDAY[day];
+  },
   async refreshCommunity() {
     return false;
   },

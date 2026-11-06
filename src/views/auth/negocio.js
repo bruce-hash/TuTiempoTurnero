@@ -7,6 +7,7 @@ import { cfg } from "../../lib/turnero.js";
 import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { mpTermNote } from "../prestador/perfil.js";
+import { depositNote, termPicker } from "../prestador/plazo.js";
 import { dniForm } from "../prestador/verificacion.js";
 import { vLogin } from "./login.js";
 import { api } from "../../api/index.js";
@@ -127,15 +128,14 @@ function step3() {
 }
 function step4() {
   const conf = cfg(ME());
-  const pay = S.biz.pay || (conf.pay === "total" ? "total" : String(conf.pct || 50));
-  const seg = (act, value, label, on) => `<button type="button" class="${on ? "on" : ""}" aria-pressed="${on}" data-act="${act}" data-v="${value}">${label}</button>`;
   const mpOk = S.mp === "ok";
+  // 4/11 · Bloque 4: la seña es fija (30%, D06) y el plazo de Mercado Pago lo elige el profesional (D30)
   return shell(
     4,
-    `<div class="f"><label>Seña que paga el cliente al reservar</label><div class="biz-seg">${[["30", "30%"], ["40", "40%"], ["50", "50%"], ["total", "Total"]].map(([value, label]) => seg("bizPay", value, label, pay === value)).join("")}</div><span class="hint">El resto lo cobrás en el local, como prefieras.</span></div>
+    `${depositNote("margin:0 0 12px")}${termPicker(S.biz.term || conf.term)}
    <div class="biz-mp"><div><b>Mercado Pago</b><div class="hint">${mpOk ? "✓ Conectado: las señas entran directo a tu cuenta." : "Las señas entran directo a tu cuenta."}</div></div>${mpOk ? "" : '<button type="button" class="btn btn-pri btn-sm" data-act="bizMp">Conectar Mercado Pago</button>'}</div>
    ${mpTermNote("margin-top:12px")}${mpOk ? "" : '<p class="note" style="text-align:left;margin-top:6px">Si preferís, conectalo después desde Perfil → Cobros.</p>'}`,
-    { title: "Seña y cobro", sub: "Cómo cobrás la seña de cada turno." },
+    { title: "Seña y cobro", sub: "La seña de cada turno y cuándo te la acredita Mercado Pago." },
   );
 }
 function step5() {

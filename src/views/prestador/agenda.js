@@ -197,11 +197,14 @@ function vManualForm(day) {
   const svcIndex = Math.min(S.manSvc || 0, prov.svcs.length - 1);
   const dur = prov.svcs[svcIndex][1];
   const free = slotsFor(ME(), day, dur).list.filter((slot) => slot.free);
+  // 4/11 · Bloque 4: el día se elige acá (hoy o cualquiera de los 31 de la agenda), no solo el que se está mirando
+  const last = dkey(addDays(30));
   return `<form class="panel" id="fManual" novalidate><p class="lbl">Agendar turno · ${esc(dayLabel(day))}</p>
    <p class="note" style="text-align:left;margin:-4px 0 10px">Para clientes que te escriben o te llaman. No paga comisión. Si el cliente tiene la app, le llegan los avisos ahí.</p>
+   <div class="f"><label for="mday">Día</label><input id="mday" type="date" min="${TODAY()}" max="${last}" value="${day}"></div>
    <div class="f"><label for="msv">Servicio</label><select id="msv">${prov.svcs.map((svc, index) => `<option value="${index}" ${index === svcIndex ? "selected" : ""}>${esc(svc[0])} · ${svc[1]} min</option>`).join("")}</select></div>
    <div class="f"><label for="mhr">Horario libre</label>${free.length ? `<select id="mhr">${free.map((slot) => `<option>${slot.time}</option>`).join("")}</select>` : '<p class="note" style="text-align:left;margin:0">No quedan horarios libres este día.</p>'}</div>
-   <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="mcl">Cliente *</label><input id="mcl" autocomplete="off" placeholder="Nombre" value="${esc(S.manName || "")}"></div><div class="f"><label for="mtel">Celular</label><input id="mtel" inputmode="tel" autocomplete="off" placeholder="Opcional"></div></div>
+   <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="mcl">Cliente *</label><input id="mcl" autocomplete="off" placeholder="Nombre" value="${esc(S.manName || "")}"></div><div class="f"><label for="mtel">Celular</label><input id="mtel" inputmode="tel" autocomplete="off" placeholder="Opcional" value="${esc(S.manTel || "")}"></div></div>
    <div class="err" id="merr"></div>
    <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="manClose">Cancelar</button><button class="btn btn-pri" type="submit" ${free.length ? "" : "disabled"}>Agendar</button></div></form>`;
 }

@@ -29,7 +29,8 @@ registerClick("bellGo", (ev, el, act) => {
     S.ctab = "seguidores";
     loadFollowers(true);
   } else {
-    setBtab("perfil");
+    // 4/11: el aviso del plazo de Mercado Pago lleva a Horarios (donde se elige); el resto, a Perfil
+    setBtab(el.dataset.to === "horarios" ? "horarios" : "perfil");
   }
   render();
   window.scrollTo(0, 0);

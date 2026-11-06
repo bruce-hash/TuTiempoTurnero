@@ -19,12 +19,13 @@ export function walkForm(prov) {
     <div class="f" id="wotroBox" hidden><label for="wotro">¿Qué servicio?</label><input id="wotro" placeholder="Ej: Diseño en la ceja" autocomplete="off"></div>
     <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))">
      <div class="f"><label for="wpr">Cobraste</label><input id="wpr" inputmode="numeric" value="${(prov.svcs[0] || [0, 0, 0])[2]}" autocomplete="off"></div>
-     <div class="f"><label for="whr">Hora</label><input id="whr" type="time" value="${nowHM()}"></div></div>
+     <div class="f" id="whrBox"><label for="whr">Hora</label><input id="whr" type="time" value="${nowHM()}"></div>
+     <div class="f" id="wqtyBox" hidden><label for="wqty">Cantidad</label><input id="wqty" inputmode="numeric" value="1" autocomplete="off"></div></div>
     ${medioButtons(S.walkMedio)}
     <div class="f"><label for="wcl">Cliente (opcional)</label><input id="wcl" placeholder="Nombre" autocomplete="off"></div>
     <div class="err" id="werr"></div>
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="walkClose">Cancelar</button><button class="btn btn-pri" type="submit">Guardar</button></div>
-    <p class="note" style="margin-top:8px">Los servicios sin turno no pagan comisión.</p></form>`;
+    <p class="note" style="margin-top:8px">Los servicios sin turno no pagan comisión. Al vender un producto se descuenta del stock.</p></form>`;
 }
 // editar algo cargado sin turno (o una venta): qué, cuánto, a qué hora, con qué medio y quién
 export function walkEditForm(walk) {
