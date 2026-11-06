@@ -23,7 +23,7 @@ export function vBProductos() {
        prod,
        index,
      ) => `<li><div class="pl-m"><b>${esc(prod.n)}</b><span>${money(prod.p)}${prod.cost != null ? ` · compra ${money(prod.cost)} · ganás ${money(prod.p - prod.cost)}` : ""} · mínimo ${prod.min} u.${prod.stock <= prod.min ? ' · <em class="lowtag">reponer</em>' : ""}</span></div>
-     <div class="pl-s"><button class="xbtn" data-act="stk" data-i="${index}" data-d="-1" aria-label="Restar uno">−</button><b>${prod.stock}</b><button class="xbtn" data-act="stk" data-i="${index}" data-d="1" aria-label="Sumar uno">+</button></div>
+     <div class="pl-s"><button class="xbtn" data-act="stk" data-i="${index}" data-d="-1" aria-label="Restar uno">−</button><b class="pl-n ${prod.stock <= prod.min ? "low" : ""}">${prod.stock}<small>en stock</small></b><button class="xbtn" data-act="stk" data-i="${index}" data-d="1" aria-label="Sumar uno">+</button></div>
      <span class="pl-acts"><button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">${ic("carrito")} Compré más</button><button class="xbtn" data-act="prodDel" data-i="${index}" aria-label="Eliminar ${esc(prod.n)}">${ic("borrar")}</button></span>
      ${
        S.prodDel === index

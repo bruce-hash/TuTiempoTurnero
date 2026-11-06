@@ -265,6 +265,11 @@ async function normalizar(page) {
     // prueban e2e.js, test_push.py y ancho.mjs.
     document.querySelectorAll("#app .ctabs").forEach((el) => el.remove());
     document.querySelectorAll("#app .avisarpanel p.note").forEach((el) => { el.textContent = "Les llega una notificación con link para reservar."; });
+    // 7/11 (cambios a propósito): la Caja del día suma «Vender producto» (producto, cantidad y medio) y Productos muestra el
+    // stock con su rótulo «en stock». Se neutraliza en las dos versiones; lo nuevo lo prueban e2e.js y ancho.mjs.
+    document.querySelectorAll("#app [data-act=saleOpen], #app .salenote").forEach((el) => el.remove());
+    document.querySelectorAll("#app .pl-n").forEach((el) => { el.querySelector("small")?.remove(); el.removeAttribute("class"); });
+    document.querySelectorAll("#app .cajabtns").forEach((el) => el.replaceWith(...el.childNodes));
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
