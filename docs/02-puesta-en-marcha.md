@@ -597,6 +597,9 @@ el aviso, mirá Supabase → Edge Functions → **mp-webhook → Invocations / L
 | 200 con "el pago no existe en ninguna cuenta" o "cobrado por otra cuenta" | El prestador cobró con una cuenta que no es la conectada | Ver "Para revisar" (D16). |
 
 ### 3. Hostinger (subdominio de prueba)
+> Desde el 7/11 el despliegue a prueba es automático (GitHub → Actions → «Desplegar prueba»): ver **docs/10**. Los pasos de
+> abajo quedan para armar el subdominio la primera vez o para subir a mano si hiciera falta.
+
 1. hPanel → Dominios → Subdominios → crear `prueba.tutiempo.com.ar`. Activar SSL.
 2. En tu compu (Node 22, ver `.nvmrc`): `npm ci` y `npm run build` → carpeta `dist/`.
 3. Editar `dist/config.js` con la URL y la clave `anon` del proyecto de prueba (nunca la `service_role`).
