@@ -9,6 +9,7 @@ import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
 import { cardInfo } from "../../ui/tarjetas.js";
+import { ic } from "../../ui/iconos.js";
 
 // turnos confirmados del cliente que todavía no pasaron, del más cercano al más lejano
 export function myUpcoming() {
@@ -123,7 +124,7 @@ export function vHome() {
               cats: ["n"],
             }
           ).cats[0]
-        }" data-act="verTurno" data-id="${next.id}"><span>📅</span><span class="nb-t">Tu próximo turno: <b>${esc(dayLabel(next.date, true))} · ${next.time}</b> en ${esc((pr(next.pid) || {}).name || "")}</span><span class="nb-go">Ver ›</span></button>`
+        }" data-act="verTurno" data-id="${next.id}"><span>${ic("agenda")}</span><span class="nb-t">Tu próximo turno: <b>${esc(dayLabel(next.date, true))} · ${next.time}</b> en ${esc((pr(next.pid) || {}).name || "")}</span><span class="nb-go">Ver ›</span></button>`
       : ""
   }
   <section class="hero"><span class="tag">Olavarría · ${cat === "todos" ? "Turnos online" : esc(catInfo(cat).name)}</span>

@@ -5,7 +5,7 @@ import { rememberedEmail } from "../../lib/sesion.js";
 import { S } from "../../state.js";
 import { P, store } from "../../store.js";
 import { CAT } from "../../lib/rubros.js";
-import { GLOGO } from "../../ui/iconos.js";
+import { GLOGO, ic } from "../../ui/iconos.js";
 import { ticket } from "../../ui/ticket.js";
 import { pwField, rememberBox, resendBtn } from "./campos.js";
 
@@ -57,7 +57,7 @@ export function authBody() {
   }
   if (mode === "confirm") {
     const goal = !pending ? "" : biz ? " y seguís con tu negocio" : " y seguís donde lo dejaste";
-    return `${tk}<div class="am-mail" aria-hidden="true">✉️</div>${head("Revisá tu email", `Te mandamos un link a <b>${email}</b>. Tocalo para activar la cuenta${goal}.`)}
+    return `${tk}<div class="am-mail" aria-hidden="true">${ic("email")}</div>${head("Revisá tu email", `Te mandamos un link a <b>${email}</b>. Tocalo para activar la cuenta${goal}.`)}
    <div class="am-ok">Podés abrirlo en este celular o en otro: ${pending ? "lo que estabas haciendo se retoma igual." : "entrás directo."}</div>
    ${captchaBox("resendConfirm")}${resendBtn("resendConfirm", "Reenviar el email", login.resendAt, "btn btn-ghost btn-block")}
    <div class="am-sec" style="justify-content:center"><button type="button" class="lnk" data-act="authMode" data-m="up">Cambiar email</button></div>

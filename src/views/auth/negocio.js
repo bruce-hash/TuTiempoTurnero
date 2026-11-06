@@ -11,6 +11,7 @@ import { dniForm } from "../prestador/verificacion.js";
 import { vLogin } from "./login.js";
 import { api } from "../../api/index.js";
 import { render } from "../../ui/render.js";
+import { ic } from "../../ui/iconos.js";
 
 // Registrá tu negocio (ingreso y registro, aprobado el 1/11): página completa en 5 pasos, después de la cuenta (paso 0,
 // la misma ventana de ingreso). Se guarda en cada paso ("Guardar y seguir"): si sale y vuelve, sigue donde quedó.
@@ -34,7 +35,7 @@ export const HOUR_TEMPLATES = [
 ];
 export const DURATIONS = [15, 20, 30, 40, 45, 60, 75, 90, 120, 150, 180, 240];
 
-const errOf = (key) => (S.biz.errs && S.biz.errs[key] ? `<span class="ferr" id="berr-${key}">⚠ ${esc(S.biz.errs[key])}</span>` : "");
+const errOf = (key) => (S.biz.errs && S.biz.errs[key] ? `<span class="ferr" id="berr-${key}">${ic("aviso")} ${esc(S.biz.errs[key])}</span>` : "");
 const field = (id, label, value, attrs = "", hint = "") =>
   `<div class="f"><label for="${id}">${label}</label><input id="${id}" value="${esc(value || "")}" ${attrs}>${hint ? `<span class="hint">${hint}</span>` : ""}${errOf(id)}</div>`;
 
@@ -60,7 +61,7 @@ function shell(n, body, { title, sub, next = "Guardar y seguir", form, finish })
 function step1() {
   const prov = S.barberAuth ? pr(ME()) : null;
   const d = Object.assign({ name: prov ? prov.name : "", cats: prov ? prov.cats : [], addr: prov ? prov.addr : "", tel: prov ? prov.tel : "", ig: prov ? prov.ig : "" }, S.biz.data || {});
-  const photo = prov && prov.photo ? avatar(prov) : S.biz.photoPreview ? `<img src="${esc(S.biz.photoPreview)}" alt="">` : "📷";
+  const photo = prov && prov.photo ? avatar(prov) : S.biz.photoPreview ? `<img src="${esc(S.biz.photoPreview)}" alt="">` : ic("trabajos");
   return shell(
     1,
     `${field("bn", "Nombre del negocio", d.name, 'maxlength="80" autocomplete="organization"')}
@@ -154,7 +155,7 @@ function done() {
   const prov = pr(ME());
   const first = ((S.user && S.user.name) || (prov && prov.name) || "").split(" ")[0];
   const todo = setupTodo().slice(2);
-  return `<div class="biz biz-one"><section class="biz-card" style="text-align:center"><div style="font-size:40px" aria-hidden="true">🎉</div><h1 class="biz-h">¡Listo${first ? ", " + esc(first) : ""}!</h1>
+  return `<div class="biz biz-one"><section class="biz-card" style="text-align:center"><div class="hero-ic">${ic("fiesta")}</div><h1 class="biz-h">¡Listo${first ? ", " + esc(first) : ""}!</h1>
    <p class="am-sub">Tu negocio quedó cargado. Esto es lo que falta para recibir reservas:</p>
    <ol class="steps" style="text-align:left"><li class="done"><span class="dot">✓</span><div><b>Datos, servicios, horarios y seña</b></div></li>${todo
      .map(([label, ok], i) => `<li class="${ok ? "done" : i === 0 ? "now" : ""}"><span class="dot">${ok ? "✓" : i + 2}</span><div><b>${esc(label)}</b>${ok ? "" : label.startsWith("Conectar") ? "<span>Falta: sin esto no recibís reservas</span>" : ""}</div></li>`)

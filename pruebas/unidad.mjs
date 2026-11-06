@@ -142,5 +142,31 @@ ok("resto: las partes y lo que quedó sin cobrar", sp.parts.length === 2 && sp.p
 ok("resto: sin partes, el resto entero en lo que eligió el cliente", JSON.stringify(restSplit({ price: 10000, paid: 5000, src: "app", pay: "cash" })) === JSON.stringify({ parts: [{ medio: E, m: 5000 }], missing: 0 }));
 ok("resto: sin partes, el medio que anotó el prestador", restSplit({ price: 4000, paid: 0, src: "manual", restMethod: "transfer" }).parts[0].medio === T);
 
+// 4/11 · íconos propios: la interfaz no vuelve a usar emojis (van ic("nombre"), src/lib/iconos.js). Se permiten solo en
+// comentarios, en el dato que marca un día bloqueado ("🏖️ " al principio del servicio) y en el mensaje de ejemplo de
+// cumpleaños (lo escribe el profesional). La demo (src/demo/) no entra al build de producción.
+{
+  const PICTO = /[\u{1F300}-\u{1FAFF}\u2600-\u26FF\u2700-\u27BF\u2B50\u23F0-\u23FF]/u;
+  const TYPO = new Set(["✓", "✕", "★", "☆", "✗"]);
+  const ALLOWED = [/isDayBlock = /, /svc: "🏖️ " \+ reason/, /run\.why\.replace\(\/\^🏖️/, /svc\.replace\(\/\^🏖️/, /¡Feliz cumpleaños, \{nombre\}! 🎉/];
+  const found = [];
+  const scanDir = (dir) => {
+    for (const name of fs.readdirSync(dir)) {
+      const full = path.join(dir, name);
+      if (fs.statSync(full).isDirectory()) {
+        if (name !== "demo") scanDir(full);
+      } else if (/\.(js|html)$/.test(name) && !full.endsWith(path.join("lib", "iconos.js"))) {
+        fs.readFileSync(full, "utf8").split("\n").forEach((line, i) => {
+          const code = line.trim().startsWith("//") ? "" : line.replace(/\/\/ .*$/, "");
+          const hits = [...code].filter((ch) => PICTO.test(ch) && !TYPO.has(ch));
+          if (hits.length && !ALLOWED.some((re) => re.test(line))) found.push(`${path.relative(ROOT, full)}:${i + 1} ${hits.join("")}`);
+        });
+      }
+    }
+  };
+  scanDir(path.join(ROOT, "src"));
+  ok("íconos: la interfaz no usa emojis (ic() de src/lib/iconos.js)", found.length === 0, found.slice(0, 8).join(" · "));
+}
+
 console.log(F ? `${F} FALLAS` : "TODO OK");
 process.exit(F ? 1 : 0);

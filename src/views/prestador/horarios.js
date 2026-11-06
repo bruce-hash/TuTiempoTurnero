@@ -6,6 +6,7 @@ import { ME, pr } from "../../lib/prestadores.js";
 import { R, cfg, freeCount } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { vDayBlocks } from "./bloqueo-dias.js";
+import { ic } from "../../ui/iconos.js";
 
 // jornadas predefinidas: [id, nombre, detalle, mañana, tarde]
 export const PRESETS = [
@@ -32,7 +33,7 @@ export function vBHorarios() {
   const freeTomorrow = freeCount(ME(), dkey(addDays(1)), 30);
   // C38 (V3b): en qué días y horas rige el happy hour, en la misma lista de días
   const hhChip = (dow) =>
-    happy.on && happy.days.includes(dow) && conf.days[dow].on ? `<span class="hhchip">⚡ Happy hour ${esc(happy.from)}–${esc(happy.to)} · −${happy.pct}%</span>` : "";
+    happy.on && happy.days.includes(dow) && conf.days[dow].on ? `<span class="hhchip">${ic("ofertaflash")} Happy hour ${esc(happy.from)}–${esc(happy.to)} · −${happy.pct}%</span>` : "";
   return `<form class="stack" id="fHorarios" novalidate>
    <p class="hsaved" id="hSaved" role="status" aria-live="polite">${S.hSavedAt ? "✓ Guardado" : "Los cambios se guardan solos."}</p>
    <div class="panel"><p class="lbl">Días y horarios</p>
@@ -52,10 +53,10 @@ export function vBHorarios() {
     <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px"><div class="f"><label for="hhf">Desde</label><input type="time" id="hhf" value="${happy.from}"></div><div class="f"><label for="hht">Hasta</label><input type="time" id="hht" value="${happy.to}"></div></div>
     <div class="daypick">${[1, 2, 3, 4, 5, 6, 0].map((dow) => `<label><input type="checkbox" id="hhd${dow}" ${happy.days.includes(dow) ? "checked" : ""}><span>${DOW[dow]}</span></label>`).join("")}</div>
     <span class="ferr" id="herr-hh">${errs.hh || ""}</span>
-    <button type="button" class="btn btn-ghost btn-block" style="margin-top:10px" data-act="hhSuggest">✨ Usar mis horarios más flojos</button></div>
+    <button type="button" class="btn btn-ghost btn-block" style="margin-top:10px" data-act="hhSuggest">${ic("chispa")} Usar mis horarios más flojos</button></div>
    <div class="panel"><p class="lbl">Reglas de reserva</p>
-    <p class="hint" style="text-align:left;margin:0 0 12px">⏱ Los horarios de cada servicio empiezan cuando abrís y se suceden según lo que dura el servicio (un corte de 45 min: 9:00, 9:45, 10:30…). Si hay un turno tomado, siguen desde que termina, sin dejar huecos. Sin descanso entre turnos.</p>
-    <p class="hint" style="text-align:left;margin:-4px 0 12px">📅 Tus clientes pueden reservar desde hoy hasta 31 días adelante.</p>
+    <p class="hint" style="text-align:left;margin:0 0 12px">${ic("horarios")} Los horarios de cada servicio empiezan cuando abrís y se suceden según lo que dura el servicio (un corte de 45 min: 9:00, 9:45, 10:30…). Si hay un turno tomado, siguen desde que termina, sin dejar huecos. Sin descanso entre turnos.</p>
+    <p class="hint" style="text-align:left;margin:-4px 0 12px">${ic("agenda")} Tus clientes pueden reservar desde hoy hasta 31 días adelante.</p>
     <div class="f"><label for="hno">Aviso mínimo</label>${select(
       "hno",
       [

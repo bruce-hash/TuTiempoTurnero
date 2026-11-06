@@ -71,7 +71,7 @@ export function showFieldErrors(errs, generalId = "aerr") {
     const note = document.createElement("span");
     note.className = "ferr fe-msg";
     note.id = id + "_err";
-    note.textContent = "⚠ " + msg;
+    note.textContent = msg;
     if (box && box.matches(".f")) {
       box.classList.add("bad");
       box.append(note);

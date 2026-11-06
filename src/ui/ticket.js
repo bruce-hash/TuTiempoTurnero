@@ -3,6 +3,7 @@ import { DOW, dm } from "../lib/fechas.js";
 import { pr } from "../lib/prestadores.js";
 import { catInfo } from "../lib/rubros.js";
 import { svcByKey } from "./sellos.js";
+import { ic } from "./iconos.js";
 
 // Ingreso y registro: el ticket de la acción que pidió ingresar (S.pending), arriba de la ventana. Talón a la izquierda
 // (día, fecha y hora) separado por una línea punteada, como un ticket de turno; a la derecha, qué, dónde y lo que pasa al
@@ -24,7 +25,7 @@ export function ticket(pending) {
      <div class="tk-info"><b>${svc ? `${esc(svc[0])} · ${svc[1]} min` : "Tu turno"}</b><span>${where}</span><em>Al ingresar seguís directo al pago</em></div></div>`;
   }
   if (pending.a === "lista") {
-    return `<div class="tk" data-ticket="lista"><div class="tk-stub"><small>${day(pending.day)}</small><b>${dm(pending.day)}</b><span>🔔</span></div>
+    return `<div class="tk" data-ticket="lista"><div class="tk-stub"><small>${day(pending.day)}</small><b>${dm(pending.day)}</b><span>${ic("campana")}</span></div>
      <div class="tk-info"><b>Avisarme si se libera un turno</b><span>${where}</span><em>Al ingresar queda anotado</em></div></div>`;
   }
   return `<div class="tk slim" data-ticket="seguir"><div class="tk-stub"><b>＋</b></div>

@@ -7,7 +7,7 @@ import { ME, pr } from "../lib/prestadores.js";
 import { CAT, pcat } from "../lib/rubros.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
-import { LOGO } from "./iconos.js";
+import { LOGO, ic } from "./iconos.js";
 import { installGuide, installMenuItem, updateBar } from "./avisos.js";
 import { accountMenu } from "./menu-cuenta.js";
 import { bell } from "./campanita.js";
@@ -40,11 +40,11 @@ function nav() {
       who: S.user || { name: "Admin TuTiempo" },
       email,
       items: [
-        ["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"'],
-        ...(S.user ? [["👤", "Mi perfil", 'data-act="asClient" data-to="cuenta"'], ["📅", "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
-        ...(S.barberAuth ? [["🏪", "Panel de profesional", 'data-act="toPanel"']] : []),
+        [ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"'],
+        ...(S.user ? [[ic("perfil"), "Mi perfil", 'data-act="asClient" data-to="cuenta"'], [ic("misturnos"), "Mis turnos", 'data-act="asClient" data-to="misturnos"', count]] : []),
+        ...(S.barberAuth ? [[ic("negocio"), "Panel de profesional", 'data-act="toPanel"']] : []),
         ...installItem(),
-        ...(S.user ? [["↪", "Cerrar sesión", 'data-act="logout"']] : [["↪", "Salir del panel", 'data-act="salirAdmin"']]),
+        ...(S.user ? [[ic("salir"), "Cerrar sesión", 'data-act="logout"']] : [[ic("salir"), "Salir del panel", 'data-act="salirAdmin"']]),
       ],
     });
     return;
@@ -58,12 +58,12 @@ function nav() {
       email,
       items: [
         // D33: una cuenta de negocio no reserva (sin Mis turnos ni "Reservar como cliente")
-        ["📅", "Mi agenda", 'data-act="toPanel"'],
+        [ic("agenda"), "Mi agenda", 'data-act="toPanel"'],
         // v2: "Mi perfil" se llama "Ajustes" y "Ver mi perfil público" pasó a la Agenda
-        ...(S.user ? [["⚙️", "Ajustes", 'data-act="asClient" data-to="cuenta"']] : []),
-        ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
+        ...(S.user ? [[ic("ajustes"), "Ajustes", 'data-act="asClient" data-to="cuenta"']] : []),
+        ...(S.isAdmin ? [[ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
         ...installItem(),
-        ["↪", "Cerrar sesión", 'data-act="salirBarbero"'],
+        [ic("salir"), "Cerrar sesión", 'data-act="salirBarbero"'],
       ],
     });
     return;
@@ -74,13 +74,13 @@ function nav() {
         who: S.user,
         email,
         items: [
-          ["👤", "Mi perfil", 'data-go="cuenta"'],
-          ["📅", "Mis turnos", 'data-go="misturnos"', count],
-          ...(S.barberAuth ? [["📅", "Mi agenda", 'data-act="toPanel"']] : []),
-          ...(S.isAdmin ? [["🛠️", "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
+          [ic("perfil"), "Mi perfil", 'data-go="cuenta"'],
+          [ic("misturnos"), "Mis turnos", 'data-go="misturnos"', count],
+          ...(S.barberAuth ? [[ic("agenda"), "Mi agenda", 'data-act="toPanel"']] : []),
+          ...(S.isAdmin ? [[ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
           ...installItem(),
-          ...(S.barberAuth || S.isAdmin ? [] : [["🏪", "Registrá tu negocio", 'data-act="bizStart"']]),
-          ["↪", "Cerrar sesión", 'data-act="logout"'],
+          ...(S.barberAuth || S.isAdmin ? [] : [[ic("negocio"), "Registrá tu negocio", 'data-act="bizStart"']]),
+          [ic("salir"), "Cerrar sesión", 'data-act="logout"'],
         ],
       })
     : // un solo botón: clientes y prestadores entran por la misma ventana
@@ -156,7 +156,7 @@ export function render() {
     const app = document.getElementById("app");
     if (app) {
       app.innerHTML =
-        '<div class="apperr panel"><div style="font-size:36px">😕</div><h1 class="h1">Algo salió mal</h1><p class="lead">No se perdió nada de lo que ya guardaste.</p><button class="btn btn-pri btn-block" data-act="recover">Volver al inicio</button></div>';
+        `<div class="apperr panel"><div class="hero-ic">${ic("triste")}</div><h1 class="h1">Algo salió mal</h1><p class="lead">No se perdió nada de lo que ya guardaste.</p><button class="btn btn-pri btn-block" data-act="recover">Volver al inicio</button></div>`;
     }
   }
 }
@@ -198,7 +198,7 @@ function renderInner() {
 const installItem = () => {
   const item = installMenuItem();
   // 4/11 · Bloque 1: la app instalada no tiene botón de recargar; "Actualizar" por si el gesto de deslizar choca con algo
-  return [...(item ? [item] : []), ...(isStandalone() ? [["↻", "Actualizar", 'data-act="appReload"']] : [])];
+  return [...(item ? [item] : []), ...(isStandalone() ? [[ic("actualizar"), "Actualizar", 'data-act="appReload"']] : [])];
 };
 function renderMain() {
   document.body.dataset.seg = segNow();
@@ -213,7 +213,7 @@ function renderMain() {
     html = vAdmin();
   } else if (S.role === "barbero") {
     html = S.preview
-      ? `<div class="prevbar"><span>👁 Así ve tu perfil un cliente</span><button class="btn btn-pri" data-act="exitPreview">Volver al panel</button></div>${vPerfil()}`
+      ? `<div class="prevbar"><span>${ic("ver")} Así ve tu perfil un cliente</span><button class="btn btn-pri" data-act="exitPreview">Volver al panel</button></div>${vPerfil()}`
       : vBarbero();
   } else {
     switch (S.view) {

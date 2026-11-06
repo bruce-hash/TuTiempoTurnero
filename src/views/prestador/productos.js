@@ -3,6 +3,7 @@ import { esc } from "../../lib/dom.js";
 import { MEDIOS } from "../../lib/medios.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
+import { ic } from "../../ui/iconos.js";
 
 store.PRODS = [];
 // productos vendidos hoy (se cargan en la caja como movimientos de tipo prod)
@@ -16,7 +17,7 @@ export function vBProductos() {
   const value = store.PRODS.reduce((sum, prod) => sum + prod.stock * prod.p, 0);
   const sold = soldToday();
   return `<div class="stats2"><div><b>${store.PRODS.length}</b><span>Productos</span></div><div><b>${units}</b><span>Unidades en stock</span></div><div><b>${money(value)}</b><span>Valor de venta</span></div></div>
-  ${low.length ? `<p class="alert" style="margin:0">⚠ Reponer: ${low.map((prod) => `${esc(prod.n)} (${prod.stock} u.)`).join(", ")}</p>` : ""}
+  ${low.length ? `<p class="alert" style="margin:0">${ic("aviso")} Reponer: ${low.map((prod) => `${esc(prod.n)} (${prod.stock} u.)`).join(", ")}</p>` : ""}
   <div class="panel"><p class="lbl">Tus productos</p>
    <ul class="plist">${store.PRODS.map(
      (
@@ -24,7 +25,7 @@ export function vBProductos() {
        index,
      ) => `<li><div class="pl-m"><b>${esc(prod.n)}</b><span>${money(prod.p)}${prod.cost != null ? ` · compra ${money(prod.cost)} · ganás ${money(prod.p - prod.cost)}` : ""} · mínimo ${prod.min} u.${prod.stock <= prod.min ? ' · <em class="lowtag">reponer</em>' : ""}</span></div>
      <div class="pl-s"><button class="xbtn" data-act="stk" data-i="${index}" data-d="-1" aria-label="Restar uno">−</button><b>${prod.stock}</b><button class="xbtn" data-act="stk" data-i="${index}" data-d="1" aria-label="Sumar uno">+</button></div>
-     <span class="pl-acts"><button class="btn btn-ghost pl-buy" data-act="prodSell" data-i="${index}" ${prod.stock > 0 ? "" : "disabled"}>💵 Vendí uno</button><button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">🛒 Compré más</button><button class="xbtn" data-act="prodDel" data-i="${index}" aria-label="Eliminar ${esc(prod.n)}">🗑</button></span>
+     <span class="pl-acts"><button class="btn btn-ghost pl-buy" data-act="prodSell" data-i="${index}" ${prod.stock > 0 ? "" : "disabled"}>${ic("efectivo")} Vendí uno</button><button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">${ic("carrito")} Compré más</button><button class="xbtn" data-act="prodDel" data-i="${index}" aria-label="Eliminar ${esc(prod.n)}">${ic("borrar")}</button></span>
      ${
        // C36 (V4): la venta se carga sola en la Caja del día, con el medio con que te pagó
        S.sellI === index

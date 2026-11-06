@@ -5,6 +5,7 @@ import { esc } from "../../lib/dom.js";
 import { dniRequired } from "../../lib/verificacion.js";
 import { store } from "../../store.js";
 import { stampsOn } from "../../ui/sellos.js";
+import { ic } from "../../ui/iconos.js";
 
 // D30: comisión de TuTiempo (% de la SEÑA) y % de Mercado Pago por plazo de acreditación. El ejemplo, con un corte de
 // $20.000 y seña del 50%, es solo para mostrar: la base hace la misma cuenta al reservar (charge_parts).
@@ -42,11 +43,11 @@ function siteForm(url) {
 // los datos quedan y al encenderlas vuelven como estaban (los premios ganados se canjean al reactivar).
 function stampsPanel() {
   const on = stampsOn();
-  return `<div class="panel"><p class="lbl">Sellos</p><div class="swrow"><div><b>🎟️ Tarjetas de sellos</b><div class="hint">${on ? "Los profesionales pueden dar sellos y los clientes canjean su premio" : "Apagadas: no se ven en ningún lado y no se suman sellos"}</div></div><button class="tg" data-act="admStamps" aria-pressed="${on}" aria-label="Tarjetas de sellos"></button></div>
+  return `<div class="panel"><p class="lbl">Sellos</p><div class="swrow"><div><b>${ic("sellos")} Tarjetas de sellos</b><div class="hint">${on ? "Los profesionales pueden dar sellos y los clientes canjean su premio" : "Apagadas: no se ven en ningún lado y no se suman sellos"}</div></div><button class="tg" data-act="admStamps" aria-pressed="${on}" aria-label="Tarjetas de sellos"></button></div>
     <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si las apagás, desaparecen de los perfiles, de Mis turnos y del panel de los profesionales, y no se suman sellos. Las tarjetas, los sellos y los premios ganados quedan guardados." : "Si las volvés a encender, cada cliente vuelve a ver su tarjeta como estaba y los premios ganados se pueden canjear."}</p></div>`;
 }
 function dniPanel() {
   const on = dniRequired();
-  return `<div class="panel"><p class="lbl">Verificación</p><div class="swrow"><div><b>🪪 Exigir DNI para aprobar profesionales</b><div class="hint">${on ? "Para aprobar a un profesional hacen falta su número de DNI y las fotos del frente y del dorso" : "Los profesionales nuevos se aprueban sin DNI"}</div></div><button class="tg" data-act="admReqDni" aria-pressed="${on}" aria-label="Exigir DNI para aprobar profesionales"></button></div>
+  return `<div class="panel"><p class="lbl">Verificación</p><div class="swrow"><div><b>${ic("dni")} Exigir DNI para aprobar profesionales</b><div class="hint">${on ? "Para aprobar a un profesional hacen falta su número de DNI y las fotos del frente y del dorso" : "Los profesionales nuevos se aprueban sin DNI"}</div></div><button class="tg" data-act="admReqDni" aria-pressed="${on}" aria-label="Exigir DNI para aprobar profesionales"></button></div>
     <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si la apagás, el alta y el panel dejan de pedir el DNI y aprobás a los profesionales nuevos solo con sus datos." : "Si la volvés a activar, los profesionales pendientes tienen que cargar su DNI antes de que los apruebes."} Los que ya tienen el DNI verificado siguen mostrando “Identidad verificada”.</p></div>`;
 }

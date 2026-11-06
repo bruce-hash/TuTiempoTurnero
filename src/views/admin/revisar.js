@@ -7,6 +7,7 @@ import { esc } from "../../lib/dom.js";
 import { dmyIso } from "../../lib/fechas.js";
 import { S } from "../../state.js";
 import { render } from "../../ui/render.js";
+import { ic } from "../../ui/iconos.js";
 
 // "Para revisar · cobros" (Bloque 1, D19 y D20): devoluciones que fallaron o se están reintentando, pagos en revisión
 // y (Bloque 2b) cuentas de Mercado Pago con error en su llave.
@@ -118,7 +119,7 @@ export function admReview() {
   const open = S.admResolve || {};
   const refundLi = (refund) => `<li><div><b>Devolución de ${money(refund.amount)} · ${esc(refund.provider_name || "Profesional")}</b>
      <span>${esc(refund.client_name || "Sin turno")} · ${esc(REFUND_WHY[refund.reason] || refund.reason)}${refund.mp_payment_id ? " · pago " + esc(refund.mp_payment_id) : ""}</span>
-     <span class="hint">${refund.status === "failed" ? "❌ Falló: ya no se reintenta sola" : `🔁 Reintentando · ${refund.attempts} intento${refund.attempts === 1 ? "" : "s"}${refund.next_attempt_at ? " · próximo " + esc(dmyIso(refund.next_attempt_at)) : ""}`}${refund.last_error ? " · Último error: " + esc(refund.last_error) : ""}</span>
+     <span class="hint">${refund.status === "failed" ? `${ic("error")} Falló: ya no se reintenta sola` : `${ic("actualizar")} Reintentando · ${refund.attempts} intento${refund.attempts === 1 ? "" : "s"}${refund.next_attempt_at ? " · próximo " + esc(dmyIso(refund.next_attempt_at)) : ""}`}${refund.last_error ? " · Último error: " + esc(refund.last_error) : ""}</span>
      ${open.k === "refund" && open.id === refund.id ? resolveForm("refund", refund.id) : `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"><button class="btn btn-ghost btn-sm" data-act="admRetry" data-id="${refund.id}">Reintentar</button><button class="btn btn-ghost btn-sm" data-act="admResolveOpen" data-k="refund" data-id="${refund.id}">Resuelto a mano</button></div>`}</div></li>`;
   const paymentLi = (payment) => `<li><div><b>Pago ${esc(payment.mp_payment_id)} de ${money(payment.amount)} · ${esc(payment.provider_name || "Profesional")}</b>
      <span>${esc(payment.client_name || "")}${payment.client_name ? " · " : ""}${(payment.review_reasons || []).map((reason) => esc(paymentWhy(reason, payment))).join(" · ")}</span>
@@ -127,14 +128,14 @@ export function admReview() {
   // cuenta de Mercado Pago que no puede cobrar o devolver por su llave: sale sola cuando se renueva o el prestador reconecta
   const accountLi = (account) => `<li><div><b>Cuenta de Mercado Pago con error · ${esc(account.provider_name || "Profesional")}</b>
      <span>Cuenta n° ${esc(account.mp_user_id || "?")} · ${account.status === "active" ? "cobra las reservas" : `solo devoluciones (${account.refunds_pending} pendiente${account.refunds_pending === 1 ? "" : "s"})`}</span>
-     <span class="hint">❌ ${esc(account.last_error)} · desde ${esc(dmyIso(account.error_at))}. Si sigue, el profesional tiene que volver a conectarla (Perfil → Cobros).</span></div></li>`;
+     <span class="hint">${ic("error")} ${esc(account.last_error)} · desde ${esc(dmyIso(account.error_at))}. Si sigue, el profesional tiene que volver a conectarla (Perfil → Cobros).</span></div></li>`;
   const eventLi = (event) =>
     `<li class="admal" data-k="mpev:${esc(String(event.id))}"><div><span>${event.reason === "recovered" ? "Pago recuperado" : "Aviso descartado"} · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)}${event.detail ? " (" + esc(event.detail) + ")" : ""} · ${esc(dmyIso(event.last_at || event.created_at))}${+event.hits > 1 ? ` · ${+event.hits} veces` : ""}</span></div><button type="button" class="xbtn" data-act="admAlertDel" data-k="mpev:${esc(String(event.id))}" aria-label="Borrar este aviso" title="Borrar">✕</button></li>`;
   // Paso 1 (v4): Mercado Pago manda avisos que la app rechaza, o hubo pagos que se registraron sin aviso: arriba de todo,
   // porque mientras siga así los pagos se confirman con demora (los encuentra la consulta automática)
   const webhookLi =
     +alert.rejected || +alert.recovered
-      ? `<li><div><b>⚠ Los avisos de Mercado Pago no están llegando bien</b>
+      ? `<li><div><b>${ic("aviso")} Los avisos de Mercado Pago no están llegando bien</b>
      <span>${+alert.rejected ? `${+alert.rejected} aviso${+alert.rejected === 1 ? "" : "s"} rechazado${+alert.rejected === 1 ? "" : "s"} en 7 días${alert.rejected_reason ? " (" + esc(EVENT_WHY[alert.rejected_reason] || alert.rejected_reason) + ")" : ""}${alert.rejected_last ? ", el último el " + esc(dmyIso(alert.rejected_last)) : ""}. ` : ""}${+alert.recovered ? `${+alert.recovered} pago${+alert.recovered === 1 ? "" : "s"} registrado${+alert.recovered === 1 ? "" : "s"} sin aviso por la consulta automática.` : ""}</span>
      <span class="hint">Los pagos igual se registran (la app le pregunta a Mercado Pago cada 2 minutos), pero con demora. Revisá el webhook y MP_WEBHOOK_SECRET: docs/02 → "Si los pagos no se registran".</span></div></li>`
       : "";
