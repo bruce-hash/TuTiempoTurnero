@@ -68,8 +68,25 @@ const ferLista = (y: number) => [
   { fecha: `${y}-04-03`, tipo: "no laborable", nombre: "Viernes Santo (no entra)" },
   { fecha: `${y}-11-20`, tipo: "provincial", nombre: "Un feriado provincial (no entra)" },
 ];
+// 7/11 (punto 6): y el calendario de Google (.ics) como respaldo, con una observancia que no entra y una línea plegada
+let icsModo: "ok" | "caida" = "caida";
+const icsDe = (y: number) => [
+  "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Google Inc//Google Calendar 70.9054//EN",
+  "BEGIN:VEVENT", `DTSTART;VALUE=DATE:${y}0101`, `DTEND;VALUE=DATE:${y}0102`, "SUMMARY:Año Nuevo", "DESCRIPTION:Feriado nacional", "END:VEVENT",
+  "BEGIN:VEVENT", `DTSTART;VALUE=DATE:${y}0323`, "SUMMARY:Día no laborable con fines turísticos", "DESCRIPTION:Feriado nacional", "END:VEVENT",
+  "BEGIN:VEVENT", `DTSTART;VALUE=DATE:${y}0510`, "SUMMARY:Día de la Madre", "DESCRIPTION:Observancia\\nPara ocultar las observancias\\, andá a la configuración", "END:VEVENT",
+  "BEGIN:VEVENT", `DTSTART;VALUE=DATE:${y}0615`, "SUMMARY:Paso a la Inmortalidad del General Martín Miguel de Güemes (tras", " ladado)", "DESCRIPTION:Feriado nacional", "END:VEVENT",
+  "END:VCALENDAR",
+].join("\r\n");
 const ferSrv = Deno.serve({ port: 0, hostname: "127.0.0.1", onListen() {} }, (req) => {
-  const y = Number(new URL(req.url).pathname.split("/").pop());
+  const path = new URL(req.url).pathname;
+  if (path === "/basic.ics") {
+    if (icsModo === "caida") return new Response("caído", { status: 502 });
+    const y = Number(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires", year: "numeric" }).format(new Date()));
+    const cal = icsDe(y).replace("END:VCALENDAR", "") + "\r\n" + icsDe(y + 1).split("\r\n").slice(3).join("\r\n");
+    return new Response(cal, { headers: { "Content-Type": "text/calendar" } });
+  }
+  const y = Number(path.split("/").pop());
   if (ferModo === "caida") return new Response("caído", { status: 503 });
   return Response.json(ferLista(y));
 });
@@ -84,7 +101,7 @@ for (const [k, v] of Object.entries({
   CRON_SECRET: CRON, MP_TOKENS_KEY: TOKENS_KEY, MP_OWNER_USER_ID: OWNER_MP,
   RESEND_API_KEY: RESEND_KEY, EMAIL_FROM: "TuTiempo <avisos@tutiempo.com.ar>", EMAIL_REPLY_TO: "soporte@tutiempo.com.ar",
   EMAIL_API_URL: rs.url, EMAIL_GAP_MS: "0",
-  HOLIDAYS_API_URL: FER_URL,
+  HOLIDAYS_API_URL: FER_URL, HOLIDAYS_ICS_URL: FER_URL + "/basic.ics",
   VAPID_PUBLIC_KEY: VAPID_PUB, VAPID_PRIVATE_KEY: VAPID_PRIV, VAPID_SUBJECT: "mailto:contacto@tutiempo.com.ar", PUSH_TEST_ORIGINS: ps.origin,
 })) Deno.env.set(k, v);
 const handlers: Record<string, (req: Request) => Promise<Response>> = {};
@@ -1107,9 +1124,9 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
   ok("feriados) una segunda corrida no duplica", Number(await one("select count(*) from holidays where extract(year from day) = $1", [y])) === 4);
   ferModo = "caida";
   r = await run(); j = await body(r);
-  ok("feriados) si la fuente se cae, quedan las fechas que ya había y el error para el admin",
+  ok("feriados) si se caen las dos fuentes, quedan las fechas que ya había y el error de cada una para el admin",
      r.status === 200 && Number(await one("select count(*) from holidays where extract(year from day) = $1", [y])) === 4
-     && /503/.test(await one("select fetch_error from holiday_years where year = $1", [y])));
+     && /ArgentinaDatos respondió 503.*calendario de Google respondió 502/.test(await one("select fetch_error from holiday_years where year = $1", [y])));
   ferModo = "ok"; await run();
   ok("feriados) …y cuando vuelve, se borra el error", (await one("select fetch_error from holiday_years where year = $1", [y])) === null);
   await q("update holiday_years set confirmed_at = now() where year = $1", [y]);
@@ -1117,7 +1134,17 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
   ok("feriados) con el año confirmado, un cambio de la fuente no toca nada: queda marcado para revisar",
      (await one("select name from holidays where day = make_date($1, 6, 17)", [y])) === "Paso a la Inmortalidad del Gral. Güemes"
      && (await one("select source_changed from holiday_years where year = $1", [y])) === true);
-  ferModo = "ok";
+  // 7/11 (punto 6): ArgentinaDatos caída y el calendario de Google como respaldo (el año siguiente, sin confirmar)
+  ferModo = "caida"; icsModo = "ok";
+  r = await run(); j = await body(r);
+  const sig = await q("select to_char(day, 'MM-DD') d, kind, name from holidays where extract(year from day) = $1 order by day", [y + 1]);
+  ok("feriados) si ArgentinaDatos falla, se usa el calendario de Google (sin las observancias)",
+     r.status === 200 && JSON.stringify(sig.map((x: any) => `${x.d} ${x.kind}`)) === JSON.stringify(["01-01 nacional", "03-23 puente", "06-15 nacional"]), JSON.stringify(sig));
+  ok("feriados) …lee las líneas plegadas del .ics y saca «(trasladado)» del nombre",
+     sig.some((x: any) => x.name === "Paso a la Inmortalidad del General Martín Miguel de Güemes"));
+  ok("feriados) …y el admin ve que ese año vino de Google, sin error",
+     (await one("select fetched_from from holiday_years where year = $1", [y + 1])) === "google" && (await one("select fetch_error from holiday_years where year = $1", [y + 1])) === null);
+  ferModo = "ok"; icsModo = "caida";
 }
 
 const cfg = fileURLToPath(new URL("./deno.json", import.meta.url));

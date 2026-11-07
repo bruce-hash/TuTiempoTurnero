@@ -7,6 +7,8 @@ export const HOLIDAY_KINDS = [
   ["inamovible", "Inamovible"],
   ["trasladable", "Trasladable"],
   ["puente", "No laborable turístico"],
+  // 7/11: los que vienen del calendario de Google (respaldo), que no dice si es inamovible o trasladable
+  ["nacional", "Nacional"],
 ];
 export const kindName = (kind) => (HOLIDAY_KINDS.find(([id]) => id === kind) || [kind, kind])[1];
 // "lunes 23/11" (el mismo formato que el aviso de la base)

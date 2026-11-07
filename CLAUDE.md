@@ -95,7 +95,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     lo cambia: `mp_term_mismatch` en Para revisar y aviso `mp_term` (lleva a Horarios). Caja del día de otra fecha
     (`S.cajaDay`, `store.WALKDAY`, `api.walkinsOn`), ventas con cantidad (`walkins.qty`), gastos variables aparte
     (`provider_month_summary`), Ajustes solo Seguridad (`vAjustes`, `/cuenta/ajustes`).
-  - 7/11 · Feriados (D39): `holidays-sync` (Edge Function, ArgentinaDatos; `HOLIDAYS_API_URL` solo pruebas) guarda la lista en
+  - 7/11 · Feriados (D39): `holidays-sync` (Edge Function, ArgentinaDatos y, de respaldo, el `.ics` de feriados de Google; `HOLIDAYS_API_URL` y `HOLIDAYS_ICS_URL` solo pruebas) guarda la lista en
     `holidays` (`holidays_sync_save`); el admin la confirma por año (`holiday_years`, Comisión → Feriados). El profesional:
     `src/views/prestador/feriados.js` (Horarios → Próximos feriados), `src/actions/feriados.js` (Abro / Cierro → `holiday_decide`;
     Cierro = `block_days`), aviso `holiday` 7 días antes (`holiday_notices`, campanita y push). Cuentas puras en `src/lib/feriados.js`.
