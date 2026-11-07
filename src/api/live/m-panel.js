@@ -133,6 +133,11 @@ Object.assign(LM, {
     saved(sb.rpc("set_rest_parts", { p_booking: booking.id, p_parts: parts.map(([medio, amount]) => ({ method: medioToDb(medio), amount })) })),
   // C35 (V4): borrar un producto (las ventas y compras ya cargadas quedan, sin producto)
   delProduct: (prod) => (prod.id ? saved(sb.from("products").delete().eq("id", prod.id)) : Promise.resolve()),
+  // 7/11: editar nombre y precios (las ventas y compras ya cargadas guardan su monto)
+  editProduct: (prod) =>
+    prod.id
+      ? saved(sb.from("products").update({ name: prod.n, price: prod.p, cost: prod.cost == null ? null : prod.cost }).eq("id", prod.id))
+      : Promise.resolve(),
   setStock: (prod) =>
     saved(
       sb
