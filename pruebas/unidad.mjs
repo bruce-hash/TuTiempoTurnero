@@ -167,5 +167,22 @@ ok("resto: sin partes, el medio que anotó el prestador", restSplit({ price: 400
   ok("íconos: la interfaz no usa emojis (ic() de src/lib/iconos.js)", found.length === 0, found.slice(0, 8).join(" · "));
 }
 
+// S20 (auditoría v3): en «Desplegar prueba», los secretos de Supabase y el token de GitHub no quedan al alcance del código
+// de npm (npm ci corre los scripts de instalación de las dependencias; el build y las pruebas corren su código)
+{
+  const wf = fs.readFileSync(path.join(ROOT, ".github/workflows/desplegar-prueba.yml"), "utf8");
+  const job = wf.slice(wf.indexOf("  desplegar:"), wf.indexOf("  verificar:"));
+  const jobEnv = job.slice(job.indexOf("    env:"), job.indexOf("    steps:"));
+  const steps = job.split(/\n      - /).slice(1);
+  const npmSteps = steps.filter((st) => /\bnpm (ci|run)\b/.test(st));
+  const secretFirst = steps.findIndex((st) => /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets|PRUEBA_DB_PASSWORD: \$\{\{ secrets/.test(st) && /supabase (link|db|functions)/.test(st));
+  const lastNpm = steps.map((st, i) => (/\bnpm (ci|run)\b/.test(st) ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+  ok("S20: el env del job de Desplegar prueba no tiene secretos", jobEnv.length > 0 && !/secrets\./.test(jobEnv));
+  ok("S20: ningún paso de npm (ci, pruebas, build) tiene el token de Supabase ni la contraseña de la base",
+     npmSteps.length >= 3 && npmSteps.every((st) => !/SUPABASE_ACCESS_TOKEN|PRUEBA_DB_PASSWORD|FTP_PASSWORD|github\.token/.test(st)));
+  ok("S20: los pasos de Supabase corren después del último paso de npm", secretFirst > lastNpm && lastNpm >= 0, `${secretFirst} / ${lastNpm}`);
+  ok("S20: el checkout no guarda el token de GitHub en .git/config", /persist-credentials: false/.test(steps.find((st) => st.startsWith("uses: actions/checkout")) || ""));
+}
+
 console.log(F ? `${F} FALLAS` : "TODO OK");
 process.exit(F ? 1 : 0);

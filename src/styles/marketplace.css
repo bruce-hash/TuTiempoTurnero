@@ -187,3 +187,8 @@ footer .in>.legal{flex-basis:100%;max-width:none;border-top:1px solid var(--line
 /* C26 (V5): el nombre de cada trabajo sobre la foto, y su editor en el panel */
 .gi-cap{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 5px;background:linear-gradient(transparent,rgba(0,0,0,.6));color:#fff;font-size:11px;font-weight:700;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 .mediaed{display:grid;gap:8px;margin-top:10px;background:var(--bg);border-radius:10px;padding:10px}.mediaed .mediadel{color:var(--bad)}
+/* 7/11: avisos ya vistos (cliente y profesional): más pálidos y con «✓ Visto»; el ícono de cada aviso del profesional */
+.inbox li.seen>div,.inbox li.seen>.av{opacity:.6}
+.inbox li.seen b{font-weight:600}
+.inbox .notice-t{display:flex;align-items:center;gap:6px}
+.inbox .notice-t svg{width:16px;height:16px;flex:none}

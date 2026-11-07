@@ -104,6 +104,11 @@ Secretos del entorno:
 
 ### Cosas a tener en cuenta
 
+- **Los secretos solo donde se usan (S20).** El token de Supabase y la contraseña de la base van solo en los dos pasos
+  que los usan (base y funciones), que corren después de `npm ci`, de las pruebas y del build. El checkout no guarda el
+  token de GitHub: la etiqueta se sube con el token solo en ese paso. Así ningún paquete de npm puede leerlos.
+  `npm run test:unidad` lo controla en cada PR.
+
 - **Primer despliegue.** Si la base de prueba se cargó pegando `TODO_EN_UNO.sql`, la CLI no tiene registradas las
   migraciones y la primera vez las vuelve a correr todas. Son idempotentes (el CI lo prueba corriéndolas dos veces), así
   que no se pierde nada. A partir de ahí solo aplica las nuevas.
