@@ -86,6 +86,8 @@ const FAKE = (pass) => `(() => {
   // crear cuenta, reenviar el email de activación
   page = await nueva();
   await open(page, "/crear-cuenta");
+  // 8/11: Crear cuenta empieza con dos opciones; el formulario (y su CAPTCHA) aparece al elegir
+  await page.click(".kindopt[data-k=client]"); await page.waitForSelector("#fSignup"); await page.waitForTimeout(400);
   await page.fill("#au_n", "Nueva Captcha"); await page.fill("#au_e", "nueva.captcha@test.ar"); await page.fill("#au_p", "Nueva2026xx");
   await page.check("#au_ok"); await page.click("#fSignup button[type=submit]"); await page.waitForTimeout(1200);
   ok("crear cuenta: con token, llega a Revisá tu email", (await last("/signup") || {}).valid === true && /Revisá tu email/.test(await text(page)));

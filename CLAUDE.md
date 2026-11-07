@@ -64,7 +64,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     la de negocio no reserva, no sigue ni reseña: aviso en `src/actions/cuentas.js`; en la base, triggers `business_account`
     y `client_history`). Registrá tu negocio: `src/views/auth/negocio.js` + `src/actions/negocio.js`
     (5 pasos, `setup_step`/`my_setup` en la base, `src/lib/alta.js` dice qué falta). Desde el 4/11 no hay ingreso con código
-    por email; «Crear cuenta» va siempre en la ventana (`S.authOnPage` encima de `/ingresar`). Cambiar contraseña:
+    por email; «Crear cuenta» va siempre en la ventana (`S.authOnPage` encima de `/ingresar`) y empieza con dos opciones
+    (8/11: «Quiero reservar turnos» / «Tengo un negocio», `S.login.kind` y la acción `authKind` en `src/actions/crear-cuenta.js`;
+    «Tengo un negocio» = la acción pendiente `negocio`). Cambiar contraseña:
     la actual con `sbScratch()` (no toca la sesión) y el código de `reauthenticate()` como `nonce`.
   - V3b (C22): `src/lib/agenda-al-dia.js` vuelve a pedir los turnos de la Agenda cada 30 s y al volver a la pestaña (sin
     Realtime) y solo dibuja si cambió algo; no toca la pantalla con un guardado pendiente, un formulario abierto o alguien escribiendo.

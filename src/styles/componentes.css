@@ -166,12 +166,6 @@ label.chk+.fe-msg{margin:-6px 0 10px}
 .am-x{width:36px;height:36px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:15px;cursor:pointer}
 .am-h{font-family:var(--font-d);text-transform:var(--d-tt);letter-spacing:var(--d-ls);font-weight:var(--d-w);font-size:22px;line-height:1.2;margin:2px 0 6px}
 .am-sub{color:var(--muted);font-size:14px;margin:0 0 16px}
-/* D32 (2/11): «Tengo un negocio y quiero recibir reservas», arriba de Google y del formulario de Crear cuenta */
-.bizchk{display:flex;gap:10px;align-items:flex-start;padding:12px;margin:0 0 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);cursor:pointer}
-.bizchk.on{border-color:var(--brand);background:var(--brand-soft)}
-.bizchk input{margin-top:3px;flex:none}
-.bizchk b{display:block;font-size:14px}
-.bizchk small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
 .am-box .f,.authpage .f{margin-bottom:12px}
 .am-sec{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:14px 0 0;font-size:14px}
 .am-foot{border-top:1px solid var(--line);margin:18px -28px -22px;padding:14px 28px 16px;text-align:center;font-size:14px;color:var(--muted)}

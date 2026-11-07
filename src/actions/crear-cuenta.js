@@ -16,8 +16,12 @@ import { focusFirstField } from "../ui/ingreso.js";
 // D32 (2/11): la acción pendiente "negocio" (la misma que abre "Registrá tu negocio") viaja a Google (sessionStorage) y
 // al link del email (tt_pending) y, al terminar la cuenta, sigue a "Tu negocio". Lo ya escrito no se pierde.
 // 7/11: las dos opciones de Crear cuenta (y «Cambiar»). "biz" = la acción pendiente "negocio", como la casilla de antes
+// La contraseña ya escrita sobrevive a «Cambiar» (la elección de nuevo no tiene el formulario), sin guardarla en S.
+let keptPass = "";
 registerClick("authKind", (ev, el, act) => {
-  const pass = $("#au_p") ? $("#au_p").value : "";
+  if ($("#au_p")) {
+    keptPass = $("#au_p").value;
+  }
   Object.assign(S.login, {
     nombre: $("#au_n") ? $("#au_n").value : S.login.nombre,
     email: $("#au_e") ? $("#au_e").value : S.login.email,
@@ -31,7 +35,8 @@ registerClick("authKind", (ev, el, act) => {
   }
   render();
   if ($("#au_p")) {
-    $("#au_p").value = pass;
+    $("#au_p").value = keptPass;
+    keptPass = "";
   }
   focusFirstField();
 });
