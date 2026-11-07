@@ -65,14 +65,25 @@ export function authBody() {
    <p class="note">Mirá también en Spam o Promociones.</p>`;
   }
   if (mode === "up") {
-    // D32 (2/11): un solo "Crear cuenta". La casilla de negocio va arriba de Google y del formulario: marcada, al terminar
-    // la cuenta sigue a "Tu negocio" (la acción pendiente "negocio", que viaja a Google y al link del email como el
-    // ticket). Con un ticket de cliente (reservar, seguir, lista) no se muestra: una cuenta de negocio no reserva (D33).
-    const bizBox =
+    // 7/11 (revisión del cliente): Crear cuenta empieza con dos opciones grandes, «Quiero reservar turnos» y «Tengo un
+    // negocio» (reemplazan la casilla de D32). Después, Google o el formulario. «Tengo un negocio» es la acción pendiente
+    // "negocio" (viaja a Google y al link del email como el ticket) y sigue a "Tu negocio". Con un ticket de cliente
+    // (reservar, seguir, lista) no se elige: es para reservar. El link del footer llega con «Tengo un negocio» elegido.
+    const kind = biz ? "biz" : pending ? "client" : login.kind;
+    if (!kind) {
+      return `${head("Creá tu cuenta", "¿Para qué la vas a usar?")}
+   <div class="kindpick" role="group" aria-label="Para qué es la cuenta">
+    <button type="button" class="kindopt" data-act="authKind" data-k="client"><span class="kind-ic" aria-hidden="true">${ic("misturnos")}</span><span><b>Quiero reservar turnos</b><small>Reservá en segundos, pagá la seña con Mercado Pago y seguí a tus profesionales.</small></span><span class="kind-go" aria-hidden="true">›</span></button>
+    <button type="button" class="kindopt" data-act="authKind" data-k="biz"><span class="kind-ic" aria-hidden="true">${ic("negocio")}</span><span><b>Tengo un negocio</b><small>Recibí reservas online con seña. Lo cargás en 5 pasos, unos 10 minutos.</small></span><span class="kind-go" aria-hidden="true">›</span></button>
+   </div>
+   ${foot('¿Ya tenés cuenta? <button type="button" class="lnk" data-act="authMode" data-m="in">Ingresá</button>')}`;
+    }
+    // la elección, con «Cambiar» (salvo cuando la fija un ticket de cliente)
+    const chosen =
       pending && !biz
         ? ""
-        : `<label class="chk bizchk${biz ? " on" : ""}"><input type="checkbox" id="au_biz" ${biz ? "checked" : ""}> <span><b>Tengo un negocio y quiero recibir reservas</b><small>Después de crear la cuenta cargás tu negocio en 5 pasos, unos 10 minutos.</small></span></label>`;
-    return `${tk}${head("Creá tu cuenta", biz ? "Tu cuenta personal: con ella entrás siempre a tu negocio." : "Para reservar turnos y seguir a tus profesionales.")}${bizBox}${google()}
+        : `<div class="kindsel"><span>${ic(biz ? "negocio" : "misturnos")} ${biz ? "Tengo un negocio" : "Quiero reservar turnos"}</span><button type="button" class="lnk" data-act="authKind" data-k="">Cambiar</button></div>`;
+    return `${tk}${head("Creá tu cuenta", biz ? "Tu cuenta personal: con ella entrás siempre a tu negocio." : "Para reservar turnos y seguir a tus profesionales.")}${chosen}${google()}
    <form id="fSignup" novalidate>
     <div class="f"><label for="au_n">${biz ? "Tu nombre y apellido" : "Nombre y apellido"}</label><input id="au_n" autocomplete="name" maxlength="80" value="${esc(login.nombre || "")}"></div>
     <div class="f"><label for="au_e">Email</label><input id="au_e" type="email" inputmode="email" autocomplete="email" maxlength="120" value="${email}"></div>

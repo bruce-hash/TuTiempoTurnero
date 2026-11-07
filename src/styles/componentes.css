@@ -397,3 +397,16 @@ body.am-open{overflow:hidden}
 .legal-ver{margin:10px 0 0}
 .legal-draft{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--bad-soft);color:var(--fg);border:1px solid var(--bad-line);font-size:14px}
 .biz-legal{text-align:left;margin:12px 0 0}
+/* 7/11 · Crear cuenta: las dos opciones grandes (reemplazan la casilla de negocio) y la elección con «Cambiar» */
+.kindpick{display:grid;gap:10px;margin:4px 0 14px}
+.kindopt{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;text-align:left;padding:16px;border:1.5px solid var(--line);border-radius:14px;background:var(--card);color:var(--fg);cursor:pointer;font:inherit}
+.kindopt:hover,.kindopt:focus-visible{border-color:var(--brand);background:var(--brand-soft)}
+.kindopt b{display:block;font-size:16px}
+.kindopt small{display:block;color:var(--muted);font-size:13px;margin-top:3px;line-height:1.4}
+.kind-ic{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--brand-soft)}
+.kind-ic svg{width:24px;height:24px}
+.kind-go{font-size:22px;color:var(--muted)}
+.kindsel{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;margin:0 0 14px;border-radius:12px;background:var(--brand-soft);font-size:14px;font-weight:600}
+.kindsel span{display:flex;align-items:center;gap:6px;min-width:0}
+.kindsel svg{width:18px;height:18px;flex:none}
+@media (min-width:1024px){.kindpick{grid-template-columns:1fr 1fr}.kindopt{grid-template-columns:1fr;align-content:start;padding:18px}.kind-go{display:none}}
