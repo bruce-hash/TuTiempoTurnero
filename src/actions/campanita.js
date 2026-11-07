@@ -1,5 +1,7 @@
 import { registerClick } from "./registro.js";
+import { api } from "../api/index.js";
 import { S } from "../state.js";
+import { toast } from "../ui/toast.js";
 import { markBellRead } from "../ui/campanita.js";
 import { render } from "../ui/render.js";
 import { setBtab } from "../views/prestador/panel.js";
@@ -40,7 +42,7 @@ document.addEventListener(
   "click",
   (ev) => {
     const el = S.bellOpen && ev.target.closest(".bellpanel [data-go], .bellpanel [data-act]");
-    if (el && !["inboxDel", "inboxClear"].includes(el.dataset.act)) {
+    if (el && !["inboxDel", "inboxClear", "noticeDel", "noticeClear"].includes(el.dataset.act)) {
       S.bellOpen = false;
     }
   },
@@ -62,4 +64,22 @@ document.addEventListener("keydown", (ev) => {
       btn.focus();
     }
   }
+});
+
+// 7/11: los avisos del profesional se borran como los del cliente (la ✕ y «Borrar los leídos»); en la base queda
+// dismissed_at, así uno que sale una sola vez no vuelve
+registerClick("noticeDel", (ev, el, act) => {
+  const id = el.dataset.id;
+  S.notices = (S.notices || []).filter((notice) => String(notice.id) !== id);
+  api.m.dismissNotices([+id]).catch(() => {});
+  render();
+});
+registerClick("noticeClear", (ev, el, act) => {
+  (S.notices || []).forEach((notice) => (notice.read = true));
+  S.notices = [];
+  Promise.resolve(api.m.readNotices())
+    .then(() => api.m.dismissNotices(null))
+    .catch(() => {});
+  toast("Borramos los avisos leídos");
+  render();
 });

@@ -1189,6 +1189,29 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     const w = await pg.locator(".bellpanel .msgb").first().evaluate((el) => [el.getBoundingClientRect().width, el.closest(".bellpanel").getBoundingClientRect().width]);
     ok("v2: el texto del aviso se lee a lo ancho de la caja", w[0] > w[1] * 0.75, JSON.stringify(w));
   }
+  // 7/11: los avisos del profesional funcionan como los del cliente: título, ✕, «Borrar los leídos» y los vistos con «✓ Visto»
+  {
+    const sofN = "(select id from providers where name like 'Sofía%')";
+    ok("7/11: cada aviso del profesional lleva su título y su ✕, y arriba «Borrar los leídos»",
+       /Nuevo seguidor/.test(bellTxt) && (await pg.locator(".bellpanel [data-act=noticeDel]").count()) >= 2 && (await pg.locator(".bellpanel [data-act=noticeClear]").count()) === 1);
+    const n0 = await pg.locator(".bellpanel li[data-notice]").count();
+    const first = await pg.locator(".bellpanel li[data-notice]").first().getAttribute("data-notice");
+    await pg.click(`.bellpanel li[data-notice="${first}"] [data-act=noticeDel]`); await wait(800);
+    ok("7/11: la ✕ borra ese aviso (queda en la base como borrado) y la campanita sigue abierta",
+       (await pg.locator(".bellpanel li[data-notice]").count()) === n0 - 1 && (await q("select dismissed_at is not null d from provider_notices where id = $1", [first]))[0].d);
+    await pg.keyboard.press("Escape"); await wait(200);
+    await pg.click("nav [data-act=bellToggle]"); await wait(400);
+    ok("7/11: al volver a abrirla, los vistos van más pálidos y con «✓ Visto»",
+       (await pg.locator(".bellpanel li.seen").count()) === n0 - 1 && /✓ Visto/.test(await pg.locator(".bellpanel").innerText())
+       && (await pg.locator(".bellpanel li.seen > div").first().evaluate((el) => +getComputedStyle(el).opacity)) < 1);
+    await pg.click(".bellpanel [data-act=noticeClear]"); await wait(1000);
+    ok("7/11: «Borrar los leídos» vacía la lista del profesional (y en la base)", (await pg.locator(".bellpanel li[data-notice]").count()) === 0
+       && (await q(`select count(*)::int c from provider_notices where provider_id = ${sofN} and dismissed_at is null`))[0].c === 0);
+    await pg.keyboard.press("Escape"); await wait(200);
+    // (las pruebas de más abajo usan esos avisos: vuelven a la lista)
+    await q(`update provider_notices set dismissed_at = null where provider_id = ${sofN}`);
+    await pg.evaluate(async () => { await api.refreshCommunity(); render(); }).catch(() => {});
+  }
   await wait(1700); await pg.keyboard.press("Escape"); await wait(300);
   {
     // v2 · Profesional: menú en el orden nuevo, todo a la vista y sin flechas; "Ver mi perfil como cliente" en la Agenda

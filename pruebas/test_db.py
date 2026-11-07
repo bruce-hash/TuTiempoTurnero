@@ -1214,5 +1214,25 @@ q("select holidays_sync_save(%s, %s::jsonb)", (f20.year, json.dumps([{"fecha": s
 ok("feriados: un cambio de la fuente en un año confirmado no cambia nada y queda para revisar",
    q("select name from holidays where day=%s", (f20,))[0][0] == "Puente de prueba" and q("select source_changed from holiday_years where year=%s", (f20.year,))[0][0] is True)
 
+# ---------- 7/11 · avisos del profesional: se borran como los del cliente ----------
+ownN = mkuser("avisos-prof@test.ar", "Avisos Prof")
+pN = q("select register_provider('Avisos Studio', 'Calle 40', array['b'], '2284 4040', null)", uid=ownN)[0][0]
+otroN = mkuser("avisos-otro@test.ar", "Otro Prof")
+pO = q("select register_provider('Otro Studio', 'Calle 41', array['b'], '2284 4141', null)", uid=otroN)[0][0]
+q("insert into provider_notices (provider_id, kind, ref, body) values (%s, 'new_follower', 'a1', 'Ana te sigue'), (%s, 'new_follower', 'a2', 'Beto te sigue'), (%s, 'new_follower', 'a3', 'Caro te sigue'), (%s, 'new_follower', 'o1', 'Otro aviso')", (pN, pN, pN, pO))
+idsN = [r[0] for r in q("select id from provider_notices where provider_id = %s order by id", (pN,))]
+idO = q("select id from provider_notices where provider_id = %s", (pO,))[0][0]
+ok("7/11 avisos: la campanita del profesional trae sus 3 avisos", len(q("select my_provider_notices()", uid=ownN)[0][0]) == 3)
+ok("7/11 avisos: borrar uno con la ✕ lo saca de la lista", q("select dismiss_provider_notices(%s)", ([idsN[0]],), uid=ownN)[0][0] == 1
+   and sorted(n["id"] for n in q("select my_provider_notices()", uid=ownN)[0][0]) == [idsN[1], idsN[2]])
+ok("7/11 avisos: no borra avisos de otro profesional", q("select dismiss_provider_notices(%s)", ([idO],), uid=ownN)[0][0] == 0
+   and q("select dismissed_at is null from provider_notices where id = %s", (idO,))[0][0] is True)
+ok("7/11 avisos: un cliente o anon no borran avisos", err(q("select dismiss_provider_notices(null)", uid=cli1), "not_provider") and err(q("select dismiss_provider_notices(null)", role="anon")))
+q("update provider_notices set read_at = now() where id = %s", (idsN[1],))
+ok("7/11 avisos: «Borrar los leídos» borra solo los leídos", q("select dismiss_provider_notices(null)", uid=ownN)[0][0] == 1
+   and [n["id"] for n in q("select my_provider_notices()", uid=ownN)[0][0]] == [idsN[2]])
+q("insert into provider_notices (provider_id, kind, ref, body) values (%s, 'new_follower', 'a1', 'Ana te sigue') on conflict do nothing", (pN,))
+ok("7/11 avisos: uno borrado que se vuelve a generar (mismo tipo y referencia) no reaparece", len(q("select my_provider_notices()", uid=ownN)[0][0]) == 1)
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
