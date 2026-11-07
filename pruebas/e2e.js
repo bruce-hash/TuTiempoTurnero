@@ -1637,6 +1637,18 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pa.click("nav [data-act=bellToggle]"); await pa.waitForSelector(".bellpanel .msg-act", { timeout: 8000 }).catch(() => {});
     ok("4/11: …y en la campanita se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator(".bellpanel").innerText()) && (await pa.locator(".bellpanel .msg-act[data-go=perfil]").count()) >= 1);
     await pa.keyboard.press("Escape");
+    // S19 (8/11): con el negocio suspendido no hay «Avisar a tus seguidores» ni «Ofrecer» (la base también lo rechaza)
+    await q("update providers set status = 'suspended' where id = $1", [sofi.id]);
+    await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector(".avisarpanel", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    ok("S19: suspendido, Trabajos no deja avisar a los seguidores y dice por qué", (await ps.locator("#postTxt, [data-act=publicar]").count()) === 0
+       && /Tu negocio está suspendido: no podés escribirles a tus seguidores/.test(await ps.locator(".avisarpanel").innerText()));
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".folist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    ok("S19: …ni ofrecerle un turno a un seguidor", (await ps.locator(".folist li").count()) >= 1 && (await ps.locator("[data-act=folOffer]").count()) === 0);
+    await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".tl, .agwk", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    await ps.evaluate((d) => { S.aday = d; S.awk = null; render(); }, g2.split("|")[0]); await ps.waitForTimeout(300);
+    ok("S19: …ni «Ofrecer» los huecos de la Agenda", (await ps.locator(".tl-gap").count()) >= 1 && (await ps.locator("[data-act=offerGap]").count()) === 0
+       && /no podés escribirles a tus seguidores ni ofrecerles turnos/.test(await ps.locator(".tl-panel").innerText()));
+    await q("update providers set status = 'active' where id = $1", [sofi.id]);
     await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector("[data-act=seguir]", { timeout: 8000 }).catch(() => {});
     // Ana deja de seguir: sale de la lista de Sofía
     await pa.waitForSelector("[data-act=seguir]"); await pa.click("[data-act=seguir]");

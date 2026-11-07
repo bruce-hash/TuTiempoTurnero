@@ -67,6 +67,8 @@ const ERRS = {
   offer_past: "Ese horario ya pasó.",
   offer_limit: "Llegaste al límite de hoy: 5 ofertas a todos tus seguidores y 10 a seguidores puntuales. Mañana podés seguir.",
   not_follower: "Esa persona ya no te sigue.",
+  // S19 / S01 (8/11): un negocio suspendido o pendiente no escribe a sus seguidores ni a sus clientes
+  not_active: "Con tu negocio sin aprobar o suspendido no podés mandar avisos ni ofrecer turnos.",
   bad_offer: "Elegí un horario libre de los próximos días.",
   bad_commission: "La comisión tiene que estar entre 0% y 30%.",
   bad_site_url: "Escribí solo https:// y el dominio, sin barra al final ni nada después.",

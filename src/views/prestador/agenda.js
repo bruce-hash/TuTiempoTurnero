@@ -12,6 +12,7 @@ import { feeOf } from "./finanzas.js";
 import { restOf } from "../../lib/resto.js";
 import { restEditor, restSummary } from "./resto.js";
 import { ic } from "../../ui/iconos.js";
+import { followersBlockedNote, provActive } from "../../lib/alta.js";
 
 // V4b · "Cargar diferencia": al marcar "Asistió", cómo te pagó el resto (uno o dos medios). Si ya lo anotaste, el resumen
 // y "Cambiar"; lo mismo se edita después desde la Caja del día.
@@ -143,10 +144,15 @@ export function vBAgendaT() {
         `<div class="tl-brk" style="top:${(from - top) * pxPerMin}px;height:${(to - from) * pxPerMin}px">No trabajás · volvés a las ${fromMin(to)}</div>`,
     )
     .join("");
+  const active = provActive();
   const gapHtml = gaps.map(([from, to]) => {
     const key = day + "|" + fromMin(from);
     const offered = S.offered && S.offered[key];
-    return `<div class="tl-gap" style="top:${(from - top) * pxPerMin}px;height:${(to - from) * pxPerMin}px"><span>Libre ${fromMin(from)}–${fromMin(to)}</span><button class="btn ${offered ? "btn-ghost" : "btn-pri"}" data-act="offerGap" data-g="${key}" data-z="${fromMin(to)}" ${offered ? "disabled" : ""}>${offered ? "✓ Ofrecido" : `${ic("ofrecer")} Ofrecer`}</button></div>`;
+    // S19: «Ofrecer» solo con el negocio activo
+    const offerBtn = active
+      ? `<button class="btn ${offered ? "btn-ghost" : "btn-pri"}" data-act="offerGap" data-g="${key}" data-z="${fromMin(to)}" ${offered ? "disabled" : ""}>${offered ? "✓ Ofrecido" : `${ic("ofrecer")} Ofrecer`}</button>`
+      : "";
+    return `<div class="tl-gap" style="top:${(from - top) * pxPerMin}px;height:${(to - from) * pxPerMin}px"><span>Libre ${fromMin(from)}–${fromMin(to)}</span>${offerBtn}</div>`;
   }).join("");
   // C38 (V3b): la franja del happy hour de este día, dibujada en la línea de tiempo
   const hh = conf.happy && conf.happy.on && (conf.happy.days || []).includes(dow) ? [toMin(conf.happy.from), toMin(conf.happy.to)] : null;
@@ -162,7 +168,7 @@ export function vBAgendaT() {
   <div class="panel tl-panel"><div class="tl-top"><b>${esc(longLabel(day))}</b><span class="hint">${rangesTxt(rngs)}${hh ? ` · ${ic("ofertaflash")} Happy hour ${esc(conf.happy.from)}–${esc(conf.happy.to)} (−${conf.happy.pct}%)` : ""}</span></div>
    <div class="tl-leg"><span><i class="lg app"></i>TuTiempo</span><span><i class="lg man"></i>Agendado</span><span><i class="lg walk"></i>Sin turno</span><span><i class="lg gap"></i>Libre</span></div>
    <div class="tl" style="height:${height}px">${hourLines.join("")}${hhHtml}${breakHtml}${gapHtml}${events}${nowLine}</div>
-   <p class="note">Tocá un turno para ver el detalle. En los huecos libres, “Ofrecer” avisa a tus ${store.COMM.followers} seguidores.</p></div>
+   <p class="note">Tocá un turno para ver el detalle. ${active ? `En los huecos libres, “Ofrecer” avisa a tus ${store.COMM.followers} seguidores.` : esc(followersBlockedNote())}</p></div>
   ${selected ? detailCard(selected) : ""}
   ${S.manOpen ? vManualForm(day) : S.blockOpen ? vBlockForm(day) : `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-pri" data-act="manOpen">+ Agendar turno</button><button class="btn btn-ghost" data-act="blockOpen">${ic("bloquear")} Bloquear horario</button></div>`}
 `;

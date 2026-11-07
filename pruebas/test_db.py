@@ -151,6 +151,25 @@ ok("nadie inserta mensajes directo", err(q("insert into client_messages (provide
 ok("un prestador no le escribe a clientes de otro", q("select send_client_messages(array[%s]::bigint[], 'hola che')", (pcid,), uid=prov2)[0][0]["sent"] == 0)
 ok("un cliente no puede mandar mensajes masivos", err(q("select send_client_messages(array[%s]::bigint[], 'hola che')", (pcid,), uid=cli1), "not_provider"))
 ok("mensaje vacío o larguísimo rechazado", err(q("select send_client_messages(array[%s]::bigint[], %s)", (pcid, " x "), uid=prov), "bad_message") and err(q("select send_client_messages(array[%s]::bigint[], %s)", (pcid, "x" * 501), uid=prov), "bad_message"))
+# S01 (8/11): la ficha la liga la base al reservar; la app no escribe user_id ni los números del cliente
+s01 = mkuser("s01@test.ar", "Víctima S01")
+ok("S01: el prestador no liga un usuario cualquiera a su lista de clientes",
+   err(q("insert into provider_clients (provider_id, user_id, name) values (%s,%s,'Víctima')", (pid, s01), uid=prov)))
+ok("S01: …ni cambiando una ficha que ya tiene", err(q("update provider_clients set user_id=%s where id=%s", (s01, man_id), uid=prov))
+   and q("select user_id from provider_clients where id=%s", (man_id,))[0][0] is None)
+ok("S01: …ni toca las visitas, las faltas o lo gastado", err(q("update provider_clients set visits=99 where id=%s", (man_id,), uid=prov))
+   and err(q("update provider_clients set no_shows=0, total_spent=0 where id=%s", (pcid,), uid=prov)))
+ok("S01: los datos de la ficha se siguen cambiando (teléfono, notas, cumpleaños, ficha y contactado)",
+   not err(q("update provider_clients set phone='2284 1', notes='ok', birthday='05-20', profile='{}', contacted_at=now() where id=%s", (man_id,), uid=prov)))
+# una ficha ligada de antes (sin turno con este prestador) no recibe mensajes
+q("update provider_clients set user_id=%s where id=%s", (s01, man_id))
+r01 = q("select send_client_messages(array[%s]::bigint[], 'Tu cuenta tiene un problema, escribinos')", (man_id,), uid=prov)
+ok("S01: un mensaje solo llega a quien reservó alguna vez con ese prestador", not err(r01) and r01[0][0]["sent"] == 0
+   and q("select count(*) from client_messages where user_id=%s", (s01,))[0][0] == 0, str(r01))
+q("update provider_clients set user_id=null where id=%s", (man_id,))
+q("update providers set status='suspended' where id=%s", (pid,))
+ok("S01: un negocio suspendido no les escribe a sus clientes", err(q("select send_client_messages(array[%s]::bigint[], 'hola che')", (pcid,), uid=prov), "not_active"))
+q("update providers set status='active' where id=%s", (pid,))
 q("select mark_messages_read()", uid=cli1)
 ok("marcar como leídos", all(m["read"] for m in q("select my_messages()", uid=cli1)[0][0]))
 # v2 · Cliente: cada aviso trae su turno (ref) y el cliente los borra (quedan en la base, fuera de su lista)
