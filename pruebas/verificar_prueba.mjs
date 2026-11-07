@@ -140,6 +140,15 @@ async function pagina() {
   await page.route(/mercadopago\.com|mercadolibre\.com|mercadopago\.com\.ar/, (route) => route.abort());
   return page;
 }
+// 8/11 (punto 11): el turno se elige con margen, el primer horario del próximo día abierto (no el «Primer turno», que puede
+// ser dentro de minutos y quedar en el pasado mientras corre la verificación)
+async function turnoConMargen(p) {
+  await p.waitForSelector(".wd[data-day]", { timeout: 20000 });
+  await p.locator(".wd[data-day]:not(.today):not([disabled]):not(.full)").first().click();
+  await p.waitForTimeout(300);
+  await p.locator(".slots [data-slot]").first().click();
+  await p.waitForTimeout(200);
+}
 async function ingresar(page, email, password) {
   await page.goto(SITIO + "/ingresar");
   await page.waitForSelector("#ai_e", { timeout: 20000 });
@@ -161,7 +170,7 @@ if (cli && cli.access_token && perfil) {
     await p.goto(`${SITIO}/${perfil.slug}`);
     await p.waitForSelector("[data-quick]", { timeout: 20000 });
     ok("cliente", `el perfil de ${perfil.name} ofrece un horario libre`, true);
-    await p.click("[data-quick]");
+    await turnoConMargen(p);
     await p.click("[data-act=reservarT]");
     await p.waitForSelector("#fTurno", { timeout: 15000 });
     const totalUi = await p.locator("#fTurno .tot").innerText();
