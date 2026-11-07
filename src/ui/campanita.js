@@ -10,7 +10,8 @@ import { ic } from "./iconos.js";
 // 4/11 · La campanita de avisos en la cabecera, para el cliente y para el profesional (antes, los del cliente estaban en
 // Mis turnos y los del profesional arriba del panel). El número dice cuántos hay sin leer; al abrirla se ven todos y
 // quedan leídos (los nuevos siguen resaltados mientras la lista está abierta). Cada aviso del cliente lleva su acción (ver el turno, dejar la reseña, reservar el
-// turno ofrecido, ver el perfil), su ✕ y "Borrar los leídos"; los del profesional, a dónde ir (Seguidores, Perfil).
+// turno ofrecido, ver el perfil), su ✕ y "Borrar los leídos"; los del profesional, a dónde ir (Seguidores, Perfil) y,
+// desde el 7/11, también su ✕ y "Borrar los leídos". Los ya vistos van más pálidos y con «✓ Visto».
 // Se cierra tocando afuera, con Esc o al elegir una acción.
 
 // a quién son los avisos: los del panel si es el profesional (o una cuenta de negocio); si no, los del cliente
@@ -80,7 +81,7 @@ function clientList() {
   return `<ul class="ag">${inbox
     .map(
       (msg) =>
-        `<li class="${fresh(msg) ? "unread" : ""}" data-msg="${esc(String(msg.id))}">${avatar({ photo: msg.photo, name: msg.name, hue: msg.hue })}<div><b>${esc(msg.name)}</b><span class="msgb">${esc(msg.body)}</span><span class="hint">${esc(msg.d)}</span>${msgAction(msg)}</div><button class="xbtn" data-act="inboxDel" data-id="${esc(String(msg.id))}" aria-label="Borrar este aviso">✕</button></li>`,
+        `<li class="${liClass(msg)}" data-msg="${esc(String(msg.id))}">${avatar({ photo: msg.photo, name: msg.name, hue: msg.hue })}<div><b>${esc(msg.name)}</b><span class="msgb">${esc(msg.body)}</span><span class="hint">${seenMark(msg)}${esc(msg.d)}</span>${msgAction(msg)}</div><button class="xbtn" data-act="inboxDel" data-id="${esc(String(msg.id))}" aria-label="Borrar este aviso">✕</button></li>`,
     )
     .join("")}</ul>`;
 }
@@ -92,13 +93,29 @@ function providerList() {
   return `<ul class="ag">${notices
     .map(
       (notice) =>
-        `<li class="${fresh(notice) ? "unread" : ""}"><div><span class="msgb">${esc(notice.body)}</span><span class="hint">${esc(relDate(notice.at))}</span>${noticeAction(notice)}</div></li>`,
+        `<li class="${liClass(notice)}" data-notice="${esc(String(notice.id))}"><div><b class="notice-t">${ic(NOTICE_IC[notice.kind] || "campana")} ${esc(NOTICE_TITLE[notice.kind] || "Aviso")}</b><span class="msgb">${esc(notice.body)}</span><span class="hint">${seenMark(notice)}${esc(relDate(notice.at))}</span>${noticeAction(notice)}</div><button class="xbtn" data-act="noticeDel" data-id="${esc(String(notice.id))}" aria-label="Borrar este aviso">✕</button></li>`,
     )
     .join("")}</ul>`;
 }
 // los que estaban sin leer al abrir la campanita (se resaltan aunque ya queden leídos)
 let opened = new Set();
 const fresh = (item) => !item.read || opened.has(String(item.id));
+// 7/11: los ya vistos van más pálidos y con «✓ Visto» (cliente y profesional, igual)
+const liClass = (item) => (fresh(item) ? "unread" : "seen");
+const seenMark = (item) => (fresh(item) ? "" : "✓ Visto · ");
+// título e ícono de cada aviso del profesional (el texto lo arma la base)
+const NOTICE_TITLE = {
+  new_follower: "Nuevo seguidor",
+  holiday: "Feriado",
+  mp_term: "Plazo de Mercado Pago",
+  mp_connect: "Mercado Pago",
+  mp_reconnect: "Mercado Pago",
+  mp_cost: "Mercado Pago",
+  mp_refunded: "Cobros",
+  mp_charged_back: "Cobros",
+  mp_in_mediation: "Cobros",
+};
+const NOTICE_IC = { new_follower: "clientes", holiday: "agenda", mp_term: "mp", mp_connect: "mp", mp_reconnect: "mp", mp_cost: "mp", mp_refunded: "efectivo", mp_charged_back: "aviso", mp_in_mediation: "aviso" };
 // el botón de la cabecera y, si está abierta, la lista
 export function bell() {
   if (!bellShown()) {
@@ -106,10 +123,10 @@ export function bell() {
   }
   const unread = bellUnread();
   const provider = forProvider();
-  const hasRead = !provider && (S.inbox || []).some((msg) => msg.read);
+  const hasRead = items().some((item) => item.read);
   return `<div class="bellw"><button type="button" class="bell-btn" data-act="bellToggle" aria-haspopup="dialog" aria-expanded="${!!S.bellOpen}" aria-controls="bellPanel" aria-label="Avisos${unread ? `, ${unread} sin leer` : ""}"><span aria-hidden="true">${ic("campana")}</span>${unread ? `<span class="bell-n">${unread > 9 ? "9+" : unread}</span>` : ""}</button>${
     S.bellOpen
-      ? `<div class="bellpanel inbox" id="bellPanel" role="dialog" aria-label="Avisos"><div class="inbox-h"><p class="lbl">${ic("campana")} Avisos${unread ? ` <span class="cnt">${unread}</span>` : ""}</p>${hasRead ? '<button class="lnk" data-act="inboxClear">Borrar los leídos</button>' : ""}</div>${provider ? providerList() : clientList()}</div>`
+      ? `<div class="bellpanel inbox" id="bellPanel" role="dialog" aria-label="Avisos"><div class="inbox-h"><p class="lbl">${ic("campana")} Avisos${unread ? ` <span class="cnt">${unread}</span>` : ""}</p>${hasRead ? `<button class="lnk" data-act="${provider ? "noticeClear" : "inboxClear"}">Borrar los leídos</button>` : ""}</div>${provider ? providerList() : clientList()}</div>`
       : ""
   }</div>`;
 }
