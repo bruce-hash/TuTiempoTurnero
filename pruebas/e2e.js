@@ -100,8 +100,11 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   const foot = await pg.locator("footer").innerText();
   const socials = await pg.evaluate(() => [...document.querySelectorAll("footer a[target=_blank]")].map((a) => [a.href, a.rel]));
   ok("V7: footer con teléfono, las cuatro redes (pestaña nueva) y sin Prototipo",
-    (await pg.locator('footer a[href="tel:+542284722825"]').count()) === 1 && !/prototipo/i.test(foot) &&
-    ["instagram.com/tutiempo.arg", "facebook.com/profile.php?id=61592065464698", "youtube.com/channel/UCMQI8_kVvk_7S7_ceHfiKAg", "tiktok.com/@tutiempo_arg"].every((u) => socials.some(([h, r]) => h.includes(u) && /noopener/.test(r))), JSON.stringify(socials));
+    (await pg.locator('footer a[href="tel:+5492284722825"]').count()) === 1 && !/prototipo/i.test(foot) &&
+    ["wa.me/5492284722825", "instagram.com/tutiempo.arg", "facebook.com/profile.php?id=61592065464698", "youtube.com/channel/UCMQI8_kVvk_7S7_ceHfiKAg", "tiktok.com/@tutiempo_arg"].every((u) => socials.some(([h, r]) => h.includes(u) && /noopener/.test(r))), JSON.stringify(socials));
+  ok("7/11: el teléfono del footer abre WhatsApp (pestaña nueva) y al lado «Llamar», cada uno con su ícono",
+     (await pg.locator('footer a[href="https://wa.me/5492284722825"][target=_blank] svg').count()) === 1 && (await pg.locator('footer a[href="tel:+5492284722825"] svg').count()) === 1
+     && /WhatsApp 2284 722825/.test(foot) && /Llamar/.test(foot));
   ok("lista desde la base (2 prestadores)", (await pg.locator(".grid .card").count()) === 2);
   ok("conteo por rubro", (await pg.locator(".segtile.seg-l").innerText()).includes("1 con turnos"));
   await pg.click(".segtile.seg-u"); await wait();
