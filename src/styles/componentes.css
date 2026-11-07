@@ -330,8 +330,6 @@ body.am-open{overflow:hidden}
 .todo li.ok{color:var(--muted);text-decoration:line-through}
 .todo-bar{height:6px;border-radius:9px;background:var(--line);overflow:hidden;margin:0 0 12px}.todo-bar i{display:block;height:100%;background:var(--ok)}
 /* inicio: la puerta "Registrá tu negocio" */
-.bizcta{display:flex;gap:16px;align-items:center;justify-content:space-between;text-align:left;margin:18px 0}
-.bizcta b{font-size:18px}.bizcta p{margin:4px 0 0;color:var(--muted);font-size:14px}
 @media (max-width:899px){
  .biz{grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px}
  .biz-steps{display:none}
@@ -342,7 +340,6 @@ body.am-open{overflow:hidden}
  .biz-row{grid-template-columns:minmax(0,1fr)}
  .biz-svc,.biz-svc.with-cat{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 42px}.biz-svc .f:first-child{grid-column:1/-1}.biz-svc.with-cat .f:nth-child(4){grid-column:1/3}
  .biz-acts{flex-direction:column-reverse;align-items:stretch}.biz-acts .btn-pri{min-width:0}
- .bizcta{flex-direction:column;align-items:stretch}
 }
 
 /* v2 (3/11): avisos del panel de TuTiempo que se pueden borrar y el cuadro de «Avisarle» */

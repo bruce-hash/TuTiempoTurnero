@@ -138,10 +138,7 @@ export function vHome() {
    <div class="sec-h"><h2>${title}</h2></div>
    <p class="note" style="margin:0 0 14px">${list.loading ? "Cargando…" : `${list.items.length}${list.next ? "+" : ""} con turnos online`} · primero los más activos: los que más servicios hicieron en los últimos 30 días.</p>
    ${list.loading ? `<div class="grid">${'<div class="skel"></div>'.repeat(3)}</div>` : list.error ? `<p class="empty">${esc(list.error)} <button class="lnk" data-act="reloadList">Reintentar</button></p>` : list.items.length ? `<div class="grid">${list.items.map(card).join("")}</div>${list.next ? `<button class="btn btn-ghost more" data-act="moreList" ${list.loadingMore ? "disabled" : ""}>${list.loadingMore ? "Cargando…" : "Ver más"}</button>` : ""}` : `<p class="empty">${S.q ? "No encontramos profesionales con esa búsqueda." : "Todavía no hay profesionales en este rubro."}</p>`}
-  </section>
-  ${
-    S.barberAuth
-      ? ""
-      : '<div class="panel bizcta"><div><b>¿Tenés un negocio?</b><p>Barbería, peluquería, masajes, pestañas, uñas o depilación: tu agenda online, con la seña por Mercado Pago.</p></div><button class="btn btn-pri" data-act="bizStart">Registrá tu negocio</button></div>'
-  }`;
+  </section>`;
+  // 7/11: sin el cartel «¿Tenés un negocio?» (estaba repetido): quedan «Registrá tu negocio» del footer y la opción
+  // «Tengo un negocio» al crear la cuenta
 }
