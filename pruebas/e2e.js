@@ -7,6 +7,14 @@ const { Client } = require("pg");
 const BASE = process.argv[2] || "http://localhost:8787";
 const PG = process.argv[3];
 let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FAIL ") + n); if (!c && d) console.log("     ", d) };
+// 8/11 (punto 11): el turno se elige con margen, el primer horario del próximo día abierto (no el «Primer turno», que puede
+// ser dentro de minutos y quedar en el pasado mientras corre la prueba: pasó a las 15:00 en el CI de #61)
+async function turnoConMargen(p) {
+  await p.locator(".wd[data-day]:not(.today):not([disabled]):not(.full)").first().click();
+  await p.waitForTimeout(200);
+  await p.locator(".slots [data-slot]").first().click();
+  await p.waitForTimeout(200);
+}
 (async () => {
   const db = new Client({ connectionString: PG }); await db.connect();
   const q = async (s, a) => (await db.query(s, a)).rows;
@@ -128,7 +136,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("perfil sin “Desde” sobre la foto", (await pg.locator(".phero .ph-price").count()) === 0);
   await pg.click(".sgroup.seg-u .svci"); await wait(200);
   ok("indicaciones en el perfil, sin adicionales", (await pg.locator("[data-add]").count()) === 0 && (await txt()).includes("Venir sin esmalte"));
-  await pg.click("[data-quick]"); await wait(200);
+  await turnoConMargen(pg);
   const slotTime = await pg.evaluate(() => S.slot && S.slot.date + " " + S.slot.time);
   await pg.click("[data-act=reservarT]"); await wait();
   ok("pide ingresar para reservar, en la ventana encima del perfil", (await txt()).includes("Ingresá para reservar") && (await pg.isVisible(".authmodal #fLogin")));
@@ -406,7 +414,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("el horario reservado ya no aparece libre", !(await pg.locator(`[data-slot="${t}"]`).count()));
   // segundo turno pagando en efectivo: se confirma sin pasar por Mercado Pago
   const fnBefore = (await (await fetch(BASE + "/__log")).json()).filter((x) => x.fn === "mp-create-preference").length;
-  await pg.click(".sgroup.seg-d .svci"); await wait(200); await pg.click("[data-quick]"); await wait(200); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno"); await wait();
+  await pg.click(".sgroup.seg-d .svci"); await wait(200); await turnoConMargen(pg); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno"); await wait();
   await pg.click("[data-paym=cash]"); await wait(200);
   ok("resto en efectivo: igual paga la seña + comisión", /pagar \$/i.test(await pg.locator("#fTurno button[type=submit]").innerText()) && (await txt()).includes("Comisión TuTiempo"));
   await Promise.all([pg.waitForURL(/mp=success/).catch(() => {}), pg.click("#fTurno button[type=submit]")]); await pg.waitForSelector(".booked", { timeout: 8000 }).catch(() => {}); await wait(800);
@@ -948,7 +956,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("4/11: Esc cierra la campanita", (await pg.locator(".bellpanel").count()) === 0);
   }
   await pg.click("[data-act=useReward]"); await pg.waitForSelector(".pcard"); await wait(800);
-  await pg.click("[data-quick]"); await wait(200); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno"); await wait(300);
+  await turnoConMargen(pg); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno"); await wait(300);
   ok("checkout con “Usar mi premio”, gratis", (await pg.locator("[data-paym=reward][aria-checked=true]").count()) === 1 && /canjear premio/i.test(await pg.locator("#fTurno button[type=submit]").innerText()));
   await pg.click("#fTurno button[type=submit]"); await pg.waitForSelector(".booked", { timeout: 8000 }).catch(() => {}); await wait(600);
   const rwb = await q("select price, pay_method, status from bookings where pay_method='reward'");
@@ -1298,7 +1306,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   await pg.click(".panel [data-svc]"); await wait(400);
   ok("D22: elige el servicio del premio y aparece el selector de horario, sin seña", (await pg.locator("[data-slot]").count()) > 0 && /no lleva seña ni comisión/.test(await txt()));
   const rewardsBefore = (await q("select count(*)::int c from bookings where pay_method = 'reward'"))[0].c;
-  await pg.click("[data-quick]"); await wait(200); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno", { timeout: 8000 }).catch(() => {}); await wait(300);
+  await turnoConMargen(pg); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno", { timeout: 8000 }).catch(() => {}); await wait(300);
   ok("D22: en el pago solo queda “Usar mi premio”", (await pg.locator("[data-paym=reward]").count()) === 1 && (await pg.locator("[data-paym=mp]").count()) === 0);
   await pg.click("#fTurno button[type=submit]"); await wait(1500);
   ok("D22: el premio queda reservado sin pago", (await q("select count(*)::int c from bookings where pay_method = 'reward' and status = 'confirmed'"))[0].c === rewardsBefore + 1);
@@ -1508,7 +1516,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
      && (await q("select count(*)::int c from follows f join auth.users u on u.id=f.user_id where u.email='luz@test.ar'"))[0].c === 1);
   // reservar: crea la cuenta desde el ticket y abre el link en otro navegador → directo al pago con ese horario
   await p6.evaluate(() => document.querySelector("[data-act=logout]") ? document.querySelector("[data-act=logout]").click() : null); await p6.waitForTimeout(800);
-  await p6.goto(BASE + sofiaPath); await p6.waitForSelector(".sgroup"); await p6.click(".sgroup.seg-u .svci"); await p6.waitForTimeout(200); await p6.click("[data-quick]"); await p6.waitForTimeout(200);
+  await p6.goto(BASE + sofiaPath); await p6.waitForSelector(".sgroup"); await p6.click(".sgroup.seg-u .svci"); await p6.waitForTimeout(200); await turnoConMargen(p6);
   const pick = await p6.evaluate(() => S.slot && { day: S.slot.date, time: S.slot.time });
   await p6.click("[data-act=reservarT]"); await p6.waitForTimeout(300);
   await p6.click(".authmodal [data-act=authMode][data-m=up]"); await p6.waitForTimeout(200);
@@ -1522,7 +1530,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   // el horario lo toma otro mientras ingresa: lo dice y deja la ficha en ese día (sin cobrar nada)
   await p6.goto(BASE + "/"); await p6.waitForTimeout(800);
   if (await p6.evaluate(() => !!S.user)) { await p6.evaluate(() => document.querySelector("[data-act=logout]").click()); await p6.waitForTimeout(800); }
-  await p6.goto(BASE + sofiaPath); await p6.waitForSelector(".sgroup"); await p6.click(".sgroup.seg-u .svci"); await p6.waitForTimeout(200); await p6.click("[data-quick]"); await p6.waitForTimeout(200);
+  await p6.goto(BASE + sofiaPath); await p6.waitForSelector(".sgroup"); await p6.click(".sgroup.seg-u .svci"); await p6.waitForTimeout(200); await turnoConMargen(p6);
   const pick2 = await p6.evaluate(() => S.slot && { day: S.slot.date, time: S.slot.time });
   await p6.click("[data-act=reservarT]"); await p6.waitForTimeout(300);
   await db.query("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at) select p.id, 'Ocupado', 'Otro', 'manual', 'confirmed', ($1::date + $2::time) at time zone 'America/Argentina/Buenos_Aires', ($1::date + $2::time + interval '60 minutes') at time zone 'America/Argentina/Buenos_Aires' from providers p where p.name like 'Sofía%'", [pick2.day, pick2.time]);
@@ -1546,7 +1554,7 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   // en un perfil: Reservar y Seguir avisan que una cuenta de negocio no puede
   await p8.goto(BASE + sofiaPath); await p8.waitForSelector(".sgroup"); await p8.waitForTimeout(300);
   ok("D33: navegando el sitio, la cuenta de negocio tiene el mismo menú (sin la barra «reservando como cliente»)", (await p8.locator(".asclient").count()) === 0);
-  await p8.click(".sgroup.seg-u .svci"); await p8.waitForTimeout(200); await p8.click("[data-quick]"); await p8.waitForTimeout(200);
+  await p8.click(".sgroup.seg-u .svci"); await p8.waitForTimeout(200); await turnoConMargen(p8);
   const pick8 = await p8.evaluate(() => S.slot && { day: S.slot.date, time: S.slot.time });
   await p8.click("[data-act=reservarT]"); await p8.waitForTimeout(300);
   ok("D33: Reservar con una cuenta de negocio: el aviso y la salida a la cuenta personal", (await p8.locator("#amTitle").innerText()).includes("Las cuentas de negocio no pueden reservar")
@@ -1655,17 +1663,21 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     ok("4/11: de cada seguidor se ve el nombre y desde cuándo (sin email ni teléfono)", /Te sigue desde el \d{1,2}\/\d{1,2}/.test(await ps.locator(".folist").innerText()) && !/@/.test(await ps.locator(".folist").innerText()));
     // "Ofrecer" a esa persona
     await ps.click(".folist [data-act=folOffer]"); await ps.waitForSelector("[data-act=folOfferGo]", { timeout: 8000 }).catch(() => {});
-    const g1 = await ps.locator("[data-act=folOfferGo]:not([disabled])").first().getAttribute("data-g");
+    // 8/11 (punto 11): un hueco de mañana en adelante (uno de hoy puede empezar dentro de minutos)
+    const hoyF = (await q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date::text d"))[0].d;
+    const gs = await ps.locator("[data-act=folOfferGo]:not([disabled])").evaluateAll((els) => els.map((el) => el.dataset.g));
+    const g1 = gs.find((g) => g.split("|")[0] > hoyF) || gs[0];
     await ps.click(`[data-act=folOfferGo][data-g="${g1}"]`);
     const toOne = await until("select count(*)::int c from slot_offers where provider_id = $1 and target_user = $2", [sofi.id, anaId], (r) => r[0].c === 1);
     ok("4/11: «Ofrecer» a un seguidor le deja un aviso solo a esa persona", toOne
        && (await q("select count(*)::int c from client_messages where kind = 'offer' and user_id = $1", [anaId]))[0].c === 1);
     // Agenda: "Ofrecer" un hueco a todos los seguidores (el primer día con lugar)
     await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".tl, .agwk", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
-    for (let i = 0; i < 10 && !(await ps.locator("[data-act=offerGap]:not([disabled])").count()); i++) {
-      const next = ps.locator(".agwk [data-aday][aria-selected=false]:not(.closed)").nth(i);
-      if (!(await next.count())) break;
-      await next.click(); await ps.waitForTimeout(250);
+    // 8/11 (punto 11): desde mañana, así el hueco no empieza dentro de minutos (offer_past si la prueba tarda)
+    const hoyOf = (await q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date::text d"))[0].d;
+    for (let i = 1; i <= 10 && !(await ps.locator("[data-act=offerGap]:not([disabled])").count()); i++) {
+      const d = (await q("select ($1::date + $2::int)::text d", [hoyOf, i]))[0].d;
+      await ps.evaluate((x) => { S.aday = x; S.awk = null; render(); }, d); await ps.waitForTimeout(250);
     }
     const g2 = await ps.locator("[data-act=offerGap]:not([disabled])").first().getAttribute("data-g");
     await ps.click(`[data-act=offerGap][data-g="${g2}"]`);
