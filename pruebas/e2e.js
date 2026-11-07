@@ -462,6 +462,17 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("producto guardado", (await q("select stock from products where name='Gel top coat'"))[0]?.stock === 3);
   await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]"); await wait(800);
   ok("compra suma stock y carga gasto", (await q("select stock from products where name='Gel top coat'"))[0].stock === 9 && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  // 7/11: «Editar» cambia nombre, precio de venta y de compra; la compra ya cargada no cambia
+  await pg.click('.plist li:has-text("Gel top coat") [data-act=prodEdit]'); await wait(300);
+  ok("7/11: «Editar» abre el producto con su nombre y su precio", (await pg.inputValue("#pen")) === "Gel top coat" && (await pg.inputValue("#pep")) === "8000");
+  await pg.fill("#pen", "Gel top coat brillo"); await pg.fill("#pep", "9.500"); await pg.fill("#pec", "4000"); await pg.click("#fProdEdit button[type=submit]");
+  ok("7/11: se guardan el nombre, el precio de venta y el de compra",
+     await until("select name, price, cost from products where id = (select id from products where name ilike 'Gel top coat%')", [], (r) => r[0]?.name === "Gel top coat brillo" && r[0].price === 9500 && r[0].cost === 4000));
+  ok("7/11: …y la compra ya cargada sigue igual", (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1 && /Gel top coat brillo/.test(await txt()));
+  await wait(700);
+  await pg.click('.plist li:has-text("Gel top coat brillo") [data-act=prodEdit]'); await wait(300);
+  await pg.fill("#pen", "Gel top coat"); await pg.fill("#pep", "8000"); await pg.fill("#pec", ""); await pg.click("#fProdEdit button[type=submit]");
+  ok("7/11: …y se puede volver atrás (sin precio de compra)", await until("select name, price, cost from products where name = 'Gel top coat'", [], (r) => r[0]?.price === 8000 && r[0].cost === null));
   // H08: montos enteros en pesos: "8000,50" se rechaza (antes se guardaba 800.050) y "8.000" es $8.000
   await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Gel caro"); await pg.fill("#pnp", "8000,50"); await pg.click("#fProd button[type=submit]"); await wait(400);
   ok("H08: un precio con centavos se rechaza con un mensaje claro", /sin centavos/.test(await pg.locator("#perr2").innerText()) && (await q("select count(*)::int c from products where name='Gel caro'"))[0].c === 0);

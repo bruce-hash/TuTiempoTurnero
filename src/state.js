@@ -67,6 +67,7 @@ export const fresh = () => ({
   syr: null,
   fy: null,
   buyI: null,
+  prodEdit: null,
   prodOpen: false,
   cf: "todos",
   cli: null,
