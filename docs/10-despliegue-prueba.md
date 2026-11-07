@@ -109,6 +109,9 @@ Secretos del entorno:
   que no se pierde nada. A partir de ahí solo aplica las nuevas.
 - **Las funciones que cambiaron.** El workflow compara con el último despliegue (la etiqueta `prueba-desplegada`, que
   mueve él mismo). Si cambió `_shared/`, despliega todas. La primera vez, todas.
+- **Verificar prueba solo corre código de developer (S21).** Antes de usar los secretos, revisa que el commit de la
+  etiqueta `prueba-desplegada` (o el que le pasa «Desplegar prueba») esté en `developer`; si no, falla sin correr nada.
+  Así, mover la etiqueta a un commit de otra rama no sirve para leer los secretos del entorno `prueba`.
 - **Supabase gratis.** El proyecto gratis se pausa tras una semana sin uso. La verificación de cada noche lo mantiene
   despierto. Si igual se pausa, la verificación falla y avisa.
 
