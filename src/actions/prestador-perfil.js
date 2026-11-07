@@ -8,6 +8,7 @@ import { ME, pr } from "../lib/prestadores.js";
 import { catName } from "../lib/rubros.js";
 import { svcMeta } from "../lib/servicios.js";
 import { cfg, skey } from "../lib/turnero.js";
+import { MP_TERMS } from "../lib/cobro.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -23,6 +24,21 @@ registerClick("cashToggle", (ev, el, act) => {
   render();
   return;
 });
+// 9/11: el plazo de acreditación de Mercado Pago, en Perfil → Cobros con Mercado Pago, se guarda al tocarlo
+registerChange(
+  MP_TERMS.map(([value]) => "pterm-" + value),
+  (ev) => {
+    const conf = cfg(ME());
+    const prev = conf.term;
+    conf.term = ev.target.value;
+    Promise.resolve(api.m.saveSettings(conf))
+      .then(() => toast("Listo: plazo de Mercado Pago guardado."))
+      .catch(() => {
+        conf.term = prev;
+        render();
+      });
+  },
+);
 // C26 (V5): cada trabajo se edita con ✎: nombre y borrar (con confirmación)
 registerClick("mediaEdit", (ev, el, act) => {
   const index = +el.dataset.i;

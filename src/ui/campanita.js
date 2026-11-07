@@ -67,9 +67,9 @@ function noticeAction(notice) {
     const day = esc(notice.ref);
     return `<div class="holbtns"><button class="btn btn-ghost btn-sm msg-act" data-act="holOpen" data-d="${day}">Abro</button><button class="btn btn-ghost btn-sm msg-act" data-act="holClose" data-d="${day}">Cierro</button></div>`;
   }
-  // 4/11 · Bloque 4: Mercado Pago cobró la comisión de otro plazo: a Horarios, donde se elige
+  // 4/11 · Bloque 4: Mercado Pago cobró la comisión de otro plazo: a donde se elige (9/11: Perfil → Cobros con Mercado Pago)
   if (notice.kind === "mp_term") {
-    return go("horarios", "Revisar el plazo");
+    return go("perfil", "Revisar el plazo");
   }
   return "";
 }

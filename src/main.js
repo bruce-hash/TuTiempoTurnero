@@ -8,6 +8,7 @@ import "./styles/rubros.css";
 import "./styles/marketplace.css";
 import "./styles/iconos.css";
 import "./styles/compu.css";
+import "./styles/celular.css";
 import "./actions/admin-balance.js";
 import "./actions/admin.js";
 import "./actions/negocio.js";

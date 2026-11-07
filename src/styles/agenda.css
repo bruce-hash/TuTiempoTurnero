@@ -24,6 +24,8 @@
 .winback{border:1.5px solid var(--warn-line);background:var(--warn-soft)}
 .search{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);font:inherit;margin-bottom:10px}
 .fchips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:6px}
+/* 9/11: los atajos de «Bloquear días» bajan de renglón en vez de esconderse a la derecha (320 px) */
+.fchips-wrap{flex-wrap:wrap;overflow-x:visible}
 .fchips button{flex:none;border:1.5px solid var(--line);background:var(--card);color:var(--fg);border-radius:99px;padding:6px 11px;font-size:13px;font-weight:600}
 .fchips button span{color:var(--muted);font-weight:700}
 .fchips button[aria-pressed="true"]{border-color:var(--brand);background:var(--brand);color:var(--on-brand)}.fchips button[aria-pressed="true"] span{color:inherit;opacity:.75}

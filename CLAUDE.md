@@ -93,8 +93,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     `pruebas/unidad.mjs` falla si vuelve a aparecer un emoji en `src/` (fuera de comentarios y de `src/demo/`).
   - 4/11 · Bloque 4 (D06, D30, D38): seña fija del 30% (`src/views/prestador/plazo.js`: `DEPOSIT_PCT`, `depositNote`,
     `termPicker`; en la base, el trigger `ps_fixed_deposit` la fuerza en todo pedido con sesión). El plazo de Mercado Pago
-    lo elige el profesional (Horarios y el alta); si un cobro trae la comisión de otro plazo, `confirm_payment_core` no
-    lo cambia: `mp_term_mismatch` en Para revisar y aviso `mp_term` (lleva a Horarios). Caja del día de otra fecha
+    lo elige el profesional (Perfil → Cobros con Mercado Pago, 9/11, y el alta); si un cobro trae la comisión de otro plazo, `confirm_payment_core` no
+    lo cambia: `mp_term_mismatch` en Para revisar y aviso `mp_term` (lleva a Perfil). Caja del día de otra fecha
     (`S.cajaDay`, `store.WALKDAY`, `api.walkinsOn`), ventas con cantidad (`walkins.qty`), gastos variables aparte
     (`provider_month_summary`), Ajustes solo Seguridad (`vAjustes`, `/cuenta/ajustes`).
   - 7/11 · Feriados (D39): `holidays-sync` (Edge Function, ArgentinaDatos y, de respaldo, el `.ics` de feriados de Google; `HOLIDAYS_API_URL` y `HOLIDAYS_ICS_URL` solo pruebas) guarda la lista en

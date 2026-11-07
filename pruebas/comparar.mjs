@@ -170,6 +170,11 @@ async function normalizar(page) {
         --font-d:var(--font);--d-ls:-.02em;--hero-bg:linear-gradient(180deg,#ffffff,#f3f2ee);--hero-fg:#121212;--hero-muted:#5b5b57;--hero-em:#121212;
         --hero-chip:rgba(0,0,0,.06);--hero-bd:#e5e4df;--bar-bg:#121212;--bar-muted:#b5b5b0;--bar-btn-fg:#121212;--glow:rgba(18,18,18,0.4)}</style>`);
     }
+    // 9/11 (cambio a propósito): en el celular, ningún campo con letra menor a 16 px (iOS agrandaba la página al tocarlo):
+    // los campos quedan un poco más altos. Se aplica la misma regla a las dos versiones; la prueba ancho.mjs la controla.
+    if (!document.getElementById("cmp-16px")) {
+      document.head.insertAdjacentHTML("beforeend", `<style id="cmp-16px">@media (max-width:1023px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]),select,textarea{font-size:16px!important}input.otp{font-size:20px!important}.comrow input{font-size:22px!important}.mptab .comrow input{font-size:16px!important}}</style>`);
+    }
     // V1 (D30, cambio a propósito): la comisión de TuTiempo pasa a ser un % de la seña y se suma el costo de Mercado Pago:
     // cambian los montos y los textos de la comisión (barra de reserva, política del turnero, confirmación, turno pagado),
     // Horarios suma el plazo de acreditación, la pestaña Comisión es otra y las comisiones de la demo cambian (Resumen y
@@ -187,6 +192,18 @@ async function normalizar(page) {
     // 4/11 · Bloque 4 (cambios a propósito): la seña fija y el plazo de Mercado Pago con su tabla, el acceso a "Bloquear
     // días" arriba de Horarios y el calendario de la Caja del día. Lo nuevo lo prueban e2e.js y ancho.mjs.
     document.querySelectorAll("#app .depnote, #app .termpick, #app .hblock, #app .calbtn").forEach((el) => el.remove());
+    // 9/11 (cambio a propósito): el plazo de Mercado Pago pasó de Horarios a Perfil → «Cobros con Mercado Pago» (el
+    // panel «Cobros» cambia de nombre y el aviso de Horarios lleva ahí). Lo prueban e2e.js y ancho.mjs.
+    document.querySelectorAll("#app .mpterm").forEach((el) => el.remove());
+    document.querySelectorAll("#fHorarios p.note").forEach((el) => { if (el.querySelector("[data-tab=perfil]")) el.remove(); });
+    document.querySelectorAll("#app .panel > .lbl").forEach((el) => { if (/^Cobros( con Mercado Pago)?$/i.test(el.textContent.trim())) el.textContent = "COBROS"; });
+    document.querySelectorAll("#app .mpcobros > div").forEach((el) => { if (!el.children.length && !el.textContent.trim()) el.remove(); });
+    // 9/11 (arreglos a propósito): las reseñas y los campos de fecha ya no se salen del ancho y los atajos de «Bloquear
+    // días» bajan de renglón: las dos versiones con el mismo arreglo (lo controla ancho.mjs en 320, 375, 390 y 430 px)
+    document.querySelectorAll("#app .fchips-wrap").forEach((el) => el.classList.remove("fchips-wrap"));
+    if (!document.getElementById("cmp-ancho")) {
+      document.head.insertAdjacentHTML("beforeend", `<style id="cmp-ancho">.rv{grid-template-columns:minmax(0,1fr)}.f{min-width:0}.f input{min-width:0}</style>`);
+    }
     if (document.querySelector("#app [data-act=admM]")) document.querySelectorAll("#app .kpis, #app table").forEach((el) => el.remove());
     // V3 (D31, C39 y C21, cambios a propósito): los horarios se suceden según la duración del servicio y sin descanso, así
     // que cambian los horarios ofrecidos, cuántos libres hay por día y el próximo turno de cada tarjeta; Horarios ya no tiene
