@@ -9,6 +9,14 @@ store.PRODS = [];
 function soldToday() {
   return S.walk.filter((item) => item.kind === "prod");
 }
+// 7/11: editar nombre, precio de venta y de compra. Las ventas y las compras ya cargadas guardan su propio monto: no cambian.
+function editForm(prod) {
+  return `<form class="buyform" id="fProdEdit" novalidate><p class="lbl" style="margin:0 0 6px">Editar ${esc(prod.n)}</p>
+   <div class="f"><label for="pen">Nombre</label><input id="pen" maxlength="80" value="${esc(prod.n)}" autocomplete="off"></div>
+   <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="pep">Precio de venta</label><input id="pep" inputmode="numeric" value="${prod.p}" autocomplete="off"></div><div class="f"><label for="pec">Precio de compra <span class="hint">(opcional)</span></label><input id="pec" inputmode="numeric" value="${prod.cost == null ? "" : prod.cost}" placeholder="$" autocomplete="off"></div></div>
+   <p class="note" style="text-align:left;margin:0 0 10px">Los precios nuevos valen desde ahora: las ventas y las compras que ya cargaste quedan como estaban.</p>
+   <div class="err" id="perr3"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="prodEditClose">Cancelar</button><button class="btn btn-pri" type="submit">Guardar cambios</button></div></form>`;
+}
 // stock de productos para vender: alerta de reposición, sumar/restar, compras (van a gastos) y alta
 export function vBProductos() {
   const low = store.PRODS.filter((prod) => prod.stock <= prod.min);
@@ -24,12 +32,13 @@ export function vBProductos() {
        index,
      ) => `<li><div class="pl-m"><b>${esc(prod.n)}</b><span>${money(prod.p)}${prod.cost != null ? ` · compra ${money(prod.cost)} · ganás ${money(prod.p - prod.cost)}` : ""} · mínimo ${prod.min} u.${prod.stock <= prod.min ? ' · <em class="lowtag">reponer</em>' : ""}</span></div>
      <div class="pl-s"><button class="xbtn" data-act="stk" data-i="${index}" data-d="-1" aria-label="Restar uno">−</button><b class="pl-n ${prod.stock <= prod.min ? "low" : ""}">${prod.stock}<small>en stock</small></b><button class="xbtn" data-act="stk" data-i="${index}" data-d="1" aria-label="Sumar uno">+</button></div>
-     <span class="pl-acts"><button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">${ic("carrito")} Compré más</button><button class="xbtn" data-act="prodDel" data-i="${index}" aria-label="Eliminar ${esc(prod.n)}">${ic("borrar")}</button></span>
+     <span class="pl-acts"><button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">${ic("carrito")} Compré más</button><button class="btn btn-ghost pl-edit" data-act="prodEdit" data-i="${index}">${ic("editar")} Editar</button><button class="xbtn" data-act="prodDel" data-i="${index}" aria-label="Eliminar ${esc(prod.n)}">${ic("borrar")}</button></span>
      ${
        S.prodDel === index
          ? `<div class="movask"><div><b>¿Eliminar ${esc(prod.n)}?</b><span>Sale de tu lista y de la caja. Las ventas y compras que ya cargaste quedan en tus finanzas.</span></div><span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="prodDelNo">No</button><button class="btn btn-pri btn-sm" data-act="prodDelYes" data-i="${index}">Sí, eliminar</button></span></div>`
          : ""
      }
+     ${S.prodEdit === index ? editForm(prod) : ""}
      ${
        S.buyI === index
          ? `<form class="buyform" id="fBuy" novalidate><div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="bq">Cantidad</label><input id="bq" inputmode="numeric" placeholder="Ej: 6" autocomplete="off"></div><div class="f"><label for="bc">Cuánto pagaste</label><input id="bc" inputmode="numeric" placeholder="$" autocomplete="off"></div></div>
