@@ -202,6 +202,8 @@ Object.assign(LM, {
   // un paso del alta guardado (2 a 5; el 1 lo marca registerBusiness)
   setupStep: (step) => saved(sb.rpc("setup_step", { p_step: step })),
   readNotices: () => saved(sb.rpc("mark_provider_notices_read")),
+  // 7/11: borrar avisos del profesional (null: todos los leídos)
+  dismissNotices: (ids) => saved(sb.rpc("dismiss_provider_notices", { p_ids: ids })),
   mpConnect: async () => {
     const res = await sb.functions.invoke("mp-oauth", {
       body: {},

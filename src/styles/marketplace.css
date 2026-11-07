@@ -190,3 +190,8 @@ footer .in>.legal{flex-basis:100%;max-width:none;border-top:1px solid var(--line
 /* 7/11: WhatsApp y Llamar en el footer, con su ícono */
 footer .ftc{display:inline-flex;align-items:center;gap:6px}
 footer .ftc svg{width:18px;height:18px;flex:none}
+/* 7/11: avisos ya vistos (cliente y profesional): más pálidos y con «✓ Visto»; el ícono de cada aviso del profesional */
+.inbox li.seen>div,.inbox li.seen>.av{opacity:.6}
+.inbox li.seen b{font-weight:600}
+.inbox .notice-t{display:flex;align-items:center;gap:6px}
+.inbox .notice-t svg{width:16px;height:16px;flex:none}
