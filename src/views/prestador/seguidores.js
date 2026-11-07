@@ -1,4 +1,5 @@
 import { api } from "../../api/index.js";
+import { followersBlockedNote, provActive } from "../../lib/alta.js";
 import { esc, ini } from "../../lib/dom.js";
 import { dayLabel, dm, fromMin, isoToLocal } from "../../lib/fechas.js";
 import { nextGaps } from "../../lib/huecos.js";
@@ -53,9 +54,11 @@ export function vSeguidores() {
   }
   const count = store.COMM.followers || 0;
   const clients = (list || []).filter((fol) => fol.client).length;
+  const active = provActive();
   return `<div class="stats2"><div><b>${count}</b><span>Seguidores</span></div><div><b>${clients}</b><span>Ya reservaron</span></div></div>
   <div class="panel">
    <p class="note" style="text-align:left;margin:0 0 10px">Te siguen desde tu perfil. Cuando ofrecés un hueco en la Agenda les llega un aviso en la app y una notificación para reservarlo. También podés ofrecerle un turno a una persona.</p>
+   ${active ? "" : `<p class="note fol-off" style="text-align:left;margin:0 0 10px">${esc(followersBlockedNote())}</p>`}
    ${
      list == null
        ? '<div class="skel" style="min-height:120px"></div>'
@@ -63,7 +66,7 @@ export function vSeguidores() {
          ? `<ul class="clist folist">${list
              .map(
                (fol) =>
-                 `<li><div class="crow">${avatarOf(fol)}<span class="cr-m"><b>${esc(fol.name)}</b><span>${sinceTxt(fol.since)}${fol.client ? " · ya reservó" : ""}</span></span><span class="cr-r"><button type="button" class="btn btn-ghost btn-sm" data-act="folOffer" data-id="${esc(fol.id)}" ${S.offerFor === fol.id ? 'aria-expanded="true"' : ""}>${ic("ofrecer")} Ofrecer</button></span></div>${S.offerFor === fol.id ? offerPicker(fol) : ""}</li>`,
+                 `<li><div class="crow">${avatarOf(fol)}<span class="cr-m"><b>${esc(fol.name)}</b><span>${sinceTxt(fol.since)}${fol.client ? " · ya reservó" : ""}</span></span>${active ? `<span class="cr-r"><button type="button" class="btn btn-ghost btn-sm" data-act="folOffer" data-id="${esc(fol.id)}" ${S.offerFor === fol.id ? 'aria-expanded="true"' : ""}>${ic("ofrecer")} Ofrecer</button></span>` : ""}</div>${active && S.offerFor === fol.id ? offerPicker(fol) : ""}</li>`,
              )
              .join("")}</ul>${count > list.length ? `<p class="note">Se muestran los últimos ${list.length}.</p>` : ""}`
          : '<p class="note">Todavía no te sigue nadie. Compartí tu perfil (el QR está en Perfil) para que te sigan y te enteres cuando tengas lugar.</p>'

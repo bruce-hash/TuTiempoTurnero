@@ -21,6 +21,20 @@ export function bizStartPath() {
   return n ? "/registrar-negocio/" + n : "/panel/agenda";
 }
 export const mpConnected = () => S.mp === "ok";
+// S19 (8/11): ¿el negocio está activo? Uno suspendido (o todavía pendiente) no escribe a sus seguidores ni les ofrece
+// turnos (la base lo rechaza con not_active). En vivo, el estado lo trae my_setup; en la demo, el del prestador.
+export function provActive(pid = ME()) {
+  const setup = setupOf(pid);
+  if (setup && setup.status) {
+    return setup.status === "active";
+  }
+  const prov = pr(pid);
+  return !prov || !prov.status || prov.status === "active";
+}
+export const followersBlockedNote = (pid = ME()) =>
+  (setupOf(pid) || pr(pid) || {}).status === "suspended"
+    ? "Tu negocio está suspendido: no podés escribirles a tus seguidores ni ofrecerles turnos."
+    : "Cuando TuTiempo apruebe tu negocio vas a poder escribirles a tus seguidores y ofrecerles turnos libres.";
 // el DNI ya está (verificado, o con número y las dos fotos): en esta sesión (my_dni_status) o según la base (my_setup)
 export function dniDone(pid = ME()) {
   const prov = pr(pid);

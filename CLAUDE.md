@@ -79,7 +79,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Pago (turno y token, `tt_cobro`) y al abrir o volver a la app lo confirma sola (no depende de la vuelta, que en iPhone se
     abre en Safari; la vuelta lleva `app=1` y dice «Volvé a la app»). `src/lib/actualizar.js`: datos de la pantalla al
     volver a primer plano y, en la app instalada, deslizar para actualizar y «Actualizar» en el menú.
-  - 4/11 B3 (D35): Clientes → Seguidores (`src/views/prestador/seguidores.js`, `provider_followers`); «Ofrecer» de la
+  - 4/11 B3 (D35): Clientes → Seguidores (`src/views/prestador/seguidores.js`, `provider_followers`); «Ofrecer» (solo con el negocio activo, `provActive()` en `src/lib/alta.js`, S19) de la
     Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
     «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
     de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).

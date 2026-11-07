@@ -418,6 +418,18 @@ ok("4/11: ofertas a todos y novedades comparten el tope de 5 por día", all(not 
    and not err(q("select offer_slot(date_trunc('hour', now()) + interval '8 days', date_trunc('hour', now()) + interval '8 days 1 hour', null)", uid=own4))
    and err(q("select notify_followers('Una más')", uid=own4), "offer_limit")
    and err(q("select offer_slot(date_trunc('hour', now()) + interval '8 days 2 hours', date_trunc('hour', now()) + interval '8 days 3 hours', null)", uid=own4), "offer_limit"))
+# S19 (8/11): un profesional suspendido no puede mandar novedades ni ofertas a sus seguidores (ni uno pendiente)
+for st in ("suspended", "pending"):
+    q("update providers set status = %s where id = %s", (st, pid4))
+    q("delete from slot_offers where provider_id = %s", (pid4,)); q("delete from posts where provider_id = %s", (pid4,))
+    nm = one("select count(*) from client_messages where provider_id = %s", (pid4,))
+    ok(f"S19: con el negocio {'suspendido' if st == 'suspended' else 'pendiente'} no avisa a sus seguidores ni les ofrece turnos",
+       err(q("select notify_followers('Promo: pagá por transferencia al alias x')", uid=own4), "not_active")
+       and err(q("select offer_slot(date_trunc('hour', now()) + interval '9 days', date_trunc('hour', now()) + interval '9 days 1 hour', null)", uid=own4), "not_active")
+       and err(q("select offer_slot(date_trunc('hour', now()) + interval '9 days', date_trunc('hour', now()) + interval '9 days 1 hour', %s)", (ana,), uid=own4), "not_active")
+       and one("select count(*) from client_messages where provider_id = %s", (pid4,)) == nm)
+q("update providers set status = 'active' where id = %s", (pid4,))
+ok("S19: …y vuelve a poder cuando el admin lo reactiva", not err(q("select notify_followers('Volvimos')", uid=own4)))
 ok("4/11: posts no acepta inserts directos (así no se saltea el límite) y un cliente no avisa", err(q("insert into posts (provider_id, body) values (%s, 'x')", (pid4,), uid=own4))
    and err(q("select notify_followers('hola a todos')", uid=ana), "not_provider") and err(q("select notify_followers('hola')", role="anon")))
 q("update bookings set status = 'cancelled_provider' where id = %s", (b_off,))
