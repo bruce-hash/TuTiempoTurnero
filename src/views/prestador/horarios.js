@@ -5,7 +5,7 @@ import { R, cfg, freeCount } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { vDayBlocks } from "./bloqueo-dias.js";
 import { vHolidays } from "./feriados.js";
-import { depositNote, termPicker } from "./plazo.js";
+import { depositNote } from "./plazo.js";
 import { ic } from "../../ui/iconos.js";
 
 // jornadas predefinidas: [id, nombre, detalle, mañana, tarde]
@@ -84,7 +84,7 @@ export function vBHorarios() {
       conf.notice,
     )}<span class="hint">No te pueden reservar con menos anticipación que esto.</span></div>
     ${depositNote("margin:2px 0 12px")}
-    ${termPicker(conf.term)}
+    <p class="note" style="text-align:left;margin:0">${ic("efectivo")} El plazo de acreditación de Mercado Pago y lo que cobra en cada uno están en <button type="button" class="lnk" data-act="toPanel" data-tab="perfil">Perfil → Cobros con Mercado Pago</button>.</p>
    </div>
    <p class="note">Con lo guardado, mañana te quedan <b>${freeTomorrow}</b> turnos libres de 30 min.</p>
   </form>${vDayBlocks()}${vHolidays()}`;

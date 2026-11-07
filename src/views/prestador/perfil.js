@@ -13,6 +13,7 @@ import { stampCfg, stampSvcs, stampsOn } from "../../ui/sellos.js";
 import { delBox } from "../cliente/cuenta.js";
 import { vMensajes } from "./mensajes.js";
 import { setupSteps } from "./verificacion.js";
+import { termPicker } from "./plazo.js";
 import { ic } from "../../ui/iconos.js";
 
 // editor de rubros y servicios: trabaja sobre una copia (S.edSvcs) que se crea al abrirlo
@@ -160,13 +161,13 @@ const mpBackNote = () =>
 
 // v2: de dónde sale el plazo de acreditación (lo mismo en el paso "Seña y cobro" del alta y en Perfil → Cobros)
 export const mpTermNote = (style = "") =>
-  `<p class="note mpterm" style="text-align:left;${style}">${ic("agenda")} <b>Plazo de acreditación:</b> elegí en Horarios el mismo que tenés en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos). Si un cobro no coincide, te avisamos. <b>Sin Mercado Pago conectado no recibís reservas.</b></p>`;
+  `<p class="note mpterm" style="text-align:left;${style}">${ic("agenda")} <b>Plazo de acreditación:</b> elegí el mismo que tenés en tu cuenta de Mercado Pago (Tu negocio → Costos y plazos); después lo cambiás en Perfil → Cobros con Mercado Pago. Si un cobro no coincide, te avisamos. <b>Sin Mercado Pago conectado no recibís reservas.</b></p>`;
 // pestaña Perfil del panel: Mercado Pago, foto, efectivo, sellos, datos y servicios, avisos, DNI y eliminar.
 // En vivo muestra el número de la cuenta conectada; “filo.barber.mp” es solo de la demo.
 export function vBPerfil(prov) {
   const mp = S.mp;
   const st = S.mpSt || {};
-  return `${setupSteps(prov, "perfil")}<div class="panel"><p class="lbl">Cobros</p>
+  return `${setupSteps(prov, "perfil")}<div class="panel mpcobros"><p class="lbl">Cobros con Mercado Pago</p>
    ${
      mp === "ok"
        ? `<div class="paym" style="border-color:var(--ok);background:var(--ok-soft)"><span class="mp">MP</span><span>Mercado Pago conectado<br><small class="hint">${LIVE ? (st.account ? `Cuenta n° ${esc(st.account)} · ` : "") : "filo.barber.mp · "}Las señas se acreditan en tu cuenta al reservar.</small></span></div>
@@ -186,7 +187,7 @@ export function vBPerfil(prov) {
      ${mpBackNote()}${st.expired ? '<p class="note" style="text-align:left;margin:8px 0 0">Venció la conexión con tu cuenta de Mercado Pago: volvé a conectarla.</p>' : ""}${mpPaidNote(st, true)}
      <button class="btn btn-pri btn-block" style="margin-top:10px;background:#009ee3" data-act="mpConnect">Conectar Mercado Pago</button>`
    }
-   ${mpTermNote("margin:10px 0 0")}
+   <div style="margin-top:14px">${termPicker(cfg(ME()).term, "pterm")}</div>
   </div>
   <div class="panel"><p class="lbl">Foto de perfil</p><div class="contact" style="gap:14px">${photoPicker(prov, "upPhoto")}<div><b>${esc(prov.name)}</b><p class="note" style="text-align:left;margin:2px 0 0">Aparece en tu perfil, en el listado y en tus historias.</p><label class="btn btn-ghost btn-sm" for="upPhoto" style="margin-top:6px;cursor:pointer">${ic("trabajos")} ${prov.photo ? "Cambiar foto" : "Subir foto"}</label></div></div></div>
   <div class="panel"><div class="swrow"><div><b>${ic("efectivo")} Aceptar el resto en efectivo</b><div class="hint">${cfg(ME()).cash !== false ? "La seña va por Mercado Pago y el resto lo pueden pagar en efectivo" : "La seña y el resto, con Mercado Pago"}</div></div><button class="tg" data-act="cashToggle" aria-pressed="${cfg(ME()).cash !== false}" aria-label="Aceptar efectivo"></button></div>

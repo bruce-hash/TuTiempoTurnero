@@ -676,10 +676,19 @@ async function turnoConMargen(p) {
   ok("4/11: Horarios muestra la seña fija del 30% (sin el selector de seña ni «El total»)", (await pg.locator("#hpay").count()) === 0 && /Seña: 30% del servicio/.test(await pg.locator("#fHorarios").innerText()));
   ok("4/11: Horarios tiene el acceso a «Bloquear días o semanas» arriba, antes de los horarios",
      await pg.evaluate(() => { const a = document.querySelector("[data-act=toDayBlock]"); const d = document.querySelector(".hdays"); return !!a && !!d && !!(a.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING); }));
-  await pg.click('label.termopt:has(input[value="d10"])'); await wait(1400);
-  ok("4/11: elegir «10 días» se guarda solo (y la seña sigue en 30%)",
+  // 9/11: el plazo de Mercado Pago salió de Horarios (estaba al final y no se encontraba): Horarios lleva a Perfil
+  ok("9/11: Horarios ya no tiene el plazo de Mercado Pago y dice dónde está", (await pg.locator("#fHorarios .termpick").count()) === 0
+     && (await pg.locator("#fHorarios [data-act=toPanel][data-tab=perfil]").innerText()).includes("Cobros con Mercado Pago"));
+  await pg.click("#fHorarios [data-act=toPanel][data-tab=perfil]"); await wait(500);
+  const cobros = await pg.locator(".panel.mpcobros").innerText().catch(() => "");
+  ok("9/11: Perfil → «Cobros con Mercado Pago», con los 4 plazos y el % de cada uno (la tabla del admin)",
+     /Cobros con Mercado Pago/i.test(cobros) && (await pg.locator('.mpcobros input[name="pterm"]').count()) === 4
+     && /Al instante[\s\S]*%[\s\S]*10 días[\s\S]*%[\s\S]*18 días[\s\S]*%[\s\S]*35 días[\s\S]*%/.test(cobros), cobros);
+  await pg.click('.mpcobros label.termopt:has(input[value="d10"])'); await wait(1400);
+  ok("9/11: elegir «10 días» en Perfil se guarda solo (y la seña sigue en 30%)",
      (await until("select payout_term, deposit_pct from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'", [], (r) => r[0].payout_term === "d10" && r[0].deposit_pct === 30))
-     && /Cambios guardados/.test(await pg.locator("#hSaved").innerText()));
+     && /plazo de Mercado Pago guardado/.test(await pg.locator(".toast").innerText().catch(() => "")));
+  await pg.click("[data-btab=horarios]"); await wait(400);
   await pg.click("[data-act=toDayBlock]"); await wait(600);
   ok("4/11: «Bloquear días o semanas» lleva al formulario de bloqueo", await pg.evaluate(() => { const r = document.querySelector("#fDayBlock").getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; }));
   await db.query("update provider_settings set payout_term = 'instant' where provider_id = (select id from providers where name like 'Sofía%')");
@@ -1273,7 +1282,7 @@ async function turnoConMargen(p) {
       ok(`v2: «${label}» deja su sección justo debajo de la cabecera fija`, pos[1] >= pos[0] && pos[1] - pos[0] <= 30, JSON.stringify(pos));
     }
     await pg.click("[data-btab=perfil]"); await wait(300);
-    ok("4/11: Perfil explica que el plazo de acreditación se elige en Horarios (el mismo de su cuenta de Mercado Pago)", /elegí en Horarios el mismo que tenés en tu cuenta de Mercado Pago[\s\S]*Sin Mercado Pago conectado no recibís reservas/.test(await txt()));
+    ok("9/11: Perfil tiene el plazo de acreditación en «Cobros con Mercado Pago», con su explicación", (await pg.locator('.mpcobros input[name="pterm"]').count()) === 4 && /Elegí el mismo plazo que tenés en tu cuenta de Mercado Pago/.test(await pg.locator(".mpcobros").innerText()));
     await pg.click("[data-btab=agenda]"); await wait(300);
   }
   ok("Bloque 1: abrir la campanita marca los avisos leídos (4/11; antes, «Entendido»)", (await pg.locator("nav .bell-n").count()) === 0 && (await q("select count(*)::int c from provider_notices n join providers p on p.id=n.provider_id where p.name like 'Sofía%' and n.read_at is null"))[0].c === 0);

@@ -56,7 +56,7 @@ export function vDayBlocks() {
    }
    <p class="note" style="text-align:left;margin:0 0 10px">Vacaciones, feriados, un curso… Esos días nadie puede reservarte. Si ya tenés turnos esos días, se cancelan y les avisamos por la app. La seña no la devuelve TuTiempo: vos los llamás para devolverla o darles otro turno. Antes te mostramos la lista.</p>
    <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="dbf">Desde</label><input id="dbf" type="date" min="${today}" value="${from}"></div><div class="f"><label for="dbt">Hasta</label><input id="dbt" type="date" min="${today}" value="${to}"></div></div>
-   <div class="fchips">${[
+   <div class="fchips fchips-wrap">${[
      [0, "Solo ese día"],
      [6, "1 semana"],
      [13, "2 semanas"],

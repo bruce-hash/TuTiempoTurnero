@@ -195,5 +195,19 @@ ok("resto: sin partes, el medio que anotó el prestador", restSplit({ price: 400
   ok("S21: el checkout trae todo developer y no deja la credencial en el repo", /fetch-depth: 0/.test(wf) && /persist-credentials: false/.test(wf));
 }
 
+// 9/11: el celular no tiene que pedir zoom. El viewport es el del ancho del aparato y NO bloquea el zoom (accesibilidad:
+// sin maximum-scale ni user-scalable=no); los campos van a 16 px en el celular (celular.css, la última hoja)
+{
+  const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+  const vp = (/<meta name="viewport" content="([^"]*)"/.exec(html) || [])[1] || "";
+  const parts = vp.split(",").map((x) => x.trim());
+  ok("9/11: viewport width=device-width, initial-scale=1", parts[0] === "width=device-width" && parts[1] === "initial-scale=1", vp);
+  ok("9/11: el viewport no bloquea el zoom (sin maximum-scale ni user-scalable)", !/maximum-scale|minimum-scale|user-scalable/i.test(vp), vp);
+  const main = fs.readFileSync(path.join(ROOT, "src/main.js"), "utf8");
+  const styles = [...main.matchAll(/import "\.\/styles\/([^"]+)\.css"/g)].map((m) => m[1]);
+  const cel = fs.readFileSync(path.join(ROOT, "src/styles/celular.css"), "utf8");
+  ok("9/11: celular.css es la última hoja y pone los campos a 16 px en el celular", styles.at(-1) === "celular" && /max-width:1023px/.test(cel) && /font-size: 16px !important/.test(cel), styles.join(","));
+}
+
 console.log(F ? `${F} FALLAS` : "TODO OK");
 process.exit(F ? 1 : 0);

@@ -10,12 +10,13 @@ export const depositNote = (style = "") =>
 
 // 4/11 · Bloque 4 (cambia D30): el profesional elige su plazo de acreditación de Mercado Pago, con la tabla del admin al
 // lado (lo que se suma al pago del cliente en cada plazo, con IVA). Si un cobro no coincide, la base avisa y lo manda a
-// "Para revisar"; ya no lo cambia sola. Radios con name="hterm" (los lee Horarios y el alta del negocio).
-export function termPicker(current) {
+// "Para revisar"; ya no lo cambia sola. Radios con name="hterm" en el alta del negocio (se guardan al seguir) y
+// name="pterm" en Perfil → Cobros con Mercado Pago (9/11: antes estaba al final de Horarios; se guarda al tocar).
+export function termPicker(current, name = "hterm") {
   const term = MP_TERMS.some(([value]) => value === current) ? current : "instant";
   const rows = MP_TERMS.map(([value, label]) => {
     const pct = +(store.FEES.mp[value] || 0);
-    return `<label class="termopt"><input type="radio" name="hterm" value="${value}" ${value === term ? "checked" : ""}><span class="term-n">${label}</span><span class="term-p">${pctTxt(pct)}%</span></label>`;
+    return `<label class="termopt"><input type="radio" name="${name}" id="${name}-${value}" value="${value}" ${value === term ? "checked" : ""}><span class="term-n">${label}</span><span class="term-p">${pctTxt(pct)}%</span></label>`;
   }).join("");
   return `<fieldset class="f termpick"><legend>Plazo de acreditación de Mercado Pago</legend>
    <div class="termopts" role="radiogroup">${rows}</div>

@@ -352,6 +352,17 @@ body.am-open{overflow:hidden}
 .bell-btn:hover{border-color:var(--brand-line)}
 .bell-btn[aria-expanded=true]{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 .bell-n{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:99px;background:var(--bad);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 2px var(--card)}
+/* 9/11 · la campanita y el menú de cuenta, del mismo tamaño (40 px) y con el mismo centro, alineados con el logo, con y
+   sin foto y con y sin el número de avisos: los contenedores son flex (sin la línea de texto que en Safari los corría),
+   los botones sin el estilo propio del sistema y la foto del menú de 32 px (.avbtn .av-img la llevaba a 34 y el botón
+   a 42). El número rojo y el punto van encima (position:absolute), así que no cambian el tamaño. */
+.nav{--hd-btn:40px}
+.nav .bellw,.nav .acct{display:flex;align-items:center;flex:none}
+.nav .bell-btn{display:inline-flex;align-items:center;justify-content:center;width:var(--hd-btn);height:var(--hd-btn);padding:0;flex:none;-webkit-appearance:none;appearance:none}
+.nav .bell-btn>span{display:flex}
+.nav .bell-btn .ic{display:block}
+.nav .acct-btn{height:var(--hd-btn);min-width:var(--hd-btn);flex:none;line-height:1;-webkit-appearance:none;appearance:none}
+.nav .acct-btn .av,.nav .acct-btn .av-img{width:32px;height:32px;flex:none}
 .bellpanel{position:absolute;right:-56px;top:calc(100% + 8px);width:min(400px,calc(100vw - 32px));max-height:min(70vh,560px);overflow:auto;padding:12px 14px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.18);z-index:60;text-align:left}
 .bellpanel:focus{outline:none}
 .bellpanel .ag li{padding:10px 0}
