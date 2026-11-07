@@ -184,5 +184,16 @@ ok("resto: sin partes, el medio que anotó el prestador", restSplit({ price: 400
   ok("S20: el checkout no guarda el token de GitHub en .git/config", /persist-credentials: false/.test(steps.find((st) => st.startsWith("uses: actions/checkout")) || ""));
 }
 
+// S21 (8/11): «Verificar prueba» corre solo un commit que ya está en developer (la etiqueta la puede mover cualquiera con
+// permiso de escritura), antes de hacer checkout de ese código y de tocar los secretos
+{
+  const wf = fs.readFileSync(path.join(ROOT, ".github/workflows/verificar-prueba.yml"), "utf8");
+  const anc = wf.indexOf('git merge-base --is-ancestor "$sha" refs/remotes/origin/developer');
+  ok("S21: verificar-prueba revisa que el commit esté en developer", anc > 0);
+  ok("S21: …antes de hacer checkout de ese commit y de correr la verificación con los secretos",
+    anc > 0 && anc < wf.indexOf('git checkout -q "$sha"') && anc < wf.indexOf("secrets.PRUEBA_DB_URL_LECTURA"));
+  ok("S21: el checkout trae todo developer y no deja la credencial en el repo", /fetch-depth: 0/.test(wf) && /persist-credentials: false/.test(wf));
+}
+
 console.log(F ? `${F} FALLAS` : "TODO OK");
 process.exit(F ? 1 : 0);

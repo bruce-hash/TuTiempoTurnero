@@ -18,6 +18,7 @@ registerClick("stk", (ev, el, act) => {
 registerClick("prodDel", (ev, el, act) => {
   S.prodDel = +el.dataset.i;
   S.buyI = null;
+  S.prodEdit = null;
   render();
 });
 registerClick("prodDelNo", (ev, el, act) => {
@@ -35,6 +36,7 @@ registerClick("prodDelYes", (ev, el, act) => {
 });
 registerClick("buyOpen", (ev, el, act) => {
   S.buyI = +el.dataset.i;
+  S.prodEdit = null;
   S.prodOpen = false;
   render();
   const input = $("#bq");
@@ -170,4 +172,58 @@ registerInput("bq", () => {
   if (prod && prod.cost != null && qty > 0) {
     $("#bc").value = String(qty * prod.cost);
   }
+});
+
+// 7/11: editar un producto (nombre, precio de venta y de compra). Las ventas y compras ya cargadas no cambian: cada
+// una guarda su monto.
+registerClick("prodEdit", (ev, el, act) => {
+  S.prodEdit = +el.dataset.i;
+  S.buyI = null;
+  S.prodDel = null;
+  render();
+  const first = $("#pen");
+  if (first) {
+    first.focus();
+  }
+});
+registerClick("prodEditClose", (ev, el, act) => {
+  S.prodEdit = null;
+  render();
+});
+registerSubmit("fProdEdit", (ev) => {
+  const index = S.prodEdit;
+  const prod = store.PRODS[index];
+  if (!prod) {
+    return;
+  }
+  const showErr = (msg) => {
+    $("#perr3").textContent = msg;
+  };
+  const name = $("#pen").value.trim().slice(0, 80);
+  const price = parsePesos($("#pep").value);
+  const costTxt = ($("#pec").value || "").trim();
+  const cost = costTxt === "" ? null : parsePesos(costTxt);
+  if (name.length < 2) {
+    return showErr("Escribí el nombre del producto.");
+  }
+  if (store.PRODS.some((item, i) => i !== index && item.n.toLowerCase() === name.toLowerCase())) {
+    return showErr("Ya tenés otro producto con ese nombre.");
+  }
+  if (isNaN(price) || (cost != null && isNaN(cost))) {
+    return showErr(PESOS_ERR);
+  }
+  if (price <= 0) {
+    return showErr("Ingresá el precio de venta.");
+  }
+  const before = { n: prod.n, p: prod.p, cost: prod.cost };
+  Object.assign(prod, { n: name, p: price, cost: cost });
+  S.prodEdit = null;
+  api.m
+    .editProduct(prod)
+    .then(() => toast("Producto guardado. Las ventas y compras anteriores no cambian."))
+    .catch(() => {
+      Object.assign(prod, before);
+      render();
+    });
+  render();
 });
