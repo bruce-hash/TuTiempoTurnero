@@ -33,6 +33,13 @@ hacer con "Bloquear días o semanas" (Horarios), pero tiene que acordarse de cad
 Recomendación: ArgentinaDatos como fuente principal, con la lista del año guardada en la base. Si la API falla, quedan las
 fechas que ya se habían traído, y el admin ve el error en "Para revisar".
 
+**7/11 (punto 6):** ArgentinaDatos sigue de principal y el calendario público de Google (`es.ar#holiday@group.v.calendar.google.com`,
+`.ics` leído desde el servidor) queda de respaldo: se usa para un año solo si ArgentinaDatos falla o no trae ese año. Del
+`.ics` se sacan las observancias (las marca la descripción) y los días que no son feriado (Jueves Santo, Día de la Madre,
+del Padre, del Niño, de la Primavera); los puentes turísticos se reconocen por el nombre y el resto entra con el tipo
+«Nacional», porque Google no dice si es inamovible o trasladable. El admin ve de qué fuente vino cada año
+(`holiday_years.fetched_from`) y, si vino de Google, que revise los tipos antes de confirmar.
+
 ## Lo que tenés que decidir antes de programarlo
 
 - **Si no elige nada:** el día queda abierto (como hoy) o se cierra solo. Recomendación: abierto, con el aviso de diez

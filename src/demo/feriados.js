@@ -30,8 +30,8 @@ const Y2027 = [
 const demoHolidayRows = (list) => list.map(([day, kind, name]) => ({ day, kind, name, source: "api" }));
 // lo que ve el admin (Comisión → Feriados)
 export const demoHolidayYears = () => [
-  { year: 2026, fetched_at: "2026-10-19T09:23:00Z", fetch_error: null, fetched_count: Y2026.length, source_changed: false, confirmed_at: "2026-01-05T13:00:00Z", days: demoHolidayRows(Y2026) },
-  { year: 2027, fetched_at: "2026-10-19T09:23:00Z", fetch_error: null, fetched_count: Y2027.length, source_changed: false, confirmed_at: null, days: demoHolidayRows(Y2027) },
+  { year: 2026, fetched_at: "2026-10-19T09:23:00Z", fetch_error: null, fetched_from: "argentinadatos", fetched_count: Y2026.length, source_changed: false, confirmed_at: "2026-01-05T13:00:00Z", days: demoHolidayRows(Y2026) },
+  { year: 2027, fetched_at: "2026-10-19T09:23:00Z", fetch_error: null, fetched_from: "google", fetched_count: Y2027.length, source_changed: false, confirmed_at: null, days: demoHolidayRows(Y2027) },
 ];
 // lo que ve el profesional: los de los años confirmados (en la demo atiende todos los días)
 export const demoHolidays = () => demoHolidayRows(Y2026).map((h) => ({ ...h, open: null, works: true }));

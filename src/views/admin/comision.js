@@ -67,7 +67,7 @@ function holidaysPanel() {
     const source = y.fetch_error
       ? `<p class="hint holerr">${ic("aviso")} La fuente falló${y.fetched_at ? ` (${esc(when(y.fetched_at))})` : ""}: ${esc(y.fetch_error)}. Si no se arregla, cargá o corregí los feriados a mano.</p>`
       : y.fetched_at
-        ? `<p class="hint">Traídos de la fuente el ${esc(when(y.fetched_at))}: ${+y.fetched_count || 0}.</p>`
+        ? `<p class="hint">Traídos ${y.fetched_from === "google" ? "del calendario de Google (respaldo: ArgentinaDatos no respondió; revisá los tipos)" : "de ArgentinaDatos"} el ${esc(when(y.fetched_at))}: ${+y.fetched_count || 0}.</p>`
         : '<p class="hint">Todavía no se trajeron de la fuente.</p>';
     const changed = y.source_changed ? `<p class="hint holerr">${ic("aviso")} La fuente cambió después de confirmar (por ejemplo, un traslado por decreto). Revisá la lista, corregí lo que haga falta y volvé a confirmar.</p>` : "";
     const days = (y.days || [])
@@ -78,7 +78,7 @@ function holidaysPanel() {
      ${(!y.confirmed_at || y.source_changed) && (y.days || []).length ? `<button type="button" class="btn btn-pri btn-block" data-act="admHolConfirm" data-y="${y.year}">Confirmar los feriados de ${y.year}</button>` : ""}</div>`;
   };
   return `<div class="panel holpanel-adm"><p class="lbl">${ic("agenda")} Feriados</p>
-   <p class="note" style="text-align:left;margin:0 0 10px">Los nacionales (inamovibles y trasladables) y los días no laborables con fines turísticos; no los provinciales ni los municipales. La lista oficial la trae el servidor de una fuente pública todos los lunes. Revisala y confirmala una vez por año: desde ahí cada profesional la ve en Horarios (Abro / Cierro) y le llega el aviso 7 días antes. Si no elige, el feriado queda abierto.</p>
+   <p class="note" style="text-align:left;margin:0 0 10px">Los nacionales (inamovibles y trasladables) y los días no laborables con fines turísticos; no los provinciales ni los municipales. La lista oficial la trae el servidor todos los lunes de ArgentinaDatos y, si no responde, del calendario público de feriados de Google. Revisala y confirmala una vez por año: desde ahí cada profesional la ve en Horarios (Abro / Cierro) y le llega el aviso 7 días antes. Si no elige, el feriado queda abierto.</p>
    ${years.map(yearBox).join("")}
    <form id="fHol" class="stack" style="gap:8px;margin-top:12px" novalidate><p class="lbl" style="margin:0">Agregar o corregir un feriado</p>
     <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="holD">Fecha</label><input id="holD" type="date"></div>
