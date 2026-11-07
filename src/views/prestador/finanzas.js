@@ -347,10 +347,12 @@ function vCajaDia() {
   }`;
 }
 // C31 (V4 resto): los gastos fijos del mes. Se repiten solos; ✎ cambia el monto "desde este mes en adelante" (los meses
-// cerrados no cambian) y "Dejar de repetirlo" lo saca desde este mes. Los precargados empiezan sin monto.
+// cerrados no cambian) y "Dejar de repetirlo" lo saca desde este mes. Los precargados empiezan sin monto. Solo en el mes
+// actual (S17): los meses pasados se ven, sin ✎.
 function fixedPanel(ym, current, closing) {
   const items = fixedFor(ym);
-  const editable = !closing && ym <= current;
+  // S17 (8/11): se cambian desde el mes actual en adelante; un mes pasado o cerrado queda como está
+  const editable = !closing && ym === current;
   const line = (item) => {
     const row = fixedRow(item, ym);
     const amount = row ? row.m : 0;
@@ -360,9 +362,9 @@ function fixedPanel(ym, current, closing) {
   };
   const total = items.reduce((sum, item) => sum + ((fixedRow(item, ym) || {}).m || 0), 0);
   return `<div class="panel"><p class="lbl">Gastos fijos · ${money(total)}</p>
-   <p class="note" style="text-align:left;margin:-2px 0 10px">Se repiten solos todos los meses. Si aumentan, cambialos con ${ic("editar")}: vale desde ${esc(mes(+ym.slice(5) - 1))} en adelante y los meses cerrados quedan como estaban.</p>
+   ${editable ? `<p class="note" style="text-align:left;margin:-2px 0 10px">Se repiten solos todos los meses. Si aumentan, cambialos con ${ic("editar")}: vale desde ${esc(mes(+ym.slice(5) - 1))} en adelante y los meses cerrados quedan como estaban.</p>` : ""}
    ${items.length ? `<ul class="ag movs">${items.map(line).join("")}</ul>` : '<p class="note" style="text-align:left">No tenés gastos fijos este mes.</p>'}
-   ${editable ? (S.fxEd === "new" ? fixedForm(null, ym, "") : '<button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="fxNew">+ Otro gasto fijo</button>') : closing ? `<p class="note" style="text-align:left;margin:8px 0 0">${ic("candado")} Mes cerrado: los gastos fijos de este mes quedan como están.</p>` : ""}</div>`;
+   ${editable ? (S.fxEd === "new" ? fixedForm(null, ym, "") : '<button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="fxNew">+ Otro gasto fijo</button>') : closing ? `<p class="note" style="text-align:left;margin:8px 0 0">${ic("candado")} Mes cerrado: los gastos fijos de este mes quedan como están.</p>` : ym < current ? `<p class="note fx-past" style="text-align:left;margin:8px 0 0">Los gastos fijos se cambian desde el mes actual en adelante: este mes queda como está.</p>` : ""}</div>`;
 }
 function fixedForm(item, ym, amount) {
   return `<form id="fFixed" class="mediaed" data-id="${item ? item.id : ""}" data-ym="${ym}" novalidate>
