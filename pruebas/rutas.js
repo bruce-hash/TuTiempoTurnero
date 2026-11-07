@@ -18,6 +18,14 @@ const ok = (name, cond, extra = "") => {
 const RESERVED = [...fs.readFileSync(path.join(__dirname, "..", "src", "lib", "rutas.js"), "utf8").matchAll(/^\s+"([a-z0-9-]+)",$/gm)].map((m) => m[1]);
 const SOFIA = "sofia-benitez-studio";
 
+// 8/11 (punto 11): el turno se elige con margen, el primer horario del próximo día abierto (no el «Primer turno», que puede
+// ser dentro de minutos y quedar en el pasado mientras corre la prueba: pasó a las 15:00 en el CI de #61)
+async function turnoConMargen(p) {
+  await p.locator(".wd[data-day]:not(.today):not([disabled]):not(.full)").first().click();
+  await p.waitForTimeout(200);
+  await p.locator(".slots [data-slot]").first().click();
+  await p.waitForTimeout(200);
+}
 (async () => {
   const db = new Client({ connectionString: PG });
   await db.connect();
@@ -206,8 +214,7 @@ const SOFIA = "sofia-benitez-studio";
   await page.goto(BASE + "/" + SOFIA);
   await wait(page, 900);
   await page.click(".sgroup.seg-u .svci");
-  await page.click("[data-quick]");
-  await wait(page, 300);
+  await turnoConMargen(page);
   await page.click("[data-act=reservarT]");
   await wait(page, 900);
   const checkout = here(page);
