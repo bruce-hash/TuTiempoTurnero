@@ -32,6 +32,11 @@ import { vBarbero } from "../views/prestador/panel.js";
 function nav() {
   $("#logoLink").innerHTML = LOGO;
   $("#logoFoot").innerHTML = LOGO;
+  // 7/11: el ícono de cada contacto del footer (WhatsApp y Llamar), una sola vez
+  document.querySelectorAll("footer [data-ic]:not(.has-ic)").forEach((el) => {
+    el.insertAdjacentHTML("afterbegin", ic(el.dataset.ic) + " ");
+    el.classList.add("has-ic");
+  });
   const upcoming = myUpcoming().length;
   const count = upcoming ? `<span class="cnt">${upcoming}</span>` : "";
   const email = S.user && S.user.email;

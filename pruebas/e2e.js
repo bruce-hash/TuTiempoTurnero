@@ -96,12 +96,16 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
   ok("ingreso: el footer dice Ingresar y Registrá tu negocio (sin Acceso prestadores ni Sumate)", /Registrá tu negocio/.test(await pg.locator("footer").innerText()) && !/Acceso prestadores|Sumate/.test(await pg.locator("footer").innerText()));
   ok("General: el footer tiene contacto@tutiempo.com.ar como link mailto y sin @tutiempo.arg",
      (await pg.locator('footer a[href="mailto:contacto@tutiempo.com.ar"]').count()) === 1 && !/@tutiempo\.arg/.test(await pg.locator("footer").innerText()));
-  ok("ingreso: el inicio tiene la puerta Registrá tu negocio debajo del listado", (await pg.locator("#app .bizcta [data-act=bizStart]").count()) === 1);
+  ok("7/11: el inicio ya no tiene el cartel «¿Tenés un negocio?»; queda «Registrá tu negocio» en el footer",
+     (await pg.locator("#app .bizcta").count()) === 0 && !/¿Tenés un negocio\?/.test(await pg.locator("#app").innerText()) && (await pg.locator("footer [data-act=bizStart]").count()) === 1);
   const foot = await pg.locator("footer").innerText();
   const socials = await pg.evaluate(() => [...document.querySelectorAll("footer a[target=_blank]")].map((a) => [a.href, a.rel]));
   ok("V7: footer con teléfono, las cuatro redes (pestaña nueva) y sin Prototipo",
-    (await pg.locator('footer a[href="tel:+542284722825"]').count()) === 1 && !/prototipo/i.test(foot) &&
-    ["instagram.com/tutiempo.arg", "facebook.com/profile.php?id=61592065464698", "youtube.com/channel/UCMQI8_kVvk_7S7_ceHfiKAg", "tiktok.com/@tutiempo_arg"].every((u) => socials.some(([h, r]) => h.includes(u) && /noopener/.test(r))), JSON.stringify(socials));
+    (await pg.locator('footer a[href="tel:+5492284722825"]').count()) === 1 && !/prototipo/i.test(foot) &&
+    ["wa.me/5492284722825", "instagram.com/tutiempo.arg", "facebook.com/profile.php?id=61592065464698", "youtube.com/channel/UCMQI8_kVvk_7S7_ceHfiKAg", "tiktok.com/@tutiempo_arg"].every((u) => socials.some(([h, r]) => h.includes(u) && /noopener/.test(r))), JSON.stringify(socials));
+  ok("7/11: el teléfono del footer abre WhatsApp (pestaña nueva) y al lado «Llamar», cada uno con su ícono",
+     (await pg.locator('footer a[href="https://wa.me/5492284722825"][target=_blank] svg').count()) === 1 && (await pg.locator('footer a[href="tel:+5492284722825"] svg').count()) === 1
+     && /WhatsApp 2284 722825/.test(foot) && /Llamar/.test(foot));
   ok("lista desde la base (2 prestadores)", (await pg.locator(".grid .card").count()) === 2);
   ok("conteo por rubro", (await pg.locator(".segtile.seg-l").innerText()).includes("1 con turnos"));
   await pg.click(".segtile.seg-u"); await wait();
@@ -530,6 +534,11 @@ let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FA
     await pg.click(`[data-act=fxEdit][data-id="${segId}"]`); await wait(200); await pg.click("[data-act=fxStop]");
     ok("C31: «Dejar de repetirlo desde este mes» lo saca", await until("select count(*)::int c from expenses where fixed_id=$1", [segId], (r) => r[0].c === 0));
     await wait(400);
+    // S17 (8/11): un mes pasado se ve sin ✎ (se cambian desde el mes actual en adelante)
+    await pg.click('.wnav [data-fm="-1"]'); await wait(300);
+    ok("S17: en un mes pasado los gastos fijos no se editan", (await pg.locator("[data-act=fxEdit]").count()) === 0 && (await pg.locator("[data-act=fxNew]").count()) === 0
+       && /Los gastos fijos se cambian desde el mes actual en adelante/.test(await txt()));
+    await pg.click('.wnav [data-fm="1"]'); await wait(300);
   }
   await pg.click("[data-act=closeMonth]"); await wait(800);
   ok("mes cerrado en la base", (await q("select count(*)::int c from cash_closings where kind='month'"))[0].c === 1);
