@@ -7,14 +7,14 @@ const { Client } = require("pg");
 const BASE = process.argv[2] || "http://localhost:8787";
 const PG = process.argv[3];
 let F = 0; const ok = (n, c, d) => { if (!c) F++; console.log((c ? "OK   " : "FAIL ") + n); if (!c && d) console.log("     ", d) };
-// 8/11 (punto 1): Crear cuenta empieza con dos opciones; después, la elegida queda arriba con «Cambiar»
-const kindOf = async (p) => {
-  const t = await p.locator(".kindsel").first().innerText().catch(() => "");
-  return /Tengo un negocio/.test(t) ? "biz" : /Quiero reservar turnos/.test(t) ? "client" : null;
-};
 (async () => {
   const db = new Client({ connectionString: PG }); await db.connect();
   const q = async (s, a) => (await db.query(s, a)).rows;
+  // 8/11 (punto 1): Crear cuenta empieza con dos opciones; después, la elegida queda arriba con «Cambiar»
+  const kindOf = async (p) => {
+    const t = await p.locator(".kindsel").first().innerText().catch(() => "");
+    return /Tengo un negocio/.test(t) ? "biz" : /Quiero reservar turnos/.test(t) ? "client" : null;
+  };
   const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 400, height: 900 } }); const pg = await ctx.newPage();
   const errs = [], csp = []; let probing = false;
   pg.on("pageerror", (e) => errs.push(e.message));
