@@ -1,4 +1,4 @@
-import { registerChange, registerSubmit } from "./registro.js";
+import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE, sb } from "../config.js";
 import { demoSignIn } from "../demo/usuarios.js";
@@ -11,30 +11,34 @@ import { clearPending, setPending } from "../lib/pendiente.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
+import { focusFirstField } from "../ui/ingreso.js";
 
-// D32 (2/11): "Tengo un negocio y quiero recibir reservas". Prende o apaga la acción pendiente "negocio" (la misma que
-// abre "Registrá tu negocio"): viaja a Google (sessionStorage) y al link del email (tt_pending) y, al terminar la
-// cuenta, sigue a "Tu negocio". Lo ya escrito no se pierde (la contraseña tampoco, sin guardarla en S).
-registerChange("au_biz", (ev) => {
-  const pass = $("#au_p") ? $("#au_p").value : "";
+// D32 (2/11): la acción pendiente "negocio" (la misma que abre "Registrá tu negocio") viaja a Google (sessionStorage) y
+// al link del email (tt_pending) y, al terminar la cuenta, sigue a "Tu negocio". Lo ya escrito no se pierde.
+// 7/11: las dos opciones de Crear cuenta (y «Cambiar»). "biz" = la acción pendiente "negocio", como la casilla de antes
+// La contraseña ya escrita sobrevive a «Cambiar» (la elección de nuevo no tiene el formulario), sin guardarla en S.
+let keptPass = "";
+registerClick("authKind", (ev, el, act) => {
+  if ($("#au_p")) {
+    keptPass = $("#au_p").value;
+  }
   Object.assign(S.login, {
     nombre: $("#au_n") ? $("#au_n").value : S.login.nombre,
     email: $("#au_e") ? $("#au_e").value : S.login.email,
     tel: $("#au_t") ? $("#au_t").value : S.login.tel,
+    kind: el.dataset.k || null,
   });
-  if (ev.target.checked) {
+  if (el.dataset.k === "biz") {
     setPending({ a: "negocio" });
-  } else {
+  } else if (S.pending && S.pending.a === "negocio") {
     clearPending();
   }
   render();
   if ($("#au_p")) {
-    $("#au_p").value = pass;
+    $("#au_p").value = keptPass;
+    keptPass = "";
   }
-  const box = $("#au_biz");
-  if (box) {
-    box.focus();
-  }
+  focusFirstField();
 });
 // crear cuenta de cliente: valida y, en vivo, la crea en Supabase Auth (si pide confirmar el email, muestra
 // ese paso); en la demo entra directo
