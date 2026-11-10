@@ -632,6 +632,8 @@ async function turnoConMargen(p) {
     await pg.click(`.detail [data-act=undoAsk][data-id="${bc.id}"]`); await pg.waitForSelector(".undo-ask [data-act=undoYes]", { timeout: 8000 }).catch(() => {});
     await pg.click("[data-act=undoYes]");
     ok("10/11: «Volver a Confirmado» queda en la base", await until("select status from bookings where id=$1", [bc.id], (r) => r[0]?.status === "confirmed"));
+    // ese turno de hoy quedó sin marcar: se borra para que no cuente como pendiente en C30
+    await q("delete from bookings where id=$1", [bc.id]);
     // C30 (V4 resto): antes de cerrar el día, lo pendiente: turnos de hoy sin marcar y cobros sin medio de pago (el
     // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba). Se cuentan los pendientes
     // que ya había (otro turno de hoy de esta prueba puede haber empezado). Sin esperas fijas: en el CI, la caja reabierta
