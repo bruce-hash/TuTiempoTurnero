@@ -452,12 +452,23 @@ q("select holiday_notices()")
 hn = one("select id from provider_notices where provider_id = %s and kind = 'holiday'", (pid,))
 D = due()
 hp = [d for d in D.values() if d["tag"] == f"holiday-{hn}"]
-ok("feriados: el aviso va por push al profesional, a Horarios", hn and hp and hp[0]["title"] == "Feriado: ¿abrís?" and hp[0]["url"] == "/panel/horarios"
-   and "es feriado (Feriado Push). ¿Abrís?" in hp[0]["body"], str(hp))
+ok("feriados: el aviso va por push al profesional, a Horarios", hn and hp and hp[0]["title"] == "Feriado: tu agenda está cerrada" and hp[0]["url"] == "/panel/horarios"
+   and "es feriado y tu agenda está cerrada. ¿Vas a trabajar?" in hp[0]["body"], str(hp))
 q("update push_outbox set next_attempt_at = now() where kind = 'holiday' and status = 'pending'")
 q("insert into provider_holidays (provider_id, day, open) values (%s, %s, true)", (pid, fF))
 due()
 ok("feriados: si ya eligió antes de que salga, no se manda", all(r[1] == "skipped" for r in cola(owner, "holiday")) and cola(owner, "holiday"))
+
+# 10/11 · feriados cerrados: el admin agrega un feriado en un día con turnos → «Tenés N turnos…» por push, a la Agenda de ese día
+fB = fF + dt.timedelta(days=1)
+q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s, 'Agendado', 'Corte', 'manual', 'confirmed', %s, %s, 1000)",
+  (pid, dt.datetime.combine(fB, dt.time(10, 0), tzinfo=dt.timezone(dt.timedelta(hours=-3))), dt.datetime.combine(fB, dt.time(10, 30), tzinfo=dt.timezone(dt.timedelta(hours=-3)))))
+q("select admin_holiday_save(%s, 'Feriado Turnos', 'inamovible')", (fB,), uid=admin); q("select admin_holidays_confirm(%s)", (fB.year,), uid=admin)
+hb = one("select id from provider_notices where provider_id = %s and kind = 'holiday_bookings' and ref = %s", (pid, str(fB)))
+D = due()
+hbp = [d for d in D.values() if d["tag"] == f"holiday-{hb}"]
+ok("feriados cerrados: «Tenés N turnos el <día>, que es feriado…» va por push, a la Agenda de ese día",
+   hb and len(hbp) == 1 and hbp[0]["title"] == "Turnos en un feriado" and hbp[0]["url"] == f"/panel/agenda?dia={fB}" and ", que es feriado. Se mantiene" in hbp[0]["body"], str(hbp))
 
 print("TODO OK" if F == 0 else f"{F} FALLAS")
 sys.exit(1 if F else 0)
