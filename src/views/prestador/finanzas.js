@@ -268,7 +268,7 @@ function movLine(line) {
   const actions =
     line.w != null
       ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Editar">${ic("editar")}</button><button class="xbtn" data-act="movDel" data-k="${key}" aria-label="Borrar">✕</button>`
-      : line.rest
+      : line.rest && !store.CLOSINGS["day|" + TODAY()]
         ? `<button class="xbtn" data-act="movEdit" data-k="${key}" aria-label="Cambiar cómo te pagó el resto">${ic("editar")}</button>`
         : "";
   const head = `<li class="${editing || deleting ? "on" : ""}"><span class="ag-t">${esc(line.h || "")}</span><div><b>${line.missing ? ic("espera") : medioIcon(line.medio)} ${esc(line.t)}</b><span>${esc(line.s || "")} · ${esc(line.medio)}</span></div><span style="display:flex;gap:6px;align-items:center"><b class="price ${line.missing ? "rs-miss" : ""}" style="font-size:15px">${money(line.m)}</b>${actions}</span></li>`;

@@ -92,6 +92,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
     «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
     de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
+  - D41 (10/11): «Editar cobro» y «Deshacer asistió» en la ficha del turno atendido (`src/views/prestador/deshacer.js`,
+    `src/actions/deshacer.js`); en la base `undo_attendance` y `attendance_undo_check` (sello ya canjeado → `stamp_redeemed`;
+    caja del día o mes cerrado → `day_closed`, también en `set_rest_method`/`set_rest_parts`).
   - 10/11 (punto 2): en el perfil, elegir un servicio pinta el perfil, el turnero, la confirmación y el pago con la paleta
     de su rubro (`pickSvc` en `src/lib/servicios.js`: `S.pctx` y `S.svcPickedFor`); sin elegir, el rubro principal o el
     de donde vino, con un servicio de ese rubro. El cambio se funde con `renderSmooth()` (View Transitions; sin soporte o

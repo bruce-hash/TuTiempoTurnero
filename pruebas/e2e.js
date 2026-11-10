@@ -664,6 +664,10 @@ async function turnoConMargen(p) {
     if (await pg.locator(`[data-act=reopenDay]`).count()) { await pg.click("[data-act=reopenDay]"); await wait(1500); }
     ok("10/11 caja: la caja de hoy, abierta otra vez para seguir", (await q("select count(*)::int c from cash_closings where provider_id=$1 and kind='day' and period=(now() at time zone 'America/Argentina/Buenos_Aires')::date", [p8.id]))[0].c === 0);
   }
+  // la caja de hoy quedó cerrada más arriba (C30): con la caja cerrada no se cobra el resto (D41), se vuelve a abrir para seguir
+  await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=dia]"); await wait(300);
+  if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(1500); }
+  ok("D41: la caja de hoy, abierta otra vez para seguir", (await q("select count(*)::int c from cash_closings where kind='day' and period=(now() at time zone 'America/Argentina/Buenos_Aires')::date"))[0].c === 0);
   // V4b · C25 "Cargar diferencia": al marcar "Asistió", el resto en dos medios; después se cambia desde la Caja del día
   {
     const [sv] = await q("select s.id, s.provider_id from services s join providers p on p.id=s.provider_id where p.name like 'Sofía%' and s.active order by s.id limit 1");
@@ -698,6 +702,36 @@ async function turnoConMargen(p) {
     await pg.click('.movs [data-act=restMedio][data-m="Transferencia"]'); await wait(800);
     ok("V4b: un solo medio vuelve al resto entero (sin partes)", (await q("select rest_parts, rest_method from bookings where id=$1", [bd.id]))[0].rest_method === "transfer"
        && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
+    // 10/11 · punto 4: desde la ficha del turno atendido, «Editar cobro» y «Deshacer asistió» (con lo que cambia antes)
+    await pg.click("[data-btab=agenda]"); await wait(300);
+    await pg.evaluate((x) => { S.aday = x; S.sel = null; render() }, hoyBA); await wait(300);
+    await pg.click(`.ev[data-sel="${bd.id}"]`); await wait(200);
+    ok("10/11: la ficha del turno atendido tiene «Editar cobro» y «Deshacer asistió»", (await pg.locator(`.detail [data-act=restOpen][data-id="${bd.id}"]`).count()) === 1
+       && (await pg.locator(`.detail [data-act=undoAsk][data-id="${bd.id}"]`).count()) === 1);
+    await pg.click(`.detail [data-act=undoAsk][data-id="${bd.id}"]`); await pg.waitForSelector(".undo-ask [data-act=undoYes]", { timeout: 8000 }).catch(() => {});
+    const undoTxt = await pg.locator(".undo-ask").innerText().catch(() => "");
+    ok("10/11: antes de confirmar dice qué cambia (el cobro del local sale de la caja; Mercado Pago no se toca)",
+       /Se borra lo que anotaste como cobrado en el local/.test(undoTxt) && /\$5\.000 en Transferencia/.test(undoTxt) && /no se devuelve nada/.test(undoTxt), undoTxt);
+    await pg.click("[data-act=undoTo][data-to=noshow]"); await wait(100); await pg.click("[data-act=undoYes]");
+    ok("10/11: «Pasar a No vino» queda en la base, sin el cobro del local", await until("select status, rest_method, rest_parts from bookings where id=$1", [bd.id],
+       (r) => r[0]?.status === "no_show" && r[0].rest_method === null && r[0].rest_parts === null));
+    // con la caja de ese día cerrada: primero «Volver a abrir la caja»
+    const [bc] = await q("insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price, rest_method) values ($1,$2,'Caja Cerrada','Corte','manual','done',($3||' 07:30')::timestamp at time zone 'America/Argentina/Buenos_Aires',($3||' 08:00')::timestamp at time zone 'America/Argentina/Buenos_Aires',4000,'cash') returning id", [sv.provider_id, sv.id, hoyBA]);
+    await q("insert into cash_closings (provider_id, kind, period, income) values ($1, 'day', $2, 4000) on conflict do nothing", [sv.provider_id, hoyBA]);
+    await pg.reload(); await wait(1500);
+    await pg.click("[data-btab=agenda]"); await wait(300);
+    await pg.evaluate((x) => { S.aday = x; S.sel = null; render() }, hoyBA); await wait(300);
+    await pg.click(`.ev[data-sel="${bc.id}"]`); await wait(200);
+    ok("10/11: con la caja cerrada no deja deshacer ni editar el cobro: pide volver a abrirla", (await pg.locator(".detail [data-act=undoAsk], .detail [data-act=restOpen]").count()) === 0
+       && (await pg.locator(".detail [data-act=reopenDay]").count()) === 1 && /está cerrada/.test(await pg.locator(".detail").innerText()));
+    await pg.click(".detail [data-act=reopenDay]");
+    ok("10/11: …y al volver a abrirla, aparecen las opciones", await until("select count(*)::int c from cash_closings where provider_id=$1 and kind='day' and period=$2", [sv.provider_id, hoyBA], (r) => r[0].c === 0)
+       && (await pg.locator(`.detail [data-act=undoAsk][data-id="${bc.id}"]`).count()) === 1);
+    await pg.click(`.detail [data-act=undoAsk][data-id="${bc.id}"]`); await pg.waitForSelector(".undo-ask [data-act=undoYes]", { timeout: 8000 }).catch(() => {});
+    await pg.click("[data-act=undoYes]");
+    ok("10/11: «Volver a Confirmado» queda en la base", await until("select status from bookings where id=$1", [bc.id], (r) => r[0]?.status === "confirmed"));
+    // ese turno de hoy quedó sin marcar: se borra para que no cuente como pendiente en C30
+    await q("delete from bookings where id=$1", [bc.id]);
     // 10/11 · punto 7: turno reservado por la app con seña de Mercado Pago → Asistió → el resto en uno y en dos medios;
     // queda en la Caja del día y en Finanzas. Uno de mañana no ofrece «Asistió» (la base lo rechaza: too_early)
     {

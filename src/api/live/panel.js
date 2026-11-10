@@ -112,6 +112,10 @@ export const livePanel = {
     await livePanel.loadFixed(S.me);
   },
   // C22 (V3b): vuelve a pedir solo los turnos del panel (60 días atrás, 120 adelante). true si cambió algo.
+  // 10/11 · punto 4: antes de deshacer «Asistió», qué pasa con el sello y si la caja de ese día está cerrada
+  async undoCheck(bookingId) {
+    return call(sb.rpc("attendance_undo_check", { p_booking: bookingId }));
+  },
   async refreshAgenda() {
     const pid = S.me;
     if (!pid) {

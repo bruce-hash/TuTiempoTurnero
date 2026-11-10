@@ -20,6 +20,7 @@ import { sendOffer } from "./ofrecer.js";
 registerClick("selClose", (ev, el, act) => {
   S.sel = null;
   S.bAsk = null;
+  S.undoAsk = null;
   render();
 });
 // “Ofrecer” un hueco libre: a cada seguidor le llega un aviso en la app y un push para reservarlo (4/11; antes se
