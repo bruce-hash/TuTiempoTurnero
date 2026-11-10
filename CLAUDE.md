@@ -95,6 +95,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - D41 (10/11): «Editar cobro» y «Deshacer asistió» en la ficha del turno atendido (`src/views/prestador/deshacer.js`,
     `src/actions/deshacer.js`); en la base `undo_attendance` y `attendance_undo_check` (sello ya canjeado → `stamp_redeemed`;
     caja del día o mes cerrado → `day_closed`, también en `set_rest_method`/`set_rest_parts`).
+  - 10/11 (punto 2): en el perfil, elegir un servicio pinta el perfil, el turnero, la confirmación y el pago con la paleta
+    de su rubro (`pickSvc` en `src/lib/servicios.js`: `S.pctx` y `S.svcPickedFor`); sin elegir, el rubro principal o el
+    de donde vino, con un servicio de ese rubro. El cambio se funde con `renderSmooth()` (View Transitions; sin soporte o
+    con movimiento reducido, directo).
   - D42 (10/11): la Caja de los últimos 7 días se corrige (`dayState`, `walksOf` en `src/views/prestador/finanzas.js`); en la
     base, `cash_day_state` (open, day_closed, month_closed, day_too_old) con triggers en `walkins`, el resto de `bookings` y
     `cash_closings`; el registro de cambios de un día reabierto en `cash_day_log` (`my_cash_day`).

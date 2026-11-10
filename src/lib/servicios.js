@@ -4,6 +4,17 @@ import { RUBRO } from "./rubros.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 
+// 10/11 · punto 2: elegir un servicio en el perfil (a mano, el premio, volver a reservar, reprogramar o desde la dirección):
+// el perfil, el turnero, la confirmación y el pago toman la paleta del rubro de ese servicio
+export function pickSvc(prov, index) {
+  S.svc = index >= 0 ? index : 0;
+  const cat = prov && prov.svcs[S.svc] && prov.svcs[S.svc][3];
+  if (cat && prov.cats.includes(cat)) {
+    S.pctx = cat;
+    S.svcPickedFor = prov.id;
+  }
+}
+
 // Retoque sugerido (días), indicación previa y adicionales de ejemplo de algunos servicios, por nombre.
 const META = {
   "Corte premium": [

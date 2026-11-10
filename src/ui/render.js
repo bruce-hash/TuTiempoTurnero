@@ -168,6 +168,19 @@ export function render() {
     }
   }
 }
+// 10/11 · punto 2: si el dibujo nuevo cambia la paleta del rubro (elegir un servicio de otro rubro en un perfil), el
+// cambio de color se funde en lugar de saltar (View Transitions; sin soporte o con movimiento reducido, como siempre)
+export function renderSmooth() {
+  const before = document.body.dataset.seg;
+  const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (S.booting || reduce || typeof document.startViewTransition !== "function" || segNow() === before) {
+    render();
+    return;
+  }
+  document.documentElement.classList.add("seg-swap");
+  const swap = document.startViewTransition(() => render());
+  swap.finished.finally(() => document.documentElement.classList.remove("seg-swap"));
+}
 function renderInner() {
   // la ventana de ingreso se anima solo al abrirse (no en cada dibujo mientras está abierta)
   const modalWasOpen = !!document.querySelector(".authmodal");

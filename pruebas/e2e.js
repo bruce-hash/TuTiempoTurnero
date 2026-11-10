@@ -139,6 +139,13 @@ async function turnoConMargen(p) {
   ok("perfil con 3 grupos de servicios", (await pg.locator(".sgroup").count()) === 3);
   ok("perfil sin teléfono; seña con Mercado Pago y resto en efectivo o MP", !(await txt()).includes("111222") && !(await txt()).includes("Teléfono") && (await txt()).includes("Seña con Mercado Pago"));
   ok("perfil sin “Desde” sobre la foto", (await pg.locator(".phero .ph-price").count()) === 0);
+  // 10/11 · punto 2: entra con el color del rubro de donde vino (Uñas) y con un servicio de ese rubro elegido; al elegir
+  // un servicio de otro rubro, el perfil (turnero, confirmación y pago) toma la paleta de ese rubro
+  ok("10/11: el perfil entra con la paleta de Uñas y un servicio de Uñas elegido", (await seg()) === "u" && (await pg.locator('.sgroup.seg-u .svci[aria-pressed="true"]').count()) === 1);
+  await pg.click(".sgroup.seg-l .svci"); await wait(600);
+  ok("10/11: al elegir un servicio de Pestañas, la paleta pasa a Pestañas", (await seg()) === "l" && (await pg.locator('.sgroup.seg-l .svci[aria-pressed="true"]').count()) === 1);
+  await pg.click(".sgroup.seg-u .svci"); await wait(600);
+  ok("10/11: …y vuelve a Uñas al elegir uno de Uñas", (await seg()) === "u");
   await pg.click(".sgroup.seg-u .svci"); await wait(200);
   ok("indicaciones en el perfil, sin adicionales", (await pg.locator("[data-add]").count()) === 0 && (await txt()).includes("Venir sin esmalte"));
   await turnoConMargen(pg);

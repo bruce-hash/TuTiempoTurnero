@@ -6,7 +6,7 @@ import { errMsg } from "../../lib/errores.js";
 import { dayLabel } from "../../lib/fechas.js";
 import { FOLLOW, avatar, noSlots, ph, pr } from "../../lib/prestadores.js";
 import { CAT, RAMP, catInfo, catName, pcat } from "../../lib/rubros.js";
-import { svcMeta } from "../../lib/servicios.js";
+import { pickSvc, svcMeta } from "../../lib/servicios.js";
 import { cfg } from "../../lib/turnero.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
@@ -55,10 +55,18 @@ export function vPerfil() {
     const rewardSvc = svcByKey(prov, S.rewardFor.sk);
     S.rewardFor = null;
     if (rewardSvc) {
-      S.svc = prov.svcs.indexOf(rewardSvc);
+      pickSvc(prov, prov.svcs.indexOf(rewardSvc));
     }
   }
   const seg = pcat(prov, S.pctx);
+  // 10/11 · punto 2: mientras la persona no eligió un servicio, el elegido es el primero del rubro con que se pinta el
+  // perfil (el principal, o el de donde vino), así la paleta y el servicio coinciden
+  if (S.svcPickedFor !== prov.id && prov.svcs[S.svc] && prov.svcs[S.svc][3] !== seg) {
+    const first = prov.svcs.findIndex((svc) => svc[3] === seg);
+    if (first >= 0) {
+      S.svc = first;
+    }
+  }
   const conf = cfg(prov.id);
   const happyOn = conf.on && conf.happy.on;
   const provComm = comm(prov.id);
