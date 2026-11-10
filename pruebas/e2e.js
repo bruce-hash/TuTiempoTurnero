@@ -1729,9 +1729,12 @@ async function turnoConMargen(p) {
     await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".tl, .agwk", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
     // 8/11 (punto 11): desde mañana, así el hueco no empieza dentro de minutos (offer_past si la prueba tarda)
     const hoyOf = (await q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date::text d"))[0].d;
-    for (let i = 1; i <= 10 && !(await ps.locator("[data-act=offerGap]:not([disabled])").count()); i++) {
+    // siempre desde mañana (antes, si hoy quedaba un hueco usaba el de hoy: según la hora, un cobro sin turno recién
+    // cargado tapaba su «Ofrecer» y el clic no llegaba)
+    for (let i = 1; i <= 10; i++) {
       const d = (await q("select ($1::date + $2::int)::text d", [hoyOf, i]))[0].d;
       await ps.evaluate((x) => { S.aday = x; S.awk = null; render(); }, d); await ps.waitForTimeout(250);
+      if (await ps.locator("[data-act=offerGap]:not([disabled])").count()) break;
     }
     const g2 = await ps.locator("[data-act=offerGap]:not([disabled])").first().getAttribute("data-g");
     await ps.click(`[data-act=offerGap][data-g="${g2}"]`);
