@@ -332,6 +332,23 @@ mp.pago({ id: "9003", collector: "1001", status: "approved", amount: 6000, fee: 
 await webhook(pid, A.id, "9003");
 ok("b) sin application_fee → pago en revisión (fee_missing)", JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9003'")) === '["fee_missing"]');
 
+// ---------- D43 (10/11): con el profesional suspendido no se crea el cobro, y un pago que igual llega se devuelve ----------
+{
+  const bs = await book();
+  const [tot, fe] = Object.values((await q("select deposit + client_fee + mp_fee - paid_wallet as t, client_fee as f from bookings where id = $1", [bs[0]]))[0]).map(Number);
+  await q("update providers set status = 'suspended' where id = $1", [pid]);
+  const n0 = mp.preferencias.length;
+  r = await preference(cli, bs);
+  ok("D43: mp-create-preference no crea el cobro de un profesional suspendido (provider_not_available)",
+     r.status === 409 && (await body(r)).error === "provider_not_available" && mp.preferencias.length === n0);
+  mp.pago({ id: "9043", collector: "1001", status: "approved", amount: tot, fee: fe, ref: bs.join(",") });
+  r = await webhook(pid, A.id, "9043");
+  ok("D43: un pago aprobado que igual llega por el webhook se devuelve (provider_suspended) y el turno no se confirma",
+     r.status === 200 && (await st(bs[0])) === "expired"
+     && Number(await one("select count(*) from refunds rf join payments p on p.id = rf.payment_id where p.mp_payment_id = '9043' and rf.reason = 'provider_suspended' and rf.amount = $1", [tot])) === 1);
+  await q("update providers set status = 'active' where id = $1", [pid]);
+}
+
 // ---------- 5. H23: desconectar ----------
 const h1 = await book();
 await preference(cli, h1);                                   // el cliente ya está pagando

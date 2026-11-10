@@ -168,10 +168,12 @@ export const liveAdmin = {
       },
     });
     if (pref.error || !pref.data || !pref.data.init_point) {
+      const why = await pref.error?.context?.json?.().catch(() => null);
       await sb.rpc("cancel_by_client", {
         p_booking: res.booking_ids[0],
       });
-      throw new Error("No pudimos abrir Mercado Pago. Probá de nuevo.");
+      // D43: el profesional no está activo (suspendido): el mensaje de book_slot para ese error (errores.js)
+      throw new Error(why && why.error === "provider_not_available" ? "provider_not_available" : "No pudimos abrir Mercado Pago. Probá de nuevo.");
     }
     // 4/11: el cobro queda guardado en la app (turno y token de regreso) para confirmarlo al volver, aunque la vuelta
     // de Mercado Pago se abra en otro navegador (iPhone con la app instalada)
@@ -187,7 +189,13 @@ export const liveAdmin = {
     const pref = await sb.functions.invoke("mp-create-preference", { body: { booking_ids: ids, app: isStandalone() } });
     if (pref.error || !pref.data || !pref.data.init_point) {
       const why = await pref.error?.context?.json?.().catch(() => null);
-      throw new Error(why && why.error === "hold_expired" ? "El horario ya se liberó. Elegí otro." : "No pudimos abrir Mercado Pago. Probá de nuevo.");
+      throw new Error(
+        why && why.error === "hold_expired"
+          ? "El horario ya se liberó. Elegí otro."
+          : why && why.error === "provider_not_available"
+            ? "provider_not_available"
+            : "No pudimos abrir Mercado Pago. Probá de nuevo.",
+      );
     }
     savePendingPay(pref.data.token, pref.data.booking || ids[0]);
     safeRedirect(pref.data.init_point);

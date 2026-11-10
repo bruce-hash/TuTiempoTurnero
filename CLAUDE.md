@@ -113,6 +113,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     `SUSPENDED_MEANS`, una línea por cosa) y `suspension()` en `src/lib/alta.js` (de `my_setup`). El admin suspende con un motivo
     opcional (`admin_set_provider(..., p_reason)` → `provider_private.suspended_reason`, sin grant de lectura); el trigger
     `providers_status_notice` deja los avisos `suspended`/`reactivated` (campanita, push `account` y email: `email_outbox.notice_id`).
+    Un pago que llega con el profesional no activo se devuelve (`provider_suspended` en `confirm_payment_core`) y `mp-create-preference` no cobra.
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma

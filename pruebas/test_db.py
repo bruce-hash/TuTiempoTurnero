@@ -1285,6 +1285,7 @@ ok("D43: el admin lo ve en la ficha (aparte de las notas privadas)", [x.get("sus
 avS = avisosS()
 ok("D43: le queda el aviso «suspendida» en la campanita, con el motivo y cómo resolverlo", [a[0] for a in avS] == ["suspended"]
    and "Motivo: Fotos de trabajos ajenos <b>." in avS[0][1] and "contacto@tutiempo.com.ar" in avS[0][1] and "WhatsApp" in avS[0][1]
+   and "Tus turnos ya reservados siguen en pie" in avS[0][1]
    and [n["kind"] for n in q("select my_provider_notices()", uid=ownS)[0][0]] == ["suspended"])
 ok("D43: …y se encolan el push (tipo account) y el email", pushS() == 1 and cuentaS() == ["suspended"])
 pd = [r for r in q("select title, body, url from push_due(100)", role="service_role") if r[0].startswith("Tu cuenta")]
@@ -1312,6 +1313,9 @@ ok("D43: con la cuenta otra vez suspendida, el email de «activa de nuevo» pend
                                                                "where n.provider_id = %s and n.kind = 'reactivated'", (pS,))[0] == ("skipped", "stale"))
 q("update providers set status = 'active' where id = %s", (pS,))
 ok("D43: un cambio de estado por otro camino (sin el admin) también avisa", avisosS()[-1][0] == "reactivated")
+ok("D43: con un motivo de 280 letras el aviso entra entero (con el contacto al final)", not err(q("select admin_set_provider(%s,'suspended',null,%s)", (pS, "y" * 280), uid=adm))
+   and avisosS()[-1][0] == "suspended" and avisosS()[-1][1].endswith("o a contacto@tutiempo.com.ar.") and ("y" * 280) in avisosS()[-1][1])
+q("update providers set status = 'active' where id = %s", (pS,))
 ok("D43: la cola de emails no acepta una fila sin aviso ni con los dos", err(q("insert into email_outbox (user_id, kind, expires_at) values (%s, 'account', now() + interval '1 day')", (ownS,)))
    and err(q("insert into email_outbox (message_id, notice_id, user_id, kind, expires_at) select m.id, n.id, %s, 'account', now() + interval '1 day' "
              "from client_messages m, provider_notices n limit 1", (ownS,))))

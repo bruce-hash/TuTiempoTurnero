@@ -16,6 +16,8 @@ export const SUSPENDED_MEANS = [
   "No aparecés en el listado de TuTiempo.",
   "No recibís reservas nuevas.",
   "No podés mandar avisos ni ofertas a tus seguidores.",
+  // 10/11 (Bruno, D43)
+  "Tus turnos ya reservados siguen en pie: atendelos como siempre (o cancelalos desde la Agenda, con devolución al cliente).",
 ];
 
 export function suspendedBanner() {

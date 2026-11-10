@@ -32,8 +32,11 @@ Deno.serve(async (req) => {
 
     // Se cobra con la llave de la cuenta ACTIVA del prestador: la seña entra directo a su cuenta de Mercado Pago.
     // Una cuenta desconectada (solo devoluciones y consultas) nunca crea cobros.
-    const [acc, provRes] = await Promise.all([activeAccount(db, pid), db.from("providers").select("name").eq("id", pid).single()]);
+    const [acc, provRes] = await Promise.all([activeAccount(db, pid), db.from("providers").select("name, status").eq("id", pid).single()]);
     const prov = must("leer el nombre del prestador", provRes);
+    // D43 (10/11): un profesional suspendido (o no activo) no cobra señas, aunque la reserva se haya hecho antes. Si igual
+    // llega un pago, confirm_payment_core lo devuelve (provider_suspended).
+    if (prov?.status !== "active") return json({ error: "provider_not_available" }, 409, h);
     const token = await accountToken(db, acc, { charge: true });
     if (!acc || !token) return json({ error: "provider_mp_not_connected" }, 409, h);
 

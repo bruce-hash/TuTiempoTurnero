@@ -1782,7 +1782,7 @@ async function turnoConMargen(p) {
       const ab = await ps.locator(".suspbox").innerText().catch(() => "");
       ok("D43: en la Agenda, «Tu cuenta está suspendida» con el motivo, qué significa y cómo resolverlo (WhatsApp y email)",
          /Tu cuenta está suspendida/.test(ab) && ab.includes("Motivo: " + WHY) && /No aparecés en el listado/.test(ab) && /No recibís reservas nuevas/.test(ab)
-         && /No podés mandar avisos ni ofertas a tus seguidores/.test(ab)
+         && /No podés mandar avisos ni ofertas a tus seguidores/.test(ab) && /Tus turnos ya reservados siguen en pie: atendelos como siempre/.test(ab)
          && (await ps.locator('.suspbox a[href="https://wa.me/5492284722825"][target=_blank][rel=noopener]').count()) === 1
          && (await ps.locator('.suspbox a[href="mailto:contacto@tutiempo.com.ar"]').count()) === 1, ab);
       ok("D43: el aviso va arriba de todo (sobre la cabecera del panel) y entra en el celular",
