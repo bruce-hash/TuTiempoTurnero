@@ -11,6 +11,7 @@ import { freeGaps } from "../../lib/huecos.js";
 import { feeOf } from "./finanzas.js";
 import { restOf } from "../../lib/resto.js";
 import { restEditor, restSummary } from "./resto.js";
+import { dayState } from "./finanzas.js";
 import { ic } from "../../ui/iconos.js";
 import { followersBlockedNote, provActive } from "../../lib/alta.js";
 
@@ -21,6 +22,17 @@ function doneRest(item) {
     return "";
   }
   const loaded = !!item.restMethod || !!(item.restParts && item.restParts.length);
+  // 10/11 · D42: con la caja de ese día cerrada (o su mes, o de hace más de 7 días) el cobro no se anota ni se cambia
+  const state = dayState(item.date);
+  if (state !== "open") {
+    const why =
+      state === "day_closed"
+        ? `La caja de ese día está cerrada: para anotar cómo te pagó el resto, primero volvé a abrirla.</p><button type="button" class="btn btn-ghost btn-block" data-act="reopenDay" data-d="${item.date}">Volver a abrir la caja</button>`
+        : state === "month_closed"
+          ? "El mes de este turno está cerrado en Finanzas: para cambiar el cobro, primero volvé a abrir el mes.</p>"
+          : "La caja de hace más de 7 días solo se ve.</p>";
+    return `${loaded ? `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span></div>` : ""}<p class="note" style="text-align:left;margin:10px 0 8px">${why}`;
+  }
   if (!loaded || S.restEd === item.id) {
     return `<div class="restbox">${restEditor(item, loaded ? "restClose" : null)}</div>`;
   }

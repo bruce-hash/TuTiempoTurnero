@@ -81,6 +81,9 @@ const ERRS = {
   empty_note: "Escribí la nota.",
   too_many_notes: "Ese profesional ya tiene demasiadas notas.",
   month_closed: "El mes está cerrado: reabrilo para cambiarlo.",
+  // 10/11 · punto 8: la Caja de los últimos 7 días
+  day_too_old: "Esa caja es de hace más de 7 días: solo se puede ver.",
+  day_closed: "La caja de ese día está cerrada: volvé a abrirla para corregirla.",
   // 10/11 · punto 7: marcar «Asistió» o «No vino»
   too_early: "Todavía falta para ese turno: «Asistió» y «No vino» se marcan desde 12 horas antes.",
   bad_state: "Ese turno ya cambió (se canceló, se marcó o sigue esperando el pago). Mirá la Agenda de nuevo.",

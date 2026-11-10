@@ -1436,6 +1436,61 @@ ok("7/11 avisos: «Borrar los leídos» borra solo los leídos", q("select dismi
 q("insert into provider_notices (provider_id, kind, ref, body) values (%s, 'new_follower', 'a1', 'Ana te sigue') on conflict do nothing", (pN,))
 ok("7/11 avisos: uno borrado que se vuelve a generar (mismo tipo y referencia) no reaparece", len(q("select my_provider_notices()", uid=ownN)[0][0]) == 1)
 
+# ---------- 10/11 · punto 8: corregir la Caja de los últimos 7 días ----------
+own8 = mkuser("caja8@test.ar", "Caja Ocho")
+p8 = q("select register_provider('Caja Siete Dias', 'Calle 8', array['b'], '2284 8888', null)", uid=own8)[0][0]
+q("update providers set status='active' where id=%s", (p8,))
+otro8 = mkuser("otro8@test.ar", "Otro Ocho")
+hoy8 = dt.datetime.now(tz).date()
+d3, d9 = hoy8 - dt.timedelta(days=3), hoy8 - dt.timedelta(days=9)
+at8 = lambda d, h=12: dt.datetime.combine(d, dt.time(h, 0), tz)
+walk8 = lambda d, amount=5000, desc="Corte sin turno", uid=own8: q("insert into walkins (provider_id, at, kind, description, amount, method) values (%s,%s,'service',%s,%s,'cash') returning id", (p8, at8(d), desc, amount), uid=uid)
+st8 = lambda d: q("select my_cash_day(%s)", (d,), uid=own8)[0][0]
+ok("10/11 caja: hoy y un día de los últimos 7 se corrigen", not err(walk8(hoy8)) and not err(walk8(d3)) and st8(d3)["state"] == "open")
+ok("10/11 caja: más de 7 días atrás no (también escribiendo directo)", err(walk8(d9), "day_too_old") and st8(d9)["state"] == "day_too_old")
+w3 = q("select id from walkins where provider_id=%s and at=%s", (p8, at8(d3)))[0][0]
+q("insert into walkins (provider_id, at, kind, description, amount, method) values (%s,%s,'service','Viejo',1000,'cash')", (p8, at8(d9)))  # cargado antes (sin sesión)
+w9 = q("select id from walkins where provider_id=%s and at=%s", (p8, at8(d9)))[0][0]
+ok("10/11 caja: …ni se cambia ni se borra uno de hace más de 7 días", err(q("update walkins set amount=2000 where id=%s", (w9,), uid=own8), "day_too_old")
+   and err(q("delete from walkins where id=%s", (w9,), uid=own8), "day_too_old") and q("select amount from walkins where id=%s", (w9,))[0][0] == 1000)
+b8 = q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,'Resto Ocho','Corte','manual','done',%s,%s,8000) returning id",
+       (p8, at8(d3, 15), at8(d3, 15) + dt.timedelta(minutes=30)))[0][0]
+q("insert into cash_closings (provider_id, kind, period, income) values (%s,'day',%s,13000)", (p8, d3), uid=own8)
+ok("10/11 caja: con la caja de ese día cerrada no se agrega, cambia ni borra nada", err(walk8(d3), "day_closed")
+   and err(q("update walkins set amount=6000 where id=%s", (w3,), uid=own8), "day_closed") and err(q("delete from walkins where id=%s", (w3,), uid=own8), "day_closed")
+   and err(q("select set_rest_method(%s,'transfer')", (b8,), uid=own8), "day_closed") and st8(d3)["state"] == "day_closed")
+ok("10/11 caja: un día de hace más de 7 días cerrado no se vuelve a abrir", (lambda: (q("insert into cash_closings (provider_id, kind, period, income) values (%s,'day',%s,1000)", (p8, d9)),
+   err(q("delete from cash_closings where provider_id=%s and kind='day' and period=%s", (p8, d9), uid=own8), "day_too_old"))[1])()
+   and q("select count(*) from cash_closings where provider_id=%s and kind='day' and period=%s", (p8, d9))[0][0] == 1)
+q("delete from cash_closings where provider_id=%s and kind='day' and period=%s", (p8, d3), uid=own8)
+fin_walk = lambda: q("select walk from provider_finance(%s, %s) where day=%s", (d3, d3, d3), uid=own8)[0][0]
+w0 = fin_walk()
+ok("10/11 caja: volver a abrirla queda en el registro", st8(d3)["state"] == "open" and [x["kind"] for x in st8(d3)["log"]] == ["reopen"] and "13.000" in st8(d3)["log"][0]["detail"])
+walk8(d3, 2500, "Barba sin turno"); q("update walkins set amount=7000, method='transfer' where id=%s", (w3,), uid=own8)
+wb = q("select id from walkins where provider_id=%s and description='Barba sin turno'", (p8,))[0][0]
+q("delete from walkins where id=%s", (wb,), uid=own8)
+q("select set_rest_parts(%s, %s::jsonb)", (b8, '[{"method":"cash","amount":5000},{"method":"mp","amount":3000}]'), uid=own8)
+q("insert into cash_closings (provider_id, kind, period, income) values (%s,'day',%s,15000)", (p8, d3), uid=own8)
+lg = st8(d3)["log"]
+ok("10/11 caja: cada cambio sobre el día reabierto queda registrado (qué y cuándo), hasta cerrarla de nuevo",
+   [x["kind"] for x in lg] == ["reopen", "add", "edit", "delete", "rest", "close"] and "Barba sin turno · $2.500 en Efectivo" in lg[1]["detail"]
+   and "$5.000 en Efectivo → $7.000 en Transferencia" in lg[2]["detail"] and "Resto de Resto Ocho: $5.000 en Efectivo + $3.000 en Mercado Pago" in lg[4]["detail"]
+   and "$15.000" in lg[5]["detail"] and all(x["at"] for x in lg), json.dumps(lg)[:500])
+ok("10/11 caja: Finanzas se pone al día sola con los cambios", fin_walk() == w0 + 2000, f"{w0} → {fin_walk()}")
+ok("10/11 caja: un día que nunca se cerró no lleva registro", st8(hoy8)["log"] == [])
+# mes cerrado: no se reabre ni se corrige un día de ese mes
+m8 = d3.replace(day=1)
+q("insert into cash_closings (provider_id, kind, period) values (%s,'month',%s)", (p8, m8), uid=own8)
+ok("10/11 caja: con el mes cerrado, un día de ese mes no se vuelve a abrir ni se corrige",
+   err(q("delete from cash_closings where provider_id=%s and kind='day' and period=%s", (p8, d3), uid=own8), "month_closed")
+   and err(walk8(d3), "month_closed") and st8(d3)["state"] == "month_closed")
+q("delete from cash_closings where provider_id=%s and kind='month' and period=%s", (p8, m8), uid=own8)
+ok("10/11 caja: …al reabrir el mes, sí", not err(q("delete from cash_closings where provider_id=%s and kind='day' and period=%s", (p8, d3), uid=own8)) and st8(d3)["state"] == "open")
+ok("10/11 caja: el registro lo ve solo su profesional y no se escribe desde la app",
+   q("select count(*) from cash_day_log where provider_id=%s", (p8,), uid=otro8)[0][0] == 0
+   and err(q("insert into cash_day_log (provider_id, day, kind, detail) values (%s,%s,'add','x')", (p8, d3), uid=own8))
+   and err(q("select my_cash_day(%s)", (d3,), role="anon")) and err(q("select my_cash_day(%s)", (d3,), uid=otro8), "not_provider")
+   and err(q("select cash_day_log_add(%s,%s,'add','x')", (p8, d3), uid=own8)))
 # ---------- 10/11 · punto 10 · eliminar clientes y bloquear (D45) ----------
 ownB = mkuser("bloq-prof@test.ar", "Bloq Prof")
 pB = q("select register_provider('Corte Fino Barber', 'Calle 10', array['b'], '2284 1010', null)", uid=ownB)[0][0]

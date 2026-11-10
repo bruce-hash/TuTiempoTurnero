@@ -84,6 +84,14 @@ export const demoApi = {
     const prov = P.find((item) => item.slug === slug);
     return prov ? prov.id : null;
   },
+  // 10/11 · punto 8: en la demo no hay registro de cambios de la caja
+  async cashDay() {
+    return null;
+  },
+  // en la demo Finanzas sale de lo que está en memoria
+  async finance() {
+    return store.FIN;
+  },
   m: new Proxy(
     {},
     {

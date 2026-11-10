@@ -302,6 +302,20 @@ export const livePanel = {
     return store.MBRK[year];
   },
   // 4/11 · Bloque 4: lo cargado sin turno (y las ventas) de otro día, para la Caja del día de esa fecha
+  // 10/11 · punto 8: el estado de un día de la caja (open, day_closed, month_closed, day_too_old) y su registro de cambios
+  // 10/11 · punto 8: solo Finanzas (los últimos 29 días y los meses), después de corregir la caja de otro día; más liviano
+  // que volver a cargar todo el panel
+  async finance() {
+    const finance = await call(sb.rpc("provider_finance", { p_from: dkey(addDays(-29)), p_to: dkey(addDays(-1)) }));
+    store.FIN = (finance || []).map((row) => ({ date: row.day, app: row.app, man: row.man, walk: row.walk, prod: row.prod }));
+    store.MTOT = {};
+    store.MBRK = {};
+    return store.FIN;
+  },
+  async cashDay(day) {
+    store.CASHDAY[day] = await call(sb.rpc("my_cash_day", { p_day: day }));
+    return store.CASHDAY[day];
+  },
   async walkinsOn(day) {
     const rows = await call(
       sb
