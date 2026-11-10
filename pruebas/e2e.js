@@ -851,7 +851,8 @@ async function turnoConMargen(p) {
   const sg = await q("select s.name, s.stamp_goal from services s join providers p on p.id=s.provider_id where p.name like 'Sofía%' and s.stamp_goal is not null");
   ok("tarjeta solo en Esmaltado, con 16 sellos", sg.length === 1 && sg[0].name === "Esmaltado semipermanente" && sg[0].stamp_goal === 16);
   ok("tarjetas activadas en la base", (await q("select stamps_on from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].stamps_on === true);
-  await pg.click("[data-btab=clientes]"); await wait(300); await pg.click(".clist [data-cli]"); await wait(300);
+  // Ana por nombre (la lista va por última visita y otras pruebas cargan clientes atendidos hoy)
+  await pg.click("[data-btab=clientes]"); await wait(300); await pg.click('.clist [data-cli*="Ana"]'); await wait(300);
   ok("v2: el cliente se ve sin la ficha (números y teléfono)", (await pg.locator("#fNotas").count()) === 0 && /Visitas[\s\S]*Faltas[\s\S]*Gastó en total[\s\S]*Última visita/.test(await txt()) && (await pg.locator("#app .panel.contact .hint svg.ic").count()) > 0);
   await pg.click(`[data-act=stampAdd][data-sk="${esm}"]`); await wait(800);
   const anaStamps = async () => ((await q("select stamps from loyalty_cards lc join auth.users u on u.id=lc.user_id where u.email='ana@test.ar' and lc.service_id=$1", [esm]))[0] || {}).stamps || 0;
