@@ -673,6 +673,9 @@ async function turnoConMargen(p) {
        && (pend0 ? (await pg.locator('.pendday li:has-text("Pendiente C30")').count()) === 0 && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText())
                  : (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText())));
     // C36 (V4 resto): precio de compra y "Vendí uno" desde Productos, que entra en la Caja del día
+    // D46: con el mes cerrado el stock inicial (con su gasto) no entra: el mes que se cerró más arriba se vuelve a abrir
+    await q("delete from cash_closings where kind='month' and period = date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date");
+    await pg.reload(); await wait(1500);
     await pg.click("[data-btab=productos]"); await wait(300);
     await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Cera C36"); await pg.fill("#pnp", "8000"); await pg.fill("#pnc", "4500"); await pg.fill("#pns", "2");
     await pg.click("#fProd button[type=submit]");
