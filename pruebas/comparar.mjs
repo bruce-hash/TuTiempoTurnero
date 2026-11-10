@@ -175,6 +175,17 @@ async function normalizar(page) {
     if (!document.getElementById("cmp-16px")) {
       document.head.insertAdjacentHTML("beforeend", `<style id="cmp-16px">@media (max-width:1023px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]),select,textarea{font-size:16px!important}input.otp{font-size:20px!important}.comrow input{font-size:22px!important}.mptab .comrow input{font-size:16px!important}}</style>`);
     }
+    // 10/11 (cambio a propósito): la leyenda y los colores de la Agenda (cada tipo con su relleno e ícono). En las dos
+    // versiones la leyenda sale y los turnos van con el mismo estilo neutro; lo nuevo lo prueban e2e.js y ancho.mjs.
+    // (el svg del ícono ya pasó a ser ■ más arriba: se saca ese ■ del principio de la hora)
+    document.querySelectorAll("#app .tl-leg, #app .ev-t svg").forEach((el) => el.remove());
+    document.querySelectorAll("#app .ev-t").forEach((el) => {
+      const first = el.firstChild;
+      if (first && first.nodeType === 3) first.nodeValue = first.nodeValue.replace(/^■/, "");
+    });
+    if (!document.getElementById("cmp-agenda")) {
+      document.head.insertAdjacentHTML("beforeend", `<style id="cmp-agenda">.ev.app,.ev.man,.ev.walk,.ev.blk{background:#eeeeee!important;border:1.5px solid #cccccc!important;color:#222222!important}.ev .ev-s{color:#666666!important;opacity:1!important}.ev .ev-ic{color:#15803d!important}.ev-t{gap:0!important}</style>`);
+    }
     // V1 (D30, cambio a propósito): la comisión de TuTiempo pasa a ser un % de la seña y se suma el costo de Mercado Pago:
     // cambian los montos y los textos de la comisión (barra de reserva, política del turnero, confirmación, turno pagado),
     // Horarios suma el plazo de acreditación, la pestaña Comisión es otra y las comisiones de la demo cambian (Resumen y
