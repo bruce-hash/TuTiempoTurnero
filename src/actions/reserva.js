@@ -10,7 +10,7 @@ import { errMsg } from "../lib/errores.js";
 import { TODAY, addDays, dkey, toMin } from "../lib/fechas.js";
 import { refreshPrices } from "../lib/precios.js";
 import { pr } from "../lib/prestadores.js";
-import { selAdds, selDur, selPrice } from "../lib/servicios.js";
+import { pickSvc, selAdds, selDur, selPrice } from "../lib/servicios.js";
 import { cfg, freed, happyAt, priceAt, seriesDates, skey, slotsFor, uname } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
@@ -121,7 +121,7 @@ registerClick("useReward", (ev, el, act) => {
   const svc = svcByKey(prov, sk);
   go("perfil", pid);
   if (svc) {
-    S.svc = prov.svcs.indexOf(svc);
+    pickSvc(prov, prov.svcs.indexOf(svc));
     S.slot = null;
     S.day = null;
   }
@@ -143,6 +143,9 @@ registerClick("rebook", (ev, el, act) => {
   const svcIndex = prov && prov.svcs.findIndex((row) => row[0] === booking.svc);
   S.pctx = booking.cat || null;
   S.svc = svcIndex >= 0 ? svcIndex : 0;
+  if (svcIndex >= 0) {
+    pickSvc(prov, svcIndex);
+  }
   S.adds = [];
   S.intake = Object.assign({}, booking.intake || {});
   S.slot = null;
@@ -240,9 +243,12 @@ registerClick("reprog", (ev, el, act) => {
   S.reprog = booking.id;
   S.pid = booking.pid;
   const prov = pr(booking.pid);
-  S.svc = Math.max(
-    0,
-    prov.svcs.findIndex((row) => row[0] === booking.svc),
+  pickSvc(
+    prov,
+    Math.max(
+      0,
+      prov.svcs.findIndex((row) => row[0] === booking.svc),
+    ),
   );
   S.day = booking.date;
   S.slot = null;

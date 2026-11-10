@@ -258,6 +258,14 @@ body.am-open{overflow:hidden}
 .restask > div{display:grid;gap:2px;min-width:0}.restask > div > span{font-size:13px;color:var(--muted)}
 .restask .medios{display:flex;flex-wrap:wrap;gap:6px}
 .restbox{margin-top:10px}.restbox.rs-done{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;font-size:14px}
+/* 10/11 · punto 4: «Editar cobro» y «Deshacer asistió» en la ficha del turno atendido */
+.bacts.undo-bt{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:8px;margin-top:12px}
+.restbox.undo-ask{display:block;padding:12px;border:1px solid var(--line);border-radius:var(--r)}
+.undo-ask>b{display:block;margin-bottom:8px}
+.undo-to{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.undo-list{text-align:left;margin:4px 0 10px;padding-left:18px;line-height:1.45}
+.undo-list li+li{margin-top:4px}
+.note.undo-closed{text-align:left;margin:12px 0 8px}
 .restsplit{display:grid;gap:8px;background:var(--bg);border-radius:10px;padding:10px}.restsplit .lbl{margin:0}
 .rs-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.rs-row select,.rs-row input{width:100%;min-width:0}
 .rs-btns{display:grid;grid-template-columns:1fr 2fr;gap:8px}.rs-miss{color:var(--bad)}
@@ -266,8 +274,11 @@ body.am-open{overflow:hidden}
 /* v2: lo que se abre debajo de un producto (venta, eliminar) y los botones van a todo el ancho: antes caían en la columna
    de la cantidad, la ensanchaban y el nombre quedaba palabra por palabra debajo de los controles */
 .plist .pl-acts,.plist .movask{grid-column:1/-1}.plist .pl-s{flex:none}
-.pl-acts .pl-buy,.pl-acts .pl-edit{flex:1 1 0;min-width:0;white-space:nowrap;padding:7px 10px;font-size:13px}.pl-acts .xbtn{flex:none}
-@media (min-width:1024px){.pl-acts .pl-buy,.pl-acts .pl-edit{flex:0 0 auto}}
+.pl-acts .pl-buy,.pl-acts .pl-adj,.pl-acts .pl-edit{flex:1 1 0;min-width:0;white-space:nowrap;padding:7px 10px;font-size:13px}.pl-acts .xbtn{flex:none}
+@media (min-width:1024px){.pl-acts .pl-buy,.pl-acts .pl-adj,.pl-acts .pl-edit{flex:0 0 auto}}
+/* 10/11 · punto 9: con «Ajustar stock» son tres botones: en el celular, la compra y el ajuste en una fila y Editar abajo */
+@media (max-width:1023px){.plist .pl-acts{flex-wrap:wrap}.pl-acts .pl-buy,.pl-acts .pl-adj{flex:1 1 calc(50% - 3px)}}
+.pl-adjlog{grid-column:1/-1;margin:0;font-size:12px;color:var(--muted);text-align:left}
 .msum .mhead{font-weight:700;margin:10px 0 6px;font-size:14px}
 .msum .mrow{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px;margin:4px 0}
 .msum .mbar{display:block;height:10px;border-radius:9px;min-width:2px}

@@ -139,6 +139,13 @@ async function turnoConMargen(p) {
   ok("perfil con 3 grupos de servicios", (await pg.locator(".sgroup").count()) === 3);
   ok("perfil sin teléfono; seña con Mercado Pago y resto en efectivo o MP", !(await txt()).includes("111222") && !(await txt()).includes("Teléfono") && (await txt()).includes("Seña con Mercado Pago"));
   ok("perfil sin “Desde” sobre la foto", (await pg.locator(".phero .ph-price").count()) === 0);
+  // 10/11 · punto 2: entra con el color del rubro de donde vino (Uñas) y con un servicio de ese rubro elegido; al elegir
+  // un servicio de otro rubro, el perfil (turnero, confirmación y pago) toma la paleta de ese rubro
+  ok("10/11: el perfil entra con la paleta de Uñas y un servicio de Uñas elegido", (await seg()) === "u" && (await pg.locator('.sgroup.seg-u .svci[aria-pressed="true"]').count()) === 1);
+  await pg.click(".sgroup.seg-l .svci"); await wait(600);
+  ok("10/11: al elegir un servicio de Pestañas, la paleta pasa a Pestañas", (await seg()) === "l" && (await pg.locator('.sgroup.seg-l .svci[aria-pressed="true"]').count()) === 1);
+  await pg.click(".sgroup.seg-u .svci"); await wait(600);
+  ok("10/11: …y vuelve a Uñas al elegir uno de Uñas", (await seg()) === "u");
   await pg.click(".sgroup.seg-u .svci"); await wait(200);
   ok("indicaciones en el perfil, sin adicionales", (await pg.locator("[data-add]").count()) === 0 && (await txt()).includes("Venir sin esmalte"));
   await turnoConMargen(pg);
@@ -503,8 +510,34 @@ async function turnoConMargen(p) {
   await pg.click("[data-btab=productos]"); await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Gel top coat"); await pg.fill("#pnp", "8000"); await pg.fill("#pns", "3");
   await pg.click("#fProd button[type=submit]"); await wait(600);
   ok("producto guardado", (await q("select stock from products where name='Gel top coat'"))[0]?.stock === 3);
-  await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]"); await wait(800);
-  ok("compra suma stock y carga gasto", (await q("select stock from products where name='Gel top coat'"))[0].stock === 9 && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  // 10/11 · punto 9: el stock no se toca a mano: sube con «Cargar compra» y baja con una venta o «Ajustar stock»
+  ok("punto 9: Productos ya no tiene los botones + y − del stock, y la compra es «Cargar compra»",
+     (await pg.locator("[data-act=stk]").count()) === 0 && /Cargar compra/.test(await pg.locator('.plist li:has-text("Gel top coat") [data-act=buyOpen]').innerText()));
+  await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]");
+  ok("compra suma stock y carga gasto", await until("select stock from products where name='Gel top coat'", [], (r) => r[0]?.stock === 9) && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  ok("punto 9: la compra es un gasto de productos de hoy, ligado al producto y con la cantidad",
+     await until("select e.concept, e.category, e.qty, e.product_id = p.id same, e.spent_on = (now() at time zone 'America/Argentina/Buenos_Aires')::date hoy from expenses e join products p on p.name = 'Gel top coat' where e.amount = 30000", [],
+                 (r) => r.length === 1 && r[0].concept === "Compra: Gel top coat × 6" && r[0].category === "Productos" && r[0].qty === 6 && r[0].same && r[0].hoy));
+  ok("punto 9: …y el stock nuevo se ve en Productos", /9\s*en stock/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-n').innerText()));
+  // «Ajustar stock»: solo resta, con motivo; no es venta ni gasto
+  {
+    const nWalk = (await q("select count(*)::int c from walkins"))[0].c, nExp = (await q("select count(*)::int c, coalesce(sum(amount),0)::int s from expenses"))[0];
+    await wait(700);
+    await pg.click('.plist li:has-text("Gel top coat") [data-act=adjOpen]'); await wait(200);
+    await pg.fill("#aq", "2"); await pg.click("#fAdj button[type=submit]"); await wait(300);
+    ok("punto 9: «Ajustar stock» pide el motivo", /Elegí el motivo/.test(await pg.locator("#aerr").innerText()) && (await q("select stock from products where name='Gel top coat'"))[0].stock === 9);
+    await wait(700);
+    await pg.click('#fAdj [data-act=adjWhy][data-r=broken]'); await pg.click("#fAdj button[type=submit]");
+    ok("punto 9: el ajuste baja el stock (9 − 2) y queda anotado con su motivo",
+       await until("select p.stock, a.qty, a.reason from products p join stock_adjustments a on a.product_id = p.id where p.name = 'Gel top coat'", [], (r) => r.length === 1 && r[0].stock === 7 && r[0].qty === 2 && r[0].reason === "broken"));
+    ok("punto 9: …se ve en el producto («−2 Roto») con el stock nuevo", /−2 Roto/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-adjlog').innerText())
+       && /7\s*en stock/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-n').innerText()));
+    const nExp2 = (await q("select count(*)::int c, coalesce(sum(amount),0)::int s from expenses"))[0];
+    ok("punto 9: …y no entra en la caja ni en los gastos del mes", (await q("select count(*)::int c from walkins"))[0].c === nWalk && nExp2.c === nExp.c && nExp2.s === nExp.s);
+    await pg.reload(); await pg.waitForSelector("[data-btab=productos]"); await pg.click("[data-btab=productos]");
+    await pg.waitForSelector('.plist li:has-text("Gel top coat")', { timeout: 8000 }).catch(() => {}); await wait(300);
+    ok("punto 9: al volver a cargar, el ajuste sigue en el producto (lo trae la base)", /−2 Roto/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-adjlog').innerText().catch(() => "")));
+  }
   // 7/11: «Editar» cambia nombre, precio de venta y de compra; la compra ya cargada no cambia
   await pg.click('.plist li:has-text("Gel top coat") [data-act=prodEdit]'); await wait(300);
   ok("7/11: «Editar» abre el producto con su nombre y su precio", (await pg.inputValue("#pen")) === "Gel top coat" && (await pg.inputValue("#pep")) === "8000");
@@ -551,6 +584,7 @@ async function turnoConMargen(p) {
   ok("gasto del mes cargado una vez (sin categoría ni compras de productos)", (await q("select count(*)::int c from expenses where concept='Alquiler' and amount=150000"))[0].c === 1 && (await pg.locator("#gprod").count()) === 0);
   const msum = await pg.evaluate(() => (document.querySelector(".msum") || {}).textContent || "");
   ok("C33: el resumen del mes separa ingresos por origen y gastos fijos y de productos", /Resumen de [A-ZÁÉÍÓÚ]/.test(msum) && msum.includes("Sin turno") && msum.includes("Gastos fijos") && msum.includes("$150.000") && /Balance: /.test(msum), msum);
+  ok("punto 9: Finanzas → Mes: «Compras de productos» suma la compra ($30.000) y no el ajuste de stock", /Compras de productos\s*\$30\.000/.test(msum), msum);
   ok("C32: los meses van con mayúscula y el balance negativo en rojo", /Balance de [A-ZÁÉÍÓÚ]/.test(await pg.locator(".kpi.big").innerText()) && (await pg.locator(".msum .mbal.neg").count()) === 1);
   // C31 (V4 resto): gastos fijos precargados, sin monto; se cargan con ✎ y se repiten solos
   {
@@ -582,6 +616,58 @@ async function turnoConMargen(p) {
   await pg.click("[data-act=closeMonth]"); await wait(800);
   ok("mes cerrado en la base", (await q("select count(*)::int c from cash_closings where kind='month'"))[0].c === 1);
   ok("C31: con el mes cerrado, los gastos fijos de ese mes no se editan", (await pg.locator("[data-act=fxEdit]").count()) === 0 && /Mes cerrado: los gastos fijos de este mes quedan como están/.test(await txt()));
+  // 10/11 · punto 8: con el mes cerrado la caja no se corrige; se vuelve a abrir para seguir (Cargar diferencia, Caja de 7 días)
+  await pg.click("[data-act=unlockMonth]"); await wait(600);
+  ok("10/11 caja: el mes se vuelve a abrir", await until("select count(*)::int c from cash_closings where kind='month'", [], (r) => r[0].c === 0));
+  // 10/11 · punto 8: la caja de ayer (cerrada) se vuelve a abrir, se corrige un movimiento, se cierra de nuevo y el mes se
+  // pone al día; el cambio queda en el registro del día. Una de hace 9 días solo se ve.
+  {
+    const [p8] = await q("select id from providers where name like 'Sofía%'");
+    const [{ ayer, viejo, mismoMes }] = await q(`select ((now() at time zone 'America/Argentina/Buenos_Aires')::date - 1)::text ayer,
+      ((now() at time zone 'America/Argentina/Buenos_Aires')::date - 9)::text viejo,
+      date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date - 1) = date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date) "mismoMes"`);
+    const walkAt = (d, desc, amount) => q("insert into walkins (provider_id, at, kind, description, amount, method) values ($1, ($2||' 12:00')::timestamp at time zone 'America/Argentina/Buenos_Aires', 'service', $3, $4, 'cash')", [p8.id, d, desc, amount]);
+    await walkAt(ayer, "Corte de ayer", 4000); await walkAt(viejo, "Corte viejo", 3000);
+    await q("insert into cash_closings (provider_id, kind, period, income) values ($1,'day',$2,4000), ($1,'day',$3,3000) on conflict do nothing", [p8.id, ayer, viejo]);
+    await pg.reload(); await wait(1500);
+    const ingresos = async () => { await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=mes]"); await wait(500);
+      return +((await pg.evaluate(() => [...document.querySelectorAll(".kpis .kpi")].find((k) => k.querySelector("span")?.textContent.trim() === "Ingresos")?.querySelector("b")?.textContent || "")).replace(/\D/g, "")); };
+    const ing0 = mismoMes ? await ingresos() : null;
+    await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=dia]"); await wait(300);
+    const verDia = async (d) => { await pg.evaluate((x) => { const i = document.querySelector("#cajaDay"); i.value = x; i.dispatchEvent(new Event("change", { bubbles: true })); }, d); await wait(1200); };
+    await verDia(viejo);
+    ok("10/11 caja: un día de hace 9 días solo se ve (sin volver a abrir ni corregir)", (await pg.locator("[data-act=reopenDay], [data-act=movEdit], [data-act=walkOpen]").count()) === 0
+       && /solo se ve/.test(await txt()));
+    await verDia(ayer);
+    ok("10/11 caja: ayer cerrado: se ve con «Volver a abrir la caja» y sin corregir", (await pg.locator(`[data-act=reopenDay][data-d="${ayer}"]`).count()) === 1 && (await pg.locator("[data-act=movEdit]").count()) === 0);
+    await pg.click(`[data-act=reopenDay][data-d="${ayer}"]`);
+    ok("10/11 caja: se vuelve a abrir (en la base)", await until("select count(*)::int c from cash_closings where provider_id=$1 and kind='day' and period=$2", [p8.id, ayer], (r) => r[0].c === 0));
+    await wait(2500);
+    await pg.click('.movs li:has-text("Corte de ayer") [data-act=movEdit]'); await wait(200);
+    await pg.fill("#wed_m", "6500"); await pg.click("#fWalkEd button[type=submit]");
+    ok("10/11 caja: se corrige el movimiento de ayer", await until("select amount from walkins where provider_id=$1 and description='Corte de ayer'", [p8.id], (r) => r[0]?.amount === 6500));
+    await pg.waitForFunction(() => /Cambios después de cerrar/i.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 10000 }).catch(() => {});
+    ok("10/11 caja: el cambio queda en el registro del día, a la vista", /Cambios después de cerrar/i.test(await txt()) && /Cambiaste Corte de ayer: \$4\.000 en Efectivo → \$6\.500 en Efectivo/.test(await txt()),
+       JSON.stringify({ log: await q("select kind, detail from cash_day_log where provider_id=$1 order by id", [p8.id]), walk: await q("select amount, method, at from walkins where provider_id=$1 and description='Corte de ayer'", [p8.id]),
+         panel: (await pg.locator(".cashlog, .movs").first().innerText().catch(() => "")).slice(0, 300),
+         app: await pg.evaluate((d) => ({ cajaDay: S.cajaDay, fp: S.fp, tab: S.btab, keys: Object.keys(store.CASHDAY || {}), log: (store.CASHDAY[d]?.log || []).length, fin: store.FIN.find((x) => x.date === d), walkday: (store.WALKDAY[d] || []).map((w) => w.precio) }), ayer).catch((e) => String(e)) }));
+    await pg.click("#fCloseDay button[type=submit]");
+    ok("10/11 caja: se cierra de nuevo con el total nuevo", await until("select income from cash_closings where provider_id=$1 and kind='day' and period=$2", [p8.id, ayer], (r) => r[0]?.income >= 6500));
+    if (mismoMes) {
+      let ing1 = 0;
+      for (let i = 0; i < 8 && (ing1 = await ingresos()) - ing0 !== 2500; i++) await wait(1000);
+      ok("10/11 caja: Finanzas del mes se pone al día sola (+$2.500)", ing1 - ing0 === 2500, `${ing0} → ${ing1} ` + JSON.stringify(await pg.evaluate(() => store.FIN.filter((x) => x.app + x.man + x.walk + x.prod).map((x) => [x.date, x.app + x.man + x.walk + x.prod]))));
+    }
+    await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=dia]"); await wait(300);
+    await pg.click("[data-act=cajaHoy]").catch(() => {}); await wait(300);
+    // la caja de hoy quedó cerrada más arriba: se vuelve a abrir para seguir cobrando (con la caja cerrada no se corrige)
+    if (await pg.locator(`[data-act=reopenDay]`).count()) { await pg.click("[data-act=reopenDay]"); await wait(1500); }
+    ok("10/11 caja: la caja de hoy, abierta otra vez para seguir", (await q("select count(*)::int c from cash_closings where provider_id=$1 and kind='day' and period=(now() at time zone 'America/Argentina/Buenos_Aires')::date", [p8.id]))[0].c === 0);
+  }
+  // la caja de hoy quedó cerrada más arriba (C30): con la caja cerrada no se cobra el resto (D41), se vuelve a abrir para seguir
+  await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=dia]"); await wait(300);
+  if (await pg.locator("[data-act=reopenDay]").count()) { await pg.click("[data-act=reopenDay]"); await wait(1500); }
+  ok("D41: la caja de hoy, abierta otra vez para seguir", (await q("select count(*)::int c from cash_closings where kind='day' and period=(now() at time zone 'America/Argentina/Buenos_Aires')::date"))[0].c === 0);
   // V4b · C25 "Cargar diferencia": al marcar "Asistió", el resto en dos medios; después se cambia desde la Caja del día
   {
     const [sv] = await q("select s.id, s.provider_id from services s join providers p on p.id=s.provider_id where p.name like 'Sofía%' and s.active order by s.id limit 1");
@@ -616,6 +702,36 @@ async function turnoConMargen(p) {
     await pg.click('.movs [data-act=restMedio][data-m="Transferencia"]'); await wait(800);
     ok("V4b: un solo medio vuelve al resto entero (sin partes)", (await q("select rest_parts, rest_method from bookings where id=$1", [bd.id]))[0].rest_method === "transfer"
        && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
+    // 10/11 · punto 4: desde la ficha del turno atendido, «Editar cobro» y «Deshacer asistió» (con lo que cambia antes)
+    await pg.click("[data-btab=agenda]"); await wait(300);
+    await pg.evaluate((x) => { S.aday = x; S.sel = null; render() }, hoyBA); await wait(300);
+    await pg.click(`.ev[data-sel="${bd.id}"]`); await wait(200);
+    ok("10/11: la ficha del turno atendido tiene «Editar cobro» y «Deshacer asistió»", (await pg.locator(`.detail [data-act=restOpen][data-id="${bd.id}"]`).count()) === 1
+       && (await pg.locator(`.detail [data-act=undoAsk][data-id="${bd.id}"]`).count()) === 1);
+    await pg.click(`.detail [data-act=undoAsk][data-id="${bd.id}"]`); await pg.waitForSelector(".undo-ask [data-act=undoYes]", { timeout: 8000 }).catch(() => {});
+    const undoTxt = await pg.locator(".undo-ask").innerText().catch(() => "");
+    ok("10/11: antes de confirmar dice qué cambia (el cobro del local sale de la caja; Mercado Pago no se toca)",
+       /Se borra lo que anotaste como cobrado en el local/.test(undoTxt) && /\$5\.000 en Transferencia/.test(undoTxt) && /no se devuelve nada/.test(undoTxt), undoTxt);
+    await pg.click("[data-act=undoTo][data-to=noshow]"); await wait(100); await pg.click("[data-act=undoYes]");
+    ok("10/11: «Pasar a No vino» queda en la base, sin el cobro del local", await until("select status, rest_method, rest_parts from bookings where id=$1", [bd.id],
+       (r) => r[0]?.status === "no_show" && r[0].rest_method === null && r[0].rest_parts === null));
+    // con la caja de ese día cerrada: primero «Volver a abrir la caja»
+    const [bc] = await q("insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price, rest_method) values ($1,$2,'Caja Cerrada','Corte','manual','done',($3||' 07:30')::timestamp at time zone 'America/Argentina/Buenos_Aires',($3||' 08:00')::timestamp at time zone 'America/Argentina/Buenos_Aires',4000,'cash') returning id", [sv.provider_id, sv.id, hoyBA]);
+    await q("insert into cash_closings (provider_id, kind, period, income) values ($1, 'day', $2, 4000) on conflict do nothing", [sv.provider_id, hoyBA]);
+    await pg.reload(); await wait(1500);
+    await pg.click("[data-btab=agenda]"); await wait(300);
+    await pg.evaluate((x) => { S.aday = x; S.sel = null; render() }, hoyBA); await wait(300);
+    await pg.click(`.ev[data-sel="${bc.id}"]`); await wait(200);
+    ok("10/11: con la caja cerrada no deja deshacer ni editar el cobro: pide volver a abrirla", (await pg.locator(".detail [data-act=undoAsk], .detail [data-act=restOpen]").count()) === 0
+       && (await pg.locator(".detail [data-act=reopenDay]").count()) === 1 && /está cerrada/.test(await pg.locator(".detail").innerText()));
+    await pg.click(".detail [data-act=reopenDay]");
+    ok("10/11: …y al volver a abrirla, aparecen las opciones", await until("select count(*)::int c from cash_closings where provider_id=$1 and kind='day' and period=$2", [sv.provider_id, hoyBA], (r) => r[0].c === 0)
+       && (await pg.locator(`.detail [data-act=undoAsk][data-id="${bc.id}"]`).count()) === 1);
+    await pg.click(`.detail [data-act=undoAsk][data-id="${bc.id}"]`); await pg.waitForSelector(".undo-ask [data-act=undoYes]", { timeout: 8000 }).catch(() => {});
+    await pg.click("[data-act=undoYes]");
+    ok("10/11: «Volver a Confirmado» queda en la base", await until("select status from bookings where id=$1", [bc.id], (r) => r[0]?.status === "confirmed"));
+    // ese turno de hoy quedó sin marcar: se borra para que no cuente como pendiente en C30
+    await q("delete from bookings where id=$1", [bc.id]);
     // 10/11 · punto 7: turno reservado por la app con seña de Mercado Pago → Asistió → el resto en uno y en dos medios;
     // queda en la Caja del día y en Finanzas. Uno de mañana no ofrece «Asistió» (la base lo rechaza: too_early)
     {
@@ -693,6 +809,9 @@ async function turnoConMargen(p) {
        && (pend0 ? (await pg.locator('.pendday li:has-text("Pendiente C30")').count()) === 0 && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText())
                  : (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText())));
     // C36 (V4 resto): precio de compra y "Vendí uno" desde Productos, que entra en la Caja del día
+    // D46: con el mes cerrado el stock inicial (con su gasto) no entra: el mes que se cerró más arriba se vuelve a abrir
+    await q("delete from cash_closings where kind='month' and period = date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date");
+    await pg.reload(); await wait(1500);
     await pg.click("[data-btab=productos]"); await wait(300);
     await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Cera C36"); await pg.fill("#pnp", "8000"); await pg.fill("#pnc", "4500"); await pg.fill("#pns", "2");
     await pg.click("#fProd button[type=submit]");
@@ -717,6 +836,15 @@ async function turnoConMargen(p) {
     ok("4/11: la venta de 2 queda en la caja con su cantidad y descuenta 2 del stock", await until("select amount, method, qty from walkins where kind='product' and description='Cera C36 × 2'", [], (r) => r.length === 1 && r[0].amount === 16000 && r[0].method === "transfer" && r[0].qty === 2)
        && await until("select stock from products where name='Cera C36'", [], (r) => r[0].stock === 0));
     ok("C36: …y se ve en los movimientos de hoy", (await pg.locator('.movs li:has-text("Cera C36 × 2")').count()) === 1);
+    // 10/11 · punto 9: sin stock, la venta no se ofrece; borrarla devuelve las unidades (lo hace la base)
+    await wait(700); await pg.click("[data-act=saleOpen]"); await wait(200);
+    ok("punto 9: sin stock, «Vender producto» no ofrece Cera C36", await pg.evaluate(() => [...document.querySelectorAll("#spr option")].some((o) => /Cera C36/.test(o.textContent) && o.disabled)));
+    await pg.click("[data-act=saleClose]"); await wait(200);
+    await pg.click('.movs li:has-text("Cera C36 × 2") [data-act=movDel]'); await wait(200); await pg.click("[data-act=movDelYes]");
+    ok("punto 9: borrar la venta la saca de la caja y devuelve las 2 unidades al stock",
+       await until("select (select stock from products where name='Cera C36') s, (select count(*)::int from walkins where description='Cera C36 × 2') w", [], (r) => r[0].s === 2 && r[0].w === 0));
+    await pg.click("[data-btab=productos]"); await wait(300);
+    ok("punto 9: …y Productos muestra el stock devuelto", /2\s*en stock/.test(await pg.locator('.plist li:has-text("Cera C36") .pl-n').innerText()));
   }
   // rubros y servicios: sumar Masajes
   await pg.click("[data-btab=perfil]"); await wait(300);
@@ -1986,6 +2114,99 @@ async function turnoConMargen(p) {
        && (await q("select count(*)::int c from client_messages where user_id = $1 and body = 'Novedad después de dejar de seguir'", [anaId]))[0].c === 0);
     await ctxS.close(); await ctxA.close();
   }
+  // ---- D45 inicio: eliminar clientes de la lista y bloquear (punto 10)
+  {
+    const sofi = (await q("select id, slug from providers where name like 'Sofía%'"))[0];
+    await db.query("update auth.users set encrypted_password = 'cliente12345', email_confirmed_at = coalesce(email_confirmed_at, now()) where email = 'ana@test.ar'");
+    const anaId = (await q("select id from auth.users where email = 'ana@test.ar'"))[0].id;
+    // Ana es clienta de Sofía (un turno al que fue) y la sigue; sin bloqueos ni marcas de antes
+    if (!(await q("select 1 from bookings where provider_id = $1 and client_id = $2 limit 1", [sofi.id, anaId])).length) {
+      await db.query("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Ana L.', 'Lifting de pestañas', 'app', 'done', now() - interval '9 days', now() - interval '9 days' + interval '1 hour', 15000)", [sofi.id, anaId]);
+    }
+    await db.query("select link_client($1, $2, 'Ana L.')", [sofi.id, anaId]);
+    await db.query("delete from client_blocks where provider_id = $1", [sofi.id]);
+    await db.query("update provider_clients set hidden_at = null where provider_id = $1", [sofi.id]);
+    await db.query("insert into follows (user_id, provider_id) values ($1, $2) on conflict do nothing", [anaId, sofi.id]);
+    const anaName = (await q("select name from provider_clients where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].name;
+    const login = async (page, email, pass) => {
+      await page.goto(BASE + "/ingresar"); await page.waitForSelector("#ai_e");
+      await page.fill("#ai_e", email); await page.fill("#ai_p", pass); await page.click("#fLogin button[type=submit]");
+      await page.waitForFunction(() => !!S.user, null, { timeout: 10000 }).catch(() => {}); await page.waitForTimeout(800);
+    };
+    const ctxS = await b.newContext({ viewport: { width: 400, height: 900 } }); const ps = await ctxS.newPage(); ps.on("pageerror", (e) => errs.push(e.message));
+    const ctxA = await b.newContext({ viewport: { width: 400, height: 900 } }); const pa = await ctxA.newPage(); pa.on("pageerror", (e) => errs.push(e.message));
+    const stxt = () => ps.locator("#app").innerText();
+    // un comienzo válido del primer día con lugar desde mañana (D31), del servicio más corto de Sofía
+    const svc = (await q("select id, duration_min from services where provider_id = $1 and active order by duration_min limit 1", [sofi.id]))[0];
+    const slot = (await q(`select (s at time zone public.provider_tz($1))::text t from generate_series(1, 14) d,
+                            lateral public.slot_starts($1, ((now() at time zone 'America/Argentina/Buenos_Aires')::date + d), $2) s
+                           order by s limit 1`, [sofi.id, svc.duration_min]))[0].t;
+    const tryBook = (page) => page.evaluate(async ([service, start]) => { const r = await sb.rpc("book_slot", { p_service: service, p_start: start }); return r.error ? r.error.message : r.data; }, [svc.id, slot]);
+    const tryFollow = (page) => page.evaluate(async ([pid, uid]) => { const r = await sb.from("follows").insert({ user_id: uid, provider_id: pid }); return r.error ? r.error.message : "ok"; }, [sofi.id, anaId]);
+
+    await login(ps, "sofia@test.ar", "prestador123");
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".folist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    ok("D45: en Seguidores cada fila tiene «Bloquear»", (await ps.locator(".folist [data-act=folBlock]").count()) >= 1);
+    await ps.locator(".folist li", { hasText: "Ana" }).locator("[data-act=folBlock]").click(); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: «Bloquear» de una seguidora que ya reservó abre su ficha con el recuadro (no le avisamos, se desbloquea en Bloqueados)",
+       new RegExp("Bloquear a " + anaName.replace(".", "\\.")).test(await ps.locator(".cliask").innerText().catch(() => "")) && /No le avisamos que lo bloqueaste/.test(await stxt()));
+    const keep = ps.locator('.cliask [data-act=cliDo][data-c="0"]');
+    await ((await keep.count()) ? keep.click() : ps.click(".cliask [data-act=cliDo]"));
+    const blocked = await until("select count(*)::int c from client_blocks where provider_id = $1 and user_id = $2", [sofi.id, anaId], (r) => r[0].c === 1);
+    await ps.waitForSelector(".ctabs", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    ok("D45: bloqueada: deja de seguirla y sale de Clientes", blocked && (await q("select count(*)::int c from follows where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].c === 0
+       && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 0);
+    ok("D45: al final de Clientes, «Bloqueados · 1»", /Bloqueados · 1/.test(await ps.locator(".blk-link").innerText().catch(() => "")));
+    await ps.click(".blk-link [data-act=ctab]"); await ps.waitForTimeout(400);
+    ok("D45: Bloqueados la muestra con «Desde el …» y «Desbloquear» (con su dirección)", new RegExp(anaName.replace(".", "\\.")).test(await ps.locator(".blist").innerText().catch(() => ""))
+       && /Desde el \d{1,2}\/\d{1,2}/.test(await ps.locator(".blist").innerText()) && new URL(ps.url()).searchParams.get("ver") === "bloqueados");
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".ctabs"); await ps.waitForTimeout(500);
+    ok("D45: …sale de Seguidores y el link también está ahí", !/Ana/.test(await ps.locator(".folist").innerText().catch(() => ""))
+       && /Bloqueados · 1/.test(await ps.locator(".blk-link").innerText().catch(() => "")));
+    // lo que ve Ana (sin decirle que la bloquearon)
+    await login(pa, "ana@test.ar", "cliente12345");
+    await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(500);
+    const perfilA = await pa.locator("#app").innerText();
+    ok("D45: la bloqueada ve los servicios pero «No hay turnos disponibles con este profesional», sin Seguir ni «Disponible»",
+       /No hay turnos disponibles con este profesional/.test(perfilA) && (await pa.locator(".sgroup").count()) >= 1 && (await pa.locator("[data-act=seguir], .phero .badge, [data-act=waitlist], .quick, .slot").count()) === 0
+       && !/bloque/i.test(perfilA));
+    ok("D45: por la API tampoco puede seguir ni reservar (mensajes neutros)", /follow_unavailable/.test(await tryFollow(pa)) && /no_slots/.test(String(await tryBook(pa))));
+    // desbloquear: vuelve enseguida a Clientes y puede reservar y seguir (no la vuelve a seguir sola)
+    await ps.goto(BASE + "/panel/clientes?ver=bloqueados"); await ps.waitForSelector(".blist", { timeout: 8000 }).catch(() => {});
+    await ps.click(".blist [data-act=unblock]");
+    const unblocked = await until("select count(*)::int c from client_blocks where provider_id = $1", [sofi.id], (r) => r[0].c === 0);
+    await ps.goto(BASE + "/panel/clientes"); await ps.waitForSelector(".clist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    ok("D45: desbloqueada vuelve a Clientes y no la sigue sola", unblocked && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 1
+       && (await ps.locator(".blk-link").count()) === 0 && (await q("select count(*)::int c from follows where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].c === 0);
+    await pa.reload(); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(500);
+    const booked = await tryBook(pa);
+    ok("D45: desbloqueada ve horarios y Seguir, y puede reservar", (await pa.locator("[data-act=seguir]").count()) >= 1 && !/No hay turnos disponibles/.test(await pa.locator("#app").innerText())
+       && booked && booked.status === "pending_payment", JSON.stringify(booked));
+    if (booked && booked.booking_ids) await db.query("update bookings set status = 'expired', hold_expires_at = null where id = any($1)", [booked.booking_ids]);
+    // eliminar de la lista: la clienta de la app (sale de Clientes, no se borra) y un contacto cargado a mano (se borra)
+    await ps.click(`.clist [data-cli="${anaName}"]`); await ps.waitForSelector(".cli-more", { timeout: 8000 }).catch(() => {});
+    await ps.click(".cli-more [data-act=cliAsk][data-k=del]"); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: «Eliminar de mi lista» explica que el historial queda y que vuelve si reserva", /Si vuelve a reservarte, aparece de nuevo en tu lista/.test(await ps.locator(".cliask").innerText().catch(() => "")));
+    const keepD = ps.locator('.cliask [data-act=cliDo][data-c="0"]');
+    await ((await keepD.count()) ? keepD.click() : ps.click(".cliask [data-act=cliDo]"));
+    const hidden = await until("select count(*)::int c from provider_clients where provider_id = $1 and user_id = $2 and hidden_at is not null", [sofi.id, anaId], (r) => r[0].c === 1);
+    await ps.waitForTimeout(300);
+    ok("D45: la clienta de la app sale de Clientes sin borrarse (sus turnos quedan)", hidden && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 0
+       && (await q("select count(*)::int c from bookings where provider_id = $1 and client_id = $2", [sofi.id, anaId]))[0].c >= 1);
+    await db.query("update provider_clients set hidden_at = null where provider_id = $1", [sofi.id]);
+    await db.query("insert into provider_clients (provider_id, name, phone) values ($1, 'Contacto E2E', '2284 101010') on conflict do nothing", [sofi.id]);
+    await ps.goto(BASE + "/panel/clientes"); await ps.waitForSelector(".clist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    await ps.click('.clist [data-cli="Contacto E2E"]'); await ps.waitForSelector(".cli-more", { timeout: 8000 }).catch(() => {});
+    ok("D45: al contacto cargado a mano, solo «Eliminar» (sin «Bloquear»)", (await ps.locator(".cli-more [data-k=del]").count()) === 1 && (await ps.locator(".cli-more [data-k=block]").count()) === 0);
+    await ps.click(".cli-more [data-act=cliAsk][data-k=del]"); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: el contacto avisa que se borra y no se puede deshacer", /Eliminar el contacto Contacto E2E/.test(await ps.locator(".cliask").innerText()) && /No se puede deshacer/.test(await ps.locator(".cliask").innerText()));
+    await ps.click(".cliask [data-act=cliDo]");
+    const gone = await until("select count(*)::int c from provider_clients where provider_id = $1 and name = 'Contacto E2E'", [sofi.id], (r) => r[0].c === 0);
+    await ps.waitForTimeout(300);
+    ok("D45: el contacto se borra y sale de la lista", gone && (await ps.locator('.clist [data-cli="Contacto E2E"]').count()) === 0);
+    await ctxS.close(); await ctxA.close();
+  }
+  // ---- D45 fin
   // 10/11 · punto 6: tocar un turno de la Agenda abre su detalle a la primera, en el celular y en la compu, tocando
   // varios seguidos y también si la Agenda se pone al día justo durante el toque
   {

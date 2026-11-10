@@ -47,6 +47,7 @@ Las dos páginas están en la app (`src/views/legal/privacidad.js` y `src/views/
 | L12 | Reseñas | El borrador no dice que TuTiempo pueda borrar reseñas: no hay una regla ni una función para hacerlo. | Si se quiere, hay que decidirlo (y programar cómo). |
 | L13 | Responsabilidad | El párrafo de responsabilidad (TuTiempo no responde por el servicio del profesional) es genérico. | **Revisar** con el abogado el alcance frente a la Ley 24.240 (TuTiempo cobra una comisión: podría considerarse parte de la cadena de comercialización). |
 | L14 | Menores de edad | Ni el PDF ni la app dicen nada sobre la edad mínima para tener cuenta o pagar. | Sin texto: **decidir.** |
+| L15 | Bloquear clientes (D45) | Un profesional puede bloquear a un cliente: no puede reservarle ni seguirlo y no le llegan sus mensajes, **sin que se le avise** (ve «No hay turnos disponibles con este profesional»). Los turnos que se le cancelan al bloquearlo se devuelven como D08. Los Términos no lo mencionan; la Política de privacidad no dice que el profesional guarda una lista de bloqueados. | Sin texto (decidido que no sea evidente para el bloqueado). **Revisar** con el abogado si hay que mencionarlo en los Términos (derecho de admisión del profesional) o en la Política de privacidad. |
 
 ## Lo que no cambia la app
 

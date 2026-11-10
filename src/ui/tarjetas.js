@@ -1,3 +1,4 @@
+import { noSlots } from "../lib/prestadores.js";
 import { cfg, nextFree } from "../lib/turnero.js";
 import { S } from "../state.js";
 
@@ -25,7 +26,8 @@ export function cardInfo(prov, cat) {
     };
   }
   const cheapest = pool.reduce((best, svc) => (svc[2] < best[2] ? svc : best), pool[0]);
-  const next = nextFree(prov.id, cheapest[1]);
+  // D45: a quien bloqueó, «Sin turnos libres esta semana» (en vivo, la base ya no le manda el próximo horario)
+  const next = noSlots(prov) ? null : nextFree(prov.id, cheapest[1]);
   const conf = cfg(prov.id);
   return {
     min: cheapest[2],

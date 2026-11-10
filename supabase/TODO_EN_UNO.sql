@@ -10307,6 +10307,899 @@ begin
   return null;
 end $$;
 
+-- ===================== 20261110190000_eliminar_bloquear.sql =====================
+-- =====================================================================
+-- TuTiempo · 10/11 · punto 10 · eliminar clientes y bloquear (D45)
+--   Eliminar de la lista (Clientes del panel):
+--     · contacto cargado a mano (sin cuenta): se borra su ficha (nombre, celular, cumpleaños, notas). Los turnos
+--       pasados quedan con el nombre escrito (Agenda, Finanzas y Estadísticas no cambian);
+--     · cliente de la app: provider_clients.hidden_at. Sale de Clientes, su historial no se toca y vuelve a aparecer
+--       cuando confirma un turno nuevo (trigger bookings_unhide). No lo saca de Seguidores (D45.1).
+--     · con turnos futuros, la app pregunta: cancelarlos (con la devolución de siempre, D08: cancel_by_provider) o
+--       dejarlos. Sin elegir, la base no deja seguir (has_upcoming).
+--   Bloquear (solo a quien tiene cuenta, D45.6): client_blocks (profesional, cuenta, desde cuándo).
+--     · deja de seguirlo (sin avisar nada), sale de la lista de espera y no puede volver a seguirlo (follows_blocked);
+--     · no puede reservar: book_slot y la lista de espera lo rechazan con 'no_slots' (el mismo mensaje neutro que
+--       ve en el perfil); get_provider le da no_slots = true y sin horarios, y next_free_slot (las tarjetas) nada;
+--     · no le llegan mensajes, novedades, ofertas ni el saludo de cumpleaños de ese profesional
+--       (client_messages_marketing); lo que ya estaba en la cola de push o email de esos tipos no sale. Los avisos
+--       de un turno que se le dejó (confirmación, recordatorios, cancelación, reseña) sí le llegan;
+--     · si el profesional le cancela un turno, el aviso no dice «Reprogramalo cuando quieras» (D45.5) y en Mis
+--       turnos no aparece «Reprogramar» (my_bookings: no_slots);
+--     · si asiste a un turno que se le dejó puede dejar la reseña (no se toca); los sellos quedan (D45.3).
+--   Lo que ve el bloqueado nunca dice «bloqueo»: la tabla no la puede leer y las respuestas usan no_slots.
+-- Idempotente y sin borrar datos.
+-- =====================================================================
+
+-- ---------- Tablas ----------
+create table if not exists public.client_blocks (
+  provider_id bigint not null references public.providers(id) on delete cascade,
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  primary key (provider_id, user_id)
+);
+create index if not exists client_blocks_user on public.client_blocks (user_id);
+alter table public.client_blocks enable row level security;
+-- el profesional lee los suyos; se escribe solo con las funciones de abajo. El bloqueado no lee nada.
+revoke all on public.client_blocks from public, anon, authenticated;
+grant select on public.client_blocks to authenticated;
+grant select on public.client_blocks to service_role;
+drop policy if exists client_blocks_owner on public.client_blocks;
+create policy client_blocks_owner on public.client_blocks for select to authenticated
+  using (provider_id = (select public.my_provider()) or (select public.is_admin()));
+
+-- cliente de la app sacado de la lista (lo escriben solo las funciones: no está en los grants de columna de S01)
+alter table public.provider_clients add column if not exists hidden_at timestamptz;
+
+-- ---------- Ayuda interna ----------
+create or replace function public.client_blocked(p_provider bigint, p_user uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select p_provider is not null and p_user is not null
+     and exists (select 1 from public.client_blocks where provider_id = p_provider and user_id = p_user)
+$$;
+revoke execute on function public.client_blocked(bigint, uuid) from public, anon, authenticated;
+
+-- ---------- Cumplimiento en la base ----------
+-- seguir: no a un profesional que te bloqueó (mensaje neutro)
+create or replace function public.follows_blocked() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if public.client_blocked(new.provider_id, new.user_id) then raise exception 'follow_unavailable'; end if;
+  return new;
+end $$;
+drop trigger if exists follows_blocked on public.follows;
+create trigger follows_blocked before insert on public.follows
+  for each row execute function public.follows_blocked();
+
+-- lista de espera: tampoco
+create or replace function public.waitlist_blocked() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if public.client_blocked(new.provider_id, new.user_id) then raise exception 'no_slots'; end if;
+  return new;
+end $$;
+drop trigger if exists waitlist_blocked on public.waitlist;
+create trigger waitlist_blocked before insert on public.waitlist
+  for each row execute function public.waitlist_blocked();
+
+-- reservar: el turno que pide el propio cliente (book_slot corre con su sesión). Lo que registra un pago (webhook,
+-- sin sesión de cliente) no se frena: un pago aprobado nunca queda sin turno ni sin devolución.
+create or replace function public.bookings_blocked() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.source = 'app' and new.client_id is not null and new.client_id = auth.uid()
+     and public.client_blocked(new.provider_id, new.client_id) then
+    raise exception 'no_slots';
+  end if;
+  return new;
+end $$;
+drop trigger if exists bookings_blocked on public.bookings;
+create trigger bookings_blocked before insert on public.bookings
+  for each row execute function public.bookings_blocked();
+
+-- vuelve a la lista (Clientes) quien confirma un turno nuevo por la app después de que lo sacaron
+create or replace function public.bookings_unhide() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.source = 'app' and new.client_id is not null and new.status = 'confirmed'
+     and (tg_op = 'INSERT' or old.status is distinct from 'confirmed') then
+    update public.provider_clients set hidden_at = null
+     where provider_id = new.provider_id and user_id = new.client_id and hidden_at is not null;
+  end if;
+  return null;
+end $$;
+drop trigger if exists bookings_unhide on public.bookings;
+create trigger bookings_unhide after insert or update of status on public.bookings
+  for each row execute function public.bookings_unhide();
+
+-- mensajes del profesional (los que manda él, novedades, ofertas y cumpleaños): no le llegan al bloqueado. El saludo
+-- de cumpleaños tampoco a quien sacó de su lista (sale de la lista de clientes a la que se le manda). Los avisos de
+-- un turno (conf, r24, r2, rev, cancel) sí.
+create or replace function public.client_messages_marketing() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.kind in ('msg','bday','offer','news') and public.client_blocked(new.provider_id, new.user_id) then return null; end if;
+  if new.kind = 'bday' and exists (select 1 from public.provider_clients c where c.provider_id = new.provider_id
+                                     and c.user_id = new.user_id and c.hidden_at is not null) then
+    return null;
+  end if;
+  return new;
+end $$;
+drop trigger if exists client_messages_marketing on public.client_messages;
+create trigger client_messages_marketing before insert on public.client_messages
+  for each row execute function public.client_messages_marketing();
+
+-- ---------- Perfil público: con sesión del bloqueado, sin horarios (no_slots); sin sesión u otra cuenta, normal ----------
+create or replace function public.get_provider(pid bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when p.id is null then null else jsonb_build_object(
+    'id', p.id, 'slug', p.slug, 'name', p.name, 'bio', p.bio, 'address', p.address, 'instagram', p.instagram,
+    'hue', p.hue, 'photo_path', p.photo_path, 'rating_avg', p.rating_avg, 'rating_count', p.rating_count, 'followers', p.followers,
+    'dni_verified', p.dni_verified, 'tz', c.tz, 'can_charge', public.provider_can_charge(p.id),
+    'categories', (select coalesce(jsonb_agg(pc.category_id order by pc.is_primary desc, pc.category_id), '[]') from public.provider_categories pc where pc.provider_id = p.id),
+    'services', (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'duration', s.duration_min, 'price', s.price, 'category', s.category_id,
+                   'repeat_days', s.repeat_days, 'prep_note', s.prep_note, 'stamp_goal', s.stamp_goal,
+                   'addons', (select coalesce(jsonb_agg(jsonb_build_object('id', a.id, 'name', a.name, 'price', a.price, 'duration', a.duration_min) order by a.sort, a.id), '[]')
+                              from public.service_addons a where a.service_id = s.id and a.active)) order by s.category_id, s.sort, s.price), '[]')
+                 from public.services s where s.provider_id = p.id and s.active),
+    'settings', (select to_jsonb(st) from public.provider_settings st where st.provider_id = p.id),
+    'hours', case when x.no_slots then '[]'::jsonb else
+              (select coalesce(jsonb_agg(jsonb_build_object('dow', h.dow, 'shift', h.shift, 'opens', to_char(h.opens,'HH24:MI'), 'closes', to_char(h.closes,'HH24:MI'))), '[]')
+               from public.provider_hours h where h.provider_id = p.id) end,
+    'reviews', (select coalesce(jsonb_agg(r), '[]') from (select id, author, stars, body, reply, created_at from public.reviews where provider_id = p.id order by created_at desc limit 20) r),
+    'media', (select coalesce(jsonb_agg(m), '[]') from (select id, storage_path, kind, label from public.media where provider_id = p.id order by created_at desc limit 24) m),
+    'following', exists (select 1 from public.follows f where f.provider_id = p.id and f.user_id = auth.uid()),
+    'my_stamps', coalesce((select jsonb_object_agg(lc.service_id::text, lc.stamps) from public.loyalty_cards lc where lc.provider_id = p.id and lc.user_id = auth.uid()), '{}'::jsonb),
+    'no_slots', x.no_slots
+  ) end
+  from public.providers p join public.cities c on c.id = p.city_id
+  cross join lateral (select public.client_blocked(p.id, auth.uid()) as no_slots) x
+  where p.id = pid and (p.status = 'active' or p.owner_id = auth.uid() or public.is_admin())
+$$;
+
+-- primer horario libre de las tarjetas (list_providers): el bloqueado ve «Sin turnos libres esta semana»
+create or replace function public.next_free_slot(pid bigint, dur int default null) returns timestamptz
+language plpgsql stable security definer set search_path = public as $$
+declare tz text := public.provider_tz(pid); st record; d int; t timestamp; now_l timestamp; dd int; day date;
+begin
+  if public.client_blocked(pid, auth.uid()) then return null; end if;
+  select * into st from public.provider_settings where provider_id = pid;
+  if st is null or not st.online or not public.provider_can_charge(pid) then return null; end if;
+  dd := coalesce(dur, (select min(duration_min) from public.services where provider_id = pid and active));
+  if dd is null then return null; end if;
+  now_l := (now() at time zone tz) + make_interval(mins => st.notice_min);
+  for d in 0 .. st.ahead_days - 1 loop
+    day := (now() at time zone tz)::date + d;
+    select min(s) into t from public.slot_starts(pid, day, dd) s where s >= now_l;
+    if t is not null then return t at time zone tz; end if;
+  end loop;
+  return null;
+end $$;
+
+-- ---------- Aviso de cancelación: al bloqueado, sin «Reprogramalo cuando quieras» (D45.5) ----------
+create or replace function public.notify_booking(bid bigint, k text) returns void
+language plpgsql security definer set search_path = public as $$
+declare b record; t record; p record; lt timestamp; body text;
+        dias text[] := array['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+begin
+  if bid is null then return; end if;
+  select * into b from public.bookings where id = bid;
+  if b is null or b.client_id is null or b.source <> 'app' then return; end if;
+  if k = 'cancel' then
+    if b.settle_by_provider then
+      select true as enabled, '{barberia} tuvo que cancelar tu turno del {dia} a las {hora}. {barberia} se va a comunicar con vos para devolverte la seña ($' ||
+             replace(to_char(b.paid_mp + b.paid_wallet, 'FM999,999,999'), ',', '.') || ') o pasarte el turno a otro día.' as body into t;
+    else
+      select true as enabled, '{barberia} tuvo que cancelar tu turno del {dia} a las {hora}.' ||
+             case when b.paid_mp > 0 then ' Te devolvemos todo lo que pagaste ($' || replace(to_char(b.paid_mp + least(b.client_fee, b.app_fee) + b.paid_mp_fee, 'FM999,999,999'), ',', '.') || ').' else '' end ||
+             case when public.client_blocked(b.provider_id, b.client_id) then '' else ' Reprogramalo cuando quieras desde Mis turnos: {link}' end as body into t;
+    end if;
+  else
+    select enabled, mt.body into t from public.message_templates mt where provider_id = b.provider_id and key = k;
+    if t is null or not t.enabled then return; end if;
+  end if;
+  select id, name, address, slug into p from public.providers where id = b.provider_id;
+  lt := b.starts_at at time zone public.provider_tz(b.provider_id);
+  body := replace(replace(replace(replace(replace(replace(t.body,
+            '{nombre}', split_part(coalesce(b.client_name, ''), ' ', 1)), '{barberia}', p.name),
+            '{dia}', dias[extract(dow from lt)::int + 1] || ' ' || extract(day from lt)::int || '/' || extract(month from lt)::int),
+            '{hora}', to_char(lt, 'HH24:MI')), '{direccion}', coalesce(p.address, '')), '{link}', public.provider_link(p.id, p.slug));
+  if k = 'rev' and exists (select 1 from public.loyalty_events where booking_id = bid and kind = 'earn') then
+    body := body || ' 🎟️ Sumaste 1 sello en tu tarjeta de ' || coalesce(b.service_name, 'este servicio') || '.';
+  end if;
+  insert into public.client_messages (provider_id, user_id, body, kind, ref)
+  values (b.provider_id, b.client_id, left(body, 600), k, bid::text) on conflict do nothing;
+end $$;
+
+-- ---------- Mis turnos: no_slots (sin «Reprogramar» ni «Reservar de nuevo» con ese profesional) ----------
+create or replace function public.my_bookings() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(x order by x.starts_at desc), '[]') from (
+    select b.id, b.provider_id, b.service_id, p.name as provider_name, p.address, p.hue,
+           coalesce(sv.category_id, (select pc.category_id from public.provider_categories pc where pc.provider_id = p.id and pc.is_primary limit 1)) as category,
+           b.service_name, b.starts_at, b.ends_at, b.status, b.price, b.discount_pct, b.deposit, b.paid_mp, b.paid_wallet,
+           least(b.client_fee, b.app_fee) as client_fee, b.client_fee as fee_due, b.paid_mp_fee, b.mp_fee, b.mp_fee_pct, b.settle_by_provider, b.cashback, b.series_id, b.attendance_ok, b.addons, b.intake, c.tz, sv.repeat_days, sv.prep_note,
+           exists (select 1 from public.reviews r where r.booking_id = b.id) as reviewed, b.pay_method, p.photo_path,
+           exists (select 1 from public.loyalty_events le where le.booking_id = b.id and le.kind = 'earn') as stamped,
+           rf.amount as refund_amount, rf.done_at as refund_done_at, rf.reason as refund_reason,
+           case when rf.amount is null then null when rf.open then 'pending' else 'done' end as refund_status,
+           public.client_blocked(b.provider_id, b.client_id) as no_slots
+    from public.bookings b join public.providers p on p.id = b.provider_id join public.cities c on c.id = p.city_id
+    left join public.services sv on sv.id = b.service_id
+    left join lateral (select sum(r.amount)::int as amount, max(r.done_at) as done_at, min(r.reason) as reason,
+                              bool_or(r.status in ('pending','failed')) as open
+                       from public.refunds r where r.booking_id = b.id and r.status <> 'cancelled' having count(*) > 0) rf on true
+    where b.client_id = auth.uid() and b.source = 'app'
+    order by b.starts_at desc limit 200) x
+$$;
+
+-- ---------- Panel del profesional ----------
+-- los turnos que vienen de una ficha (cliente de la app: por su cuenta; contacto a mano: por el nombre escrito)
+create or replace function public.client_upcoming(p_provider bigint, p_user uuid, p_name text) returns setof bigint
+language sql stable security definer set search_path = public as $$
+  select b.id from public.bookings b
+   where b.provider_id = p_provider and b.starts_at > now() and b.status in ('confirmed','hold') and b.source <> 'block'
+     and ((p_user is not null and b.client_id = p_user)
+          or (p_user is null and b.client_id is null and b.source = 'manual' and lower(b.client_name) = lower(p_name)))
+   order by b.starts_at
+$$;
+revoke execute on function public.client_upcoming(bigint, uuid, text) from public, anon, authenticated;
+
+-- cancela esos turnos con la regla de siempre (D08: se devuelve todo lo que pagó). Devuelve {cancelled, refund}.
+create or replace function public.client_cancel_upcoming(p_provider bigint, p_user uuid, p_name text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare bid bigint; r jsonb; n int := 0; back int := 0;
+begin
+  for bid in select * from public.client_upcoming(p_provider, p_user, p_name) loop
+    r := public.cancel_by_provider(bid);
+    n := n + 1;
+    back := back + coalesce((r->>'refund_mp')::int, 0);
+  end loop;
+  return jsonb_build_object('cancelled', n, 'refund', back);
+end $$;
+revoke execute on function public.client_cancel_upcoming(bigint, uuid, text) from public, anon, authenticated;
+
+-- Eliminar de la lista. p_cancel: con turnos futuros, true los cancela (con devolución) y false los deja; null no hace
+-- nada y avisa (has_upcoming). Contacto a mano: se borra. Cliente de la app: sale de Clientes (hidden_at).
+create or replace function public.remove_client(p_client bigint, p_cancel boolean default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); c record; res jsonb := jsonb_build_object('cancelled', 0, 'refund', 0);
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  select * into c from public.provider_clients where id = p_client and provider_id = pid for update;
+  if c is null then raise exception 'not_found'; end if;
+  if exists (select 1 from public.client_upcoming(pid, c.user_id, c.name)) then
+    if p_cancel is null then raise exception 'has_upcoming'; end if;
+    if p_cancel then res := public.client_cancel_upcoming(pid, c.user_id, c.name); end if;
+  end if;
+  if c.user_id is null then
+    delete from public.provider_clients where id = c.id;
+  else
+    update public.provider_clients set hidden_at = now() where id = c.id;
+  end if;
+  return res || jsonb_build_object('deleted', c.user_id is null);
+end $$;
+
+-- Bloquear a una cuenta que reservó o que lo sigue. Mismo p_cancel que remove_client.
+create or replace function public.block_client(p_user uuid, p_cancel boolean default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); res jsonb := jsonb_build_object('cancelled', 0, 'refund', 0);
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  if p_user is null or p_user = auth.uid()
+     or not (exists (select 1 from public.follows where provider_id = pid and user_id = p_user)
+             or exists (select 1 from public.provider_clients where provider_id = pid and user_id = p_user)
+             or exists (select 1 from public.bookings where provider_id = pid and client_id = p_user)) then
+    raise exception 'not_found';
+  end if;
+  if exists (select 1 from public.client_upcoming(pid, p_user, null)) and p_cancel is null then
+    raise exception 'has_upcoming';
+  end if;
+  -- primero el bloqueo: el aviso de cancelación ya sale sin «Reprogramalo»
+  insert into public.client_blocks (provider_id, user_id) values (pid, p_user) on conflict do nothing;
+  if p_cancel then res := public.client_cancel_upcoming(pid, p_user, null); end if;
+  delete from public.follows where provider_id = pid and user_id = p_user;
+  delete from public.waitlist where provider_id = pid and user_id = p_user;
+  -- lo que ya estaba en la cola y no salió (mensajes, novedades, ofertas, cumpleaños de este profesional)
+  update public.push_outbox o set status = 'skipped', skip_reason = 'opt_out'
+    from public.client_messages m
+   where o.source = 'message' and o.source_id = m.id and o.status = 'pending' and o.user_id = p_user
+     and m.provider_id = pid and m.kind in ('msg','bday','offer','news');
+  update public.email_outbox e set status = 'skipped', skip_reason = 'opt_out'
+    from public.client_messages m
+   where e.message_id = m.id and e.status = 'pending' and m.provider_id = pid and m.user_id = p_user
+     and m.kind in ('msg','bday','offer','news');
+  return res;
+end $$;
+
+-- Desbloquear: vuelve a poder reservar y seguir (no se lo vuelve a seguir solo) y, si ya era cliente, vuelve a Clientes
+create or replace function public.unblock_client(p_user uuid) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); n int;
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  delete from public.client_blocks where provider_id = pid and user_id = p_user;
+  get diagnostics n = row_count;
+  return n > 0;
+end $$;
+
+-- Clientes → Bloqueados: nombre como en Clientes (o «Ana G.» si nunca reservó) y desde cuándo
+create or replace function public.my_blocked() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', x.user_id, 'name', x.name, 'photo', x.avatar_path, 'since', x.created_at,
+                                               'client', x.client_id) order by x.created_at desc), '[]')
+  from (select k.user_id, k.created_at, pf.avatar_path, pc.id as client_id,
+               coalesce(pc.name, public.follower_label(pf.full_name)) as name
+          from public.client_blocks k
+          left join public.profiles pf on pf.id = k.user_id
+          left join public.provider_clients pc on pc.provider_id = k.provider_id and pc.user_id = k.user_id
+         where k.provider_id = public.my_provider()
+         order by k.created_at desc limit 500) x
+$$;
+
+-- ---------- Permisos ----------
+revoke execute on function public.follows_blocked(), public.waitlist_blocked(), public.bookings_blocked(), public.bookings_unhide(),
+  public.client_messages_marketing() from public, anon, authenticated;
+revoke execute on function public.remove_client(bigint, boolean), public.block_client(uuid, boolean), public.unblock_client(uuid),
+  public.my_blocked() from public, anon;
+grant execute on function public.remove_client(bigint, boolean), public.block_client(uuid, boolean), public.unblock_client(uuid),
+  public.my_blocked() to authenticated;
+grant execute on function public.get_provider(bigint), public.next_free_slot(bigint, int) to anon, authenticated;
+grant execute on function public.my_bookings() to authenticated;
+
+-- ===================== 20261110210000_stock_compra_venta.sql =====================
+-- =====================================================================
+-- TuTiempo · 10/11 · punto 9 · Productos: el stock solo cambia por una compra o por una venta
+--   - Antes la app escribía products.stock directo (los botones + y − de Productos, «Compré más» y «Vender producto»
+--     mandaban el número nuevo desde el navegador). Ahora el stock lo lleva la base:
+--       · sube solo con una compra: product_buy (suma al stock y carga el gasto de productos del mes en la misma
+--         transacción, ligado al producto y con la cantidad). Con el mes actual cerrado, no entra (month_closed), como
+--         los gastos fijos;
+--       · baja solo con una venta: el trigger walkins_stock descuenta la cantidad al guardar una venta (walkins de tipo
+--         'product' con producto) y falla con no_stock si no alcanza; borrar la venta la devuelve y cambiar el producto o
+--         la cantidad ajusta la diferencia;
+--       · el producto nuevo con su stock inicial: product_add (el producto y, con precio de compra, el gasto «Stock
+--         inicial» en la misma transacción). El insert directo sigue permitido (con stock inicial).
+--   - La app ya no puede cambiar products.stock por update: la columna sale de los permisos de la app y el trigger
+--     products_stock_guard lo frena igual (stock_locked) si alguna vez vuelve a tener el permiso. Las funciones de
+--     arriba corren como su dueño y sí pueden; las tareas sin sesión (cron, SQL Editor) tampoco pasan por la regla.
+--   - Las ventas viejas sin producto (product_id null) no tocan el stock, como antes.
+-- Idempotente y sin borrar datos.
+-- =====================================================================
+
+-- ---------- columnas que la app puede cambiar en un producto (stock no) ----------
+revoke update on public.products from authenticated;
+grant update (name, price, cost, min_stock) on public.products to authenticated;
+
+-- ---------- stock: nadie lo cambia por update desde la app ----------
+create or replace function public.products_stock_guard() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  -- desde la app (authenticated/anon) no; las funciones security definer corren como su dueño y sí pueden
+  if new.stock is distinct from old.stock and current_user in ('authenticated', 'anon') then
+    raise exception 'stock_locked';
+  end if;
+  return new;
+end $$;
+drop trigger if exists products_stock_guard on public.products;
+create trigger products_stock_guard before update of stock on public.products
+  for each row execute function public.products_stock_guard();
+
+-- ---------- la venta baja el stock; borrarla lo devuelve ----------
+create or replace function public.walkins_stock() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  old_on boolean := tg_op <> 'INSERT' and old.kind = 'product' and old.product_id is not null;
+  new_on boolean := tg_op <> 'DELETE' and new.kind = 'product' and new.product_id is not null;
+  n int;
+begin
+  -- un cambio que no toca el producto ni la cantidad no mueve el stock
+  if tg_op = 'UPDATE' and old_on = new_on and old.product_id is not distinct from new.product_id
+     and coalesce(old.qty, 1) = coalesce(new.qty, 1) then
+    return null;
+  end if;
+  -- lo vendido antes vuelve al stock (si el producto ya no existe, no hay nada que devolver)
+  if old_on then
+    update public.products set stock = stock + coalesce(old.qty, 1) where id = old.product_id;
+  end if;
+  if new_on then
+    n := coalesce(new.qty, 1);
+    if not exists (select 1 from public.products p where p.id = new.product_id and p.provider_id = new.provider_id) then
+      raise exception 'product_not_found';
+    end if;
+    update public.products set stock = stock - n where id = new.product_id and stock >= n;
+    if not found then raise exception 'no_stock'; end if;
+  end if;
+  return null;
+end $$;
+drop trigger if exists walkins_stock on public.walkins;
+create trigger walkins_stock after insert or update of kind, product_id, qty or delete on public.walkins
+  for each row execute function public.walkins_stock();
+
+-- ---------- la compra: suma al stock y carga el gasto del mes, todo junto ----------
+-- p_cost es lo que pagó por todas las unidades (entero, en pesos). Devuelve el stock nuevo y el gasto cargado.
+create or replace function public.product_buy(p_product bigint, p_qty int, p_cost int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  pid bigint := public.my_provider();
+  today date := (now() at time zone 'America/Argentina/Buenos_Aires')::date;
+  pr record; st int; eid bigint;
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  if p_qty is null or p_qty < 1 then raise exception 'bad_qty'; end if;
+  if p_cost is null or p_cost < 1 then raise exception 'bad_amount'; end if;
+  select p.id, p.name into pr from public.products p where p.id = p_product and p.provider_id = pid for update;
+  if not found then raise exception 'product_not_found'; end if;
+  if public.month_closed(pid, public.month_start_ba()) then raise exception 'month_closed'; end if;
+  update public.products set stock = stock + p_qty where id = pr.id returning stock into st;
+  insert into public.expenses (provider_id, concept, amount, category, spent_on, product_id, qty)
+  values (pid, left('Compra: ' || pr.name || ' × ' || p_qty, 80), p_cost, 'Productos', today, pr.id, p_qty)
+  returning id into eid;
+  return jsonb_build_object('stock', st, 'expense_id', eid, 'spent_on', today);
+end $$;
+
+-- ---------- el producto nuevo con su stock inicial (y, con precio de compra, su gasto) ----------
+create or replace function public.product_add(p_name text, p_price int, p_cost int, p_stock int, p_min int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  pid bigint := public.my_provider();
+  today date := (now() at time zone 'America/Argentina/Buenos_Aires')::date;
+  nm text := btrim(coalesce(p_name, ''));
+  st int := coalesce(p_stock, 0);
+  spent int; prid bigint; eid bigint;
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  if st < 0 or coalesce(p_min, 0) < 0 then raise exception 'bad_qty'; end if;
+  if p_price is null or p_price < 0 or (p_cost is not null and p_cost < 0) then raise exception 'bad_amount'; end if;
+  spent := case when coalesce(p_cost, 0) > 0 and st > 0 then st * p_cost else 0 end;   -- stock × precio de compra
+  if spent > 0 and public.month_closed(pid, public.month_start_ba()) then raise exception 'month_closed'; end if;
+  insert into public.products (provider_id, name, price, cost, stock, min_stock)
+  values (pid, left(nm, 80), p_price, p_cost, st, coalesce(p_min, 0))
+  returning id into prid;
+  if spent > 0 then
+    insert into public.expenses (provider_id, concept, amount, category, spent_on, product_id, qty)
+    values (pid, left('Stock inicial: ' || left(nm, 80) || ' × ' || st, 80), spent, 'Productos', today, prid, st)
+    returning id into eid;
+  end if;
+  return jsonb_build_object('id', prid, 'expense_id', eid, 'spent_on', today);
+end $$;
+
+-- ---------- «Ajustar stock» (aprobado por el dueño, 10/11): lo que sale sin venderse ----------
+-- Solo resta: un producto roto, vencido o usado en el local. No es venta (no va a la caja) ni gasto (no va a los gastos
+-- del mes): queda anotado acá, con su motivo. La app lo lee; lo escribe solo product_adjust.
+create table if not exists public.stock_adjustments (
+  id          bigint generated always as identity primary key,
+  provider_id bigint not null references public.providers(id) on delete cascade,
+  product_id  bigint references public.products(id) on delete set null,
+  at          timestamptz not null default now(),
+  qty         integer not null check (qty > 0),
+  reason      text not null check (reason in ('broken', 'expired', 'in_use'))
+);
+create index if not exists stock_adjustments_product on public.stock_adjustments (product_id, at desc);
+create index if not exists stock_adjustments_provider on public.stock_adjustments (provider_id, at desc);
+alter table public.stock_adjustments enable row level security;
+revoke all on public.stock_adjustments from public, anon, authenticated;
+grant select on public.stock_adjustments to authenticated;   -- escribir, solo product_adjust
+grant all on public.stock_adjustments to service_role;
+drop policy if exists stock_adjustments_owner on public.stock_adjustments;
+create policy stock_adjustments_owner on public.stock_adjustments for select to authenticated
+  using (provider_id = (select public.my_provider()) or (select public.is_admin()));
+
+-- resta p_qty del stock (sin pasar de lo que hay) y lo anota con su motivo. Devuelve el stock nuevo y el ajuste.
+create or replace function public.product_adjust(p_product bigint, p_qty int, p_reason text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare pid bigint := public.my_provider(); st int; aid bigint; at_ timestamptz;
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  if p_reason is null or p_reason not in ('broken', 'expired', 'in_use') then raise exception 'bad_reason'; end if;
+  if p_qty is null or p_qty < 1 then raise exception 'bad_qty'; end if;
+  perform 1 from public.products p where p.id = p_product and p.provider_id = pid for update;
+  if not found then raise exception 'product_not_found'; end if;
+  update public.products set stock = stock - p_qty where id = p_product and stock >= p_qty returning stock into st;
+  if not found then raise exception 'no_stock'; end if;
+  insert into public.stock_adjustments (provider_id, product_id, qty, reason) values (pid, p_product, p_qty, p_reason)
+  returning id, at into aid, at_;
+  return jsonb_build_object('stock', st, 'id', aid, 'at', at_);
+end $$;
+
+-- al dar de baja un negocio (status 'deleted': las funciones de baja borran sus ventas, gastos y productos), sus ajustes
+-- también se borran. Borrar un solo producto no: sus ajustes quedan, sin producto, como sus ventas y compras.
+create or replace function public.stock_adjustments_purge() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.stock_adjustments where provider_id = new.id;
+  return null;
+end $$;
+drop trigger if exists stock_adjustments_purge on public.providers;
+create trigger stock_adjustments_purge after update of status on public.providers
+  for each row when (new.status = 'deleted' and old.status is distinct from 'deleted')
+  execute function public.stock_adjustments_purge();
+revoke execute on function public.stock_adjustments_purge() from public, anon, authenticated;
+
+revoke execute on function public.products_stock_guard(), public.walkins_stock() from public, anon, authenticated;
+revoke execute on function public.product_buy(bigint, int, int), public.product_add(text, int, int, int, int),
+  public.product_adjust(bigint, int, text) from public, anon;
+grant execute on function public.product_buy(bigint, int, int), public.product_add(text, int, int, int, int),
+  public.product_adjust(bigint, int, text) to authenticated;
+
+-- ===================== 20261110220000_caja_7_dias.sql =====================
+-- =====================================================================
+-- TuTiempo · 10/11 · punto 8 · corregir la Caja de los últimos 7 días
+--   - Un día de los últimos 7 (y hoy) se puede volver a abrir y corregir: lo cargado sin turno y las ventas (walkins) y
+--     cómo se cobró el resto de los turnos (rest_method / rest_parts). Después se cierra de nuevo.
+--   - Más de 7 días atrás: solo se ve (day_too_old). Con el mes de ese día cerrado en Finanzas no se reabre ni se
+--     corrige nada: primero hay que reabrir el mes (month_closed). Con la caja del día cerrada no se corrige: primero
+--     «Volver a abrir la caja» (day_closed). La base lo controla también si se escribe directo (triggers).
+--   - Registro: los cambios hechos sobre un día que se volvió a abrir quedan en cash_day_log (qué y cuándo), que el
+--     profesional ve en la Caja de ese día. Lo escriben solo los triggers.
+--   - Las tareas internas (sin sesión: cron, SQL Editor) no pasan por estas reglas.
+-- Idempotente y sin borrar datos.
+-- =====================================================================
+
+create table if not exists public.cash_day_log (
+  id          bigint generated always as identity primary key,
+  provider_id bigint not null references public.providers(id) on delete cascade,
+  day         date not null,
+  at          timestamptz not null default now(),
+  kind        text not null check (kind in ('reopen','close','add','edit','delete','rest')),
+  detail      text not null check (char_length(detail) between 1 and 240)
+);
+create index if not exists cash_day_log_day on public.cash_day_log (provider_id, day, at);
+alter table public.cash_day_log enable row level security;
+drop policy if exists cash_day_log_owner on public.cash_day_log;
+create policy cash_day_log_owner on public.cash_day_log for select to authenticated
+  using (provider_id = (select public.my_provider()) or (select public.is_admin()));
+revoke all on public.cash_day_log from public, anon, authenticated;
+grant select on public.cash_day_log to authenticated;
+
+-- ---------- reglas ----------
+-- "open" se puede corregir; si no, por qué no: day_too_old (más de 7 días), month_closed, day_closed
+create or replace function public.cash_day_state(p_provider bigint, p_day date) returns text
+language sql stable security definer set search_path = public as $$
+  select case
+    when p_day < (now() at time zone 'America/Argentina/Buenos_Aires')::date - 7 then 'day_too_old'
+    when exists (select 1 from public.cash_closings c where c.provider_id = p_provider and c.kind = 'month'
+                  and c.period = date_trunc('month', p_day)::date) then 'month_closed'
+    when exists (select 1 from public.cash_closings c where c.provider_id = p_provider and c.kind = 'day' and c.period = p_day) then 'day_closed'
+    else 'open' end
+$$;
+
+-- el día de caja de un movimiento sin turno y de un turno (en la hora del profesional)
+create or replace function public.cash_day_of(p_provider bigint, p_at timestamptz) returns date
+language sql stable security definer set search_path = public as $$
+  select (p_at at time zone coalesce(public.provider_tz(p_provider), 'America/Argentina/Buenos_Aires'))::date
+$$;
+
+create or replace function public.cash_money(p int) returns text language sql immutable set search_path = public as $$
+  select '$' || replace(to_char(coalesce(p, 0), 'FM999,999,999,990'), ',', '.')
+$$;
+create or replace function public.cash_medio(p text) returns text language sql immutable set search_path = public as $$
+  select case p when 'cash' then 'Efectivo' when 'transfer' then 'Transferencia' when 'mp' then 'Mercado Pago' else coalesce(p, '—') end
+$$;
+
+-- ¿ese día se volvió a abrir después de cerrarlo? (desde ahí, todo cambio queda en el registro)
+create or replace function public.cash_day_reopened(p_provider bigint, p_day date) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.cash_day_log l where l.provider_id = p_provider and l.day = p_day and l.kind = 'reopen')
+$$;
+
+create or replace function public.cash_day_log_add(p_provider bigint, p_day date, p_kind text, p_detail text) returns void
+language sql security definer set search_path = public as $$
+  insert into public.cash_day_log (provider_id, day, kind, detail) values (p_provider, p_day, p_kind, left(p_detail, 240))
+$$;
+
+-- ---------- lo cargado sin turno y las ventas ----------
+create or replace function public.walkins_cash_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare st text;
+begin
+  if auth.uid() is null then return case when tg_op = 'DELETE' then old else new end; end if;
+  if tg_op in ('UPDATE','DELETE') then
+    st := public.cash_day_state(old.provider_id, public.cash_day_of(old.provider_id, old.at));
+    if st <> 'open' then raise exception '%', st; end if;
+  end if;
+  if tg_op in ('INSERT','UPDATE') then
+    st := public.cash_day_state(new.provider_id, public.cash_day_of(new.provider_id, new.at));
+    if st <> 'open' then raise exception '%', st; end if;
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end $$;
+drop trigger if exists walkins_cash_guard on public.walkins;
+create trigger walkins_cash_guard before insert or update or delete on public.walkins
+  for each row execute function public.walkins_cash_guard();
+
+create or replace function public.walkins_cash_log() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare d date; what text;
+begin
+  if tg_op = 'DELETE' then
+    d := public.cash_day_of(old.provider_id, old.at);
+    if public.cash_day_reopened(old.provider_id, d) then
+      perform public.cash_day_log_add(old.provider_id, d, 'delete', 'Borraste ' || old.description || ' · ' || public.cash_money(old.amount + old.tip) || ' en ' || public.cash_medio(old.method));
+    end if;
+    return old;
+  end if;
+  d := public.cash_day_of(new.provider_id, new.at);
+  if not public.cash_day_reopened(new.provider_id, d) then return new; end if;
+  if tg_op = 'INSERT' then
+    perform public.cash_day_log_add(new.provider_id, d, 'add', 'Agregaste ' || new.description || ' · ' || public.cash_money(new.amount + new.tip) || ' en ' || public.cash_medio(new.method));
+  elsif (old.amount + old.tip, old.method, old.description, old.at) is distinct from (new.amount + new.tip, new.method, new.description, new.at) then
+    what := 'Cambiaste ' || old.description || ': ' || public.cash_money(old.amount + old.tip) || ' en ' || public.cash_medio(old.method)
+            || ' → ' || case when new.description <> old.description then new.description || ' ' else '' end
+            || public.cash_money(new.amount + new.tip) || ' en ' || public.cash_medio(new.method);
+    perform public.cash_day_log_add(new.provider_id, d, 'edit', what);
+  end if;
+  return new;
+end $$;
+drop trigger if exists walkins_cash_log on public.walkins;
+create trigger walkins_cash_log after insert or update or delete on public.walkins
+  for each row execute function public.walkins_cash_log();
+
+-- ---------- cómo se cobró el resto de un turno ----------
+create or replace function public.bookings_rest_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare st text;
+begin
+  if auth.uid() is null or (new.rest_method is not distinct from old.rest_method and new.rest_parts is not distinct from old.rest_parts) then
+    return new;
+  end if;
+  st := public.cash_day_state(new.provider_id, public.cash_day_of(new.provider_id, new.starts_at));
+  if st <> 'open' then raise exception '%', st; end if;
+  return new;
+end $$;
+drop trigger if exists bookings_rest_guard on public.bookings;
+create trigger bookings_rest_guard before update of rest_method, rest_parts on public.bookings
+  for each row execute function public.bookings_rest_guard();
+
+create or replace function public.bookings_rest_log() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare d date; how text;
+begin
+  if new.source = 'block' or (new.rest_method is not distinct from old.rest_method and new.rest_parts is not distinct from old.rest_parts) then
+    return null;
+  end if;
+  d := public.cash_day_of(new.provider_id, new.starts_at);
+  if not public.cash_day_reopened(new.provider_id, d) then return null; end if;
+  how := case
+    when new.rest_parts is not null and jsonb_typeof(new.rest_parts) = 'array' and jsonb_array_length(new.rest_parts) > 0 then
+      (select string_agg(public.cash_money((x->>'amount')::int) || ' en ' || public.cash_medio(x->>'method'), ' + ') from jsonb_array_elements(new.rest_parts) x)
+    when new.rest_method is not null then 'todo en ' || public.cash_medio(new.rest_method)
+    else 'sin anotar' end;
+  perform public.cash_day_log_add(new.provider_id, d, 'rest', 'Resto de ' || coalesce(nullif(new.client_name, ''), 'un cliente') || ': ' || how);
+  return null;
+end $$;
+drop trigger if exists bookings_rest_log on public.bookings;
+create trigger bookings_rest_log after update of rest_method, rest_parts on public.bookings
+  for each row execute function public.bookings_rest_log();
+
+-- ---------- volver a abrir y cerrar de nuevo ----------
+create or replace function public.cash_closings_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare st text;
+begin
+  if auth.uid() is null or old.kind <> 'day' then return old; end if;
+  st := public.cash_day_state(old.provider_id, old.period);
+  -- reabrir un día: solo de los últimos 7 y con su mes abierto (day_closed es justamente lo que se está deshaciendo)
+  if st in ('day_too_old', 'month_closed') then raise exception '%', st; end if;
+  return old;
+end $$;
+drop trigger if exists cash_closings_guard on public.cash_closings;
+create trigger cash_closings_guard before delete on public.cash_closings
+  for each row execute function public.cash_closings_guard();
+
+create or replace function public.cash_closings_log() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.kind = 'day' then
+      perform public.cash_day_log_add(old.provider_id, old.period, 'reopen', 'Volviste a abrir la caja (estaba cerrada con ' || public.cash_money(old.income) || ')');
+    end if;
+    return old;
+  end if;
+  if new.kind = 'day' and public.cash_day_reopened(new.provider_id, new.period) then
+    perform public.cash_day_log_add(new.provider_id, new.period, 'close', 'Cerraste la caja de nuevo: ' || public.cash_money(new.income));
+  end if;
+  return new;
+end $$;
+drop trigger if exists cash_closings_log on public.cash_closings;
+create trigger cash_closings_log after insert or update or delete on public.cash_closings
+  for each row execute function public.cash_closings_log();
+
+-- para la app: el estado de un día de la caja (open, day_closed, month_closed, day_too_old)
+create or replace function public.my_cash_day(p_day date) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare pid bigint := public.my_provider();
+begin
+  if pid is null then raise exception 'not_provider'; end if;
+  return jsonb_build_object('state', public.cash_day_state(pid, p_day),
+    'log', coalesce((select jsonb_agg(jsonb_build_object('at', l.at, 'kind', l.kind, 'detail', l.detail) order by l.at, l.id)
+                       from public.cash_day_log l where l.provider_id = pid and l.day = p_day), '[]'));
+end $$;
+
+revoke execute on function public.cash_day_state(bigint, date), public.cash_day_of(bigint, timestamptz), public.cash_day_reopened(bigint, date),
+  public.cash_day_log_add(bigint, date, text, text), public.walkins_cash_guard(), public.walkins_cash_log(), public.bookings_rest_guard(),
+  public.bookings_rest_log(), public.cash_closings_guard(), public.cash_closings_log() from public, anon, authenticated;
+revoke execute on function public.my_cash_day(date) from public, anon;
+grant execute on function public.my_cash_day(date) to authenticated;
+
+-- ===================== 20261110230000_deshacer_asistio.sql =====================
+-- =====================================================================
+-- TuTiempo · 10/11 · punto 4 · deshacer o editar «Asistió» (decidido por Bruno el 10/11)
+--   - undo_attendance(turno, 'confirmed' | 'no_show'): el turno atendido vuelve a Confirmado o pasa a No vino.
+--       · se borra el resto cobrado en el local (rest_parts y rest_method: sale de la Caja del día);
+--       · se resta el sello que sumó ese turno (loyalty_events 'undo'). Si el cliente ya lo usó en un canje
+--         (un canje de esa tarjeta después del sello, sin devolver), NO se puede deshacer: stamp_redeemed;
+--       · la ficha del cliente: una visita menos, lo que gastó menos el precio, la última visita vuelve a la anterior;
+--         con No vino, una falta más (como el botón «No vino»);
+--       · el ranking de actividad lo corrige solo el trigger bookings_activity (deja de ser 'done');
+--       · NUNCA hay devolución de Mercado Pago (D08) y el pedido de reseña que ya salió queda (una reseña que ya existe
+--         también; una nueva ya no se puede dejar porque la base pide el turno atendido).
+--   - Solo con la caja de ese día abierta (y el mes sin cerrar): si no, day_closed. Lo mismo para cambiar cómo se cobró
+--     el resto (set_rest_method, set_rest_parts): antes se podía con la caja cerrada y el cierre dejaba de cerrar.
+--   - attendance_undo_check(turno): lo que hace falta saber antes de confirmar (sello y caja), para el aviso de la app.
+-- Idempotente y sin borrar datos.
+-- =====================================================================
+
+alter table public.loyalty_events drop constraint if exists loyalty_events_kind_check;
+alter table public.loyalty_events add constraint loyalty_events_kind_check
+  check (kind in ('earn','manual','redeem','refund','undo'));
+
+-- un turno puede sumar su sello, perderlo al deshacer y volver a sumarlo si se marca Asistió de nuevo: el índice que
+-- dejaba un solo evento por turno y tipo queda para los canjes y sus devoluciones. Que un turno no sume dos veces lo
+-- asegura mark_booking (solo pasa de Confirmado a Atendido una vez por vuelta, con el turno bloqueado).
+drop index if exists public.loyalty_events_once;
+create unique index if not exists loyalty_events_once_redeem on public.loyalty_events (booking_id, kind)
+  where booking_id is not null and kind in ('redeem', 'refund');
+
+-- sellos: 'undo' resta un sello ganado (también con los sellos apagados, como la devolución)
+create or replace function public.stamp_add(pid bigint, uid uuid, sid bigint, d integer, k text, bid bigint)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  -- C29: con los sellos apagados no se suma (la visita se marca igual) y no se canjea; la devolución y el deshacer sí
+  if not public.stamps_enabled() then
+    if k = 'earn' then
+      return null;
+    end if;
+    if k in ('manual', 'redeem') then
+      raise exception 'stamps_off';
+    end if;
+  end if;
+  insert into public.loyalty_events (provider_id, user_id, service_id, kind, delta, booking_id) values (pid, uid, sid, k, d, bid);
+  insert into public.loyalty_cards as lc (provider_id, user_id, service_id, stamps, earned, redeemed)
+  values (pid, uid, sid, greatest(d, 0), case when k in ('earn','manual','undo') then greatest(d, 0) else 0 end, 0)
+  on conflict (provider_id, user_id, service_id) do update set
+    stamps   = lc.stamps + d,
+    earned   = lc.earned + case when k in ('earn','manual','undo') then d else 0 end,
+    redeemed = lc.redeemed + case when k = 'redeem' then -d when k = 'refund' then -d else 0 end,
+    updated_at = now()
+  returning stamps into n;
+  return n;
+end $$;
+
+-- ¿la caja del día de ese turno (o su mes) está cerrada?
+create or replace function public.booking_day_closed(p_provider bigint, p_starts timestamptz) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.cash_closings c
+     where c.provider_id = p_provider
+       and ((c.kind = 'day' and c.period = (p_starts at time zone public.provider_tz(p_provider))::date)
+         or (c.kind = 'month' and c.period = date_trunc('month', p_starts at time zone public.provider_tz(p_provider))::date)))
+$$;
+
+-- el sello que sumó un turno: 'none' (no sumó o ya se restó), 'undo' (se puede restar) o 'redeemed' (ya lo canjeó)
+create or replace function public.attendance_stamp_state(p_booking bigint) returns text
+language plpgsql stable security definer set search_path = public as $$
+declare e record; have int;
+begin
+  select * into e from public.loyalty_events where booking_id = p_booking and kind = 'earn' order by id desc limit 1;
+  if e.id is null or exists (select 1 from public.loyalty_events u where u.booking_id = p_booking and u.kind = 'undo' and u.id > e.id) then
+    return 'none';
+  end if;
+  select stamps into have from public.loyalty_cards
+   where provider_id = e.provider_id and user_id = e.user_id and service_id = e.service_id;
+  if coalesce(have, 0) < e.delta
+     or exists (select 1 from public.loyalty_events r
+                 where r.provider_id = e.provider_id and r.user_id = e.user_id and r.service_id = e.service_id
+                   and r.kind = 'redeem' and r.id > e.id
+                   and not exists (select 1 from public.loyalty_events f where f.booking_id = r.booking_id and f.kind = 'refund')) then
+    return 'redeemed';
+  end if;
+  return 'undo';
+end $$;
+
+-- antes de confirmar: qué pasa con el sello y si la caja de ese día está cerrada
+create or replace function public.attendance_undo_check(p_booking bigint) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare b record;
+begin
+  select id, provider_id, status, source, starts_at into b from public.bookings where id = p_booking;
+  if b.id is null or not public.owns_provider(b.provider_id) then raise exception 'not_found'; end if;
+  return jsonb_build_object('status', b.status,
+                            'stamp', public.attendance_stamp_state(b.id),
+                            'day_closed', public.booking_day_closed(b.provider_id, b.starts_at));
+end $$;
+
+create or replace function public.undo_attendance(p_booking bigint, p_to text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare b record; tz text; st text; e record; prev date;
+begin
+  if p_to is null or p_to not in ('confirmed','no_show') then raise exception 'bad_status'; end if;
+  select * into b from public.bookings where id = p_booking for update;
+  if b.id is null or not public.owns_provider(b.provider_id) then raise exception 'not_found'; end if;
+  if b.status <> 'done' or b.source = 'block' then raise exception 'bad_state'; end if;
+  if public.booking_day_closed(b.provider_id, b.starts_at) then raise exception 'day_closed'; end if;
+  st := public.attendance_stamp_state(b.id);
+  if st = 'redeemed' then raise exception 'stamp_redeemed'; end if;
+  if st = 'undo' then
+    select * into e from public.loyalty_events where booking_id = b.id and kind = 'earn' order by id desc limit 1;
+    perform public.stamp_add(e.provider_id, e.user_id, e.service_id, -e.delta, 'undo', b.id);
+  end if;
+  tz := public.provider_tz(b.provider_id);
+  update public.bookings set status = p_to, rest_parts = null, rest_method = null where id = b.id;
+  -- la última visita anterior de ese cliente (sin este turno)
+  select max((x.starts_at at time zone tz)::date) into prev from public.bookings x
+   where x.provider_id = b.provider_id and x.status = 'done' and x.id <> b.id
+     and ((b.client_id is not null and x.client_id = b.client_id) or (b.client_id is null and lower(x.client_name) = lower(b.client_name)));
+  update public.provider_clients c set
+     visits = greatest(visits - 1, 0),
+     no_shows = no_shows + (p_to = 'no_show')::int,
+     total_spent = greatest(total_spent - b.price, 0),
+     last_visit = case when last_visit = (b.starts_at at time zone tz)::date then prev else last_visit end
+   where c.provider_id = b.provider_id
+     and ((b.client_id is not null and c.user_id = b.client_id) or (b.client_id is null and lower(c.name) = lower(b.client_name)));
+  return jsonb_build_object('status', p_to, 'stamp', st);
+end $$;
+
+-- cambiar cómo se cobró el resto: solo con la caja de ese día abierta
+create or replace function public.set_rest_method(p_booking bigint, p_method text) returns text
+language plpgsql security definer set search_path = public as $$
+declare b record;
+begin
+  if p_method is not null and p_method not in ('cash','mp','transfer') then raise exception 'bad_method'; end if;
+  select id, provider_id, status, source, starts_at into b from public.bookings where id = p_booking for update;
+  if b.id is null or b.provider_id is distinct from public.my_provider() then raise exception 'forbidden'; end if;
+  if b.source = 'block' or b.status <> 'done' then raise exception 'not_done'; end if;
+  if public.booking_day_closed(b.provider_id, b.starts_at) then raise exception 'day_closed'; end if;
+  update public.bookings set rest_method = p_method, rest_parts = null where id = p_booking;
+  return p_method;
+end $$;
+
+create or replace function public.set_rest_parts(p_booking bigint, p_parts jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare b record; part jsonb; total int := 0; methods text[] := '{}'; clean jsonb := '[]'; amt int; m text;
+begin
+  select id, provider_id, status, source, price, paid_mp, paid_wallet, starts_at into b from public.bookings where id = p_booking for update;
+  if b.id is null or b.provider_id is distinct from public.my_provider() then raise exception 'forbidden'; end if;
+  if b.source = 'block' or b.status <> 'done' then raise exception 'not_done'; end if;
+  if public.booking_day_closed(b.provider_id, b.starts_at) then raise exception 'day_closed'; end if;
+  if p_parts is null or jsonb_typeof(p_parts) <> 'array' or jsonb_array_length(p_parts) not between 1 and 2 then
+    raise exception 'bad_parts';
+  end if;
+  for part in select * from jsonb_array_elements(p_parts) loop
+    m := part->>'method';
+    if m is null or m not in ('cash','mp','transfer') then raise exception 'bad_method'; end if;
+    if m = any(methods) then raise exception 'bad_parts'; end if;
+    -- montos enteros en pesos (sin decimales ni texto)
+    if coalesce(jsonb_typeof(part->'amount'), '') <> 'number' or coalesce(part->>'amount', '') !~ '^[0-9]+$' then raise exception 'bad_amount'; end if;
+    amt := (part->>'amount')::int;
+    if amt <= 0 then raise exception 'bad_amount'; end if;
+    methods := methods || m;
+    total := total + amt;
+    clean := clean || jsonb_build_array(jsonb_build_object('method', m, 'amount', amt));
+  end loop;
+  if total > public.booking_rest(b.price, b.paid_mp, b.paid_wallet) then raise exception 'over_rest'; end if;
+  update public.bookings set rest_parts = clean, rest_method = methods[1] where id = p_booking;
+  return clean;
+end $$;
+
+revoke execute on function public.booking_day_closed(bigint, timestamptz), public.attendance_stamp_state(bigint)
+  from public, anon, authenticated;
+revoke execute on function public.undo_attendance(bigint, text), public.attendance_undo_check(bigint),
+  public.set_rest_method(bigint, text), public.set_rest_parts(bigint, jsonb) from public, anon;
+grant execute on function public.undo_attendance(bigint, text), public.attendance_undo_check(bigint),
+  public.set_rest_method(bigint, text), public.set_rest_parts(bigint, jsonb) to authenticated;
+
 -- ===================== 20261110240000_feriados_cerrados.sql =====================
 -- 10/11 · Punto 13: feriados cerrados por defecto (cambia D39). Idempotente; no borra datos.
 --

@@ -12,6 +12,8 @@ import { freeGaps } from "../../lib/huecos.js";
 import { feeOf } from "./finanzas.js";
 import { restOf } from "../../lib/resto.js";
 import { restEditor, restSummary } from "./resto.js";
+import { cajaClosed, doneActions } from "./deshacer.js";
+import { dayState } from "./finanzas.js";
 import { ic } from "../../ui/iconos.js";
 import { followersBlockedNote, provActive } from "../../lib/alta.js";
 
@@ -22,10 +24,22 @@ function doneRest(item) {
     return "";
   }
   const loaded = !!item.restMethod || !!(item.restParts && item.restParts.length);
+  // 10/11 · D42: con la caja de ese día cerrada (o su mes, o de hace más de 7 días) el cobro no se anota ni se cambia
+  const state = dayState(item.date);
+  if (state !== "open") {
+    const why =
+      state === "day_closed"
+        ? `La caja de ese día está cerrada: para anotar cómo te pagó el resto, primero volvé a abrirla.</p><button type="button" class="btn btn-ghost btn-block" data-act="reopenDay" data-d="${item.date}">Volver a abrir la caja</button>`
+        : state === "month_closed"
+          ? "El mes de este turno está cerrado en Finanzas: para cambiar el cobro, primero volvé a abrir el mes.</p>"
+          : "La caja de hace más de 7 días solo se ve.</p>";
+    return `${loaded ? `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span></div>` : ""}<p class="note" style="text-align:left;margin:10px 0 8px">${why}`;
+  }
   if (!loaded || S.restEd === item.id) {
     return `<div class="restbox">${restEditor(item, loaded ? "restClose" : null)}</div>`;
   }
-  return `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span><button type="button" class="lnk" data-act="restOpen" data-id="${item.id}">Cambiar</button></div>`;
+  // 10/11: «Editar cobro» va abajo, junto a «Deshacer asistió» (deshacer.js)
+  return `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span></div>`;
 }
 
 // agenda del prestador: semanas de un período de 31 días y la línea de tiempo del día elegido, con turnos,
@@ -207,7 +221,7 @@ function detailCard(item) {
    ${item.price ? `<div class="sum" style="margin-top:10px"><div><span>Precio</span><span>${money(item.price)}</span></div><div><span>Seña pagada (Mercado Pago)</span><span>${money(item.paid || 0)}</span></div>${item.price > (item.paid || 0) ? `<div class="tot"><span>A cobrar en el local${item.pay === "cash" ? " (efectivo)" : item.src === "app" ? " (Mercado Pago)" : ""}</span><span>${money(item.price - (item.paid || 0))}</span></div>` : ""}</div>` : ""}
    ${isBooking && item.status === "confirmed" && item.type !== "block" ? (S.bAsk === item.id ? `<div class="bacts"><span class="hint">¿Cancelar? Se le devuelve todo al cliente.</span><button class="btn btn-ghost" data-act="bCancelNo">No</button><button class="btn btn-bad" data-act="bCancelYes" data-id="${item.id}">Sí, cancelar</button></div>` : canMark(item)
           ? `<div class="bacts" style="margin-top:12px"><button class="btn btn-ok" data-act="bDone" data-id="${item.id}">✓ Asistió</button><button class="btn btn-ghost" data-act="bNoShow" data-id="${item.id}">No vino</button><button class="btn btn-ghost" data-act="bCancel" data-id="${item.id}">Cancelar</button></div>`
-          : `<p class="note mark-later">${item.hold ? "Está esperando el pago de la seña: «Asistió» y «No vino» aparecen cuando se confirma." : "«Asistió» y «No vino» se marcan desde 12 horas antes del turno."}</p><div class="bacts" style="margin-top:8px"><button class="btn btn-ghost" data-act="bCancel" data-id="${item.id}">Cancelar</button></div>`) : isBooking && item.type === "block" ? `<div class="bacts" style="margin-top:12px"><button class="btn btn-ghost" data-act="bUnblock" data-id="${item.id}">Desbloquear</button></div>` : item.status === "done" ? `<p class="note" style="text-align:left;margin-top:10px">${ic("ok")} Atendido</p>` + (isBooking ? doneRest(item) : "") : item.status === "noshow" ? '<p class="note" style="text-align:left;margin-top:10px">✕ No vino</p>' : ""}
+          : `<p class="note mark-later">${item.hold ? "Está esperando el pago de la seña: «Asistió» y «No vino» aparecen cuando se confirma." : "«Asistió» y «No vino» se marcan desde 12 horas antes del turno."}</p><div class="bacts" style="margin-top:8px"><button class="btn btn-ghost" data-act="bCancel" data-id="${item.id}">Cancelar</button></div>`) : isBooking && item.type === "block" ? `<div class="bacts" style="margin-top:12px"><button class="btn btn-ghost" data-act="bUnblock" data-id="${item.id}">Desbloquear</button></div>` : item.status === "done" ? `<p class="note" style="text-align:left;margin-top:10px">${ic("ok")} Atendido</p>` + (isBooking ? doneActions(item, cajaClosed(item) ? "" : doneRest(item)) : "") : item.status === "noshow" ? '<p class="note" style="text-align:left;margin-top:10px">✕ No vino</p>' : ""}
   </div>`;
 }
 // agendar a mano un turno para un cliente que escribió o llamó (sin comisión)

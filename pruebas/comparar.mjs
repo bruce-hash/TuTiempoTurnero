@@ -317,6 +317,9 @@ async function normalizar(page) {
     document.querySelectorAll("#app .holpanel, #app .holpanel-adm").forEach((el) => el.remove());
     // 7/11 (cambio a propósito): cada producto suma «Editar». Se neutraliza en las dos versiones; lo prueba e2e.js.
     document.querySelectorAll("#app [data-act=prodEdit]").forEach((el) => el.remove());
+    // 10/11 · punto 9 (cambio a propósito): salen los botones + y − del stock, «Compré más» pasa a «Cargar compra» y cada
+    // producto suma «Ajustar stock» y sus últimos ajustes. Se neutraliza en las dos versiones; lo prueban test_db.py y e2e.js.
+    document.querySelectorAll("#app [data-act=stk], #app [data-act=buyOpen], #app [data-act=adjOpen], #app .pl-adjlog").forEach((el) => el.remove());
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {
@@ -389,6 +392,16 @@ async function recorridoVivo(browser, url) {
   if (!dia) throw new Error("comparar: no hay un día abierto desde " + desde);
   await clic(page, `[data-day="${dia}"]`);
   await clic(page, "[data-slot]");
+  // 10/11 · punto 2 (cambio a propósito): el perfil, el turnero y el pago toman el color del rubro del servicio elegido
+  // (Uñas); la referencia seguía con el de donde vino (Pestañas). En las dos versiones, el de Uñas; lo nuevo lo prueba e2e.js
+  const rubroDelServicio = async () => {
+    await page.evaluate(() => {
+      document.body.dataset.seg = "u";
+      document.querySelectorAll(".cchip[data-pctx]").forEach((chip) => chip.setAttribute("aria-pressed", String(chip.dataset.pctx === "u")));
+    });
+    await page.waitForTimeout(400);
+  };
+  await rubroDelServicio();
   await foto(page, pasos, "perfil con horario elegido");
   await clic(page, "[data-act=reservarT]");
   // 4/11: sin el código por email; con contraseña en las dos versiones
@@ -396,6 +409,7 @@ async function recorridoVivo(browser, url) {
   await page.fill("#ai_p", "cliente12345");
   await clic(page, "#fLogin button[type=submit]");
   await page.waitForSelector("#fTurno");
+  await rubroDelServicio();
   await foto(page, pasos, "pago (monto)");
   await clic(page, "#fTurno button[type=submit]");
   await page.waitForURL(/mp=success|\/$/, { timeout: 10000 }).catch(() => {});

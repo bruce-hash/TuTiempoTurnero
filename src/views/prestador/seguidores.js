@@ -1,4 +1,5 @@
 import { api } from "../../api/index.js";
+import { LIVE } from "../../config.js";
 import { followersBlockedNote, provActive } from "../../lib/alta.js";
 import { esc, ini } from "../../lib/dom.js";
 import { dayLabel, dm, fromMin, isoToLocal } from "../../lib/fechas.js";
@@ -7,6 +8,7 @@ import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
 import { ic } from "../../ui/iconos.js";
+import { askPanel, blockedLink } from "./bloqueos.js";
 
 // 4/11 · Bloque 3: Clientes → Seguidores. Quienes siguen al prestador ("Ana G.", con la foto y desde cuándo), cuántos son
 // y, a cada uno, "Ofrecer turno": elige un hueco libre de los próximos 7 días y a esa persona le llega un aviso en la app
@@ -47,8 +49,12 @@ function offerPicker(fol) {
       : '<p class="note" style="text-align:left">No tenés huecos libres en los próximos 7 días.</p>'
   }<button type="button" class="lnk" data-act="folOfferClose" style="margin-top:6px">Cerrar</button></div>`;
 }
+// D45: el recuadro «Bloquear a …» abierto debajo de un seguidor que nunca reservó (si reservó, se abre en su ficha)
+const asking = (fol) => !!S.cliAsk && S.cliAsk.fol === fol.id;
 export function vSeguidores() {
-  const list = store.FOLLOWERS;
+  // D45: en la demo los bloqueados salen de la lista acá (en vivo, la base ya le borró el seguimiento)
+  const blocked = new Set((store.BLOCKED || []).map((row) => row.name));
+  const list = store.FOLLOWERS && (LIVE ? store.FOLLOWERS : store.FOLLOWERS.filter((fol) => !blocked.has(fol.name)));
   if (list == null) {
     loadFollowers();
   }
@@ -66,10 +72,10 @@ export function vSeguidores() {
          ? `<ul class="clist folist">${list
              .map(
                (fol) =>
-                 `<li><div class="crow">${avatarOf(fol)}<span class="cr-m"><b>${esc(fol.name)}</b><span>${sinceTxt(fol.since)}${fol.client ? " · ya reservó" : ""}</span></span>${active ? `<span class="cr-r"><button type="button" class="btn btn-ghost btn-sm" data-act="folOffer" data-id="${esc(fol.id)}" ${S.offerFor === fol.id ? 'aria-expanded="true"' : ""}>${ic("ofrecer")} Ofrecer</button></span>` : ""}</div>${active && S.offerFor === fol.id ? offerPicker(fol) : ""}</li>`,
+                 `<li><div class="crow">${avatarOf(fol)}<span class="cr-m"><b>${esc(fol.name)}</b><span>${sinceTxt(fol.since)}${fol.client ? " · ya reservó" : ""}</span></span><span class="cr-r">${active ? `<button type="button" class="btn btn-ghost btn-sm" data-act="folOffer" data-id="${esc(fol.id)}" ${S.offerFor === fol.id ? 'aria-expanded="true"' : ""}>${ic("ofrecer")} Ofrecer</button>` : ""}<button type="button" class="lnk folblk" data-act="folBlock" data-id="${esc(fol.id)}" ${asking(fol) ? 'aria-expanded="true"' : ""}>${ic("bloquear")} Bloquear</button></span></div>${active && S.offerFor === fol.id ? offerPicker(fol) : ""}${asking(fol) ? askPanel(S.cliAsk) : ""}</li>`,
              )
              .join("")}</ul>${count > list.length ? `<p class="note">Se muestran los últimos ${list.length}.</p>` : ""}`
          : '<p class="note">Todavía no te sigue nadie. Compartí tu perfil (el QR está en Perfil) para que te sigan y te enteres cuando tengas lugar.</p>'
    }
-  </div>`;
+  </div>${blockedLink()}`;
 }

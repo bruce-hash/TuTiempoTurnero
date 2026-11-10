@@ -1,7 +1,7 @@
 import { mpPctOf, pctTxt } from "../lib/dinero.js";
 import { esc } from "../lib/dom.js";
 import { DOW, MESES, TODAY, addDays, dayLabel, dkey, longLabel, toMin } from "../lib/fechas.js";
-import { isFol } from "../lib/prestadores.js";
+import { isFol, noSlots } from "../lib/prestadores.js";
 import { selDur } from "../lib/servicios.js";
 import { cfg, cli, freeCount, nextFree, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
@@ -33,12 +33,17 @@ export const canRedeemSvc = (prov, svc) => {
 // activa: la base lo informa en get_provider, Bloque 1). D22: sin cuenta, igual se puede canjear el premio de sellos,
 // solo en los servicios con la tarjeta llena del cliente.
 export const rewardOnly = (prov) => prov.canCharge === false;
-export const bookable = (prov) => cfg(prov.id).on && (!rewardOnly(prov) || canRedeemSvc(prov, prov.svcs[S.svc]));
+export const bookable = (prov) => !noSlots(prov) && cfg(prov.id).on && (!rewardOnly(prov) || canRedeemSvc(prov, prov.svcs[S.svc]));
 // selector de día y horario: semanas de 7 días hasta conf.ahead, horarios libres por franja,
 // primer turno libre, happy hour y lista de espera si el día está lleno
 export function vPicker(prov) {
   const conf = cfg(prov.id);
   const dur = selDur(prov);
+  // D45: sin días ni horarios, sin lista de espera ni «Primer turno» (y sin decir por qué)
+  if (noSlots(prov)) {
+    return `<section class="picker"><div class="pk-head"><p class="lbl" style="margin:0">2 · Elegí día y horario</p></div>
+     <div class="pk-none"><div class="hero-ic">${ic("agenda")}</div><b>No hay turnos disponibles con este profesional.</b></div></section>`;
+  }
   if (!bookable(prov)) {
     const following = isFol(prov.id);
     const rewards = cfg(prov.id).on && rewardOnly(prov) ? prov.svcs.map((svc, index) => [svc, index]).filter(([svc]) => canRedeemSvc(prov, svc)) : [];
