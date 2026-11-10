@@ -94,7 +94,7 @@ Object.assign(LM, {
         .from("walkins")
         .insert({
           provider_id: S.me,
-          at: localToIso(TODAY(), walk.hora),
+          at: localToIso(walk.date || TODAY(), walk.hora),
           kind: walk.kind === "prod" ? "product" : "service",
           description: walk.svc,
           amount: walk.precio,
@@ -117,7 +117,7 @@ Object.assign(LM, {
           sb
             .from("walkins")
             .update({
-              at: localToIso(TODAY(), walk.hora),
+              at: localToIso(walk.date || TODAY(), walk.hora),
               description: walk.svc,
               amount: walk.precio,
               method: medioToDb(walk.medio),

@@ -563,6 +563,47 @@ async function turnoConMargen(p) {
   await pg.click("[data-act=closeMonth]"); await wait(800);
   ok("mes cerrado en la base", (await q("select count(*)::int c from cash_closings where kind='month'"))[0].c === 1);
   ok("C31: con el mes cerrado, los gastos fijos de ese mes no se editan", (await pg.locator("[data-act=fxEdit]").count()) === 0 && /Mes cerrado: los gastos fijos de este mes quedan como están/.test(await txt()));
+  // 10/11 · punto 8: con el mes cerrado la caja no se corrige; se vuelve a abrir para seguir (Cargar diferencia, Caja de 7 días)
+  await pg.click("[data-act=unlockMonth]"); await wait(600);
+  ok("10/11 caja: el mes se vuelve a abrir", await until("select count(*)::int c from cash_closings where kind='month'", [], (r) => r[0].c === 0));
+  // 10/11 · punto 8: la caja de ayer (cerrada) se vuelve a abrir, se corrige un movimiento, se cierra de nuevo y el mes se
+  // pone al día; el cambio queda en el registro del día. Una de hace 9 días solo se ve.
+  {
+    const [p8] = await q("select id from providers where name like 'Sofía%'");
+    const [{ ayer, viejo, mismoMes }] = await q(`select ((now() at time zone 'America/Argentina/Buenos_Aires')::date - 1)::text ayer,
+      ((now() at time zone 'America/Argentina/Buenos_Aires')::date - 9)::text viejo,
+      date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date - 1) = date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date) "mismoMes"`);
+    const walkAt = (d, desc, amount) => q("insert into walkins (provider_id, at, kind, description, amount, method) values ($1, ($2||' 12:00')::timestamp at time zone 'America/Argentina/Buenos_Aires', 'service', $3, $4, 'cash')", [p8.id, d, desc, amount]);
+    await walkAt(ayer, "Corte de ayer", 4000); await walkAt(viejo, "Corte viejo", 3000);
+    await q("insert into cash_closings (provider_id, kind, period, income) values ($1,'day',$2,4000), ($1,'day',$3,3000) on conflict do nothing", [p8.id, ayer, viejo]);
+    await pg.reload(); await wait(1500);
+    const ingresos = async () => { await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=mes]"); await wait(500);
+      return +((await pg.evaluate(() => [...document.querySelectorAll(".kpis .kpi")].find((k) => /Ingresos/.test(k.textContent))?.querySelector("b")?.textContent || "")).replace(/\D/g, "")); };
+    const ing0 = mismoMes ? await ingresos() : null;
+    await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=dia]"); await wait(300);
+    const verDia = async (d) => { await pg.evaluate((x) => { const i = document.querySelector("#cajaDay"); i.value = x; i.dispatchEvent(new Event("change", { bubbles: true })); }, d); await wait(1200); };
+    await verDia(viejo);
+    ok("10/11 caja: un día de hace 9 días solo se ve (sin volver a abrir ni corregir)", (await pg.locator("[data-act=reopenDay], [data-act=movEdit], [data-act=walkOpen]").count()) === 0
+       && /solo se ve/.test(await txt()));
+    await verDia(ayer);
+    ok("10/11 caja: ayer cerrado: se ve con «Volver a abrir la caja» y sin corregir", (await pg.locator(`[data-act=reopenDay][data-d="${ayer}"]`).count()) === 1 && (await pg.locator("[data-act=movEdit]").count()) === 0);
+    await pg.click(`[data-act=reopenDay][data-d="${ayer}"]`);
+    ok("10/11 caja: se vuelve a abrir (en la base)", await until("select count(*)::int c from cash_closings where provider_id=$1 and kind='day' and period=$2", [p8.id, ayer], (r) => r[0].c === 0));
+    await wait(2500);
+    await pg.click('.movs li:has-text("Corte de ayer") [data-act=movEdit]'); await wait(200);
+    await pg.fill("#wed_m", "6500"); await pg.click("#fWalkEd button[type=submit]");
+    ok("10/11 caja: se corrige el movimiento de ayer", await until("select amount from walkins where provider_id=$1 and description='Corte de ayer'", [p8.id], (r) => r[0]?.amount === 6500));
+    await wait(1500);
+    ok("10/11 caja: el cambio queda en el registro del día, a la vista", /Cambios después de cerrar/.test(await txt()) && /Cambiaste Corte de ayer: \$4\.000 en Efectivo → \$6\.500 en Efectivo/.test(await txt()));
+    await pg.click("#fCloseDay button[type=submit]");
+    ok("10/11 caja: se cierra de nuevo con el total nuevo", await until("select income from cash_closings where provider_id=$1 and kind='day' and period=$2", [p8.id, ayer], (r) => r[0]?.income >= 6500));
+    if (mismoMes) {
+      const ing1 = await ingresos();
+      ok("10/11 caja: Finanzas del mes se pone al día sola (+$2.500)", ing1 - ing0 === 2500, `${ing0} → ${ing1}`);
+    }
+    await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=dia]"); await wait(300);
+    await pg.click("[data-act=cajaHoy]").catch(() => {}); await wait(300);
+  }
   // V4b · C25 "Cargar diferencia": al marcar "Asistió", el resto en dos medios; después se cambia desde la Caja del día
   {
     const [sv] = await q("select s.id, s.provider_id from services s join providers p on p.id=s.provider_id where p.name like 'Sofía%' and s.active order by s.id limit 1");

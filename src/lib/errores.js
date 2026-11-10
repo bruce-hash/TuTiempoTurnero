@@ -75,6 +75,9 @@ const ERRS = {
   empty_note: "Escribí la nota.",
   too_many_notes: "Ese profesional ya tiene demasiadas notas.",
   month_closed: "El mes está cerrado: reabrilo para cambiarlo.",
+  // 10/11 · punto 8: la Caja de los últimos 7 días
+  day_too_old: "Esa caja es de hace más de 7 días: solo se puede ver.",
+  day_closed: "La caja de ese día está cerrada: volvé a abrirla para corregirla.",
   period_not_over: "Todavía no terminó: se cierra cuando termina.",
   already_closed: "Ya estaba cerrado.",
   year_closed: "El año está cerrado: reabrí el año primero.",
