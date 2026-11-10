@@ -76,6 +76,8 @@ const ERRS = {
   bad_offer: "Elegí un horario libre de los próximos días.",
   bad_commission: "La comisión tiene que estar entre 0% y 30%.",
   bad_site_url: "Escribí solo https:// y el dominio, sin barra al final ni nada después.",
+  // 10/11 (D43): el motivo de la suspensión que ve el profesional
+  reason_too_long: "El motivo puede tener hasta 280 letras.",
   empty_note: "Escribí la nota.",
   too_many_notes: "Ese profesional ya tiene demasiadas notas.",
   month_closed: "El mes está cerrado: reabrilo para cambiarlo.",
