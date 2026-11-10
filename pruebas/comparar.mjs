@@ -344,6 +344,7 @@ async function recorridoDemo(page, url) {
   await page.fill("#ai_p", "cliente123");
   await clic(page, "#fLogin button[type=submit]");
   await page.waitForSelector("#fTurno");
+  await rubroDelServicio();
   await foto(page, pasos, "pago (monto)");
   await clic(page, "#fTurno button[type=submit]");
   await page.waitForTimeout(600);
@@ -373,6 +374,16 @@ async function recorridoVivo(browser, url) {
   if (!dia) throw new Error("comparar: no hay un día abierto desde " + desde);
   await clic(page, `[data-day="${dia}"]`);
   await clic(page, "[data-slot]");
+  // 10/11 · punto 2 (cambio a propósito): el perfil, el turnero y el pago toman el color del rubro del servicio elegido
+  // (Uñas); la referencia seguía con el de donde vino (Pestañas). En las dos versiones, el de Uñas; lo nuevo lo prueba e2e.js
+  const rubroDelServicio = async () => {
+    await page.evaluate(() => {
+      document.body.dataset.seg = "u";
+      document.querySelectorAll(".cchip[data-pctx]").forEach((chip) => chip.setAttribute("aria-pressed", String(chip.dataset.pctx === "u")));
+    });
+    await page.waitForTimeout(400);
+  };
+  await rubroDelServicio();
   await foto(page, pasos, "perfil con horario elegido");
   await clic(page, "[data-act=reservarT]");
   // 4/11: sin el código por email; con contraseña en las dos versiones
@@ -380,6 +391,7 @@ async function recorridoVivo(browser, url) {
   await page.fill("#ai_p", "cliente12345");
   await clic(page, "#fLogin button[type=submit]");
   await page.waitForSelector("#fTurno");
+  await rubroDelServicio();
   await foto(page, pasos, "pago (monto)");
   await clic(page, "#fTurno button[type=submit]");
   await page.waitForURL(/mp=success|\/$/, { timeout: 10000 }).catch(() => {});
