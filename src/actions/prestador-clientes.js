@@ -249,6 +249,7 @@ registerClick("stampRedeem", (ev, el, act) => {
 });
 registerClick("cliBack", (ev, el, act) => {
   S.cli = null;
+  S.cliAsk = null;
   render();
 });
 registerClick("cliAgendar", (ev, el, act) => {
@@ -342,8 +343,11 @@ registerSubmit("fContact", (ev) => {
 
 // 4/11 · Bloque 3: Clientes → Clientes / Seguidores
 registerClick("ctab", (ev, el, act) => {
-  S.ctab = el.dataset.t === "seguidores" ? "seguidores" : "clientes";
+  // D45: también Clientes → Bloqueados (el link del final de las dos listas)
+  S.ctab = el.dataset.t === "seguidores" || el.dataset.t === "bloqueados" ? el.dataset.t : "clientes";
   S.offerFor = null;
+  S.cliAsk = null;
+  S.cli = null;
   if (S.ctab === "seguidores") {
     // al entrar, la lista al día (quien siguió o dejó de seguir desde la última vez)
     loadFollowers(true);

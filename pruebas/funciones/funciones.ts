@@ -332,6 +332,23 @@ mp.pago({ id: "9003", collector: "1001", status: "approved", amount: 6000, fee: 
 await webhook(pid, A.id, "9003");
 ok("b) sin application_fee → pago en revisión (fee_missing)", JSON.stringify(await one("select review_reasons from payments where mp_payment_id = '9003'")) === '["fee_missing"]');
 
+// ---------- D43 (10/11): con el profesional suspendido no se crea el cobro, y un pago que igual llega se devuelve ----------
+{
+  const bs = await book();
+  const [tot, fe] = Object.values((await q("select deposit + client_fee + mp_fee - paid_wallet as t, client_fee as f from bookings where id = $1", [bs[0]]))[0]).map(Number);
+  await q("update providers set status = 'suspended' where id = $1", [pid]);
+  const n0 = mp.preferencias.length;
+  r = await preference(cli, bs);
+  ok("D43: mp-create-preference no crea el cobro de un profesional suspendido (provider_not_available)",
+     r.status === 409 && (await body(r)).error === "provider_not_available" && mp.preferencias.length === n0);
+  mp.pago({ id: "9043", collector: "1001", status: "approved", amount: tot, fee: fe, ref: bs.join(",") });
+  r = await webhook(pid, A.id, "9043");
+  ok("D43: un pago aprobado que igual llega por el webhook se devuelve (provider_suspended) y el turno no se confirma",
+     r.status === 200 && (await st(bs[0])) === "expired"
+     && Number(await one("select count(*) from refunds rf join payments p on p.id = rf.payment_id where p.mp_payment_id = '9043' and rf.reason = 'provider_suspended' and rf.amount = $1", [tot])) === 1);
+  await q("update providers set status = 'active' where id = $1", [pid]);
+}
+
 // ---------- 5. H23: desconectar ----------
 const h1 = await book();
 await preference(cli, h1);                                   // el cliente ya está pagando
@@ -701,6 +718,30 @@ ok("…y todos los links son del sitio: el del aviso, el único botón (Ver mis 
    && (mHtml.match(/display:inline-block/g) ?? []).length === 1 && hrefs.includes("https://tutiempo.com.ar/mis-turnos"), JSON.stringify(hrefs));
 await q("update providers set name = $1, address = $2 where id = $3", [nombre0, dir0, pid]);
 await q("update message_templates set body = $1 where provider_id = $2 and key = 'rev'", [plantilla0, pid]);
+// 10/11 (D43): el aviso de cuenta suspendida y el de activa de nuevo le llegan al profesional por email
+const suspOwner = crypto.randomUUID();
+await q("insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at) values ($1, 'suspendido@fn.test', '{\"full_name\":\"Prov Suspendido\"}', now())", [suspOwner]);
+const suspPid = Number(await one("select register_provider('Uñas <b>Suspendidas</b>', 'Calle 9', array['u'], '2284 9', null)", [], suspOwner));
+await q("update providers set status = 'active' where id = $1", [suspPid]);
+await q("update provider_private set suspended_reason = $1 where provider_id = $2", ["Reclamos <script>x</script> de clientes", suspPid]);
+await q("update providers set status = 'suspended' where id = $1", [suspPid]);
+const eSusp = Number(await one("select o.id from email_outbox o join provider_notices n on n.id = o.notice_id where n.provider_id = $1 and n.kind = 'suspended'", [suspPid]));
+ej = await body(await emailRun());
+const mSusp = rs.enviados.find((e) => e.clave === `tt-email-${eSusp}`)?.body;
+const hSusp = [...(mSusp?.html ?? "").matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+ok("D43: «Tu cuenta de TuTiempo está suspendida» le llega al profesional, con el motivo escapado", ej.sent === 1 && (await estado(eSusp)).status === "sent"
+   && JSON.stringify(mSusp?.to) === JSON.stringify(["suspendido@fn.test"]) && mSusp?.subject === "Tu cuenta de TuTiempo está suspendida"
+   && mSusp?.html.includes("Motivo: Reclamos &lt;script&gt;x&lt;/script&gt; de clientes.") && !mSusp?.html.includes("<script>")
+   && mSusp?.html.includes("Uñas &lt;b&gt;Suspendidas&lt;/b&gt;"), JSON.stringify(mSusp ?? {}).slice(0, 400));
+ok("D43: …con «Ir a mi panel», WhatsApp y el email de TuTiempo, sin «Dejar de recibir» ni «Mis turnos»",
+   JSON.stringify(hSusp) === JSON.stringify(["https://tutiempo.com.ar/panel/agenda", "https://wa.me/5492284722825", "mailto:contacto@tutiempo.com.ar"])
+   && mSusp?.html.includes(">Ir a mi panel</a>") && !mSusp?.html.includes("Dejar de recibir") && !mSusp?.html.includes("Mis turnos") && !mSusp?.html.includes("Mi perfil")
+   && mSusp?.html.includes("Recibís este email por tu negocio en TuTiempo.")
+   && mSusp?.text.includes("Ir a mi panel: https://tutiempo.com.ar/panel/agenda") && mSusp?.text.includes("https://wa.me/5492284722825"), JSON.stringify(hSusp));
+await q("update providers set status = 'active' where id = $1", [suspPid]);
+ej = await body(await emailRun());
+const mAct = rs.enviados.find((e) => e.body?.to?.[0] === "suspendido@fn.test" && e.body?.subject === "Tu cuenta de TuTiempo está activa de nuevo");
+ok("D43: al reactivarlo, «Tu cuenta de TuTiempo está activa de nuevo»", ej.sent === 1 && !!mAct && mAct?.body?.html.includes("Tu cuenta está activa de nuevo"));
 
 // ---------- Usuario que llama: proyecto nuevo (claves asimétricas y publishable/secret) y viejo (HS256) ----------
 // Un proyecto nuevo firma las sesiones con ES256 y publica las claves en /auth/v1/.well-known/jwks.json; las claves

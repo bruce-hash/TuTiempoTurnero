@@ -1,5 +1,5 @@
 import { approved, dniMissing, dniRequired } from "../../lib/verificacion.js";
-import { nextStep, setupTodo } from "../../lib/alta.js";
+import { nextStep, setupTodo, suspension } from "../../lib/alta.js";
 import { esc } from "../../lib/dom.js";
 import { S } from "../../state.js";
 
@@ -40,6 +40,10 @@ export function setupSteps(prov, where) {
 // avance y "Seguir con el alta" (lleva al primer paso sin guardar). Desaparece con el perfil aprobado y Mercado Pago
 // conectado. Reemplaza la tarjeta "Activá tu perfil" de la Agenda (en Perfil siguen los pasos con el formulario del DNI).
 export function setupCard() {
+  // 10/11 (D43): suspendido, lo explica el aviso fijo de arriba (no está "en revisión")
+  if (suspension()) {
+    return "";
+  }
   const items = setupTodo();
   if (!items.length || items.every((item) => item[1])) {
     return "";

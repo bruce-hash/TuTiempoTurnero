@@ -171,10 +171,11 @@ export function describe() {
     const label = (BTABS.find((row) => row[0] === tab) || [])[1] || "Panel";
     const clientId = tab === "clientes" && S.cli ? clientIdOf(S.cli) : null;
     // 4/11: Clientes → Seguidores tiene su dirección (/panel/clientes?ver=seguidores; la del push "Nuevo seguidor")
-    const ver = tab === "clientes" && clientId == null && S.ctab === "seguidores" ? "seguidores" : null;
+    // D45: y Clientes → Bloqueados (/panel/clientes?ver=bloqueados)
+    const ver = tab === "clientes" && clientId == null && (S.ctab === "seguidores" || S.ctab === "bloqueados") ? S.ctab : null;
     return {
       url: withParams("/panel/" + PANEL_TABS[tab], { cliente: clientId, ver, historia: S.story ? S.story.i : null }),
-      key: `panel:${tab}${clientId != null ? ":cliente:" + clientId : ""}${ver ? ":seguidores" : ""}${S.story ? ":historia" : ""}`,
+      key: `panel:${tab}${clientId != null ? ":cliente:" + clientId : ""}${ver ? ":" + ver : ""}${S.story ? ":historia" : ""}`,
       overlay: clientId != null || !!S.story,
       title: `${label} · Panel · ${SITE}`,
     };

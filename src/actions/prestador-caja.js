@@ -9,16 +9,31 @@ import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
-import { CAJA_BACK, cashLines, closeDay, dayLines, finTot, ymk } from "../views/prestador/finanzas.js";
+import { CAJA_BACK, cajaDayNow, cashLines, closeDay, dayLines, finTot, walksOf, ymk } from "../views/prestador/finanzas.js";
+import { LIVE } from "../config.js";
 import { medioToDb } from "../lib/medios.js";
 import { saleTotal } from "../views/prestador/caja.js";
 import { checkSplit, restOf } from "../lib/resto.js";
 
+// 10/11 · punto 8: después de corregir la caja de un día, el registro de cambios de ese día, lo cargado ese día y
+// Finanzas (el mes y el resumen) se vuelven a pedir a la base, primero lo que se ve en la pantalla. De hoy, solo el
+// registro (Finanzas de hoy sale de lo cargado).
+function refreshCaja(day, saving) {
+  if (!LIVE) {
+    return;
+  }
+  const past = day !== TODAY();
+  Promise.resolve(saving)
+    .then(() => Promise.all([api.cashDay(day), past ? api.walkinsOn(day) : null]))
+    .then(() => render())
+    .then(() => (past ? api.finance().then(() => render()) : null))
+    .catch(() => {});
+}
 registerClick("reopenDay", (ev, el, act) => {
   // 4/11: hoy o el día que se está mirando con el calendario
   const day = el.dataset.d || TODAY();
   delete store.CLOSINGS["day|" + day];
-  api.m.reopenCash("day", day);
+  refreshCaja(day, api.m.reopenCash("day", day));
   toast("Volviste a abrir la caja. Cuando esté todo, cerrala de nuevo.");
   render();
   return;
@@ -65,6 +80,9 @@ registerChange("cajaDay", (ev) => {
   S.saleOpen = false;
   S.movEd = null;
   S.movDel = null;
+  if (LIVE && S.cajaDay) {
+    api.cashDay(S.cajaDay).then(render).catch(() => {});
+  }
   if (S.cajaDay && !store.WALKDAY[S.cajaDay]) {
     api
       .walkinsOn(S.cajaDay)
@@ -97,7 +115,8 @@ registerClick("walkClose", (ev, el, act) => {
 });
 // C25 (V4): editar y borrar cada movimiento de la Caja del día. k: "w<índice>" (lo cargado sin turno o una venta) o
 // "b<id>" (un turno: solo el medio con que se cobró el resto)
-const walkOf = (key) => (String(key).startsWith("w") ? S.walk[+String(key).slice(1)] : null);
+// 10/11 · punto 8: del día que se está mirando (hoy o uno de los últimos 7)
+const walkOf = (key) => (String(key).startsWith("w") ? walksOf(cajaDayNow())[+String(key).slice(1)] : null);
 registerClick("movEdit", (ev, el, act) => {
   S.movEd = el.dataset.k;
   S.movDel = null;
@@ -122,17 +141,18 @@ registerClick("movDelNo", (ev, el, act) => {
 });
 registerClick("movDelYes", (ev, el, act) => {
   const index = +String(el.dataset.k).slice(1);
-  const walk = S.walk.splice(index, 1)[0];
+  const day = cajaDayNow();
+  const walk = walksOf(day).splice(index, 1)[0];
   S.movDel = null;
   if (!walk) {
     return render();
   }
-  api.m.delWalk(walk);
-  // una venta borrada devuelve sus unidades al stock (4/11: con la cantidad vendida)
-  const prod = walk.kind === "prod" && store.PRODS.find((item) => (walk.pid && item.id === walk.pid) || item.n === walk.svc || walk.svc.startsWith(item.n + " × "));
+  refreshCaja(day, api.m.delWalk(walk));
+  // una venta borrada devuelve sus unidades al stock (4/11: con la cantidad vendida). 10/11: en vivo lo hace la base
+  // (walkins_stock, solo las ventas con producto); acá se muestra igual. En la demo no hay ids: busca por nombre.
+  const prod = walk.kind === "prod" && store.PRODS.find((item) => (walk.pid ? item.id === walk.pid : !walk.id && (item.n === walk.svc || walk.svc.startsWith(item.n + " × "))));
   if (prod) {
     prod.stock += walk.qty || 1;
-    api.m.setStock(prod);
   }
   toast("Borraste " + walk.svc + " de las " + walk.hora);
   render();
@@ -161,9 +181,10 @@ registerSubmit("fWalkEd", (ev) => {
   if (!time) {
     return err("Ingresá la hora.");
   }
-  Object.assign(walk, { svc: label.slice(0, 80), precio: price, hora: time, medio: S.walkMedio || walk.medio, cliente: $("#wed_c").value.trim().slice(0, 80) });
-  api.m.updWalk(walk);
-  S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
+  const day = cajaDayNow();
+  Object.assign(walk, { svc: label.slice(0, 80), precio: price, hora: time, medio: S.walkMedio || walk.medio, cliente: $("#wed_c").value.trim().slice(0, 80), date: day });
+  refreshCaja(day, api.m.updWalk(walk));
+  walksOf(day).sort((one, other) => one.hora.localeCompare(other.hora));
   S.movEd = null;
   toast("Movimiento actualizado");
   render();
@@ -176,7 +197,7 @@ registerClick("restMedio", (ev, el, act) => {
   }
   booking.restMethod = medioToDb(el.dataset.m);
   booking.restParts = null;
-  api.m.setRestMethod(booking, el.dataset.m);
+  refreshCaja(booking.date, api.m.setRestMethod(booking, el.dataset.m));
   S.movEd = null;
   S.restSplit = null;
   S.restEd = null;
@@ -248,7 +269,7 @@ registerSubmit("fRest", (ev) => {
   }
   booking.restParts = parts.map((part) => [part.medio, part.m]);
   booking.restMethod = medioToDb(parts[0].medio);
-  api.m.setRestParts(booking, booking.restParts);
+  refreshCaja(booking.date, api.m.setRestParts(booking, booking.restParts));
   S.restSplit = null;
   S.movEd = null;
   S.restEd = null;
@@ -297,10 +318,12 @@ registerSubmit("fWalk", (ev) => {
     stats.last = 0;
     stats.spend ||= price;
   }
-  const walk = { svc: label, precio: price, propina: 0, hora: time, medio: S.walkMedio || "Efectivo", cliente: client, kind: "svc", pid: null };
-  S.walk.push(walk);
-  api.m.addWalk(walk);
-  S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
+  const day = cajaDayNow();
+  const walk = { svc: label, precio: price, propina: 0, hora: time, medio: S.walkMedio || "Efectivo", cliente: client, kind: "svc", pid: null, date: day };
+  const list = walksOf(day);
+  list.push(walk);
+  refreshCaja(day, api.m.addWalk(walk));
+  list.sort((one, other) => one.hora.localeCompare(other.hora));
   S.walkOpen = false;
   toast(`Guardado: ${label} · ${money(price)}`);
   render();
@@ -361,11 +384,13 @@ registerSubmit("fSale", (ev) => {
     kind: "prod",
     pid: prod.id || null,
     qty,
+    date: cajaDayNow(),
   };
-  S.walk.push(walk);
-  api.m.addWalk(walk);
-  api.m.setStock(prod);
-  S.walk.sort((one, other) => one.hora.localeCompare(other.hora));
+  const list = walksOf(walk.date);
+  list.push(walk);
+  // 10/11: el stock lo baja la base al guardar la venta (walkins_stock; no_stock si no alcanza)
+  refreshCaja(walk.date, api.m.addWalk(walk));
+  list.sort((one, other) => one.hora.localeCompare(other.hora));
   S.saleOpen = false;
   toast(`Venta guardada: ${walk.svc} · ${money(price)}. Quedan ${prod.stock} en stock.`);
   render();
@@ -373,7 +398,8 @@ registerSubmit("fSale", (ev) => {
 });
 // cierre de la caja de hoy; con el efectivo contado, avisa si sobra o falta
 registerSubmit("fCloseDay", (ev) => {
-  const today = TODAY();
+  // 10/11 · punto 8: hoy o el día de los últimos 7 que se volvió a abrir
+  const today = cajaDayNow();
   const lines = cashLines(dayLines(today));
   const total = lines.reduce((sum, line) => sum + line.m, 0);
   const cash = lines.filter((line) => line.medio === "Efectivo").reduce((sum, line) => sum + line.m, 0);
@@ -384,6 +410,7 @@ registerSubmit("fCloseDay", (ev) => {
     return;
   }
   closeDay(today, total, cash, total - cash, countedN);
+  refreshCaja(today, null);
   const diff = countedN == null ? null : countedN - cash;
   toast(
     `Caja cerrada: ${money(total)}.${diff == null ? "" : diff === 0 ? " El efectivo da justo." : diff > 0 ? ` Te sobran ${money(diff)}.` : ` Te faltan ${money(-diff)}.`}`,

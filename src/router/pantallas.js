@@ -207,9 +207,11 @@ function openPanel(parts, params, path) {
     S.aday = day;
     S.awk = null;
   }
-  // 4/11: /panel/clientes?ver=seguidores
+  // 4/11: /panel/clientes?ver=seguidores (D45: y ?ver=bloqueados)
   if (tab === "clientes") {
-    S.ctab = params.get("ver") === "seguidores" ? "seguidores" : "clientes";
+    const ver = params.get("ver");
+    S.ctab = ver === "seguidores" || ver === "bloqueados" ? ver : "clientes";
+    S.cliAsk = null;
   }
   const clientId = params.get("cliente");
   if (tab === "clientes" && clientId) {
