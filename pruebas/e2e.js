@@ -1714,6 +1714,15 @@ async function turnoConMargen(p) {
     await pa.click("nav [data-act=bellToggle]"); await pa.waitForSelector(".bellpanel .msg-act", { timeout: 8000 }).catch(() => {});
     ok("4/11: …y en la campanita se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator(".bellpanel").innerText()) && (await pa.locator(".bellpanel .msg-act[data-go=perfil]").count()) >= 1);
     await pa.keyboard.press("Escape");
+    // 10/11: con la app abierta, otra novedad llega a la campanita sin recargar (al llegar el push, el service worker le
+    // avisa a la app con "tt-push"; acá se simula ese mensaje: el recorrido real del service worker lo prueba pwa.js)
+    await ps.fill("#postTxt", "Segunda novedad con la app abierta"); await ps.click("[data-act=publicar]");
+    await until("select count(*)::int c from client_messages where kind = 'news' and user_id = $1", [anaId], (r) => r[0].c === 2);
+    const inboxHas2 = () => pa.evaluate(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"));
+    const before2 = await inboxHas2();
+    await pa.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "tt-push" } })));
+    await pa.waitForFunction(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"), null, { timeout: 8000 }).catch(() => {});
+    ok("10/11: con la app abierta, la novedad aparece en la campanita sin recargar", !before2 && (await inboxHas2()) && (await pa.locator(".bell-btn .bell-n").count()) >= 1);
     // S19 (8/11): con el negocio suspendido no hay «Avisar a tus seguidores» ni «Ofrecer» (la base también lo rechaza)
     await q("update providers set status = 'suspended' where id = $1", [sofi.id]);
     await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector(".avisarpanel", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
@@ -1734,6 +1743,11 @@ async function turnoConMargen(p) {
     await volver();
     await ps.waitForFunction(() => /Todavía no te sigue nadie/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
     ok("4/11: quien deja de seguir sale de la lista y del número", /Todavía no te sigue nadie/.test(await stxt()) && /Seguidores\s*0/.test(await ps.locator(".ctabs").innerText()));
+    // 10/11: después de dejar de seguir, «Avisar a tus seguidores» ya no le llega
+    await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector("#postTxt", { timeout: 8000 }).catch(() => {});
+    await ps.fill("#postTxt", "Novedad después de dejar de seguir"); await ps.click("[data-act=publicar]"); await ps.waitForTimeout(1500);
+    ok("10/11: después de dejar de seguir no le llega nada más", (await q("select count(*)::int c from posts where provider_id = $1 and body = 'Novedad después de dejar de seguir'", [sofi.id]))[0].c === 1
+       && (await q("select count(*)::int c from client_messages where user_id = $1 and body = 'Novedad después de dejar de seguir'", [anaId]))[0].c === 0);
     await ctxS.close(); await ctxA.close();
   }
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
