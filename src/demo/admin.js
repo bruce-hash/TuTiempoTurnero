@@ -108,8 +108,16 @@ function admMonthDemo(ym) {
     charged: deposits + commission,
     deposits: deposits,
     commission: commission,
-    expenses: store.DEMO_AEXP.filter((exp) => exp.day.slice(0, 7) === ym).reduce((sum, exp) => sum + exp.amount, 0),
+    // D44: gastos fijos y variables aparte (expenses es el total)
+    ...admExpDemo(ym),
   };
+}
+// gastos de TuTiempo de un mes: total, fijos y variables
+function admExpDemo(ym) {
+  const rows = store.DEMO_AEXP.filter((exp) => exp.day.slice(0, 7) === ym);
+  const fixed = rows.filter((exp) => exp.fixed_id).reduce((sum, exp) => sum + exp.amount, 0);
+  const variable = rows.filter((exp) => !exp.fixed_id).reduce((sum, exp) => sum + exp.amount, 0);
+  return { expenses: fixed + variable, fixed: fixed, variable: variable };
 }
 const nextM = (ym) => {
   const date = /* @__PURE__ */ new Date(ym + "-15T12:00:00");
@@ -135,13 +143,16 @@ export function admDemo() {
   store.DEMO_AEXP = [];
   store.DEMO_ACL = {};
   const current = TODAY().slice(0, 7);
-  for (let ym = ADM_LAUNCH.slice(0, 7); ym <= current; ym = nextM(ym)) {
-    store.DEMO_AEXP.push({
-      id: store.AEID++,
-      day: ym + "-05",
-      concept: "Hosting, dominio y base de datos",
-      amount: 45e3,
-    });
+  const launch = ADM_LAUNCH.slice(0, 7);
+  // D44: los gastos fijos de ejemplo (los emails, sin monto: «Completá el monto»); se cargan solos cada mes
+  store.DEMO_AFIX = [
+    ["Hosting (Hostinger)", 15e3, "hosting"],
+    ["Base de datos (Supabase)", 25e3, "database"],
+    ["Emails (Resend)", 0, "email"],
+    ["Dominio", 5e3, "domain"],
+  ].map(([concept, amount, preset]) => ({ id: store.AEID++, concept, amount, since: launch, from: launch, until: null, preset: true, key: preset }));
+  admFixedSyncDemo();
+  for (let ym = launch; ym <= current; ym = nextM(ym)) {
     if (ym < current || +TODAY().slice(8) >= 10) {
       store.DEMO_AEXP.push({
         id: store.AEID++,
@@ -162,8 +173,64 @@ export function admDemo() {
     });
   }
 }
+// D44 · gastos fijos de TuTiempo en la demo, con la misma regla que la base (admin_fixed_sync, admin_fixed_save,
+// admin_fixed_stop): la fila de cada mes desde que vale el monto actual, nunca en un mes cerrado; se cambian solo desde
+// el mes actual. store.DEMO_AFIX: [{ id, concept, amount, since "AAAA-MM", from "AAAA-MM", until "AAAA-MM" | null, preset }]
+const aClosed = (ym) => !!store.DEMO_ACL["month|" + ym];
+export function admFixedSyncDemo() {
+  const current = TODAY().slice(0, 7);
+  (store.DEMO_AFIX || []).forEach((item) => {
+    if (!item.amount) {
+      return;
+    }
+    for (let ym = item.from > item.since ? item.from : item.since; ym <= current && (!item.until || ym <= item.until); ym = nextM(ym)) {
+      if (!aClosed(ym) && !store.DEMO_AEXP.some((exp) => exp.fixed_id === item.id && exp.day.slice(0, 7) === ym)) {
+        store.DEMO_AEXP.push({ id: store.AEID++, day: ym + "-01", concept: item.concept, amount: item.amount, fixed_id: item.id });
+      }
+    }
+  });
+}
+// crear (item null) o cambiar un gasto fijo desde el mes actual (ym); devuelve un error o null
+export function admFixedSaveDemo(item, concept, amount, ym) {
+  if (ym !== TODAY().slice(0, 7)) {
+    return "Los gastos fijos se cambian desde el mes actual.";
+  }
+  if (aClosed(ym)) {
+    return "El mes está cerrado: reabrilo para cambiarlo.";
+  }
+  admFixedSyncDemo();
+  if (!item) {
+    store.DEMO_AFIX.push({ id: store.AEID++, concept, amount, since: ym, from: ym, until: null, preset: false });
+  } else {
+    Object.assign(item, { concept, amount, from: item.since > ym ? item.since : ym, until: null });
+    store.DEMO_AEXP = store.DEMO_AEXP.filter((exp) => !(exp.fixed_id === item.id && exp.day.slice(0, 7) >= ym && !amount && !aClosed(exp.day.slice(0, 7))));
+    store.DEMO_AEXP.forEach((exp) => {
+      if (exp.fixed_id === item.id && exp.day.slice(0, 7) >= ym && !aClosed(exp.day.slice(0, 7))) {
+        Object.assign(exp, { concept, amount });
+      }
+    });
+  }
+  admFixedSyncDemo();
+  return null;
+}
+// dejar de repetirlo desde el mes actual
+export function admFixedStopDemo(item, ym) {
+  if (aClosed(ym)) {
+    return "El mes está cerrado: reabrilo para cambiarlo.";
+  }
+  admFixedSyncDemo();
+  const prev = (() => {
+    const date = /* @__PURE__ */ new Date((item.since > ym ? item.since : ym) + "-15T12:00:00");
+    date.setMonth(date.getMonth() - 1);
+    return dkey(date).slice(0, 7);
+  })();
+  item.until = prev;
+  store.DEMO_AEXP = store.DEMO_AEXP.filter((exp) => !(exp.fixed_id === item.id && exp.day.slice(0, 7) >= ym && !aClosed(exp.day.slice(0, 7))));
+  return null;
+}
 export function admFinDemo(year) {
   admDemo();
+  admFixedSyncDemo();
   const current = TODAY().slice(0, 7);
   const nowYear = +current.slice(0, 4);
   const months = Array.from(
@@ -187,6 +254,15 @@ export function admFinDemo(year) {
     months: months,
     year_closed_at: yearClosed ? yearClosed.closed_at : null,
     can_close_year: year < nowYear,
+    current_month: current,
+    fixed_items: store.DEMO_AFIX.filter((item) => !item.until || item.until >= item.since).map((item) => ({
+      id: item.id,
+      concept: item.concept,
+      amount: item.amount,
+      since: item.since,
+      until: item.until,
+      preset: item.preset,
+    })),
     expenses: store.DEMO_AEXP.filter((exp) => exp.day.slice(0, 4) === String(year)).sort(
       (one, other) => other.day.localeCompare(one.day) || other.id - one.id,
     ),
@@ -208,6 +284,8 @@ export function admCloseDemo(close, kind, period) {
   const year = +period.slice(0, 4);
   const ym = period.slice(0, 7);
   const now = TODAY() + "T" + nowHM() + ":00";
+  // D44: los gastos fijos que falten, antes de la foto (como admin_close)
+  admFixedSyncDemo();
   if (kind === "month") {
     if (close) {
       store.DEMO_ACL["month|" + ym] = Object.assign(admMonthDemo(ym), {

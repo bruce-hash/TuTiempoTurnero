@@ -1279,6 +1279,41 @@ async function turnoConMargen(p) {
   await pg.click("[data-act=admMn][data-d='-1']"); await wait(1200);
   await pg.click("[data-act=admClose][data-k=month]"); await wait(200); await pg.click("[data-act=admClose][data-k=month]"); await wait(1500);
   ok("v30: cerrar el mes pasado", (await q("select count(*)::int c from admin_closings where kind='month'"))[0].c === 1 && (await pg.locator(".cclosed").count()) === 1);
+  // D44 (10/11 · punto 12): gastos fijos y variables de TuTiempo, como en Finanzas del profesional
+  {
+    const monthOf = () => pg.evaluate(() => { const f = S.admFin && S.admFin[+S.admM.slice(0, 4)]; return f && f.months.find((m) => m.month === S.admM) });
+    ok("D44: un mes cerrado no deja agregar, cambiar ni borrar gastos (fijos ni variables)",
+       (await pg.locator(".cclosed").count()) === 1 && (await pg.locator("#fAdmExp, #fAdmFixed, [data-act=admFxEdit], [data-act=admFxNew], [data-act=admExpEdit], [data-act=admExpDel]").count()) === 0
+       && /Mes cerrado: los gastos fijos de este mes quedan como están/.test(await pg.locator(".afix").innerText()) && /El mes está cerrado/.test(await pg.locator(".avar").innerText()));
+    await pg.click("[data-act=admMn][data-d='1']"); await pg.waitForSelector(".afix", { timeout: 8000 }).catch(() => {}); await wait(400);
+    const fx = await q("select id, concept from admin_fixed_expenses where preset is not null order by id");
+    ok("D44: los 4 gastos fijos precargados (hosting, base de datos, emails y dominio) dicen «Completá el monto»",
+       fx.length === 4 && (await pg.locator(".afix li.afx-missing").count()) === 4 && /Hostinger/.test(await pg.locator(".afix").innerText()) && /Completá el monto/.test(await pg.locator(".afix").innerText()));
+    ok("D44: el gasto que ya estaba cargado queda en «Gastos variables»", (await pg.locator(".avar li", { hasText: "Hosting" }).count()) === 1 && /gastos fijos · \$0/i.test(await pg.locator(".afix .lbl").innerText()));
+    await pg.click(`[data-act=admFxEdit][data-id="${fx[0].id}"]`); await wait(300);
+    await pg.fill("#afm", "12000"); await pg.click("#fAdmFixed button[type=submit]"); await pg.waitForSelector(".afix:not(:has(#fAdmFixed))", { timeout: 8000 }).catch(() => {}); await wait(600);
+    ok("D44: completar el monto de un fijo: se carga este mes en la base y en pantalla",
+       await until("select amount from admin_expenses where fixed_id=$1 and to_char(fixed_month, 'YYYY-MM')=$2", [fx[0].id, curM], (r) => r.length === 1 && r[0].amount === 12000)
+       && (await pg.locator(`.afix li[data-fx="${fx[0].id}"]`).innerText()).includes("$12.000") && (await pg.locator(".afix .lbl").innerText()).includes("$12.000"));
+    await pg.fill("#aec", "Publicidad"); await pg.fill("#aem", "30000"); await pg.click("#fAdmExp button[type=submit]"); await wait(1500);
+    const pub = await q("select id from admin_expenses where concept='Publicidad' and fixed_id is null");
+    ok("D44: agregar un gasto variable", pub.length === 1 && (await pg.locator(`.avar li[data-exp="${pub[0]?.id}"]`).count()) === 1);
+    await pg.click(`[data-act=admExpEdit][data-id="${pub[0]?.id}"]`); await wait(300);
+    await pg.fill("#aeec", "Publicidad en Instagram"); await pg.fill("#aeem", "35000"); await pg.click("#fAdmExpEd button[type=submit]"); await wait(1500);
+    ok("D44: cambiar un gasto variable (nombre y monto)", (await q("select concept, amount from admin_expenses where id=$1", [pub[0]?.id]))[0]?.amount === 35000
+       && (await pg.locator(`.avar li[data-exp="${pub[0]?.id}"]`).innerText()).includes("Publicidad en Instagram") && (await pg.locator("#fAdmExpEd").count()) === 0);
+    const mo = await monthOf();
+    const sum = await pg.locator(".asum").innerText().catch(() => "");
+    const res = mo ? await pg.evaluate((n) => money(n), mo.commission - 92000) : "?";
+    ok("D44: el resultado del mes = comisión − gastos fijos − gastos variables, con fijos y variables aparte",
+       mo && mo.fixed === 12000 && mo.variable === 80000 && /Gastos fijos\s*\$12\.000/.test(sum) && /Gastos variables\s*\$80\.000/.test(sum)
+       && sum.includes("Resultado: " + res) && (await pg.locator(".kpi.big b").innerText()) === res, JSON.stringify(mo) + " " + sum);
+    await pg.click(`[data-act=admExpDel][data-id="${pub[0]?.id}"]`); await wait(1500);
+    ok("D44: borrar un gasto variable", (await q("select count(*)::int c from admin_expenses where id=$1", [pub[0]?.id]))[0].c === 0 && (await pg.locator(`.avar li[data-exp="${pub[0]?.id}"]`).count()) === 0);
+    await pg.click("[data-act=admM][data-m='']"); await wait(600);
+    const head = await pg.locator(".ftbl").first().locator("thead").innerText();
+    ok("D44: el balance anual separa fijos y variables", /fijos/i.test(head) && /variables/i.test(head) && /resultado/i.test(head) && /variables/i.test(await pg.locator(".ftbl").nth(1).locator("thead").innerText()));
+  }
   await menu("[data-act=asClient][data-to=cuenta]"); await wait(400);
   ok("Bloque D: desde el panel de TuTiempo, Mi perfil vuelve a la cuenta como cliente", (await pg.evaluate(() => S.role === "cliente" && S.view === "cuenta")));
   probing = true; const reuse = await pg.evaluate(async (h) => { const r = await sb.auth.verifyOtp({ token_hash: h, type: "recovery" }); return !!r.error }, (await mailOf("carla@test.ar")).recovery); probing = false;
