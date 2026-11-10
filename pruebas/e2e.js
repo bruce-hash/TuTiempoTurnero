@@ -1746,7 +1746,8 @@ async function turnoConMargen(p) {
     // 10/11: después de dejar de seguir, «Avisar a tus seguidores» ya no le llega
     await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector("#postTxt", { timeout: 8000 }).catch(() => {});
     await ps.fill("#postTxt", "Novedad después de dejar de seguir"); await ps.click("[data-act=publicar]"); await ps.waitForTimeout(1500);
-    ok("10/11: después de dejar de seguir no le llega nada más", (await q("select count(*)::int c from posts where provider_id = $1 and body = 'Novedad después de dejar de seguir'", [sofi.id]))[0].c === 1
+    ok("10/11: después de dejar de seguir no le llega nada más (sin seguidores, «Avisar» lo dice y no manda)",
+       /Todavía no tenés seguidores/.test(await ps.locator(".toast").innerText().catch(() => ""))
        && (await q("select count(*)::int c from client_messages where user_id = $1 and body = 'Novedad después de dejar de seguir'", [anaId]))[0].c === 0);
     await ctxS.close(); await ctxA.close();
   }
