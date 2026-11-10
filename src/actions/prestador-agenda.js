@@ -218,7 +218,8 @@ registerSubmit("fManual", (ev) => {
     $("#merr").textContent = "Escribí el nombre del cliente.";
     return;
   }
-  if (!slotsFor(ME(), day, svc[1]).list.some((slot) => slot.free && slot.time === time)) {
+  // 10/11: en un feriado cerrado puede agendar igual (ownAgenda)
+  if (!slotsFor(ME(), day, svc[1], undefined, false, true).list.some((slot) => slot.free && slot.time === time)) {
     $("#merr").textContent = "Ese horario se acaba de ocupar. Elegí otro.";
     render();
     return;

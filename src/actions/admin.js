@@ -596,7 +596,7 @@ registerClick("admHolDel", (ev, el, act) => {
 });
 registerClick("admHolConfirm", (ev, el, act) => {
   const y = +el.dataset.y;
-  const msg = `Listo: los feriados de ${y} quedan confirmados. Los profesionales ya los ven en Horarios.`;
+  const msg = `Listo: los feriados de ${y} quedan confirmados. Esos días quedan cerrados para todos los profesionales (los abren desde Horarios).`;
   if (LIVE) {
     el.disabled = true;
     api.m

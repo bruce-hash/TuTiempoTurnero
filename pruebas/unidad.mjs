@@ -220,5 +220,24 @@ const RUBRO_EMOJIS = { b: "💈", p: "✂", m: "🌿", l: "👁", u: "💅", d: 
   ok("9/11: celular.css es la última hoja y pone los campos a 16 px en el celular", styles.at(-1) === "celular" && /max-width:1023px/.test(cel) && /font-size: 16px !important/.test(cel), styles.join(","));
 }
 
+// 10/11 · feriados cerrados por defecto (D39): la misma regla que holiday_closed en la base. Un feriado de la lista (años
+// confirmados) está cerrado salvo que el profesional lo abra; los que ya pasaron no cuentan.
+{
+  const { closedHolidayOn, holidayBookingsNote, holidayIsOpen, holidayState } = await import("../src/lib/feriados.js");
+  const list = [
+    { day: "2026-11-23", name: "Soberanía", open: null },
+    { day: "2026-12-07", name: "Puente", open: false },
+    { day: "2026-12-08", name: "Inmaculada", open: true },
+  ];
+  ok("feriados cerrados: sin elegir, cerrado", closedHolidayOn(list, "2026-11-23", "2026-11-10") === true);
+  ok("feriados cerrados: «Dejarlo cerrado» (o el «Cierro» de antes), cerrado", closedHolidayOn(list, "2026-12-07", "2026-11-10") === true);
+  ok("feriados cerrados: «Voy a trabajar este día», abierto", closedHolidayOn(list, "2026-12-08", "2026-11-10") === false);
+  ok("feriados cerrados: un día que no es feriado, abierto", closedHolidayOn(list, "2026-11-24", "2026-11-10") === false && closedHolidayOn([], "2026-11-23") === false);
+  ok("feriados cerrados: uno que ya pasó no cuenta", closedHolidayOn(list, "2026-11-23", "2026-11-24") === false);
+  ok("feriados cerrados: el estado en palabras", holidayState(list[0]) === "Cerrado" && holidayState(list[1]) === "Cerrado" && holidayState(list[2]) === "Vas a trabajar"
+     && holidayIsOpen(list[2]) && !holidayIsOpen(null));
+  ok("feriados cerrados: los turnos que se mantienen", holidayBookingsNote(1) === "Tenés 1 turno ese día: se mantiene" && holidayBookingsNote(3) === "Tenés 3 turnos ese día: se mantienen");
+}
+
 console.log(F ? `${F} FALLAS` : "TODO OK");
 process.exit(F ? 1 : 0);

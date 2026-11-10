@@ -147,6 +147,15 @@ export const liveLectura = {
         p_to: dkey(addDays(Math.min(91, conf.ahead + 84))),
       }),
     );
+    // 10/11 · Feriados cerrados (D39): los días que no atiende por feriado (sin turnos nuevos; la base hace la misma cuenta)
+    const closed = await call(
+      sb.rpc("provider_closed_days", {
+        pid: prov.id,
+        p_from: TODAY(),
+        p_to: dkey(addDays(Math.min(91, conf.ahead + 84))),
+      }),
+    ).catch(() => []);
+    conf.closedDays = (closed || []).map((row) => String(row.day || row).slice(0, 10));
     store.BOOK = store.BOOK.filter((booking) => booking.pid != prov.id || !booking.busy).concat(
       (busy || []).map((row, idx) =>
         Object.assign(

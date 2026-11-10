@@ -30,6 +30,13 @@ registerClick("bellGo", (ev, el, act) => {
     setBtab("clientes");
     S.ctab = "seguidores";
     loadFollowers(true);
+  } else if (el.dataset.to === "agenda") {
+    // 10/11 · turnos en un feriado: a la Agenda, en ese día
+    setBtab("agenda");
+    if (el.dataset.d) {
+      S.aday = el.dataset.d;
+      S.awk = null;
+    }
   } else {
     // el plazo de Mercado Pago (9/11: se elige en Perfil → Cobros con Mercado Pago) y los demás avisos, a Perfil
     setBtab("perfil");

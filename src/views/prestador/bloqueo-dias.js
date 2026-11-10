@@ -78,18 +78,15 @@ export function vDayBlocks() {
 }
 // bloquea los días con horario entre from y to. En vivo lo hace la base (block_days); en la demo se cancelan
 // los turnos de esos días (sin devolver la seña: la devuelve el prestador) y se devuelven los sellos canjeados.
-// 7/11 · Feriados: con holiday (la fecha), es el «Cierro» de un feriado: en vivo lo hace holiday_decide (el mismo
-// bloqueo, más la elección guardada); la respuesta es la misma.
-export function blockDays(from, to, reason, holiday) {
+// (10/11: cerrar un feriado ya no pasa por acá: no cancela turnos, ver src/actions/feriados.js)
+export function blockDays(from, to, reason) {
   const pid = ME();
   const conf = cfg(pid);
   S.dbAsk = null;
   if (LIVE) {
-    (holiday ? api.m.holidayDecide(holiday, false) : api.m.blockDays(from, to, reason))
+    api.m
+      .blockDays(from, to, reason)
       .then((res) => {
-        if (holiday) {
-          setHolidayChoice(holiday, false);
-        }
         S.dbCancelled = ((res && res.cancelled) || []).map((row) => ({
           name: row.name,
           date: row.day,
@@ -173,15 +170,12 @@ export function blockDays(from, to, reason, holiday) {
   }
   S.dbCancelled = cancelled.sort((one, other) => (one.date + one.time).localeCompare(other.date + other.time));
   S.db = null;
-  if (holiday) {
-    setHolidayChoice(holiday, false);
-  }
   toast(
     `Bloqueaste ${blockedCount} día${blockedCount === 1 ? "" : "s"}.${cancelled.length ? ` Cancelamos ${cancelled.length} turno${cancelled.length > 1 ? "s" : ""} y les avisamos. Llamalos para la seña.` : ""}`,
   );
   render();
 }
-// 7/11 · Feriados: guarda en pantalla lo que eligió (la lista de Horarios y el aviso de la campanita)
+// 7/11 · Feriados: guarda en pantalla lo que eligió (la lista de Horarios, la Agenda y los avisos de la campanita)
 export function setHolidayChoice(day, open) {
   (store.HOLIDAYS || []).forEach((h) => {
     if (h.day === day) {
@@ -189,7 +183,7 @@ export function setHolidayChoice(day, open) {
     }
   });
   (S.notices || []).forEach((notice) => {
-    if (notice.kind === "holiday" && notice.ref === day) {
+    if ((notice.kind === "holiday" || notice.kind === "holiday_bookings") && notice.ref === day) {
       notice.open = open;
       notice.read = true;
     }

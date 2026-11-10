@@ -123,7 +123,7 @@ function step3() {
     3,
     `<div class="biz-opt" role="radiogroup" aria-label="Plantilla de horarios">${HOUR_TEMPLATES.map(([key, label, hint]) => `<label class="${tpl === key ? "on" : ""}"><input type="radio" name="btpl" data-act="bizTpl" data-k="${key}" ${tpl === key ? "checked" : ""}><span><b>${label}</b><small>${hint}</small></span></label>`).join("")}</div>
    <div class="biz-days">${order.map(row).join("")}</div>${errOf("days")}`,
-    { title: "Horarios", sub: "Elegí una plantilla y ajustala. Los feriados y vacaciones los bloqueás desde la Agenda.", form: '<form id="fBiz3" novalidate>%</form>' },
+    { title: "Horarios", sub: "Elegí una plantilla y ajustala. Los feriados quedan cerrados solos (si trabajás, los abrís desde Horarios) y las vacaciones las bloqueás vos.", form: '<form id="fBiz3" novalidate>%</form>' },
   );
 }
 function step4() {
