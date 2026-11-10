@@ -344,7 +344,6 @@ async function recorridoDemo(page, url) {
   await page.fill("#ai_p", "cliente123");
   await clic(page, "#fLogin button[type=submit]");
   await page.waitForSelector("#fTurno");
-  await rubroDelServicio();
   await foto(page, pasos, "pago (monto)");
   await clic(page, "#fTurno button[type=submit]");
   await page.waitForTimeout(600);
