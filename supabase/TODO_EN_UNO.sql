@@ -10449,7 +10449,8 @@ end $$;
 -- ---------- Los avisos ----------
 alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
 alter table public.provider_notices add constraint provider_notices_kind_check
-  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect','new_follower','mp_term','holiday','holiday_bookings'));
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect','new_follower','mp_term','holiday',
+                  'suspended','reactivated','holiday_bookings'));
 
 -- «Tenés N turnos el <día>, que es feriado. Se mantienen; …»: a cada profesional con turnos en un feriado cerrado que no
 -- pasó (de un año confirmado). p_day: solo ese día; null: todos. Una sola vez por profesional y día (unique de provider_notices).
@@ -10501,13 +10502,15 @@ begin
   return n;
 end $$;
 
--- el push de los dos avisos de feriado: el tipo de push 'holiday', vale hasta el día del feriado
+-- el push de los avisos del prestador: igual que en 20261110175000_cuenta_suspendida.sql (account), más el aviso de turnos en
+-- un feriado (holiday_bookings), con el tipo de push 'holiday' y que vale hasta el día del feriado
 create or replace function public.provider_notices_push() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   perform public.push_enqueue((select owner_id from public.providers where id = new.provider_id),
     case when new.kind in ('mp_reconnect','mp_connect') then 'mp_reconnect' when new.kind = 'new_follower' then new.kind
-         when new.kind in ('holiday','holiday_bookings') then 'holiday' else 'cobros' end,
+         when new.kind in ('holiday','holiday_bookings') then 'holiday'
+         when new.kind in ('suspended','reactivated') then 'account' else 'cobros' end,
     'notice', new.id, null,
     case when new.kind = 'new_follower' then now() + interval '1 day'
          when new.kind in ('holiday','holiday_bookings') and new.ref ~ '^\d{4}-\d{2}-\d{2}$'
@@ -10569,16 +10572,13 @@ begin
   end if;
 end $$;
 
--- push_due: igual que en 20261110120000_avisos_seguidores.sql (con 'unfollowed'), con los dos avisos de feriado (10/11)
-create or replace function public.push_due(p_limit integer DEFAULT 100)
- RETURNS TABLE(id bigint, endpoint text, p256dh text, auth text, title text, body text, url text, tag text, ttl integer, urgency text)
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
+-- push_due: igual que en 20261110175000_cuenta_suspendida.sql ('unfollowed' y 'account'), con los dos avisos de feriado (10/11)
+create or replace function public.push_due(p_limit int default 100)
+returns table (id bigint, endpoint text, p256dh text, auth text, title text, body text, url text, tag text, ttl int, urgency text)
+language plpgsql security definer set search_path = public as $$
 declare r record; skip text; hday text; t text; b text; u text; who text; svc text; pname text; lt timestamp;
         b_status text; b_start timestamptz; b_pid bigint; b_svc text; b_client text;
-        o_start timestamptz; o_pid bigint; o_slug text; o_body text;
+        o_start timestamptz; o_pid bigint; o_slug text; o_body text; a_kind text; a_status text;
 begin
   for r in select o.id, o.kind, o.source, o.source_id, o.booking_id, o.expires_at, s.endpoint, s.p256dh, s.auth,
                   coalesce(pr.push_notices, true) as wants, coalesce(pr.push_bookings, true) as wants_bookings,
@@ -10591,7 +10591,7 @@ begin
             limit greatest(coalesce(p_limit, 100), 1)
             for update of o skip locked loop
     b_status := null; b_start := null; b_pid := null; b_svc := null; b_client := null;
-    o_start := null; o_pid := null; o_slug := null; o_body := null;
+    o_start := null; o_pid := null; o_slug := null; o_body := null; a_kind := null; a_status := null;
     if r.booking_id is not null then
       select bb.status, bb.starts_at, bb.provider_id, bb.service_name, bb.client_name into b_status, b_start, b_pid, b_svc, b_client
         from public.bookings bb where bb.id = r.booking_id;
@@ -10603,12 +10603,16 @@ begin
         join public.providers p on p.id = so.provider_id
        where m.id = r.source_id and m.kind = 'offer';
     end if;
+    if r.kind = 'account' then
+      select n.kind, p.status into a_kind, a_status
+        from public.provider_notices n join public.providers p on p.id = n.provider_id where n.id = r.source_id;
+    end if;
     skip := case when (public.push_optional(r.kind) and not r.wants) or (public.push_booking_kind(r.kind) and not r.wants_bookings)
                    or (r.kind = 'new_follower' and not r.wants_followers) then 'opt_out'
                  when r.expires_at <= now() then 'stale'
                  when r.kind in ('conf','r24','r2','new_booking') and (b_status is distinct from 'confirmed' or b_start <= now()) then 'stale'
                  when r.kind = 'client_cancel' and (b_start is null or b_start <= now()) then 'stale'
-                 -- 10/11: dejó de seguir al profesional → lo que quedaba en la cola de ese profesional ya no le llega
+                 -- 10/11 (20261110120000_avisos_seguidores.sql): dejó de seguir al profesional → lo que quedaba en la cola de ese profesional ya no le llega
                  when r.kind in ('offer','news') and not exists (
                         select 1 from public.client_messages m join public.follows f on f.provider_id = m.provider_id and f.user_id = m.user_id
                          where m.id = r.source_id) then 'unfollowed'
@@ -10619,6 +10623,8 @@ begin
                         not exists (select 1 from public.holidays h where h.day::text = n.ref)
                         or (n.kind = 'holiday' and exists (select 1 from public.provider_holidays d where d.provider_id = n.provider_id and d.day::text = n.ref))
                         or (n.kind = 'holiday_bookings' and exists (select 1 from public.provider_holidays d where d.provider_id = n.provider_id and d.day::text = n.ref and d.open)))) then 'stale'
+                 -- 10/11 · cuenta: el aviso de suspendida solo mientras lo esté; el de activa, solo si no la volvieron a suspender
+                 when r.kind = 'account' and (a_kind is null or a_status = 'deleted' or (a_kind = 'suspended') <> (a_status = 'suspended')) then 'stale'
             end;
     if skip is not null then
       update public.push_outbox set status = 'skipped', skip_reason = skip where push_outbox.id = r.id;
@@ -10652,7 +10658,13 @@ begin
       u := '/panel/agenda?dia=' || to_char(b_start at time zone public.provider_tz(b_pid), 'YYYY-MM-DD');
     else
       -- C06 (V8): un seguidor nuevo, con su nombre de pila (lo guarda el aviso; nada más). 4/11: a la pestaña Seguidores
-      if r.kind = 'holiday' then
+      if r.kind = 'account' then
+        -- 10/11 · cuenta suspendida (D43): llega siempre (aviso del servicio), a la Agenda, donde está el aviso fijo
+        t := case a_kind when 'suspended' then 'Tu cuenta está suspendida' else 'Tu cuenta está activa de nuevo' end;
+        b := case a_kind when 'suspended' then 'No aparecés en TuTiempo ni recibís reservas nuevas. Abrí tu panel para ver cómo resolverlo.'
+                         else 'Ya aparecés en TuTiempo y podés recibir reservas nuevas.' end;
+        u := '/panel/agenda';
+      elsif r.kind = 'holiday' then
         -- 10/11 · feriados (D39): «El lunes 24/11 es feriado y tu agenda está cerrada. ¿Vas a trabajar?», a Horarios
         -- (Próximos feriados); «Tenés N turnos el …, que es feriado…», a la Agenda de ese día
         select n.body, case when n.kind = 'holiday_bookings' then n.ref end into b, hday from public.provider_notices n where n.id = r.source_id;
@@ -10684,10 +10696,10 @@ begin
     tag := case when r.booking_id is not null then 'turno-' || r.booking_id else r.kind || '-' || r.source_id end;
     -- cuánto la guarda el servicio de push si el dispositivo está apagado: hasta que vence, y nunca después del turno
     ttl := greatest(60, least(2419200, extract(epoch from (least(r.expires_at, case when r.kind in ('conf','r24','r2','new_booking') then b_start end) - now()))::int));
-    urgency := case when r.kind in ('conf','cancel','r2','new_booking','client_cancel','mp_reconnect') then 'high' else 'normal' end;
+    urgency := case when r.kind in ('conf','cancel','r2','new_booking','client_cancel','mp_reconnect','account') then 'high' else 'normal' end;
     return next;
   end loop;
-end $function$;
+end $$;
 
 revoke execute on function public.push_due(int) from public, anon, authenticated;
 grant execute on function public.push_due(int) to service_role;
