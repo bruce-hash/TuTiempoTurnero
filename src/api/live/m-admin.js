@@ -90,6 +90,12 @@ Object.assign(LM, {
         p_id: expenseId,
       }),
     ),
+  // D44: cambiar un gasto variable; crear, cambiar o dejar de repetir un gasto fijo desde el mes actual (ym = AAAA-MM)
+  adminUpdExp: (expenseId, concept, amount) =>
+    saved(sb.rpc("admin_update_expense", { p_id: expenseId, p_concept: concept, p_amount: amount })),
+  adminFixedSave: (fixedId, concept, amount, ym) =>
+    saved(sb.rpc("admin_fixed_save", { p_id: fixedId, p_concept: concept, p_amount: amount, p_from: ym + "-01" })),
+  adminFixedStop: (fixedId, ym) => saved(sb.rpc("admin_fixed_stop", { p_id: fixedId, p_from: ym + "-01" })),
   // fotos del DNI de un prestador: enlaces firmados que vencen a los 5 minutos
   adminDni: async (userId) => {
     const res = await sb.storage.from("dni").list(userId, {

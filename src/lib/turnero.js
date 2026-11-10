@@ -263,3 +263,7 @@ export function freed(booking) {
   }
   return waiting.length;
 }
+
+// 10/11 · punto 7: «Asistió» y «No vino» se marcan desde 12 h antes del turno (la base, mark_booking, rechaza antes con
+// too_early) y con la seña ya pagada (un turno en espera de pago no está confirmado todavía)
+export const canMark = (item) => !item.hold && new Date(item.date + "T" + item.time + ":00") - NOW() <= 12 * 3600e3;

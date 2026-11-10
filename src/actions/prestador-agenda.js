@@ -5,7 +5,8 @@ import { money } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, addDays, dayLabel, dkey, toMin } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
-import { busy, cfg, cli, freed, overlaps, slotsFor } from "../lib/turnero.js";
+import { busy, canMark, cfg, cli, freed, overlaps, slotsFor } from "../lib/turnero.js";
+import { errMsg } from "../lib/errores.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -36,6 +37,10 @@ registerClick("offerGap", (ev, el, act) => {
 registerClick("bDone", (ev, el, act) => {
   const booking = store.BOOK.find((item) => item.id === +el.dataset.id);
   if (!booking || booking.status !== "confirmed") {
+    return;
+  }
+  if (!canMark(booking)) {
+    toast(errMsg({ message: booking.hold ? "bad_state" : "too_early" }));
     return;
   }
   booking.status = "done";
@@ -70,6 +75,13 @@ registerClick("bDone", (ev, el, act) => {
 });
 registerClick("bNoShow", (ev, el, act) => {
   const booking = store.BOOK.find((item) => item.id === +el.dataset.id);
+  if (!booking || booking.status !== "confirmed") {
+    return;
+  }
+  if (!canMark(booking)) {
+    toast(errMsg({ message: booking.hold ? "bad_state" : "too_early" }));
+    return;
+  }
   booking.status = "noshow";
   api.m.markBooking(booking, "noshow");
   cli(booking.cliente).n++;
