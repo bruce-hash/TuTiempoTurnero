@@ -850,8 +850,9 @@ async function turnoConMargen(p) {
   ok("a Ana le llegó el aviso para reprogramar", cn.length >= 1 && cn[0].body.includes("tuvo que cancelar") && cn[0].body.includes("se va a comunicar con vos") && cn[0].body.includes("$3.600"));
   const dayBlk = await q("select count(*)::int c from provider_busy((select id from providers where name like 'Sofía%'), $1::date, $1::date) where day_block", [d]);
   ok("ese día queda Cerrado para los clientes", dayBlk[0].c === 1);
-  // 7/11 · feriados: un feriado confirmado de acá a 7 días, en un día que Sofía atiende y sin turnos: le llega el aviso
-  // con Abro / Cierro; Cierro bloquea el día (igual que Bloquear días) y Abro, desde Horarios, lo vuelve a abrir
+  // 7/11 · feriados; 10/11 (punto 13): un feriado confirmado de acá a 7 días, en un día que Sofía atiende y sin turnos,
+  // queda cerrado y le llega el aviso «El <día> es feriado y tu agenda está cerrada. ¿Vas a trabajar?» con Abrir el día /
+  // Dejarlo cerrado; «Dejarlo cerrado» no bloquea nada (sin block_days) y «Voy a trabajar este día», desde Horarios, lo abre
   {
     const sof = "(select id from providers where name like 'Sofía%')";
     const hd = (await q(`select to_char(g::date, 'YYYY-MM-DD') d from generate_series((now() at time zone 'America/Argentina/Buenos_Aires')::date + 1,
@@ -861,26 +862,30 @@ async function turnoConMargen(p) {
        order by g limit 1`))[0].d;
     await q("select holidays_sync_save($1::int, $2::jsonb)", [+hd.slice(0, 4), JSON.stringify([{ fecha: hd, tipo: "trasladable", nombre: "Feriado de la prueba" }])]);
     await q("update holiday_years set confirmed_at = now() where year = $1", [+hd.slice(0, 4)]);
+    const closedDays = async () => (await q(`select day::text d from provider_closed_days(${sof}, $1::date, $1::date)`, [hd])).map((r) => r.d);
     // (abrir la campanita deja leídos los otros avisos de Sofía: al final vuelven a quedar como estaban)
     const unread = (await q(`select id from provider_notices where provider_id = ${sof} and read_at is null`)).map((r) => r.id);
     await q("select holiday_notices()");
     await pg.evaluate(async () => { await api.loadMine(); render() }); await wait(600);
     await pg.click("nav [data-act=bellToggle]"); await wait(500);
-    const hn = pg.locator(".bellpanel li", { hasText: "Feriado de la prueba" });
-    ok("7/11 · feriados: el aviso «El <día> es feriado (…). ¿Abrís?» llega a la campanita con Abro / Cierro",
-       (await hn.count()) === 1 && /es feriado \(Feriado de la prueba\)\. ¿Abrís\?/.test(await hn.innerText())
-       && (await hn.locator("[data-act=holOpen]").count()) === 1 && (await hn.locator("[data-act=holClose]").count()) === 1);
-    await hn.locator("[data-act=holClose]").click(); await wait(1800);
-    ok("7/11 · feriados: Cierro bloquea ese día (como Bloquear días) y guarda la elección",
-       (await q(`select count(*)::int c from provider_busy(${sof}, $1::date, $1::date) where day_block`, [hd]))[0].c === 1
-       && (await q(`select open from provider_holidays where provider_id = ${sof} and day = $1::date`, [hd]))[0]?.open === false);
-    ok("7/11 · feriados: …lleva a Horarios, donde «Próximos feriados» lo muestra cerrado",
-       await pg.evaluate(() => S.btab === "horarios") && /✓ Cerrado/.test(await pg.locator(`#holPanel li[data-hol="${hd}"]`).innerText()));
-    await pg.click(`#holPanel li[data-hol="${hd}"] [data-act=holOpen]`); await wait(1800);
-    ok("7/11 · feriados: Abro lo vuelve a abrir",
+    const hn = pg.locator(".bellpanel li", { hasText: "es feriado y tu agenda está cerrada" });
+    ok("10/11 · feriados: el aviso «El <día> es feriado y tu agenda está cerrada. ¿Vas a trabajar?» llega a la campanita con Abrir el día / Dejarlo cerrado",
+       (await hn.count()) === 1 && /es feriado y tu agenda está cerrada\. ¿Vas a trabajar\?/.test(await hn.innerText())
+       && (await hn.locator("[data-act=holOpen]").innerText()) === "Abrir el día" && (await hn.locator("[data-act=holClose]").innerText()) === "Dejarlo cerrado");
+    ok("10/11 · feriados: confirmado el año, ese día queda cerrado para los clientes", JSON.stringify(await closedDays()) === JSON.stringify([hd]));
+    await hn.locator("[data-act=holClose]").click(); await wait(1500);
+    ok("10/11 · feriados: «Dejarlo cerrado» guarda la elección sin bloquear el día (no es Bloquear días)",
        (await q(`select count(*)::int c from provider_busy(${sof}, $1::date, $1::date) where day_block`, [hd]))[0].c === 0
+       && (await q(`select open from provider_holidays where provider_id = ${sof} and day = $1::date`, [hd]))[0]?.open === false
+       && JSON.stringify(await closedDays()) === JSON.stringify([hd]));
+    await pg.evaluate(() => { S.btab = "horarios"; render(); }); await wait(300);
+    ok("10/11 · feriados: Horarios → «Próximos feriados» lo muestra cerrado, con «Voy a trabajar este día»",
+       /Cerrado/.test(await pg.locator(`#holPanel li[data-hol="${hd}"]`).innerText()) && (await pg.locator(`#holPanel li[data-hol="${hd}"] [data-act=holOpen]`).count()) === 1);
+    await pg.click(`#holPanel li[data-hol="${hd}"] [data-act=holOpen]`); await wait(1800);
+    ok("10/11 · feriados: «Voy a trabajar este día» lo abre",
+       (await closedDays()).length === 0
        && (await q(`select open from provider_holidays where provider_id = ${sof} and day = $1::date`, [hd]))[0]?.open === true
-       && /✓ Abrís/.test(await pg.locator(`#holPanel li[data-hol="${hd}"]`).innerText()));
+       && /✓ Vas a trabajar/.test(await pg.locator(`#holPanel li[data-hol="${hd}"]`).innerText()));
     if (unread.length) await q("update provider_notices set read_at = null where id = any($1::bigint[])", [unread]);
   }
   // seguridad como prestadora
@@ -1067,6 +1072,74 @@ async function turnoConMargen(p) {
     await pg.click(`.holyear [data-act=admHolConfirm][data-y="${ny}"]`); await wait(1200);
     ok("7/11 · feriados: confirma el año (desde ahí lo ven los profesionales)", (await q("select confirmed_at is not null c from holiday_years where year = $1", [ny]))[0].c === true
        && /Confirmado el/.test(await pg.locator(".holyear", { hasText: String(ny) }).innerText()));
+  }
+  // 10/11 · punto 13 (D39): feriados cerrados por defecto. El admin confirma el año → el perfil de Sofía no ofrece horarios
+  // ese día (y el turno que ya tenía se mantiene, con el aviso) → Sofía lo abre desde Horarios → vuelve a ofrecer horarios.
+  // Un feriado propio de la prueba, de acá a 2-12 días, en un día que Sofía atiende (no depende de la fecha ni de la hora).
+  {
+    const sofC = (await q("select id, slug from providers where name like 'Sofía%'"))[0];
+    const hdC = (await q(`select to_char(g::date, 'YYYY-MM-DD') d from generate_series((now() at time zone 'America/Argentina/Buenos_Aires')::date + 2,
+        (now() at time zone 'America/Argentina/Buenos_Aires')::date + 12, interval '1 day') g
+       where not exists (select 1 from holidays h where h.day = g::date)
+         and (select count(*) from slot_starts($1, g::date, 60)) >= 2
+         and not exists (select 1 from bookings b where b.provider_id = $1 and b.source in ('app','manual') and b.status in ('confirmed','hold')
+                           and (b.starts_at at time zone 'America/Argentina/Buenos_Aires')::date = g::date)
+       order by g limit 1`, [sofC.id]))[0].d;
+    const yC = +hdC.slice(0, 4);
+    // el turno que ya estaba reservado ese día (agendado a mano, en el primer horario libre)
+    const s0 = (await q("select to_char(s, 'HH24:MI') t from slot_starts($1, $2::date, 60) s order by s limit 1", [sofC.id, hdC]))[0].t;
+    const bkC = (await q(`insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price)
+        values ($1, 'Turno del feriado', 'Esmaltado semipermanente', 'manual', 'confirmed', ($2::date + $3::time) at time zone 'America/Argentina/Buenos_Aires',
+                ($2::date + $3::time + interval '60 minutes') at time zone 'America/Argentina/Buenos_Aires', 12000) returning id`, [sofC.id, hdC, s0]))[0].id;
+    await q("insert into holidays (day, name, kind, source) values ($1::date, 'Feriado cerrado de la prueba', 'inamovible', 'admin')", [hdC]);
+    await q("insert into holiday_years (year) values ($1) on conflict (year) do update set confirmed_at = null", [yC]);
+    // el turnero del perfil, como lo ve cualquiera: Esmaltado (60 min) ese día
+    const ctxH = await b.newContext({ viewport: { width: 400, height: 900 } }); const ph = await ctxH.newPage(); ph.on("pageerror", (e) => errs.push(e.message));
+    const libres = async () => {
+      await ph.goto(`${BASE}/${sofC.slug}?dia=${hdC}`); await ph.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await ph.waitForTimeout(400);
+      await ph.click(".sgroup.seg-u .svci"); await ph.waitForTimeout(400);
+      const day = await ph.evaluate(() => S.day);
+      return { day, n: await ph.locator(".slots [data-slot]").count(), note: await ph.locator(".pk, .picker, #app").first().innerText().catch(() => "") };
+    };
+    const antes = await libres();
+    ok("10/11 · feriados cerrados: con el año sin confirmar, el feriado ofrece horarios", antes.day === hdC && antes.n > 0, JSON.stringify({ ...antes, note: undefined }));
+    // el admin confirma el año (Comisión → Feriados)
+    const ctxA = await b.newContext({ viewport: { width: 1366, height: 900 } }); const pa = await ctxA.newPage(); pa.on("pageerror", (e) => errs.push(e.message));
+    await pa.goto(BASE + "/ingresar"); await pa.waitForSelector("#ai_e");
+    await pa.fill("#ai_e", "carla@test.ar"); await pa.fill("#ai_p", "Nueva2026zz"); await pa.click("#fLogin button[type=submit]"); await pa.waitForTimeout(1500);
+    await pa.goto(BASE + "/admin/comision"); await pa.waitForSelector(`.holyear [data-act=admHolConfirm][data-y="${yC}"]`, { timeout: 8000 }).catch(() => {});
+    await pa.click(`.holyear [data-act=admHolConfirm][data-y="${yC}"]`);
+    const conf = await until("select confirmed_at is not null c from holiday_years where year = $1", [yC], (r) => r[0]?.c === true);
+    const avC = await q("select body from provider_notices where provider_id = $1 and kind = 'holiday_bookings' and ref = $2", [sofC.id, hdC]);
+    ok("10/11 · feriados cerrados: el admin confirma el año y a Sofía le llega «Tenés 1 turno el <día>, que es feriado. Se mantiene…»",
+       conf && avC.length === 1 && /^Tenés 1 turno el .+, que es feriado\. Se mantiene; si no vas a trabajar, avisale y cancelalo \(con devolución\)\.$/.test(avC[0].body), JSON.stringify(avC));
+    await ctxA.close();
+    const cerrado = await libres();
+    ok("10/11 · feriados cerrados: confirmado el año, el perfil no ofrece horarios ese día (es feriado)", cerrado.n === 0 && /feriado/i.test(cerrado.note), JSON.stringify({ ...cerrado, note: cerrado.note.slice(0, 200) }));
+    ok("10/11 · feriados cerrados: …y el turno que ya estaba reservado se mantiene", (await q("select status from bookings where id = $1", [bkC]))[0].status === "confirmed");
+    // Sofía: la Agenda de ese día cerrada por feriado (con su turno) y, desde Horarios, «Voy a trabajar este día»
+    const ctxS = await b.newContext({ viewport: { width: 400, height: 900 } }); const ps = await ctxS.newPage(); ps.on("pageerror", (e) => errs.push(e.message));
+    await ps.goto(BASE + "/ingresar"); await ps.waitForSelector("#ai_e");
+    await ps.fill("#ai_e", "sofia@test.ar"); await ps.fill("#ai_p", "prestador123"); await ps.click("#fLogin button[type=submit]"); await ps.waitForSelector(".bhead", { timeout: 8000 }).catch(() => {});
+    await ps.goto(`${BASE}/panel/agenda?dia=${hdC}`); await ps.waitForSelector(".tl-panel", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    const hb = await ps.locator(".holday").innerText().catch(() => "");
+    ok("10/11 · feriados cerrados: en la Agenda ese día dice que es feriado y está cerrado, con el turno que se mantiene",
+       /Feriado · Feriado cerrado de la prueba: tu agenda está cerrada/.test(hb) && /Tenés 1 turno ese día: se mantiene/.test(hb)
+       && (await ps.locator(".tl .ev", { hasText: "Turno del feriado" }).count()) === 1 && (await ps.locator(".tl [data-act=offerGap]").count()) === 0, hb);
+    await ps.goto(BASE + "/panel/horarios"); await ps.waitForSelector("#holPanel", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    const li = ps.locator(`#holPanel li[data-hol="${hdC}"]`);
+    ok("10/11 · feriados cerrados: en Horarios → Próximos feriados figura «Cerrado», con su turno y «Voy a trabajar este día»",
+       /Cerrado · Tenés 1 turno ese día: se mantiene/.test(await li.innerText().catch(() => "")) && (await li.locator("[data-act=holOpen]").innerText().catch(() => "")) === "Voy a trabajar este día");
+    await li.locator("[data-act=holOpen]").click();
+    ok("10/11 · feriados cerrados: Sofía lo abre (queda guardado)", await until("select open from provider_holidays where provider_id = $1 and day = $2::date", [sofC.id, hdC], (r) => r[0]?.open === true));
+    await ps.waitForTimeout(600);
+    ok("10/11 · feriados cerrados: …y Horarios lo muestra abierto, con «Cerrar el día de nuevo»",
+       /✓ Vas a trabajar/.test(await li.innerText().catch(() => "")) && (await li.locator("[data-act=holClose]").count()) === 1);
+    const abierto = await libres();
+    ok("10/11 · feriados cerrados: abierto, el perfil vuelve a ofrecer horarios ese día (menos el del turno que ya tenía)",
+       abierto.n > 0 && !(await ph.locator(`.slots [data-slot="${s0}"]`).count()), JSON.stringify({ ...abierto, note: undefined }));
+    await ctxS.close(); await ctxH.close();
+    await q("delete from bookings where id = $1", [bkC]);
   }
   // D30: guarda Comisión y espera a que el panel se vuelva a dibujar con lo guardado (si no, el render tardío pisa lo que se
   // escribe después: en el CI pasa)

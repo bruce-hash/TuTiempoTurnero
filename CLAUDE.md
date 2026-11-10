@@ -100,8 +100,13 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     (`provider_month_summary`), Ajustes solo Seguridad (`vAjustes`, `/cuenta/ajustes`).
   - 7/11 · Feriados (D39): `holidays-sync` (Edge Function, ArgentinaDatos y, de respaldo, el `.ics` de feriados de Google; `HOLIDAYS_API_URL` y `HOLIDAYS_ICS_URL` solo pruebas) guarda la lista en
     `holidays` (`holidays_sync_save`); el admin la confirma por año (`holiday_years`, Comisión → Feriados). El profesional:
-    `src/views/prestador/feriados.js` (Horarios → Próximos feriados), `src/actions/feriados.js` (Abro / Cierro → `holiday_decide`;
-    Cierro = `block_days`), aviso `holiday` 7 días antes (`holiday_notices`, campanita y push). Cuentas puras en `src/lib/feriados.js`.
+    `src/views/prestador/feriados.js` (Horarios → Próximos feriados), `src/actions/feriados.js` (`holiday_decide`), aviso `holiday` 7 días
+    antes (`holiday_notices`, campanita y push). Cuentas puras en `src/lib/feriados.js`. 10/11 (punto 13): **cerrados por defecto**: un
+    feriado de un año confirmado que no pasó está cerrado salvo que el profesional lo abra (`holiday_closed`; se calcula, no es un
+    bloqueo y NUNCA cancela turnos). `slot_starts` no da horarios ese día (book_slot, next_free_slot), un trigger no deja ofrecerlo
+    (`slot_offers`) y la app lo sabe por `holidayClosed` en `src/lib/turnero.js` (perfil: `provider_closed_days`; panel: `store.HOLIDAYS`).
+    «Voy a trabajar este día» / «Cerrar el día de nuevo» (sin `block_days`); a quien ya tiene turnos ese día, aviso `holiday_bookings`
+    (`holiday_bookings_notices`, al confirmar o agregar un feriado). El profesional puede agendar a mano igual (`slotsFor(…, ownAgenda)`).
   - 7/11 · Legales: `/privacidad` (`src/views/legal/privacidad.js`) y `/terminos` (`terminos.js`), con la marca «Borrador
     pendiente de revisión legal»; lo que falta revisar y las contradicciones con el PDF original, en `docs/11-legales.md`. Si
     cambia una regla de `docs/01-decisiones.md` (seña, comisión, devoluciones, borrado de datos), cambiá también estos textos.

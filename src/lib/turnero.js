@@ -174,18 +174,18 @@ export function slotsFor(pid, date, dur, ignoreId, anyDate, ownAgenda) {
       list: [],
     };
   }
+  if (!anyDate && date > dkey(addDays(conf.ahead - 1))) {
+    return {
+      closed: true,
+      reason: "Todavía no abrió la agenda",
+      list: [],
+    };
+  }
   if (!ownAgenda && holidayClosed(pid, date)) {
     return {
       closed: true,
       holiday: true,
       reason: "Es feriado: el profesional no atiende este día",
-      list: [],
-    };
-  }
-  if (!anyDate && date > dkey(addDays(conf.ahead - 1))) {
-    return {
-      closed: true,
-      reason: "Todavía no abrió la agenda",
       list: [],
     };
   }
