@@ -1703,9 +1703,12 @@ async function turnoConMargen(p) {
     await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".tl, .agwk", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
     // 8/11 (punto 11): desde mañana, así el hueco no empieza dentro de minutos (offer_past si la prueba tarda)
     const hoyOf = (await q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date::text d"))[0].d;
-    for (let i = 1; i <= 10 && !(await ps.locator("[data-act=offerGap]:not([disabled])").count()); i++) {
+    // siempre desde mañana (antes, si hoy quedaba un hueco usaba el de hoy: según la hora, un cobro sin turno recién
+    // cargado tapaba su «Ofrecer» y el clic no llegaba)
+    for (let i = 1; i <= 10; i++) {
       const d = (await q("select ($1::date + $2::int)::text d", [hoyOf, i]))[0].d;
       await ps.evaluate((x) => { S.aday = x; S.awk = null; render(); }, d); await ps.waitForTimeout(250);
+      if (await ps.locator("[data-act=offerGap]:not([disabled])").count()) break;
     }
     const g2 = await ps.locator("[data-act=offerGap]:not([disabled])").first().getAttribute("data-g");
     await ps.click(`[data-act=offerGap][data-g="${g2}"]`);
@@ -1733,6 +1736,15 @@ async function turnoConMargen(p) {
     await pa.click("nav [data-act=bellToggle]"); await pa.waitForSelector(".bellpanel .msg-act", { timeout: 8000 }).catch(() => {});
     ok("4/11: …y en la campanita se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator(".bellpanel").innerText()) && (await pa.locator(".bellpanel .msg-act[data-go=perfil]").count()) >= 1);
     await pa.keyboard.press("Escape");
+    // 10/11: con la app abierta, otra novedad llega a la campanita sin recargar (al llegar el push, el service worker le
+    // avisa a la app con "tt-push"; acá se simula ese mensaje: el recorrido real del service worker lo prueba pwa.js)
+    await ps.fill("#postTxt", "Segunda novedad con la app abierta"); await ps.click("[data-act=publicar]");
+    await until("select count(*)::int c from client_messages where kind = 'news' and user_id = $1", [anaId], (r) => r[0].c === 2);
+    const inboxHas2 = () => pa.evaluate(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"));
+    const before2 = await inboxHas2();
+    await pa.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "tt-push" } })));
+    await pa.waitForFunction(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"), null, { timeout: 8000 }).catch(() => {});
+    ok("10/11: con la app abierta, la novedad aparece en la campanita sin recargar", !before2 && (await inboxHas2()) && (await pa.locator(".bell-btn .bell-n").count()) >= 1);
     // S19 (8/11): con el negocio suspendido no hay «Avisar a tus seguidores» ni «Ofrecer» (la base también lo rechaza)
     await q("update providers set status = 'suspended' where id = $1", [sofi.id]);
     await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector(".avisarpanel", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
@@ -1753,6 +1765,12 @@ async function turnoConMargen(p) {
     await volver();
     await ps.waitForFunction(() => /Todavía no te sigue nadie/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
     ok("4/11: quien deja de seguir sale de la lista y del número", /Todavía no te sigue nadie/.test(await stxt()) && /Seguidores\s*0/.test(await ps.locator(".ctabs").innerText()));
+    // 10/11: después de dejar de seguir, «Avisar a tus seguidores» ya no le llega
+    await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector("#postTxt", { timeout: 8000 }).catch(() => {});
+    await ps.fill("#postTxt", "Novedad después de dejar de seguir"); await ps.click("[data-act=publicar]"); await ps.waitForTimeout(1500);
+    ok("10/11: después de dejar de seguir no le llega nada más (sin seguidores, «Avisar» lo dice y no manda)",
+       /Todavía no tenés seguidores/.test(await ps.locator(".toast").innerText().catch(() => ""))
+       && (await q("select count(*)::int c from client_messages where user_id = $1 and body = 'Novedad después de dejar de seguir'", [anaId]))[0].c === 0);
     await ctxS.close(); await ctxA.close();
   }
   // ---- D45 inicio: eliminar clientes de la lista y bloquear (punto 10)
@@ -1848,6 +1866,58 @@ async function turnoConMargen(p) {
     await ctxS.close(); await ctxA.close();
   }
   // ---- D45 fin
+  // 10/11 · punto 6: tocar un turno de la Agenda abre su detalle a la primera, en el celular y en la compu, tocando
+  // varios seguidos y también si la Agenda se pone al día justo durante el toque
+  {
+    const sofiP = (await q("select id from providers where name like 'Sofía%'"))[0].id;
+    const [sv6] = await q("select id from services where provider_id=$1 and active order by id limit 1", [sofiP]);
+    const dia6 = (await q("select ((now() at time zone 'America/Argentina/Buenos_Aires')::date + 3)::text d"))[0].d;
+    const nombres = ["Toque Uno", "Toque Dos", "Toque Tres", "Toque Cuatro"];
+    for (const [i, n] of nombres.entries()) {
+      await q(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)
+        values ($1,$2,$3,'Corte','manual','confirmed',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '40 minutes',5000)`,
+        [sofiP, sv6.id, n, dia6, ["10:00", "11:00", "12:00", "13:00"][i]]);
+    }
+    for (const [label, opts] of [["celular", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }], ["compu", { viewport: { width: 1366, height: 860 } }]]) {
+      const ctx = await b.newContext(opts); const p6 = await ctx.newPage(); p6.on("pageerror", (e) => errs.push(e.message));
+      await p6.goto(BASE + "/ingresar"); await p6.waitForSelector("#ai_e");
+      await p6.fill("#ai_e", "sofia@test.ar"); await p6.fill("#ai_p", "prestador123"); await p6.click("#fLogin button[type=submit]"); await p6.waitForTimeout(1500);
+      await p6.goto(BASE + "/panel/agenda?dia=" + dia6); await p6.waitForSelector(".tl .ev", { timeout: 8000 }).catch(() => {}); await p6.waitForTimeout(500);
+      const ids = await p6.evaluate((ns) => ns.map((n) => (BOOK.find((x) => x.cliente === n) || {}).id), nombres);
+      const toque = async (id) => { const el = p6.locator(`.ev[data-sel="${id}"]`); await el.scrollIntoViewIfNeeded(); if (label === "celular") await el.tap(); else await el.click(); await p6.waitForTimeout(150); };
+      const abierto = async (n) => new RegExp(n).test(await p6.locator(".detail").innerText().catch(() => ""));
+      let bien = 0;
+      for (const [i, id] of [ids[0], ids[1], ids[2], ids[1], ids[3], ids[0]].entries()) {
+        await toque(id);
+        if (await abierto(nombres[ids.indexOf(id)])) bien++;
+      }
+      ok(`10/11: ${label}: tocar 6 turnos seguidos (también uno ya abierto) abre cada detalle a la primera`, bien === 6, `${bien}/6`);
+      // la Agenda se pone al día (llega un turno nuevo) justo entre que el dedo baja y sube
+      // la pantalla quieta (el toque anterior la llevó hasta el detalle) y el turno a la vista, antes de apoyar el dedo
+      await p6.locator(`.ev[data-sel="${ids[2]}"]`).scrollIntoViewIfNeeded(); await p6.waitForTimeout(700);
+      const box = await p6.locator(`.ev[data-sel="${ids[2]}"]`).boundingBox();
+      const cx = box.x + box.width / 2, cy = box.y + Math.min(box.height / 2, 12);
+      const nuevo = async (h) => q(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)
+        values ($1,$2,$3,'Corte','manual','confirmed',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '20 minutes',5000)`,
+        [sofiP, sv6.id, "Llega " + label + h, dia6, h]);
+      const refrescar = () => p6.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      if (label === "celular") {
+        const cdp = await ctx.newCDPSession(p6);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: cy }] });
+        await nuevo("16:00"); await refrescar(); await p6.waitForTimeout(900);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      } else {
+        await p6.mouse.move(cx, cy); await p6.mouse.down();
+        await nuevo("17:00"); await refrescar(); await p6.waitForTimeout(900);
+        await p6.mouse.up();
+      }
+      await p6.waitForTimeout(300);
+      ok(`10/11: ${label}: con la Agenda poniéndose al día durante el toque, el detalle se abre igual`, await abierto(nombres[2]));
+      await p6.waitForTimeout(1200);
+      ok(`10/11: ${label}: …y el turno nuevo aparece apenas termina el toque`, new RegExp("Llega " + label).test(await p6.locator(".tl").innerText().catch(() => "")));
+      await ctx.close();
+    }
+  }
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));
   await b.close(); await db.end();

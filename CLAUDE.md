@@ -88,6 +88,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - D45 (punto 10): Eliminar de la lista y Bloquear (`src/views/prestador/bloqueos.js`, `src/actions/prestador-bloqueos.js`;
     Clientes → Bloqueados en `?ver=bloqueados`). La base lo hace cumplir (`client_blocks`, `block_client`, `remove_client`,
     `provider_clients.hidden_at`); al bloqueado le llega solo `no_slots` (`noSlots()` en `src/lib/prestadores.js`), nunca «bloqueo».
+  - 10/11 (`docs/12-avisos-seguidores.md`): `src/lib/avisos-al-dia.js` pide los avisos del cliente cada minuto con la app
+    abierta y, al llegar un push, el service worker le avisa a la app (`tt-push`) y se ponen al día (cliente o panel).
+    Dejar de seguir saltea lo que quedaba en la cola (`push_due`, `unfollowed`); una suscripción vencida (404/410) deja
+    rastro en `push_gone` (solo el SQL Editor la lee).
   - D36: la campanita de avisos de la cabecera (`src/ui/campanita.js` + `src/actions/campanita.js`): `S.inbox` del
     cliente (con `msgAction`) y `S.notices` del profesional. Mis turnos y el panel ya no muestran avisos.
   - D37: íconos propios, sin emojis en la interfaz: `ic("nombre")` de `src/lib/iconos.js` (SVG en línea, trazo del color

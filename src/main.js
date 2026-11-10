@@ -41,6 +41,7 @@ import { errMsg } from "./lib/errores.js";
 import { startPriceRefresh } from "./lib/precios.js";
 import { startAgendaRefresh } from "./lib/agenda-al-dia.js";
 import { startAppRefresh } from "./lib/actualizar.js";
+import { startInboxRefresh } from "./lib/avisos-al-dia.js";
 import { clearPendingPay, resumePendingPay } from "./lib/cobro-pendiente.js";
 import { refreshPush } from "./lib/push.js";
 import { unstashPending } from "./lib/pendiente.js";
@@ -164,6 +165,8 @@ async function boot() {
     startPriceRefresh();
     // C22 (V3b): la Agenda del prestador al día cada 30 segundos y al volver a la pestaña
     startAgendaRefresh();
+    // 10/11: la campanita del cliente al día con la app abierta (cada minuto y al llegar un push)
+    startInboxRefresh();
     // D26 y C29: lo que dice TuTiempo (exigir DNI, tarjetas de sellos); al llegar, se vuelve a dibujar
     api.requireDni()
       .then(() => render())
