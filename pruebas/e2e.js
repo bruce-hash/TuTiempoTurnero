@@ -679,6 +679,7 @@ async function turnoConMargen(p) {
     await pg.click(`.ev[data-sel="${bd.id}"]`); await wait(200);
     await pg.click(`[data-act=bDone][data-id="${bd.id}"]`); await wait(700);
     ok("V4b: al marcar «Asistió» pregunta cómo te pagó el resto", /¿Cómo te pagó el resto\? · \$5\.000/.test(await pg.locator(".detail .restbox").innerText()));
+    ok("10/11 · punto 5: el editor del resto no tiene «Listo» (tocar el medio ya lo anota)", (await pg.locator('.detail .restbox button:has-text("Listo")').count()) === 0);
     await pg.click(".restbox [data-act=restSplitOn]"); await wait(200);
     await pg.fill("#rs_a1", "3000"); await wait(100);
     ok("V4b: al escribir el primer monto, el segundo se completa con lo que falta", (await pg.inputValue("#rs_a2")) === "2000" && /justo el resto/.test(await pg.locator("#rs_left").innerText()));

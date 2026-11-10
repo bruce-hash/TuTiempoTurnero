@@ -1,5 +1,6 @@
 // V4b · C25 "Cargar diferencia": cómo te pagó el resto de un turno, en uno o dos medios. Lo mismo en la Agenda (al
-// marcar "Asistió") y en la Caja del día de Finanzas. closeAct: la acción del botón "Listo" (o nada).
+// marcar "Asistió") y en la Caja del día de Finanzas. 10/11 · punto 5: sin botón «Listo»: tocar el medio (o «Guardar» en
+// dos medios) ya lo anota y cierra el editor.
 import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { MEDIOS, medioIcon } from "../../lib/medios.js";
@@ -17,10 +18,9 @@ export function restSummary(booking) {
 
 const options = (selected) => MEDIOS.map((medio) => `<option ${medio === selected ? "selected" : ""}>${medio}</option>`).join("");
 
-export function restEditor(booking, closeAct) {
+export function restEditor(booking) {
   const rest = restOf(booking);
   const split = booking.restParts && booking.restParts.length ? booking.restParts : null;
-  const close = closeAct ? `<button type="button" class="btn btn-ghost btn-sm" data-act="${closeAct}">Listo</button>` : "";
   if (S.restSplit === booking.id) {
     const { parts } = restSplit(booking);
     const first = parts[0] ? parts[0].medio : MEDIOS[0];
@@ -38,5 +38,5 @@ export function restEditor(booking, closeAct) {
   }
   const current = split ? null : restSplit(booking).parts[0];
   return `<div class="restask"><div><b>¿Cómo te pagó el resto? · ${money(rest)}</b><span>${split ? "Ahora: " + restSummary(booking) : "Tocá el medio. Si te pagó con dos, dividilo."}</span></div>
-   <span class="medios">${MEDIOS.map((medio) => `<button type="button" class="btn btn-sm ${current && current.medio === medio ? "btn-pri" : "btn-ghost"}" data-act="restMedio" data-id="${booking.id}" data-m="${medio}" aria-pressed="${!!current && current.medio === medio}">${medio}</button>`).join("")}<button type="button" class="btn btn-sm ${split ? "btn-pri" : "btn-ghost"}" data-act="restSplitOn" data-id="${booking.id}" aria-pressed="${!!split}">En dos medios</button>${close}</span></div>`;
+   <span class="medios">${MEDIOS.map((medio) => `<button type="button" class="btn btn-sm ${current && current.medio === medio ? "btn-pri" : "btn-ghost"}" data-act="restMedio" data-id="${booking.id}" data-m="${medio}" aria-pressed="${!!current && current.medio === medio}">${medio}</button>`).join("")}<button type="button" class="btn btn-sm ${split ? "btn-pri" : "btn-ghost"}" data-act="restSplitOn" data-id="${booking.id}" aria-pressed="${!!split}">En dos medios</button></span></div>`;
 }
