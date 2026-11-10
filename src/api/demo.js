@@ -88,6 +88,10 @@ export const demoApi = {
   async cashDay() {
     return null;
   },
+  // en la demo Finanzas sale de lo que está en memoria
+  async finance() {
+    return store.FIN;
+  },
   m: new Proxy(
     {},
     {

@@ -15,16 +15,18 @@ import { medioToDb } from "../lib/medios.js";
 import { saleTotal } from "../views/prestador/caja.js";
 import { checkSplit, restOf } from "../lib/resto.js";
 
-// 10/11 · punto 8: después de corregir la caja de un día, Finanzas (el mes y el resumen) y el registro de cambios de ese
-// día se vuelven a pedir a la base. De hoy, solo el registro (Finanzas de hoy sale de lo cargado).
+// 10/11 · punto 8: después de corregir la caja de un día, el registro de cambios de ese día, lo cargado ese día y
+// Finanzas (el mes y el resumen) se vuelven a pedir a la base, primero lo que se ve en la pantalla. De hoy, solo el
+// registro (Finanzas de hoy sale de lo cargado).
 function refreshCaja(day, saving) {
   if (!LIVE) {
     return;
   }
+  const past = day !== TODAY();
   Promise.resolve(saving)
-    .then(() => (day === TODAY() ? null : api.loadMine().then(() => api.walkinsOn(day))))
-    .then(() => api.cashDay(day))
+    .then(() => Promise.all([api.cashDay(day), past ? api.walkinsOn(day) : null]))
     .then(() => render())
+    .then(() => (past ? api.finance().then(() => render()) : null))
     .catch(() => {});
 }
 registerClick("reopenDay", (ev, el, act) => {

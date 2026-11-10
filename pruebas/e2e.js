@@ -594,7 +594,9 @@ async function turnoConMargen(p) {
     await pg.fill("#wed_m", "6500"); await pg.click("#fWalkEd button[type=submit]");
     ok("10/11 caja: se corrige el movimiento de ayer", await until("select amount from walkins where provider_id=$1 and description='Corte de ayer'", [p8.id], (r) => r[0]?.amount === 6500));
     await pg.waitForFunction(() => /Cambios después de cerrar/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 10000 }).catch(() => {});
-    ok("10/11 caja: el cambio queda en el registro del día, a la vista", /Cambios después de cerrar/.test(await txt()) && /Cambiaste Corte de ayer: \$4\.000 en Efectivo → \$6\.500 en Efectivo/.test(await txt()));
+    ok("10/11 caja: el cambio queda en el registro del día, a la vista", /Cambios después de cerrar/.test(await txt()) && /Cambiaste Corte de ayer: \$4\.000 en Efectivo → \$6\.500 en Efectivo/.test(await txt()),
+       JSON.stringify({ log: await q("select kind, detail from cash_day_log where provider_id=$1 order by id", [p8.id]), walk: await q("select amount, method, at from walkins where provider_id=$1 and description='Corte de ayer'", [p8.id]),
+         panel: (await pg.locator(".cashlog, .movs").first().innerText().catch(() => "")).slice(0, 300) }));
     await pg.click("#fCloseDay button[type=submit]");
     ok("10/11 caja: se cierra de nuevo con el total nuevo", await until("select income from cash_closings where provider_id=$1 and kind='day' and period=$2", [p8.id, ayer], (r) => r[0]?.income >= 6500));
     if (mismoMes) {
