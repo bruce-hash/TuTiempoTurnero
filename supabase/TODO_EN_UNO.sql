@@ -9659,7 +9659,7 @@ begin
 end $$;
 
 
--- push_due: igual que en 20261106210000_feriados.sql, más los avisos de la cuenta (account: suspendida / activa de nuevo).
+-- push_due: igual que en 20261110120000_avisos_seguidores.sql (feriados + 'unfollowed'), más los avisos de la cuenta (account: suspendida / activa de nuevo).
 -- Un aviso de cuenta que ya no corresponde (lo reactivaron antes de mandarlo, o al revés) no sale.
 create or replace function public.push_due(p_limit int default 100)
 returns table (id bigint, endpoint text, p256dh text, auth text, title text, body text, url text, tag text, ttl int, urgency text)
@@ -9700,6 +9700,10 @@ begin
                  when r.expires_at <= now() then 'stale'
                  when r.kind in ('conf','r24','r2','new_booking') and (b_status is distinct from 'confirmed' or b_start <= now()) then 'stale'
                  when r.kind = 'client_cancel' and (b_start is null or b_start <= now()) then 'stale'
+                 -- 10/11 (20261110120000_avisos_seguidores.sql): dejó de seguir al profesional → lo que quedaba en la cola de ese profesional ya no le llega
+                 when r.kind in ('offer','news') and not exists (
+                        select 1 from public.client_messages m join public.follows f on f.provider_id = m.provider_id and f.user_id = m.user_id
+                         where m.id = r.source_id) then 'unfollowed'
                  when r.kind = 'offer' and (o_start is null or o_start <= now()) then 'stale'
                  -- 7/11 · feriados: ya eligió Abro o Cierro
                  when r.kind = 'holiday' and exists (select 1 from public.provider_notices n join public.provider_holidays d
