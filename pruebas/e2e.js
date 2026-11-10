@@ -128,6 +128,11 @@ async function turnoConMargen(p) {
      && /WhatsApp 2284 722825/.test(foot) && /Llamar/.test(foot));
   ok("lista desde la base (2 prestadores)", (await pg.locator(".grid .card").count()) === 2);
   ok("conteo por rubro", (await pg.locator(".segtile.seg-l").innerText()).includes("1 con turnos"));
+  // 10/11: los rubros con sus emojis de antes y la tarjeta de Barberías como las demás (sin mayúsculas)
+  const tiles = await pg.evaluate(() => [...document.querySelectorAll(".segtile")].map((tile) => ({ k: tile.className.match(/seg-(\w)/)[1], ic: tile.querySelector(".st-k").textContent.trim(), svg: !!tile.querySelector(".st-k svg"), tt: getComputedStyle(tile.querySelector("b")).textTransform })));
+  const RUB = { b: "💈", p: "✂", m: "🌿", l: "👁", u: "💅", d: "✨" };
+  ok("rubros del inicio con su emoji", tiles.length === 6 && tiles.every((tile) => tile.ic === RUB[tile.k] && !tile.svg), JSON.stringify(tiles));
+  ok("Barberías sin mayúsculas, como las demás", tiles.every((tile) => tile.tt === "none"), JSON.stringify(tiles.map((tile) => tile.tt)));
   await pg.click(".segtile.seg-u"); await wait();
   ok("rubro Uñas: Sofía con paleta coral", (await seg()) === "u" && (await pg.locator(".grid .card.seg-u").count()) === 1);
   await pg.click(".grid .card [data-go=perfil]"); await pg.waitForSelector(".sgroup"); await wait();
@@ -473,6 +478,20 @@ async function turnoConMargen(p) {
   ok("panel de Sofía con sus 3 rubros", (await pg.locator(".bhead .cchip").count()) === 3);
   await pg.evaluate((d) => { S.aday = d; render() }, d); await wait(300);
   ok("su agenda muestra la reserva de la app", (await pg.locator(".ev.app").count()) >= 1);
+  // 10/11: la leyenda con los seis tipos (cada uno con su muestra e ícono) y cada turno con el ícono de su tipo; «Por la
+  // app» y «Agendado» ya no se confunden (fondos distintos: el color de la marca contra el de la tarjeta)
+  {
+    const leg = await pg.evaluate(() => {
+      const items = [...document.querySelectorAll(".tl-leg .lgi")];
+      const bg = (k) => getComputedStyle(document.querySelector(`.tl-leg .lgi.${k}`)).backgroundColor;
+      return { labels: items.map((el) => el.textContent.trim()), icons: items.filter((el) => el.querySelector("svg")).length, app: bg("app"), man: bg("man"), walk: bg("walk"),
+        evIcon: !!document.querySelector(".ev.app .ev-t svg") };
+    });
+    ok("10/11: la leyenda de la Agenda tiene los seis tipos (con Bloqueado y No trabajás) y los cuatro de turnos con ícono",
+       leg.labels.join("|") === "Por la app|Agendado|Sin turno|Bloqueado|No trabajás|Libre" && leg.icons === 4, JSON.stringify(leg));
+    ok("10/11: «Por la app», «Agendado» y «Sin turno» con fondos distintos, y la reserva de la app con su ícono",
+       new Set([leg.app, leg.man, leg.walk]).size === 3 && leg.evIcon, JSON.stringify(leg));
+  }
   // bloquear horario
   // en un día hábil sin turnos: el día de la reserva de Ana chocaba con ella si su primer turno libre caía a las 20:00
   const dBloq = await pg.evaluate(() => { for (let i = 9; ; i++) { const k = dkey(addDays(i)); if (![0, 6].includes(new Date(k + "T12:00:00").getDay())) return k } });

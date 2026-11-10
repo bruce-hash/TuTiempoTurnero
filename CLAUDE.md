@@ -90,7 +90,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - D37: íconos propios, sin emojis en la interfaz: `ic("nombre")` de `src/lib/iconos.js` (SVG en línea, trazo del color
     del texto y detalle verde en `--ic-a`; tamaños por lugar en `src/styles/iconos.css`; `src/ui/iconos.js` lo reexporta).
     Un ícono nuevo se agrega ahí. Los textos planos (toast, confirm, push, title, placeholder, `<option>`) van sin ícono.
-    `pruebas/unidad.mjs` falla si vuelve a aparecer un emoji en `src/` (fuera de comentarios y de `src/demo/`).
+    `pruebas/unidad.mjs` falla si vuelve a aparecer un emoji en `src/` (fuera de comentarios y de `src/demo/`), salvo
+    los de los seis rubros en `src/lib/rubros.js` (10/11: vuelven a sus emojis).
   - 4/11 · Bloque 4 (D06, D30, D38): seña fija del 30% (`src/views/prestador/plazo.js`: `DEPOSIT_PCT`, `depositNote`,
     `termPicker`; en la base, el trigger `ps_fixed_deposit` la fuerza en todo pedido con sesión). El plazo de Mercado Pago
     lo elige el profesional (Perfil → Cobros con Mercado Pago, 9/11, y el alta); si un cobro trae la comisión de otro plazo, `confirm_payment_core` no
