@@ -85,12 +85,17 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
     «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
     de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
+  - 10/11 (`docs/12-avisos-seguidores.md`): `src/lib/avisos-al-dia.js` pide los avisos del cliente cada minuto con la app
+    abierta y, al llegar un push, el service worker le avisa a la app (`tt-push`) y se ponen al día (cliente o panel).
+    Dejar de seguir saltea lo que quedaba en la cola (`push_due`, `unfollowed`); una suscripción vencida (404/410) deja
+    rastro en `push_gone` (solo el SQL Editor la lee).
   - D36: la campanita de avisos de la cabecera (`src/ui/campanita.js` + `src/actions/campanita.js`): `S.inbox` del
     cliente (con `msgAction`) y `S.notices` del profesional. Mis turnos y el panel ya no muestran avisos.
   - D37: íconos propios, sin emojis en la interfaz: `ic("nombre")` de `src/lib/iconos.js` (SVG en línea, trazo del color
     del texto y detalle verde en `--ic-a`; tamaños por lugar en `src/styles/iconos.css`; `src/ui/iconos.js` lo reexporta).
     Un ícono nuevo se agrega ahí. Los textos planos (toast, confirm, push, title, placeholder, `<option>`) van sin ícono.
-    `pruebas/unidad.mjs` falla si vuelve a aparecer un emoji en `src/` (fuera de comentarios y de `src/demo/`).
+    `pruebas/unidad.mjs` falla si vuelve a aparecer un emoji en `src/` (fuera de comentarios y de `src/demo/`), salvo
+    los de los seis rubros en `src/lib/rubros.js` (10/11: vuelven a sus emojis).
   - 4/11 · Bloque 4 (D06, D30, D38): seña fija del 30% (`src/views/prestador/plazo.js`: `DEPOSIT_PCT`, `depositNote`,
     `termPicker`; en la base, el trigger `ps_fixed_deposit` la fuerza en todo pedido con sesión). El plazo de Mercado Pago
     lo elige el profesional (Perfil → Cobros con Mercado Pago, 9/11, y el alta); si un cobro trae la comisión de otro plazo, `confirm_payment_core` no

@@ -441,6 +441,46 @@ ok("4/11: funciones nuevas con search_path fijo y solo para cuentas con sesión"
    "select bool_and(p.proconfig::text like '%%search_path%%') from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname in ('provider_followers','offer_slot','follower_label')")
    and not one("select has_function_privilege('anon', 'offer_slot(timestamptz,timestamptz,uuid)', 'execute') or has_function_privilege('anon', 'provider_followers()', 'execute')"))
 
+# ---------- 10/11 · punto 3: dejar de seguir corta lo que estaba en la cola; suscripción vencida deja rastro ----------
+own5 = mkuser("seg5@push.test", "Seg Cinco")
+pid5 = one("select register_provider('Seguidores Push', 'Calle 5', array['p'], '2284 5', null)", uid=own5)
+q("update providers set status = 'active', dni_verified = true where id = %s", (pid5,))
+cli5 = mkuser("cli5@push.test", "clara Cinco")
+ep5 = sub(cli5, label="Safari en iPhone")
+sub(own5)
+q("update push_outbox set status = 'skipped', skip_reason = 'stale' where status = 'pending'")
+q("insert into follows (user_id, provider_id) values (%s, %s)", (cli5, pid5), uid=cli5)
+nf5 = [d for d in due().values() if d["title"] == "Nuevo seguidor" and d["body"] == "Clara empezó a seguirte."]
+ok("10/11: seguir → al profesional le llega «Clara empezó a seguirte.» (campanita y push a Seguidores)",
+   one("select body from provider_notices where provider_id = %s and kind = 'new_follower'", (pid5,)) == "Clara empezó a seguirte."
+   and len(nf5) == 1 and nf5[0]["url"] == "/panel/clientes?ver=seguidores", str(nf5))
+q("update push_outbox set status = 'skipped', skip_reason = 'stale' where status = 'pending'")
+r5 = q("select notify_followers('Abrimos el domingo')", uid=own5)
+r6 = q("select offer_slot(date_trunc('hour', now()) + interval '2 days', date_trunc('hour', now()) + interval '2 days 1 hour', %s)", (cli5,), uid=own5)
+ok("10/11: «Avisar» y «Ofrecer» → aviso en la campanita y push en la cola del seguidor", not err(r5) and not err(r6)
+   and [r[1] for r in cola(cli5, "news")] == ["pending"] and [r[1] for r in cola(cli5, "offer")] == ["pending"])
+q("delete from follows where user_id = %s and provider_id = %s", (cli5, pid5), uid=cli5)
+D5 = due()
+ok("10/11: dejar de seguir → lo que quedaba en la cola de ese profesional no sale ('unfollowed')",
+   cola(cli5, "news") == [("news", "skipped", "unfollowed")] and cola(cli5, "offer") == [("offer", "skipped", "unfollowed")]
+   and not [d for d in D5.values() if d["endpoint"] == ep5], str(cola(cli5)))
+ok("10/11: …lo que ya le había llegado a la campanita queda, y sale de la lista de Seguidores",
+   one("select count(*) from client_messages where user_id = %s and provider_id = %s", (cli5, pid5)) == 2
+   and one("select provider_followers()", uid=own5)["count"] == 0)
+q("insert into follows (user_id, provider_id) values (%s, %s)", (cli5, pid5), uid=cli5)
+ok("10/11: volver a seguir no repite «empezó a seguirte» (una vez por persona, C06)",
+   one("select count(*) from provider_notices where provider_id = %s and kind = 'new_follower'", (pid5,)) == 1)
+q("select notify_followers('Segunda novedad')", uid=own5)
+n5 = pending_ids(cli5, "news")
+due()
+q("select push_result(%s, 410, 'gone')", (n5[0],), role="service_role")
+g5 = q("select user_id, label, host, status, kind from push_gone where user_id = %s", (cli5,))
+ok("10/11: suscripción vencida (410) → se borra y queda el rastro en push_gone (sin el endpoint)",
+   one("select count(*) from push_subscriptions where user_id = %s", (cli5,)) == 0
+   and g5 == [(cli5, "Safari en iPhone", "fcm.googleapis.com", 410, "news")], str(g5))
+ok("10/11: push_gone no la lee la app (ni con sesión ni sin)", err(q("select * from push_gone", uid=cli5)) and err(q("select * from push_gone", role="anon"))
+   and one("select relrowsecurity from pg_class where oid = 'public.push_gone'::regclass"))
+
 # ---------- 7/11 · feriados: el aviso de 7 días antes también va por push ----------
 hoyF = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))).date()
 fF = hoyF + dt.timedelta(days=4)

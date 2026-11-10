@@ -29,6 +29,11 @@ function doneRest(item) {
 
 // agenda del prestador: semanas de un período de 31 días y la línea de tiempo del día elegido, con turnos,
 // servicios sin turno de hoy, descansos, huecos libres para ofrecer y la hora actual
+// 10/11 (propuesta): cada tipo de turno con su ícono y un relleno distinto (no solo el color): por la app (lleno, el
+// color del rubro: la reserva paga), agendado por vos (blanco con borde), sin turno (verde), bloqueado (rayado rojo)
+const KIND_IC = { app: "celu", man: "editar", walk: "caminar", blk: "bloquear" };
+const LEGEND = [["app", "Por la app"], ["man", "Agendado"], ["walk", "Sin turno"], ["blk", "Bloqueado"], ["brk", "No trabajás"], ["gap", "Libre"]];
+
 export function vBAgendaT() {
   const days = [];
   for (let offset = 0; offset < 31; offset++) {
@@ -128,7 +133,7 @@ export function vBAgendaT() {
       const topPx = (start - top) * pxPerMin;
       const heightPx = Math.max(item.dur * pxPerMin, 30);
       return `<button class="ev ${kindClass(item)} ${item.status === "done" ? "done" : ""} ${item.status === "noshow" ? "ns" : ""} ${String(S.sel) === String(item.id) ? "sel" : ""} ${col ? "c2" : ""}" style="top:${topPx}px;height:${heightPx}px" data-sel="${item.id}">
-      <span class="ev-t">${item.time}</span><span class="ev-n">${esc(item.cliente || "Bloqueado")}</span>${item.type === "block" ? "" : `<span class="ev-s">${esc(item.svc)}</span>`}
+      <span class="ev-t">${ic(KIND_IC[kindClass(item)])}${item.time}</span><span class="ev-n">${esc(item.cliente || "Bloqueado")}</span>${item.type === "block" ? "" : `<span class="ev-s">${esc(item.svc)}</span>`}
       <span class="ev-ic">${item.att ? "✓" : ""}${item.late ? ic("horarios") : ""}${item.status === "done" ? ic("ok") : ""}${item.status === "noshow" ? "✕" : ""}${item.disc ? "%" : ""}</span></button>`;
     })
     .join("");
@@ -166,7 +171,7 @@ export function vBAgendaT() {
   return `${weekNav}
   <div class="stats2"><div><b>${bookings.length}</b><span>Turnos</span></div><div><b>${occupancy(day)}%</b><span>Ocupación</span></div><div><b>${money(income)}</b><span>Ingreso estimado</span></div></div>
   <div class="panel tl-panel"><div class="tl-top"><b>${esc(longLabel(day))}</b><span class="hint">${rangesTxt(rngs)}${hh ? ` · ${ic("ofertaflash")} Happy hour ${esc(conf.happy.from)}–${esc(conf.happy.to)} (−${conf.happy.pct}%)` : ""}</span></div>
-   <div class="tl-leg"><span><i class="lg app"></i>TuTiempo</span><span><i class="lg man"></i>Agendado</span><span><i class="lg walk"></i>Sin turno</span><span><i class="lg gap"></i>Libre</span></div>
+   <div class="tl-leg">${LEGEND.map(([k, label]) => `<span class="lgi ${k}">${KIND_IC[k] ? ic(KIND_IC[k]) : ""}${label}</span>`).join("")}</div>
    <div class="tl" style="height:${height}px">${hourLines.join("")}${hhHtml}${breakHtml}${gapHtml}${events}${nowLine}</div>
    <p class="note">Tocá un turno para ver el detalle. ${active ? `En los huecos libres, “Ofrecer” avisa a tus ${store.COMM.followers} seguidores.` : esc(followersBlockedNote())}</p></div>
   ${selected ? detailCard(selected) : ""}

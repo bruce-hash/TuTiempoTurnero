@@ -128,6 +128,11 @@ async function turnoConMargen(p) {
      && /WhatsApp 2284 722825/.test(foot) && /Llamar/.test(foot));
   ok("lista desde la base (2 prestadores)", (await pg.locator(".grid .card").count()) === 2);
   ok("conteo por rubro", (await pg.locator(".segtile.seg-l").innerText()).includes("1 con turnos"));
+  // 10/11: los rubros con sus emojis de antes y la tarjeta de Barberías como las demás (sin mayúsculas)
+  const tiles = await pg.evaluate(() => [...document.querySelectorAll(".segtile")].map((tile) => ({ k: tile.className.match(/seg-(\w)/)[1], ic: tile.querySelector(".st-k").textContent.trim(), svg: !!tile.querySelector(".st-k svg"), tt: getComputedStyle(tile.querySelector("b")).textTransform })));
+  const RUB = { b: "💈", p: "✂", m: "🌿", l: "👁", u: "💅", d: "✨" };
+  ok("rubros del inicio con su emoji", tiles.length === 6 && tiles.every((tile) => tile.ic === RUB[tile.k] && !tile.svg), JSON.stringify(tiles));
+  ok("Barberías sin mayúsculas, como las demás", tiles.every((tile) => tile.tt === "none"), JSON.stringify(tiles.map((tile) => tile.tt)));
   await pg.click(".segtile.seg-u"); await wait();
   ok("rubro Uñas: Sofía con paleta coral", (await seg()) === "u" && (await pg.locator(".grid .card.seg-u").count()) === 1);
   await pg.click(".grid .card [data-go=perfil]"); await pg.waitForSelector(".sgroup"); await wait();
@@ -473,6 +478,20 @@ async function turnoConMargen(p) {
   ok("panel de Sofía con sus 3 rubros", (await pg.locator(".bhead .cchip").count()) === 3);
   await pg.evaluate((d) => { S.aday = d; render() }, d); await wait(300);
   ok("su agenda muestra la reserva de la app", (await pg.locator(".ev.app").count()) >= 1);
+  // 10/11: la leyenda con los seis tipos (cada uno con su muestra e ícono) y cada turno con el ícono de su tipo; «Por la
+  // app» y «Agendado» ya no se confunden (fondos distintos: el color de la marca contra el de la tarjeta)
+  {
+    const leg = await pg.evaluate(() => {
+      const items = [...document.querySelectorAll(".tl-leg .lgi")];
+      const bg = (k) => getComputedStyle(document.querySelector(`.tl-leg .lgi.${k}`)).backgroundColor;
+      return { labels: items.map((el) => el.textContent.trim()), icons: items.filter((el) => el.querySelector("svg")).length, app: bg("app"), man: bg("man"), walk: bg("walk"),
+        evIcon: !!document.querySelector(".ev.app .ev-t svg") };
+    });
+    ok("10/11: la leyenda de la Agenda tiene los seis tipos (con Bloqueado y No trabajás) y los cuatro de turnos con ícono",
+       leg.labels.join("|") === "Por la app|Agendado|Sin turno|Bloqueado|No trabajás|Libre" && leg.icons === 4, JSON.stringify(leg));
+    ok("10/11: «Por la app», «Agendado» y «Sin turno» con fondos distintos, y la reserva de la app con su ícono",
+       new Set([leg.app, leg.man, leg.walk]).size === 3 && leg.evIcon, JSON.stringify(leg));
+  }
   // bloquear horario
   // en un día hábil sin turnos: el día de la reserva de Ana chocaba con ella si su primer turno libre caía a las 20:00
   const dBloq = await pg.evaluate(() => { for (let i = 9; ; i++) { const k = dkey(addDays(i)); if (![0, 6].includes(new Date(k + "T12:00:00").getDay())) return k } });
@@ -1765,6 +1784,15 @@ async function turnoConMargen(p) {
     await pa.click("nav [data-act=bellToggle]"); await pa.waitForSelector(".bellpanel .msg-act", { timeout: 8000 }).catch(() => {});
     ok("4/11: …y en la campanita se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator(".bellpanel").innerText()) && (await pa.locator(".bellpanel .msg-act[data-go=perfil]").count()) >= 1);
     await pa.keyboard.press("Escape");
+    // 10/11: con la app abierta, otra novedad llega a la campanita sin recargar (al llegar el push, el service worker le
+    // avisa a la app con "tt-push"; acá se simula ese mensaje: el recorrido real del service worker lo prueba pwa.js)
+    await ps.fill("#postTxt", "Segunda novedad con la app abierta"); await ps.click("[data-act=publicar]");
+    await until("select count(*)::int c from client_messages where kind = 'news' and user_id = $1", [anaId], (r) => r[0].c === 2);
+    const inboxHas2 = () => pa.evaluate(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"));
+    const before2 = await inboxHas2();
+    await pa.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "tt-push" } })));
+    await pa.waitForFunction(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"), null, { timeout: 8000 }).catch(() => {});
+    ok("10/11: con la app abierta, la novedad aparece en la campanita sin recargar", !before2 && (await inboxHas2()) && (await pa.locator(".bell-btn .bell-n").count()) >= 1);
     // S19 (8/11): con el negocio suspendido no hay «Avisar a tus seguidores» ni «Ofrecer» (la base también lo rechaza)
     await q("update providers set status = 'suspended' where id = $1", [sofi.id]);
     await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector(".avisarpanel", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
@@ -1785,7 +1813,65 @@ async function turnoConMargen(p) {
     await volver();
     await ps.waitForFunction(() => /Todavía no te sigue nadie/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
     ok("4/11: quien deja de seguir sale de la lista y del número", /Todavía no te sigue nadie/.test(await stxt()) && /Seguidores\s*0/.test(await ps.locator(".ctabs").innerText()));
+    // 10/11: después de dejar de seguir, «Avisar a tus seguidores» ya no le llega
+    await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector("#postTxt", { timeout: 8000 }).catch(() => {});
+    await ps.fill("#postTxt", "Novedad después de dejar de seguir"); await ps.click("[data-act=publicar]"); await ps.waitForTimeout(1500);
+    ok("10/11: después de dejar de seguir no le llega nada más (sin seguidores, «Avisar» lo dice y no manda)",
+       /Todavía no tenés seguidores/.test(await ps.locator(".toast").innerText().catch(() => ""))
+       && (await q("select count(*)::int c from client_messages where user_id = $1 and body = 'Novedad después de dejar de seguir'", [anaId]))[0].c === 0);
     await ctxS.close(); await ctxA.close();
+  }
+  // 10/11 · punto 6: tocar un turno de la Agenda abre su detalle a la primera, en el celular y en la compu, tocando
+  // varios seguidos y también si la Agenda se pone al día justo durante el toque
+  {
+    const sofiP = (await q("select id from providers where name like 'Sofía%'"))[0].id;
+    const [sv6] = await q("select id from services where provider_id=$1 and active order by id limit 1", [sofiP]);
+    const dia6 = (await q("select ((now() at time zone 'America/Argentina/Buenos_Aires')::date + 3)::text d"))[0].d;
+    const nombres = ["Toque Uno", "Toque Dos", "Toque Tres", "Toque Cuatro"];
+    for (const [i, n] of nombres.entries()) {
+      await q(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)
+        values ($1,$2,$3,'Corte','manual','confirmed',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '40 minutes',5000)`,
+        [sofiP, sv6.id, n, dia6, ["10:00", "11:00", "12:00", "13:00"][i]]);
+    }
+    for (const [label, opts] of [["celular", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }], ["compu", { viewport: { width: 1366, height: 860 } }]]) {
+      const ctx = await b.newContext(opts); const p6 = await ctx.newPage(); p6.on("pageerror", (e) => errs.push(e.message));
+      await p6.goto(BASE + "/ingresar"); await p6.waitForSelector("#ai_e");
+      await p6.fill("#ai_e", "sofia@test.ar"); await p6.fill("#ai_p", "prestador123"); await p6.click("#fLogin button[type=submit]"); await p6.waitForTimeout(1500);
+      await p6.goto(BASE + "/panel/agenda?dia=" + dia6); await p6.waitForSelector(".tl .ev", { timeout: 8000 }).catch(() => {}); await p6.waitForTimeout(500);
+      const ids = await p6.evaluate((ns) => ns.map((n) => (BOOK.find((x) => x.cliente === n) || {}).id), nombres);
+      const toque = async (id) => { const el = p6.locator(`.ev[data-sel="${id}"]`); await el.scrollIntoViewIfNeeded(); if (label === "celular") await el.tap(); else await el.click(); await p6.waitForTimeout(150); };
+      const abierto = async (n) => new RegExp(n).test(await p6.locator(".detail").innerText().catch(() => ""));
+      let bien = 0;
+      for (const [i, id] of [ids[0], ids[1], ids[2], ids[1], ids[3], ids[0]].entries()) {
+        await toque(id);
+        if (await abierto(nombres[ids.indexOf(id)])) bien++;
+      }
+      ok(`10/11: ${label}: tocar 6 turnos seguidos (también uno ya abierto) abre cada detalle a la primera`, bien === 6, `${bien}/6`);
+      // la Agenda se pone al día (llega un turno nuevo) justo entre que el dedo baja y sube
+      // la pantalla quieta (el toque anterior la llevó hasta el detalle) y el turno a la vista, antes de apoyar el dedo
+      await p6.locator(`.ev[data-sel="${ids[2]}"]`).scrollIntoViewIfNeeded(); await p6.waitForTimeout(700);
+      const box = await p6.locator(`.ev[data-sel="${ids[2]}"]`).boundingBox();
+      const cx = box.x + box.width / 2, cy = box.y + Math.min(box.height / 2, 12);
+      const nuevo = async (h) => q(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)
+        values ($1,$2,$3,'Corte','manual','confirmed',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '20 minutes',5000)`,
+        [sofiP, sv6.id, "Llega " + label + h, dia6, h]);
+      const refrescar = () => p6.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      if (label === "celular") {
+        const cdp = await ctx.newCDPSession(p6);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: cy }] });
+        await nuevo("16:00"); await refrescar(); await p6.waitForTimeout(900);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      } else {
+        await p6.mouse.move(cx, cy); await p6.mouse.down();
+        await nuevo("17:00"); await refrescar(); await p6.waitForTimeout(900);
+        await p6.mouse.up();
+      }
+      await p6.waitForTimeout(300);
+      ok(`10/11: ${label}: con la Agenda poniéndose al día durante el toque, el detalle se abre igual`, await abierto(nombres[2]));
+      await p6.waitForTimeout(1200);
+      ok(`10/11: ${label}: …y el turno nuevo aparece apenas termina el toque`, new RegExp("Llega " + label).test(await p6.locator(".tl").innerText().catch(() => "")));
+      await ctx.close();
+    }
   }
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));

@@ -167,9 +167,18 @@ const PUSH_STUB = `(() => {
   cdp.on("ServiceWorker.workerRegistrationUpdated", (ev) => { for (const r of ev.registrations) if (r.scopeURL.startsWith(BASE)) regId = r.registrationId; });
   await cdp.send("ServiceWorker.enable");
   for (let i = 0; i < 20 && !regId; i++) await page.waitForTimeout(100);
+  // 10/11: un aviso nuevo en la base (una novedad del profesional) que la app abierta todavía no pidió
+  const provOfBooking = (await q("select provider_id from bookings where id = $1", [booking]))[0].provider_id;
+  await q("insert into client_messages (provider_id, user_id, kind, ref, body) values ($1, $2, 'news', '0', 'Novedad con la app abierta')", [provOfBooking, uid]);
+  const inboxHas = () => page.evaluate(() => (S.inbox || []).some((msg) => msg.body === "Novedad con la app abierta"));
+  const hadBefore = await inboxHas();
   const message = { title: "Turno confirmado", body: "Sofía Benítez Studio · jue 22/10, 17:30", url: `/turno/${booking}`, tag: `turno-${booking}` };
   if (regId) await cdp.send("ServiceWorker.deliverPushMessage", { origin: BASE, registrationId: regId, data: JSON.stringify(message) });
   await page.waitForTimeout(800);
+  let hasAfter = false;
+  for (let i = 0; i < 20 && !(hasAfter = await inboxHas()); i++) await page.waitForTimeout(150);
+  ok("10/11: con la app abierta, al llegar un push la campanita se pone al día sola (sin recargar)", !hadBefore && hasAfter
+     && (await page.locator(".bell-btn .bell-n").count()) >= 1);
   const shown = await page.evaluate(() => navigator.serviceWorker.ready.then((r) => r.getNotifications()).then((list) => list.map((n) => ({ title: n.title, body: n.body, tag: n.tag, url: n.data && n.data.url, icon: n.icon }))));
   ok("un push entregado al service worker muestra la notificación (título, texto, etiqueta, adónde lleva)", shown.some((n) => n.title === message.title && n.body === message.body && n.tag === message.tag && n.url === message.url && /icon-192/.test(n.icon)), JSON.stringify(shown));
   if (regId) await cdp.send("ServiceWorker.deliverPushMessage", { origin: BASE, registrationId: regId, data: JSON.stringify({ title: "x", body: "y", url: "https://evil.test/robo" }) });

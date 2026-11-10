@@ -45,7 +45,7 @@ function svcEditor(prov) {
        ) => `<div class="svcrow3"><label class="sfl sfn"><span>Nombre del servicio</span><input id="sn${index}" value="${esc(svc[0])}" autocomplete="off" placeholder="Ej: Corte de cabello"></label><button type="button" class="xbtn" data-act="svcDel" data-i="${index}" aria-label="Quitar servicio">✕</button><label class="sfl"><span>Duración (minutos)</span><input id="sd${index}" value="${svc[1]}" inputmode="numeric" placeholder="30"></label><label class="sfl"><span>Precio ($)</span><input id="sp${index}" value="${svc[2]}" inputmode="numeric" placeholder="10000"></label>
      <button type="button" class="lnk svcmore" data-act="svcOpts" data-i="${index}">${(S.edOpen || {})[index] ? "▾ Ocultar" : "▸ Indicaciones antes del turno"}</button>
      ${(S.edOpen || {})[index] ? svcOpts(svc, index) : ""}
-     ${cats.length > 1 ? `<select id="sc${index}" aria-label="Rubro del servicio">${cats.map((cat) => `<option value="${cat}" ${svc[3] === cat ? "selected" : ""}>${catInfo(cat).one}</option>`).join("")}</select>` : ""}</div>`,
+     ${cats.length > 1 ? `<select id="sc${index}" aria-label="Rubro del servicio">${cats.map((cat) => `<option value="${cat}" ${svc[3] === cat ? "selected" : ""}>${catInfo(cat).ic} ${catInfo(cat).one}</option>`).join("")}</select>` : ""}</div>`,
      )
      .join("")}</div>
    <p class="note" style="text-align:left;margin:4px 0 6px">${cats.length > 1 ? "Elegí el rubro de cada servicio: así aparecés en cada rubro con sus precios." : ""}</p>
