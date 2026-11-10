@@ -388,7 +388,7 @@ body.am-open{overflow:hidden}
 /* 7/11 · Feriados: Próximos feriados (Horarios), aviso de la campanita y la lista del admin */
 .hollist li{align-items:center}
 .holbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-.hollist .holbtns{margin-top:0}
+.hollist .holbtns{margin-top:6px}
 .holset{color:var(--ok,#07774F)}
 .holyear{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
 .holyear-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}

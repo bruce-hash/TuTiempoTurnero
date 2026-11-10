@@ -29,12 +29,12 @@ export function vHolidays() {
      .map((h) => {
        const open = holidayIsOpen(h);
        const count = holidayBookings(h);
-       return `<li data-hol="${esc(h.day)}"><span class="ag-t">${esc(h.day.slice(8, 10))}/${esc(h.day.slice(5, 7))}</span><div><b>${esc(holidayLabel(h.day))} · ${esc(h.name)}</b><span class="hint holset">${open ? "✓ " : ""}${esc(holidayState(h))}${count ? ` · ${esc(holidayBookingsNote(count))}` : ""}</span></div>
+       return `<li data-hol="${esc(h.day)}"><span class="ag-t">${esc(h.day.slice(8, 10))}/${esc(h.day.slice(5, 7))}</span><div><b>${esc(holidayLabel(h.day))} · ${esc(h.name)}</b><span class="hint ${open ? "holset" : ""}">${open ? "✓ " : ""}${esc(holidayState(h))}${count ? ` · ${esc(holidayBookingsNote(count))}` : ""}</span>
      <div class="holbtns">${
        open
          ? `<button type="button" class="btn btn-sm btn-ghost" data-act="holClose" data-d="${esc(h.day)}">Cerrar el día de nuevo</button>`
          : `<button type="button" class="btn btn-sm btn-pri" data-act="holOpen" data-d="${esc(h.day)}">Voy a trabajar este día</button>`
-     }</div></li>`;
+     }</div></div></li>`;
      })
      .join("")}</ul></div>`;
 }
