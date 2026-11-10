@@ -5,10 +5,10 @@ import { H } from "../lib/compat.js";
 import { $ } from "../lib/dom.js";
 import { TODAY, addDays, dkey, pad } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
-import { selDur } from "../lib/servicios.js";
+import { pickSvc, selDur } from "../lib/servicios.js";
 import { cfg, freeCount, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
-import { go, render } from "../ui/render.js";
+import { go, render, renderSmooth } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { SMAX } from "../views/prestador/estadisticas.js";
 import { ymk } from "../views/prestador/finanzas.js";
@@ -49,6 +49,7 @@ document.addEventListener("click", (ev) => {
     if (goEl.dataset.go === "perfil") {
       S.pctx = goEl.dataset.ctx || null;
       S.svc = 0;
+      S.svcPickedFor = null;
       S.day = null;
       S.slot = null;
     }
@@ -65,7 +66,7 @@ document.addEventListener("click", (ev) => {
         S.svc = idx;
       }
     }
-    render();
+    renderSmooth();
     return;
   }
   const svcEl = ev.target.closest("[data-svc]");
@@ -74,8 +75,9 @@ document.addEventListener("click", (ev) => {
       S.adds = [];
       S.intake = {};
     }
-    S.svc = +svcEl.dataset.svc;
-    render();
+    // 10/11 · punto 2: el perfil (turnero, confirmación y pago) toma la paleta del rubro del servicio elegido
+    pickSvc(pr(S.pid), +svcEl.dataset.svc);
+    renderSmooth();
     return;
   }
   const iqEl = ev.target.closest("[data-iqk]");

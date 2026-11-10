@@ -92,6 +92,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
     «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
     de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
+  - 10/11 (punto 2): en el perfil, elegir un servicio pinta el perfil, el turnero, la confirmación y el pago con la paleta
+    de su rubro (`pickSvc` en `src/lib/servicios.js`: `S.pctx` y `S.svcPickedFor`); sin elegir, el rubro principal o el
+    de donde vino, con un servicio de ese rubro. El cambio se funde con `renderSmooth()` (View Transitions; sin soporte o
+    con movimiento reducido, directo).
   - D42 (10/11): la Caja de los últimos 7 días se corrige (`dayState`, `walksOf` en `src/views/prestador/finanzas.js`); en la
     base, `cash_day_state` (open, day_closed, month_closed, day_too_old) con triggers en `walkins`, el resto de `bookings` y
     `cash_closings`; el registro de cambios de un día reabierto en `cash_day_log` (`my_cash_day`).
