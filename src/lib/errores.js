@@ -67,11 +67,17 @@ const ERRS = {
   offer_past: "Ese horario ya pasó.",
   offer_limit: "Llegaste al límite de hoy: 5 ofertas a todos tus seguidores y 10 a seguidores puntuales. Mañana podés seguir.",
   not_follower: "Esa persona ya no te sigue.",
+  // D45: lo que ve quien fue bloqueado (sin decir que lo bloquearon) y el aviso al profesional
+  no_slots: "No hay turnos disponibles con este profesional.",
+  follow_unavailable: "No se puede seguir a este profesional.",
+  has_upcoming: "Tiene turnos reservados: elegí si los cancelás o los dejás.",
   // S19 / S01 (8/11): un negocio suspendido o pendiente no escribe a sus seguidores ni a sus clientes
   not_active: "Con tu negocio sin aprobar o suspendido no podés mandar avisos ni ofrecer turnos.",
   bad_offer: "Elegí un horario libre de los próximos días.",
   bad_commission: "La comisión tiene que estar entre 0% y 30%.",
   bad_site_url: "Escribí solo https:// y el dominio, sin barra al final ni nada después.",
+  // 10/11 (D43): el motivo de la suspensión que ve el profesional
+  reason_too_long: "El motivo puede tener hasta 280 letras.",
   empty_note: "Escribí la nota.",
   too_many_notes: "Ese profesional ya tiene demasiadas notas.",
   month_closed: "El mes está cerrado: reabrilo para cambiarlo.",

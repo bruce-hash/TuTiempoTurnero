@@ -61,6 +61,8 @@ const bookingFromDb = (pid) => (row) =>
       mpFee: row.paid_mp_fee || 0,
       disc: row.discount_pct,
       cliente: row.client_name || "",
+      // D45: la cuenta del cliente (sus turnos al eliminarlo de la lista o bloquearlo)
+      user: row.client_id || null,
       tel: row.client_phone || "",
       src: row.source === "app" ? "app" : "manual",
       type: row.source === "block" ? "block" : "local",
@@ -90,6 +92,12 @@ const expenseFromDb = (row) => ({
   // C31: viene de un gasto fijo (se cambia desde Gastos fijos, no se borra suelto)
   fixed: row.fixed_id || null,
 });
+// D45: la lista de bloqueados y, en Clientes, la marca de cada uno (sale de la lista mientras esté bloqueado)
+function setBlocked(rows) {
+  store.BLOCKED = (rows || []).map((row) => ({ id: row.id, name: row.name, photo: avatarUrl(row.photo), since: row.since, client: row.client }));
+  const ids = new Set(store.BLOCKED.map((row) => row.id));
+  Object.values(store.CLIENTS).forEach((client) => (client.blocked = !!client.user && ids.has(client.user)));
+}
 const ym = (date) => (date ? String(date).slice(0, 7) : null);
 
 export const livePanel = {
@@ -125,7 +133,7 @@ export const livePanel = {
     // C31: los gastos fijos que falten hasta este mes (y los precargados la primera vez), antes de leer los gastos
     await call(sb.rpc("fixed_expenses_sync")).catch(() => null);
     await liveApi.loadFixed(pid);
-    const [bookings, clients, products, expenses, walkins, templates, finance, priv, occupancy, cards, closings, mpSt, notices, adjusts] = await Promise.all([
+    const [bookings, clients, products, expenses, walkins, templates, finance, priv, occupancy, cards, closings, mpSt, notices, adjusts, blocked] = await Promise.all([
       call(bookingsQuery(pid, from, to)),
       call(sb.from("provider_clients").select("*").eq("provider_id", pid).limit(5e3)),
       call(sb.from("products").select("*").eq("provider_id", pid).order("name")),
@@ -174,6 +182,8 @@ export const livePanel = {
       call(sb.rpc("my_provider_notices")),
       // 10/11 · punto 9: los últimos ajustes de stock (roto, vencido, uso en el local), para mostrarlos en cada producto
       call(sb.from("stock_adjustments").select("product_id,at,qty,reason").eq("provider_id", pid).order("at", { ascending: false }).limit(300)).catch(() => []),
+      // D45: Clientes → Bloqueados
+      call(sb.rpc("my_blocked")).catch(() => []),
     ]);
     // H10: mientras no está verificado, qué le falta cargar (número, frente, dorso); el número no viaja al navegador
     S.dniSt = pr(pid).verified === false ? await call(sb.rpc("my_dni_status")).catch(() => null) : null;
@@ -194,12 +204,15 @@ export const livePanel = {
         bday: row.birthday || "",
         contacted: !!row.contacted_at,
         user: row.user_id,
+        // D45: sacado de la lista (vuelve si reserva de nuevo)
+        hidden: !!row.hidden_at,
         profile: row.profile || {},
         stamps: Object.fromEntries(
           (cards || []).filter((card) => row.user_id && card.user_id === row.user_id).map((card) => [card.service_id, card.stamps]),
         ),
       };
     });
+    setBlocked(blocked);
     store.PRODS = (products || []).map((row) => ({
       id: row.id,
       n: row.name,
@@ -316,6 +329,11 @@ export const livePanel = {
     store.COMM.followers = (data && data.count) || 0;
     return store.FOLLOWERS;
   },
+  // D45: Clientes → Bloqueados, al día (después de bloquear o desbloquear)
+  async blocked() {
+    setBlocked(await call(sb.rpc("my_blocked")));
+    return store.BLOCKED;
+  },
   // los huecos que ya ofreció (a todos o a un seguidor), para marcarlos "✓ Ofrecido" aunque recargue
   async myHolidays() {
     const rows = await call(sb.rpc("my_holidays"));
@@ -344,17 +362,23 @@ export const livePanel = {
       return false;
     }
     const [row, notices] = await Promise.all([
-      call(sb.from("providers").select("followers").eq("id", pid).maybeSingle()),
+      call(sb.from("providers").select("followers,status").eq("id", pid).maybeSingle()),
       call(sb.rpc("my_provider_notices")),
       // 10/11 · punto 9: los últimos ajustes de stock (roto, vencido, uso en el local), para mostrarlos en cada producto
       call(sb.from("stock_adjustments").select("product_id,at,qty,reason").eq("provider_id", pid).order("at", { ascending: false }).limit(300)).catch(() => []),
     ]);
-    const before = JSON.stringify([store.COMM.followers, S.notices]);
+    const before = JSON.stringify([store.COMM.followers, S.notices, (S.setupBy || {})[pid]]);
     if (row) {
       store.COMM.followers = row.followers;
     }
     S.notices = notices || [];
-    return JSON.stringify([store.COMM.followers, S.notices]) !== before;
+    // 10/11 (D43): si TuTiempo lo suspendió o lo reactivó mientras tenía el panel abierto, el aviso fijo (y lo que
+    // depende del estado, como «Ofrecer») se pone al día sin recargar
+    const setup = (S.setupBy || {})[pid];
+    if (row && setup && setup.status && row.status !== setup.status) {
+      await liveApi.mySetup().catch(() => null);
+    }
+    return JSON.stringify([store.COMM.followers, S.notices, (S.setupBy || {})[pid]]) !== before;
   },
   m: {},
 };

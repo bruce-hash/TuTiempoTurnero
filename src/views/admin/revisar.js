@@ -41,6 +41,7 @@ const REFUND_WHY = {
   booking_unavailable: "el turno ya no estaba disponible cuando llegó el pago",
   amount_short: "el pago no alcanzaba",
   booking_past: "el pago llegó después de la hora del turno (D29)",
+  provider_suspended: "el pago llegó con el profesional suspendido (D43)",
   unknown_booking: "pago sin turno de ese profesional",
 };
 const PAYMENT_WHY = {

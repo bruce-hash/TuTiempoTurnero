@@ -326,6 +326,12 @@ body.am-open{overflow:hidden}
 .todo ul{margin:0 0 12px;padding:0;list-style:none;display:grid;gap:6px;font-size:14px}
 .todo li.ok{color:var(--muted);text-decoration:line-through}
 .todo-bar{height:6px;border-radius:9px;background:var(--line);overflow:hidden;margin:0 0 12px}.todo-bar i{display:block;height:100%;background:var(--ok)}
+/* 10/11 (D43): aviso fijo de cuenta suspendida, arriba de todo el panel (en la compu, a lo ancho) */
+.suspbox{border:1.5px solid var(--bad-line);background:var(--bad-soft);text-align:left;font-size:14px}
+.suspbox p{margin:0 0 6px}.suspbox .susp-h{font-size:16px;margin-bottom:8px}.suspbox .susp-h .ic{color:var(--bad)}
+.suspbox .susp-why{padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--bad-line);overflow-wrap:anywhere}
+.suspbox .susp-list{margin:0 0 10px;padding-left:20px;display:grid;gap:3px}
+.suspbox .susp-ct{display:flex;flex-wrap:wrap;gap:8px}.suspbox .susp-ct .btn{max-width:100%;overflow-wrap:anywhere;white-space:normal}
 /* inicio: la puerta "Registrá tu negocio" */
 @media (max-width:899px){
  .biz{grid-template-columns:minmax(0,1fr);gap:12px;margin-top:12px}
