@@ -563,6 +563,9 @@ async function turnoConMargen(p) {
   await pg.click("[data-act=closeMonth]"); await wait(800);
   ok("mes cerrado en la base", (await q("select count(*)::int c from cash_closings where kind='month'"))[0].c === 1);
   ok("C31: con el mes cerrado, los gastos fijos de ese mes no se editan", (await pg.locator("[data-act=fxEdit]").count()) === 0 && /Mes cerrado: los gastos fijos de este mes quedan como están/.test(await txt()));
+  // 10/11 · D41: con el mes cerrado la caja no se corrige (ni el cobro del resto ni deshacer «Asistió»): se vuelve a abrir
+  await pg.click("[data-act=unlockMonth]"); await wait(600);
+  ok("D41: el mes se vuelve a abrir", await until("select count(*)::int c from cash_closings where kind='month'", [], (r) => r[0].c === 0));
   // V4b · C25 "Cargar diferencia": al marcar "Asistió", el resto en dos medios; después se cambia desde la Caja del día
   {
     const [sv] = await q("select s.id, s.provider_id from services s join providers p on p.id=s.provider_id where p.name like 'Sofía%' and s.active order by s.id limit 1");
