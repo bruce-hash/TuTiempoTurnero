@@ -73,6 +73,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - V4 resto: C31 gastos fijos en `src/lib/fijos.js` (qué corre cada mes; en la demo, la misma regla) y en la base
     (`fixed_expenses`, `fixed_expenses_sync` al abrir el panel, `fixed_expense_save`/`_stop` solo desde el mes actual, D40; `fixed_id`/`fixed_month` solo las funciones, S16; un mes cerrado
     no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost`; las ventas, con «Vender producto» en la Caja del día (`saleForm`, 7/11).
+  - D44 (Balance del admin): gastos de TuTiempo fijos (`admin_fixed_expenses`, filas por mes en `admin_expenses` con
+    `fixed_id`/`fixed_month`, `admin_fixed_sync` al abrir el balance y al cerrar; `admin_fixed_save`/`_stop` solo desde el
+    mes actual) y variables (`admin_expenses` sin `fixed_id`, `admin_update_expense`); resultado = comisiones − fijos −
+    variables (`admin_finance`, `admin_closings.expenses_fixed`). Vista en `src/views/admin/balance.js`; demo en `src/demo/admin.js`.
   - V5 resto (C29): interruptor global de sellos (`app_settings.stamps_on`, `stampsOn()` en `src/ui/sellos.js`; todo lo de
     sellos pregunta ahí). En la base, `stamp_add` no suma ni canjea con los sellos apagados (`stamps_off`); los datos quedan.
   - V8 (C06): seguidor nuevo → `provider_notices` `new_follower` (trigger `follows_notice`, nombre de pila, una vez por

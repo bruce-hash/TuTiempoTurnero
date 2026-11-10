@@ -1,14 +1,15 @@
 import { registerClick, registerSubmit } from "./registro.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
-import { admCloseDemo } from "../demo/admin.js";
-import { PESOS_ERR, parsePesos } from "../lib/dinero.js";
+import { admCloseDemo, admFixedSaveDemo, admFixedStopDemo } from "../demo/admin.js";
+import { PESOS_ERR, money, parsePesos } from "../lib/dinero.js";
 import { $ } from "../lib/dom.js";
 import { MESES, TODAY, pad } from "../lib/fechas.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
+import { admFin } from "../views/admin/datos.js";
 
 registerClick("admY", (ev, el, act) => {
   S.admY = +el.dataset.y;
@@ -18,6 +19,7 @@ registerClick("admY", (ev, el, act) => {
 });
 registerClick("admM", (ev, el, act) => {
   S.admM = el.dataset.m || null;
+  S.admFxEd = S.admExpEd = null;
   if (S.admM) {
     S.admY = +S.admM.slice(0, 4);
   }
@@ -38,6 +40,7 @@ registerClick("admMn", (ev, el, act) => {
   }
   S.admM = ym;
   S.admY = date.getFullYear();
+  S.admFxEd = S.admExpEd = null;
   render();
   return;
 });
@@ -94,7 +97,7 @@ registerClick("admExpDel", (ev, el, act) => {
     return;
   }
   const exp = store.DEMO_AEXP.find((item) => item.id === id);
-  if (!exp) {
+  if (!exp || exp.fixed_id) {
     return;
   }
   if (store.DEMO_ACL["month|" + exp.day.slice(0, 7)]) {
@@ -106,7 +109,7 @@ registerClick("admExpDel", (ev, el, act) => {
   render();
   return;
 });
-// gasto de la plataforma: en el mes en curso se fecha hoy, en meses pasados el día 1
+// gasto variable de la plataforma: en el mes en curso se fecha hoy, en meses pasados el día 1
 registerSubmit("fAdmExp", (ev) => {
   const ym = ev.target.dataset.m;
   const concept = String($("#aec").value || "")
@@ -150,4 +153,147 @@ registerSubmit("fAdmExp", (ev) => {
   toast("Gasto cargado.");
   render();
   return;
+});
+
+// D44 · gastos variables: ✎ abre el editor de un gasto (otra vez, lo cierra); se cambia el concepto y el monto
+const cleanConcept = (value) =>
+  String(value || "")
+    .replace(/[<>\u0000-\u001f]/g, "")
+    .trim()
+    .slice(0, 80);
+registerClick("admExpEdit", (ev, el, act) => {
+  const id = el.dataset.id ? +el.dataset.id : null;
+  S.admExpEd = id && S.admExpEd !== id ? id : null;
+  render();
+  $("#aeem") && $("#aeem").focus();
+});
+registerSubmit("fAdmExpEd", (ev) => {
+  const id = +ev.target.dataset.id;
+  const concept = cleanConcept($("#aeec").value);
+  const amount = parsePesos($("#aeem").value);
+  const showErr = (msg) => {
+    $("#aeeerr").textContent = msg;
+  };
+  if (!concept) {
+    return showErr("Escribí el concepto.");
+  }
+  if (isNaN(amount)) {
+    return showErr(PESOS_ERR);
+  }
+  if (!(amount >= 1) || !(amount <= 2e9)) {
+    return showErr("Escribí el monto.");
+  }
+  if (LIVE) {
+    api.m
+      .adminUpdExp(id, concept, amount)
+      .then(() => {
+        S.admExpEd = null;
+        S.admFin = null;
+        toast("Gasto cambiado.");
+        render();
+      })
+      .catch(() => {});
+    return;
+  }
+  const exp = store.DEMO_AEXP.find((item) => item.id === id);
+  if (!exp || exp.fixed_id) {
+    return;
+  }
+  if (store.DEMO_ACL["month|" + exp.day.slice(0, 7)]) {
+    return showErr("El mes está cerrado: reabrilo para cambiarlo.");
+  }
+  Object.assign(exp, { concept, amount });
+  S.admExpEd = null;
+  toast("Gasto cambiado.");
+  render();
+});
+// D44 · gastos fijos de TuTiempo (como C31/S17 del profesional): ✎ abre el editor; guardar vale desde el mes actual en
+// adelante; «Dejar de repetirlo» lo saca desde el mes actual. En vivo lo hace la base y se vuelve a pedir el balance.
+const fixedById = (id) => {
+  const fin = admFin(+String(S.admM || TODAY()).slice(0, 4));
+  return ((fin && fin.fixed_items) || []).find((item) => String(item.id) === String(id)) || null;
+};
+const demoFixed = (id) => (store.DEMO_AFIX || []).find((item) => String(item.id) === String(id)) || null;
+registerClick("admFxEdit", (ev, el, act) => {
+  const item = fixedById(el.dataset.id);
+  S.admFxEd = item && S.admFxEd !== item.id ? item.id : null;
+  render();
+  $("#afm") && $("#afm").focus();
+});
+registerClick("admFxNew", (ev, el, act) => {
+  S.admFxEd = "new";
+  render();
+  $("#afc") && $("#afc").focus();
+});
+registerClick("admFxClose", (ev, el, act) => {
+  S.admFxEd = null;
+  render();
+});
+registerSubmit("fAdmFixed", (ev) => {
+  const form = ev.target;
+  const ym = form.dataset.ym;
+  const item = form.dataset.id ? fixedById(form.dataset.id) : null;
+  const concept = cleanConcept($("#afc").value);
+  const amountTxt = ($("#afm").value || "").trim();
+  const amount = amountTxt === "" ? 0 : parsePesos(amountTxt);
+  const showErr = (msg) => {
+    $("#aferr").textContent = msg;
+  };
+  if (!concept) {
+    return showErr("Escribí qué gasto es.");
+  }
+  if (isNaN(amount) || amount < 0 || amount > 2e9) {
+    return showErr(PESOS_ERR);
+  }
+  if (!item && amount <= 0) {
+    return showErr("Ingresá cuánto se paga por mes.");
+  }
+  const done = () => {
+    S.admFxEd = null;
+    toast(amount ? `Guardado: ${concept} · ${money(amount)} por mes, desde ${MESES[+ym.slice(5) - 1]}.` : `${concept} quedó sin monto desde ${MESES[+ym.slice(5) - 1]}.`);
+    render();
+  };
+  if (LIVE) {
+    api.m
+      .adminFixedSave(item ? item.id : null, concept, amount, ym)
+      .then(() => {
+        S.admFin = null;
+        done();
+      })
+      .catch(() => {});
+    return;
+  }
+  const problem = admFixedSaveDemo(item ? demoFixed(item.id) : null, concept, amount, ym);
+  if (problem) {
+    return showErr(problem);
+  }
+  done();
+});
+registerClick("admFxStop", (ev, el, act) => {
+  const item = fixedById(el.dataset.id);
+  const ym = el.dataset.ym;
+  if (!item) {
+    return;
+  }
+  const done = () => {
+    S.admFxEd = null;
+    toast(`${item.concept} deja de repetirse desde ${MESES[+ym.slice(5) - 1]}.`);
+    render();
+  };
+  if (LIVE) {
+    api.m
+      .adminFixedStop(item.id, ym)
+      .then(() => {
+        S.admFin = null;
+        done();
+      })
+      .catch(() => {});
+    return;
+  }
+  const problem = admFixedStopDemo(demoFixed(item.id), ym);
+  if (problem) {
+    toast(problem);
+    return;
+  }
+  done();
 });
