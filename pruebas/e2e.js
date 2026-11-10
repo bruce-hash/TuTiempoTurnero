@@ -503,8 +503,34 @@ async function turnoConMargen(p) {
   await pg.click("[data-btab=productos]"); await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Gel top coat"); await pg.fill("#pnp", "8000"); await pg.fill("#pns", "3");
   await pg.click("#fProd button[type=submit]"); await wait(600);
   ok("producto guardado", (await q("select stock from products where name='Gel top coat'"))[0]?.stock === 3);
-  await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]"); await wait(800);
-  ok("compra suma stock y carga gasto", (await q("select stock from products where name='Gel top coat'"))[0].stock === 9 && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  // 10/11 · punto 9: el stock no se toca a mano: sube con «Cargar compra» y baja con una venta o «Ajustar stock»
+  ok("punto 9: Productos ya no tiene los botones + y − del stock, y la compra es «Cargar compra»",
+     (await pg.locator("[data-act=stk]").count()) === 0 && /Cargar compra/.test(await pg.locator('.plist li:has-text("Gel top coat") [data-act=buyOpen]').innerText()));
+  await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]");
+  ok("compra suma stock y carga gasto", await until("select stock from products where name='Gel top coat'", [], (r) => r[0]?.stock === 9) && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  ok("punto 9: la compra es un gasto de productos de hoy, ligado al producto y con la cantidad",
+     await until("select e.concept, e.category, e.qty, e.product_id = p.id same, e.spent_on = (now() at time zone 'America/Argentina/Buenos_Aires')::date hoy from expenses e join products p on p.name = 'Gel top coat' where e.amount = 30000", [],
+                 (r) => r.length === 1 && r[0].concept === "Compra: Gel top coat × 6" && r[0].category === "Productos" && r[0].qty === 6 && r[0].same && r[0].hoy));
+  ok("punto 9: …y el stock nuevo se ve en Productos", /9\s*en stock/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-n').innerText()));
+  // «Ajustar stock»: solo resta, con motivo; no es venta ni gasto
+  {
+    const nWalk = (await q("select count(*)::int c from walkins"))[0].c, nExp = (await q("select count(*)::int c, coalesce(sum(amount),0)::int s from expenses"))[0];
+    await wait(700);
+    await pg.click('.plist li:has-text("Gel top coat") [data-act=adjOpen]'); await wait(200);
+    await pg.fill("#aq", "2"); await pg.click("#fAdj button[type=submit]"); await wait(300);
+    ok("punto 9: «Ajustar stock» pide el motivo", /Elegí el motivo/.test(await pg.locator("#aerr").innerText()) && (await q("select stock from products where name='Gel top coat'"))[0].stock === 9);
+    await wait(700);
+    await pg.click('#fAdj [data-act=adjWhy][data-r=broken]'); await pg.click("#fAdj button[type=submit]");
+    ok("punto 9: el ajuste baja el stock (9 − 2) y queda anotado con su motivo",
+       await until("select p.stock, a.qty, a.reason from products p join stock_adjustments a on a.product_id = p.id where p.name = 'Gel top coat'", [], (r) => r.length === 1 && r[0].stock === 7 && r[0].qty === 2 && r[0].reason === "broken"));
+    ok("punto 9: …se ve en el producto («−2 Roto») con el stock nuevo", /−2 Roto/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-adjlog').innerText())
+       && /7\s*en stock/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-n').innerText()));
+    const nExp2 = (await q("select count(*)::int c, coalesce(sum(amount),0)::int s from expenses"))[0];
+    ok("punto 9: …y no entra en la caja ni en los gastos del mes", (await q("select count(*)::int c from walkins"))[0].c === nWalk && nExp2.c === nExp.c && nExp2.s === nExp.s);
+    await pg.reload(); await pg.waitForSelector("[data-btab=productos]"); await pg.click("[data-btab=productos]");
+    await pg.waitForSelector('.plist li:has-text("Gel top coat")', { timeout: 8000 }).catch(() => {}); await wait(300);
+    ok("punto 9: al volver a cargar, el ajuste sigue en el producto (lo trae la base)", /−2 Roto/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-adjlog').innerText().catch(() => "")));
+  }
   // 7/11: «Editar» cambia nombre, precio de venta y de compra; la compra ya cargada no cambia
   await pg.click('.plist li:has-text("Gel top coat") [data-act=prodEdit]'); await wait(300);
   ok("7/11: «Editar» abre el producto con su nombre y su precio", (await pg.inputValue("#pen")) === "Gel top coat" && (await pg.inputValue("#pep")) === "8000");
@@ -551,6 +577,7 @@ async function turnoConMargen(p) {
   ok("gasto del mes cargado una vez (sin categoría ni compras de productos)", (await q("select count(*)::int c from expenses where concept='Alquiler' and amount=150000"))[0].c === 1 && (await pg.locator("#gprod").count()) === 0);
   const msum = await pg.evaluate(() => (document.querySelector(".msum") || {}).textContent || "");
   ok("C33: el resumen del mes separa ingresos por origen y gastos fijos y de productos", /Resumen de [A-ZÁÉÍÓÚ]/.test(msum) && msum.includes("Sin turno") && msum.includes("Gastos fijos") && msum.includes("$150.000") && /Balance: /.test(msum), msum);
+  ok("punto 9: Finanzas → Mes: «Compras de productos» suma la compra ($30.000) y no el ajuste de stock", /Compras de productos\s*\$30\.000/.test(msum), msum);
   ok("C32: los meses van con mayúscula y el balance negativo en rojo", /Balance de [A-ZÁÉÍÓÚ]/.test(await pg.locator(".kpi.big").innerText()) && (await pg.locator(".msum .mbal.neg").count()) === 1);
   // C31 (V4 resto): gastos fijos precargados, sin monto; se cargan con ✎ y se repiten solos
   {
@@ -670,6 +697,15 @@ async function turnoConMargen(p) {
     ok("4/11: la venta de 2 queda en la caja con su cantidad y descuenta 2 del stock", await until("select amount, method, qty from walkins where kind='product' and description='Cera C36 × 2'", [], (r) => r.length === 1 && r[0].amount === 16000 && r[0].method === "transfer" && r[0].qty === 2)
        && await until("select stock from products where name='Cera C36'", [], (r) => r[0].stock === 0));
     ok("C36: …y se ve en los movimientos de hoy", (await pg.locator('.movs li:has-text("Cera C36 × 2")').count()) === 1);
+    // 10/11 · punto 9: sin stock, la venta no se ofrece; borrarla devuelve las unidades (lo hace la base)
+    await wait(700); await pg.click("[data-act=saleOpen]"); await wait(200);
+    ok("punto 9: sin stock, «Vender producto» no ofrece Cera C36", await pg.evaluate(() => [...document.querySelectorAll("#spr option")].some((o) => /Cera C36/.test(o.textContent) && o.disabled)));
+    await pg.click("[data-act=saleClose]"); await wait(200);
+    await pg.click('.movs li:has-text("Cera C36 × 2") [data-act=movDel]'); await wait(200); await pg.click("[data-act=movDelYes]");
+    ok("punto 9: borrar la venta la saca de la caja y devuelve las 2 unidades al stock",
+       await until("select (select stock from products where name='Cera C36') s, (select count(*)::int from walkins where description='Cera C36 × 2') w", [], (r) => r[0].s === 2 && r[0].w === 0));
+    await pg.click("[data-btab=productos]"); await wait(300);
+    ok("punto 9: …y Productos muestra el stock devuelto", /2\s*en stock/.test(await pg.locator('.plist li:has-text("Cera C36") .pl-n').innerText()));
   }
   // rubros y servicios: sumar Masajes
   await pg.click("[data-btab=perfil]"); await wait(300);

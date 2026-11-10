@@ -317,6 +317,9 @@ async function normalizar(page) {
     document.querySelectorAll("#app .holpanel, #app .holpanel-adm").forEach((el) => el.remove());
     // 7/11 (cambio a propósito): cada producto suma «Editar». Se neutraliza en las dos versiones; lo prueba e2e.js.
     document.querySelectorAll("#app [data-act=prodEdit]").forEach((el) => el.remove());
+    // 10/11 · punto 9 (cambio a propósito): salen los botones + y − del stock, «Compré más» pasa a «Cargar compra» y cada
+    // producto suma «Ajustar stock» y sus últimos ajustes. Se neutraliza en las dos versiones; lo prueban test_db.py y e2e.js.
+    document.querySelectorAll("#app [data-act=stk], #app [data-act=buyOpen], #app [data-act=adjOpen], #app .pl-adjlog").forEach((el) => el.remove());
     // en vivo corre con el reloj real: la línea de "ahora" de la agenda cambia de minuto (y de lugar) entre una captura y otra
     document.querySelectorAll("#app .tl-now").forEach((line) => line.remove());
     document.querySelectorAll("#app .paym small.hint").forEach((hint) => {

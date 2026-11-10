@@ -266,8 +266,11 @@ body.am-open{overflow:hidden}
 /* v2: lo que se abre debajo de un producto (venta, eliminar) y los botones van a todo el ancho: antes caían en la columna
    de la cantidad, la ensanchaban y el nombre quedaba palabra por palabra debajo de los controles */
 .plist .pl-acts,.plist .movask{grid-column:1/-1}.plist .pl-s{flex:none}
-.pl-acts .pl-buy,.pl-acts .pl-edit{flex:1 1 0;min-width:0;white-space:nowrap;padding:7px 10px;font-size:13px}.pl-acts .xbtn{flex:none}
-@media (min-width:1024px){.pl-acts .pl-buy,.pl-acts .pl-edit{flex:0 0 auto}}
+.pl-acts .pl-buy,.pl-acts .pl-adj,.pl-acts .pl-edit{flex:1 1 0;min-width:0;white-space:nowrap;padding:7px 10px;font-size:13px}.pl-acts .xbtn{flex:none}
+@media (min-width:1024px){.pl-acts .pl-buy,.pl-acts .pl-adj,.pl-acts .pl-edit{flex:0 0 auto}}
+/* 10/11 · punto 9: con «Ajustar stock» son tres botones: en el celular, la compra y el ajuste en una fila y Editar abajo */
+@media (max-width:1023px){.plist .pl-acts{flex-wrap:wrap}.pl-acts .pl-buy,.pl-acts .pl-adj{flex:1 1 calc(50% - 3px)}}
+.pl-adjlog{grid-column:1/-1;margin:0;font-size:12px;color:var(--muted);text-align:left}
 .msum .mhead{font-weight:700;margin:10px 0 6px;font-size:14px}
 .msum .mrow{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px;margin:4px 0}
 .msum .mbar{display:block;height:10px;border-radius:9px;min-width:2px}
