@@ -4,6 +4,8 @@ export const store = {
   // en producción arrancan vacíos; en el modo demo los carga src/demo/estado.js
   // 4/11: quienes siguen al prestador (Clientes → Seguidores); null hasta que se piden
   FOLLOWERS: null,
+  // D45: Clientes → Bloqueados ({id, name, photo, since, client})
+  BLOCKED: [],
   COMM: { followers: 0, reviews: [], media: [] },
   COMMBY: {},
 };

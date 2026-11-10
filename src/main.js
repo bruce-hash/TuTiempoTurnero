@@ -26,6 +26,7 @@ import "./actions/navegacion.js";
 import "./actions/prestador-agenda.js";
 import "./actions/prestador-caja.js";
 import "./actions/prestador-clientes.js";
+import "./actions/prestador-bloqueos.js";
 import "./actions/prestador-finanzas.js";
 import "./actions/prestador-horarios.js";
 import "./actions/feriados.js";
@@ -74,6 +75,7 @@ async function boot() {
     store.CFGS = {};
     store.COMMBY = {};
     store.CLIENTS = {};
+    store.BLOCKED = [];
     store.PRODS = [];
     store.GASTOS = [];
     store.FIN = [];
