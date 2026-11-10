@@ -1,6 +1,6 @@
 import { NOW, TODAY, addDays, dkey, toMin } from "./fechas.js";
 import { ME } from "./prestadores.js";
-import { busy, cfg, ranges } from "./turnero.js";
+import { busy, cfg, holidayClosed, ranges } from "./turnero.js";
 
 // Huecos libres del prestador en un día: 30 minutos o más dentro de su horario, sin turnos, reservas en pago ni
 // bloqueos (y desde ahora, si es hoy, redondeado a la media hora). [[desde, hasta]] en minutos del día. Los usa la Agenda
@@ -9,7 +9,8 @@ export function freeGaps(day, pid = ME()) {
   const conf = cfg(pid);
   const dow = new Date(day + "T12:00:00").getDay();
   const rngs = ranges(conf, dow);
-  if (!rngs.length) {
+  // 10/11: un feriado cerrado no tiene huecos para ofrecer (nadie lo podría reservar; la base tampoco lo deja)
+  if (!rngs.length || holidayClosed(pid, day)) {
     return [];
   }
   const taken = busy(pid, day).map((item) => [toMin(item.time), toMin(item.time) + item.dur]);

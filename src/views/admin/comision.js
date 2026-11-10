@@ -55,8 +55,8 @@ function dniPanel() {
     <p class="note" style="text-align:left;margin:8px 0 0">${on ? "Si la apagás, el alta y el panel dejan de pedir el DNI y aprobás a los profesionales nuevos solo con sus datos." : "Si la volvés a activar, los profesionales pendientes tienen que cargar su DNI antes de que los apruebes."} Los que ya tienen el DNI verificado siguen mostrando “Identidad verificada”.</p></div>`;
 }
 // 7/11 · Feriados (D39): la lista oficial del año en curso y del siguiente, que trae el servidor de la fuente pública
-// (holidays-sync, los lunes). El admin la revisa, la corrige si hace falta y la confirma una vez por año: desde ahí los
-// profesionales la ven en Horarios y les llega el aviso 7 días antes.
+// (holidays-sync, los lunes). El admin la revisa, la corrige si hace falta y la confirma una vez por año: desde ahí esos
+// días quedan cerrados para todos los profesionales (10/11), que los abren desde Horarios; el aviso llega 7 días antes.
 function holidaysPanel() {
   const years = S.admHol || [];
   const when = (iso) => (iso ? isoToLocal(iso).date.split("-").reverse().slice(0, 2).join("/") : "");
@@ -78,7 +78,7 @@ function holidaysPanel() {
      ${(!y.confirmed_at || y.source_changed) && (y.days || []).length ? `<button type="button" class="btn btn-pri btn-block" data-act="admHolConfirm" data-y="${y.year}">Confirmar los feriados de ${y.year}</button>` : ""}</div>`;
   };
   return `<div class="panel holpanel-adm"><p class="lbl">${ic("agenda")} Feriados</p>
-   <p class="note" style="text-align:left;margin:0 0 10px">Los nacionales (inamovibles y trasladables) y los días no laborables con fines turísticos; no los provinciales ni los municipales. La lista oficial la trae el servidor todos los lunes de ArgentinaDatos y, si no responde, del calendario público de feriados de Google. Revisala y confirmala una vez por año: desde ahí cada profesional la ve en Horarios (Abro / Cierro) y le llega el aviso 7 días antes. Si no elige, el feriado queda abierto.</p>
+   <p class="note" style="text-align:left;margin:0 0 10px">Los nacionales (inamovibles y trasladables) y los días no laborables con fines turísticos; no los provinciales ni los municipales. La lista oficial la trae el servidor todos los lunes de ArgentinaDatos y, si no responde, del calendario público de feriados de Google. Revisala y confirmala una vez por año: desde ahí esos días quedan cerrados para todos los profesionales (los turnos que ya tenían se mantienen y les avisamos). El que trabaja lo abre desde Horarios; el aviso le llega 7 días antes. Si corregís la lista después, vale para los días que todavía no pasaron.</p>
    ${years.map(yearBox).join("")}
    <form id="fHol" class="stack" style="gap:8px;margin-top:12px" novalidate><p class="lbl" style="margin:0">Agregar o corregir un feriado</p>
     <div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="holD">Fecha</label><input id="holD" type="date"></div>

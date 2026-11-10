@@ -3,7 +3,8 @@ import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { DOW, MESES, NOW, TODAY, addDays, dayLabel, dkey, fromMin, longLabel, nowHM, pad, toMin } from "../../lib/fechas.js";
 import { ME, pr } from "../../lib/prestadores.js";
-import { busy, canMark, cfg, cli, isDayBlock, ranges, rangesTxt, slotsFor } from "../../lib/turnero.js";
+import { busy, canMark, cfg, cli, holidayClosed, isDayBlock, ranges, rangesTxt, slotsFor } from "../../lib/turnero.js";
+import { holidayBookingsNote } from "../../lib/feriados.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { relBadge } from "../../ui/picker.js";
@@ -103,7 +104,9 @@ export function vBAgendaT() {
       const jsDate = /* @__PURE__ */ new Date(date + "T12:00:00");
       const occ = occupancy(date);
       const count = busy(ME(), date).filter((item) => item.type !== "block").length;
-      return `<button class="wd ${occ == null ? "closed" : ""} ${date === TODAY() ? "today" : ""}" data-aday="${date}" aria-selected="${day === date}"><span>${DOW[jsDate.getDay()]}</span><b>${jsDate.getDate()}</b><i class="av-bar occ"><i style="width:${occ || 0}%"></i></i><small>${occ == null ? "Cerrado" : count + '<span class="sm-l"> turno' + (count === 1 ? "" : "s") + "</span>"}</small></button>`;
+      // 10/11: un feriado cerrado sin turnos dice «Feriado»
+      const label = occ == null ? "Cerrado" : !count && holidayClosed(ME(), date) ? "Feriado" : count + '<span class="sm-l"> turno' + (count === 1 ? "" : "s") + "</span>";
+      return `<button class="wd ${occ == null ? "closed" : ""} ${date === TODAY() ? "today" : ""}" data-aday="${date}" aria-selected="${day === date}"><span>${DOW[jsDate.getDay()]}</span><b>${jsDate.getDate()}</b><i class="av-bar occ"><i style="width:${occ || 0}%"></i></i><small>${label}</small></button>`;
     })
     .join("")}</div>`;
   const bookings = items.filter((item) => item.type !== "block");
@@ -182,7 +185,13 @@ export function vBAgendaT() {
     day === TODAY() && nowMin > top && nowMin < bottom
       ? `<div class="tl-now" style="top:${(nowMin - top) * pxPerMin}px"><span>${nowHM()}</span></div>`
       : "";
-  return `${weekNav}
+  // 10/11 · Feriados cerrados (D39): ese día nadie reserva; los turnos que ya estaban siguen en la agenda
+  const holiday = holidayClosed(ME(), day) ? (store.HOLIDAYS || []).find((h) => h.day === day) || { day, name: "" } : null;
+  const kept = bookings.filter((item) => item.type !== "walk" && item.status === "confirmed").length;
+  const holidayHtml = holiday
+    ? `<div class="panel warnbox holday"><b>${ic("agenda")} Feriado${holiday.name ? ` · ${esc(holiday.name)}` : ""}: tu agenda está cerrada</b><p class="note" style="text-align:left;margin:4px 0 8px">Nadie te puede reservar este día. ${kept ? `${esc(holidayBookingsNote(kept))}: si no vas a trabajar, avisales y cancelalos (con devolución).` : "Si vas a trabajar, abrilo."}</p><button type="button" class="btn btn-pri btn-sm" data-act="holOpen" data-d="${esc(day)}">Voy a trabajar este día</button></div>`
+    : "";
+  return `${weekNav}${holidayHtml}
   <div class="stats2"><div><b>${bookings.length}</b><span>Turnos</span></div><div><b>${occupancy(day)}%</b><span>Ocupación</span></div><div><b>${money(income)}</b><span>Ingreso estimado</span></div></div>
   <div class="panel tl-panel"><div class="tl-top"><b>${esc(longLabel(day))}</b><span class="hint">${rangesTxt(rngs)}${hh ? ` · ${ic("ofertaflash")} Happy hour ${esc(conf.happy.from)}–${esc(conf.happy.to)} (−${conf.happy.pct}%)` : ""}</span></div>
    <div class="tl-leg">${LEGEND.map(([k, label]) => `<span class="lgi ${k}">${KIND_IC[k] ? ic(KIND_IC[k]) : ""}${label}</span>`).join("")}</div>
@@ -223,11 +232,13 @@ function vManualForm(day) {
   }
   const svcIndex = Math.min(S.manSvc || 0, prov.svcs.length - 1);
   const dur = prov.svcs[svcIndex][1];
-  const free = slotsFor(ME(), day, dur).list.filter((slot) => slot.free);
+  // 10/11: en un feriado cerrado el profesional puede agendar igual (lo decide él); se le recuerda que es feriado
+  const free = slotsFor(ME(), day, dur, undefined, false, true).list.filter((slot) => slot.free);
+  const holidayNote = holidayClosed(ME(), day) ? `<p class="note" style="text-align:left;margin:-4px 0 10px">${ic("agenda")} Es feriado y tu agenda está cerrada para las reservas por la app. Podés agendar igual.</p>` : "";
   // 4/11 · Bloque 4: el día se elige acá (hoy o cualquiera de los 31 de la agenda), no solo el que se está mirando
   const last = dkey(addDays(30));
   return `<form class="panel" id="fManual" novalidate><p class="lbl">Agendar turno · ${esc(dayLabel(day))}</p>
-   <p class="note" style="text-align:left;margin:-4px 0 10px">Para clientes que te escriben o te llaman. No paga comisión. Si el cliente tiene la app, le llegan los avisos ahí.</p>
+   <p class="note" style="text-align:left;margin:-4px 0 10px">Para clientes que te escriben o te llaman. No paga comisión. Si el cliente tiene la app, le llegan los avisos ahí.</p>${holidayNote}
    <div class="f"><label for="mday">Día</label><input id="mday" type="date" min="${TODAY()}" max="${last}" value="${day}"></div>
    <div class="f"><label for="msv">Servicio</label><select id="msv">${prov.svcs.map((svc, index) => `<option value="${index}" ${index === svcIndex ? "selected" : ""}>${esc(svc[0])} · ${svc[1]} min</option>`).join("")}</select></div>
    <div class="f"><label for="mhr">Horario libre</label>${free.length ? `<select id="mhr">${free.map((slot) => `<option>${slot.time}</option>`).join("")}</select>` : '<p class="note" style="text-align:left;margin:0">No quedan horarios libres este día.</p>'}</div>

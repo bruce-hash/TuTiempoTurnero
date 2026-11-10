@@ -108,7 +108,7 @@ export function vPicker(prov) {
        const total = slots.list.length || 1;
        const date = /* @__PURE__ */ new Date(day + "T12:00:00");
        const hasHappy = slots.list.some((slot) => slot.free && slot.disc);
-       return `<button class="wd ${slots.closed ? "closed" : freeN === 0 ? "full" : freeN / total < 0.25 ? "low" : ""} ${day === TODAY() ? "today" : ""}" data-day="${day}" aria-selected="${S.day === day}" ${slots.closed ? "disabled" : ""}><span>${DOW[date.getDay()]}</span><b>${date.getDate()}</b><i class="av-bar"><i style="width:${slots.closed ? 0 : Math.round((freeN / total) * 100)}%"></i></i><small>${slots.closed ? "Cerrado" : freeN ? freeN + '<span class="sm-l"> libres</span>' : "Lleno"}</small>${hasHappy ? "<em>%</em>" : ""}</button>`;
+       return `<button class="wd ${slots.closed ? "closed" : freeN === 0 ? "full" : freeN / total < 0.25 ? "low" : ""} ${day === TODAY() ? "today" : ""}" data-day="${day}" aria-selected="${S.day === day}" ${slots.closed ? "disabled" : ""}><span>${DOW[date.getDay()]}</span><b>${date.getDate()}</b><i class="av-bar"><i style="width:${slots.closed ? 0 : Math.round((freeN / total) * 100)}%"></i></i><small>${slots.closed ? (slots.holiday ? "Feriado" : "Cerrado") : freeN ? freeN + '<span class="sm-l"> libres</span>' : "Lleno"}</small>${hasHappy ? "<em>%</em>" : ""}</button>`;
      })
      .join("")}</div>
    <div class="pk-body">

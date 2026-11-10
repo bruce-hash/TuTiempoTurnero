@@ -1,7 +1,8 @@
 import { LIVE } from "../config.js";
 import { esc } from "./dom.js";
 import { NOW, TODAY, addDays, dayLabel, dkey, fromMin, toMin } from "./fechas.js";
-import { pr } from "./prestadores.js";
+import { ME, pr } from "./prestadores.js";
+import { closedHolidayOn } from "./feriados.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { notif } from "../ui/toast.js";
@@ -132,9 +133,23 @@ export function happyAt(pid, date, min) {
     return 0;
   }
 }
+// 10/11 · Feriados cerrados por defecto (D39): ¿ese día es un feriado cerrado para el prestador? La misma regla que
+// holiday_closed en la base. El profesional usa su lista (Horarios → Próximos feriados, con lo que eligió); en vivo, el
+// perfil público trae las fechas cerradas (provider_closed_days); en la demo, los otros prestadores no abren ninguno.
+export function holidayClosed(pid, date) {
+  const today = TODAY();
+  if (LIVE ? S.me && pid == S.me && store.HOLIDAYS : pid == ME()) {
+    return closedHolidayOn(store.HOLIDAYS, date, today);
+  }
+  if (!LIVE) {
+    return date >= today && (store.HOLIDAYS || []).some((h) => h.day === date);
+  }
+  return date >= today && ((store.CFGS[pid] || {}).closedDays || []).includes(date);
+}
 // Horarios de un día para un servicio de `dur` minutos: libres u ocupados (contando el descanso entre turnos) y con
-// el descuento de happy hour. Si el día está cerrado, devuelve el motivo.
-export function slotsFor(pid, date, dur, ignoreId, anyDate) {
+// el descuento de happy hour. Si el día está cerrado, devuelve el motivo. ownAgenda: el profesional agenda a mano (un
+// feriado cerrado no le impide cargar un turno: lo decide él).
+export function slotsFor(pid, date, dur, ignoreId, anyDate, ownAgenda) {
   const conf = cfg(pid);
   const dow = /* @__PURE__ */ new Date(date + "T12:00:00").getDay();
   if (!conf.on) {
@@ -163,6 +178,14 @@ export function slotsFor(pid, date, dur, ignoreId, anyDate) {
     return {
       closed: true,
       reason: "Todavía no abrió la agenda",
+      list: [],
+    };
+  }
+  if (!ownAgenda && holidayClosed(pid, date)) {
+    return {
+      closed: true,
+      holiday: true,
+      reason: "Es feriado: el profesional no atiende este día",
       list: [],
     };
   }

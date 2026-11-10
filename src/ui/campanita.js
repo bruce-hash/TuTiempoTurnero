@@ -56,16 +56,18 @@ function noticeAction(notice) {
   if (notice.kind === "mp_connect" || notice.kind === "mp_reconnect") {
     return go("perfil", "Conectar Mercado Pago");
   }
-  // 7/11 · Feriados: «El lunes 23/11 es feriado (…). ¿Abrís?» con Abro / Cierro (o lo que ya eligió)
-  if (notice.kind === "holiday" && notice.ref) {
-    if (notice.open != null) {
-      return `<span class="hint">✓ ${notice.open ? "Abrís ese día" : "Cerrado ese día"}</span>`;
-    }
+  // 7/11 · Feriados; 10/11: cerrados por defecto. «El lunes 23/11 es feriado y tu agenda está cerrada. ¿Vas a trabajar?»
+  // y «Tenés N turnos el …, que es feriado…», con Abrir el día / Dejarlo cerrado (o lo que ya eligió)
+  if ((notice.kind === "holiday" || notice.kind === "holiday_bookings") && notice.ref) {
     if (notice.ref < TODAY()) {
       return "";
     }
     const day = esc(notice.ref);
-    return `<div class="holbtns"><button class="btn btn-ghost btn-sm msg-act" data-act="holOpen" data-d="${day}">Abro</button><button class="btn btn-ghost btn-sm msg-act" data-act="holClose" data-d="${day}">Cierro</button></div>`;
+    const agenda = notice.kind === "holiday_bookings" ? `<button class="btn btn-ghost btn-sm msg-act" data-act="bellGo" data-to="agenda" data-d="${day}">Ver la Agenda</button>` : "";
+    if (notice.open != null) {
+      return `<span class="hint">✓ ${notice.open ? "Vas a trabajar ese día" : "Lo dejaste cerrado"}</span>${notice.open ? "" : agenda}`;
+    }
+    return `<div class="holbtns"><button class="btn btn-ghost btn-sm msg-act" data-act="holOpen" data-d="${day}">Abrir el día</button><button class="btn btn-ghost btn-sm msg-act" data-act="holClose" data-d="${day}">Dejarlo cerrado</button>${agenda}</div>`;
   }
   // 4/11 · Bloque 4: Mercado Pago cobró la comisión de otro plazo: a donde se elige (9/11: Perfil → Cobros con Mercado Pago)
   if (notice.kind === "mp_term") {
@@ -107,6 +109,7 @@ const seenMark = (item) => (fresh(item) ? "" : "✓ Visto · ");
 const NOTICE_TITLE = {
   new_follower: "Nuevo seguidor",
   holiday: "Feriado",
+  holiday_bookings: "Turnos en un feriado",
   mp_term: "Plazo de Mercado Pago",
   mp_connect: "Mercado Pago",
   mp_reconnect: "Mercado Pago",
@@ -118,7 +121,7 @@ const NOTICE_TITLE = {
   suspended: "Cuenta suspendida",
   reactivated: "Cuenta activa",
 };
-const NOTICE_IC = { new_follower: "clientes", holiday: "agenda", mp_term: "mp", mp_connect: "mp", mp_reconnect: "mp", mp_cost: "mp", mp_refunded: "efectivo", mp_charged_back: "aviso", mp_in_mediation: "aviso", suspended: "pausa", reactivated: "ok" };
+const NOTICE_IC = { new_follower: "clientes", holiday: "agenda", holiday_bookings: "agenda", mp_term: "mp", mp_connect: "mp", mp_reconnect: "mp", mp_cost: "mp", mp_refunded: "efectivo", mp_charged_back: "aviso", mp_in_mediation: "aviso", suspended: "pausa", reactivated: "ok" };
 // el botón de la cabecera y, si está abierta, la lista
 export function bell() {
   if (!bellShown()) {

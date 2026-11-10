@@ -1347,17 +1347,24 @@ q("grant usage on schema public to tt_verificador; grant execute on function pub
 ok("verificación: el usuario tt_verificador la puede llamar (y no lee tablas)",
    not err(q("set local role tt_verificador; select verificacion_prueba(null)")) and err(q("set local role tt_verificador; select count(*) from bookings")))
 
-# ---------- 7/11 · punto 4: feriados (D39) ----------
-hoyF = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))).date()   # el "hoy" de Buenos Aires
-f5, f20, fpas = hoyF + dt.timedelta(days=5), hoyF + dt.timedelta(days=20), hoyF - dt.timedelta(days=3)
+# ---------- 7/11 · punto 4: feriados (D39); 10/11 · punto 13: cerrados por defecto ----------
+TZF = dt.timezone(dt.timedelta(hours=-3))
+hoyF = dt.datetime.now(TZF).date()   # el "hoy" de Buenos Aires
+f5, f12, f20, fpas = hoyF + dt.timedelta(days=5), hoyF + dt.timedelta(days=12), hoyF + dt.timedelta(days=20), hoyF - dt.timedelta(days=3)
 q("delete from holidays"); q("delete from holiday_years")
 admF = mkuser("adminfer@test.ar", "Admin Feriados"); q("insert into app_admins (user_id) values (%s)", (admF,))
 ownF = mkuser("feriados@test.ar", "Dueña Feriados")
 pF = q("select register_provider('Feriados Studio', 'Calle 39', array['b'], '2284 3939', null)", uid=ownF)[0][0]
-q("update providers set status='active' where id=%s", (pF,))
-q("insert into provider_hours select %s, g, 1, '09:00', '18:00' from generate_series(0, 6) g on conflict do nothing", (pF,))
+q("update providers set status='active' where id=%s", (pF,)); conectar_mp(pF)
+q("update provider_settings set online=true, notice_min=0, ahead_days=31 where provider_id=%s", (pF,))
+q("delete from provider_hours where provider_id=%s", (pF,))
+q("insert into provider_hours select %s, g, 1, '09:00', '18:00' from generate_series(0, 6) g", (pF,))
 sF = q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Corte F',30,5000) returning id", (pF,), uid=ownF)[0][0]
 cliF = mkuser("clientefer@test.ar", "Cliente Feriado")
+def at(day, hh, mm=0): return dt.datetime.combine(day, dt.time(hh, mm), tzinfo=TZF)
+def horarios(day): return [r[0] for r in q("select s from slot_starts(%s, %s, 30) s", (pF, day))]
+def cerrados(): return [str(r[0]) for r in q("select day from provider_closed_days(%s, %s, %s)", (pF, hoyF, hoyF + dt.timedelta(days=40)), role="anon")]
+def avisos(kind): return q("select ref, body, read_at is not null, dismissed_at is not null from provider_notices where provider_id=%s and kind=%s order by ref", (pF, kind))
 filas = [{"fecha": str(f5), "tipo": "trasladable", "nombre": "Feriado de prueba"}, {"fecha": str(f20), "tipo": "puente", "nombre": "Puente de prueba"},
          {"fecha": str(fpas), "tipo": "inamovible", "nombre": "Ya pasó"}, {"fecha": str(f5 + dt.timedelta(days=1)), "tipo": "no laborable", "nombre": "No entra"}]
 años = sorted({f5.year, f20.year, fpas.year})
@@ -1369,45 +1376,91 @@ ok("feriados: las tablas no se leen ni se escriben desde la app", err(q("select 
 ok("feriados: sin confirmar el año, el profesional no ve nada", q("select my_holidays()", uid=ownF)[0][0] == [])
 q("select holiday_notices()")
 ok("feriados: …ni le llega el aviso", q("select count(*) from provider_notices where provider_id=%s and kind='holiday'", (pF,))[0][0] == 0)
+ok("feriados cerrados: sin confirmar el año, el feriado ofrece horarios como cualquier día", len(horarios(f5)) == 18 and cerrados() == [])
 ok("feriados: solo el admin ve, corrige y confirma", err(q("select admin_holidays()", uid=ownF), "forbidden") and err(q("select admin_holidays_confirm(%s)", (f5.year,), uid=ownF), "forbidden")
    and err(q("select admin_holiday_save(%s, 'x', 'inamovible')", (f5,), role="anon")))
 q("select admin_holiday_save(%s, %s, 'trasladable')", (f5, "Feriado corregido"), uid=admF)
 ok("feriados: el admin corrige un nombre (queda como cargado a mano)", q("select name, source from holidays where day=%s", (f5,))[0] == ("Feriado corregido", "admin"))
 ok("feriados: no se confirma un año sin feriados", err(q("select admin_holidays_confirm(2099)", uid=admF), "no_holidays"))
+# un turno ya reservado el feriado, antes de que se confirme el año (y uno que pasó, en el feriado de hace 3 días)
+bF = q("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,%s,%s,'Cliente Feriado','Corte F','app','confirmed',%s,%s,5000) returning id",
+       (pF, sF, cliF, at(f5, 11), at(f5, 11, 30)))[0][0]
+bPas = q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,'Pasado','Corte F','manual','done',%s,%s,5000) returning id",
+         (pF, at(fpas, 10), at(fpas, 10, 30)))[0][0]
 for a in años:
     q("select admin_holidays_confirm(%s)", (a,), uid=admF)
 ah = q("select admin_holidays()", uid=admF)[0][0]
 ok("feriados: el admin ve el año en curso y el siguiente, confirmados con su fecha", len(ah) == 2 and ah[0]["confirmed_at"] is not None)
 mh = q("select my_holidays()", uid=ownF)[0][0]
-ok("feriados: confirmado, el profesional ve los próximos (no los que pasaron), sin elegir y si atiende ese día",
-   [(h["day"], h["open"], h["works"]) for h in mh] == [(str(f5), None, True), (str(f20), None, True)], str(mh))
+ok("feriados cerrados: confirmado, el profesional ve los próximos cerrados (no los que pasaron), con sus turnos",
+   [(h["day"], h["open"], h["closed"], h["works"], h["bookings"]) for h in mh] == [(str(f5), None, True, True, 1), (str(f20), None, True, True, 0)], str(mh))
+ok("feriados cerrados: confirmar el año cierra el feriado (sin horarios) y la app lo sabe", horarios(f5) == [] and cerrados() == [str(f5), str(f20)])
+ok("feriados cerrados: …el día anterior sigue con horarios", len(horarios(f5 - dt.timedelta(days=1))) == 18)
+ok("feriados cerrados: nadie reserva por la app ese día", err(q("select book_slot(%s, %s)", (sF, at(f5, 15)), uid=cliF), "slot_not_available"))
+ok("feriados cerrados: el turno que ya estaba reservado se mantiene", q("select status from bookings where id=%s", (bF,))[0][0] == "confirmed"
+   and q("select count(*) from bookings where provider_id=%s and source='block'", (pF,))[0][0] == 0)
+ok("feriados cerrados: un día que ya pasó no cambia", q("select holiday_closed(%s, %s)", (pF, fpas))[0][0] is False and q("select status from bookings where id=%s", (bPas,))[0][0] == "done")
+nb = avisos("holiday_bookings")
+ok("feriados cerrados: le llega «Tenés 1 turno el <día>, que es feriado. Se mantiene…» (solo por el feriado que viene)",
+   [x[0] for x in nb] == [str(f5)] and nb[0][1].startswith("Tenés 1 turno el ") and nb[0][1].endswith(", que es feriado. Se mantiene; si no vas a trabajar, avisale y cancelalo (con devolución)."), str(nb))
+q("select holiday_bookings_notices()"); q("select admin_holidays_confirm(%s)", (f5.year,), uid=admF)
+ok("feriados cerrados: …una sola vez", len(avisos("holiday_bookings")) == 1)
+ok("feriados cerrados: no se ofrece un hueco del feriado a los seguidores", err(q("select offer_slot(%s, %s)", (at(f5, 15), at(f5, 16)), uid=ownF), "holiday_closed"))
 q("select holiday_notices()"); q("select holiday_notices()")
-nt = q("select ref, body from provider_notices where provider_id=%s and kind='holiday'", (pF,))
+nt = avisos("holiday")
 ok("feriados: el aviso llega 7 días antes (no el de dentro de 20) y una sola vez", [x[0] for x in nt] == [str(f5)], str(nt))
-ok("feriados: «El <día> es feriado (…). ¿Abrís?»", nt and nt[0][1].startswith("El ") and nt[0][1].endswith("es feriado (Feriado corregido). ¿Abrís?"), nt and nt[0][1])
+ok("feriados cerrados: «El <día> es feriado y tu agenda está cerrada. ¿Vas a trabajar?», con sus turnos",
+   nt and nt[0][1].startswith("El ") and nt[0][1].endswith(" es feriado y tu agenda está cerrada. ¿Vas a trabajar? Tenés 1 turno ese día: se mantiene."), nt and nt[0][1])
 pn = q("select my_provider_notices()", uid=ownF)[0][0]
-ok("feriados: la campanita trae la fecha del feriado y que todavía no eligió", any(x["kind"] == "holiday" and x["ref"] == str(f5) and x["open"] is None for x in pn))
-# un turno ese día: Cierro lo cancela como "Bloquear días"
-stF = dt.datetime.combine(f5, dt.time(11, 0), tzinfo=dt.timezone(dt.timedelta(hours=-3)))
-bF = q("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,%s,%s,'Cliente Feriado','Corte F','app','confirmed',%s,%s,5000) returning id",
-       (pF, sF, cliF, stF, stF + dt.timedelta(minutes=30)))[0][0]
-ok("feriados: no se elige un día que no es feriado", err(q("select holiday_decide(%s, false)", (f5 + dt.timedelta(days=1),), uid=ownF), "not_holiday"))
-ok("feriados: no se elige uno que ya pasó", err(q("select holiday_decide(%s, false)", (fpas,), uid=ownF)))
-ok("feriados: otro usuario no elige por el profesional", err(q("select holiday_decide(%s, false)", (f5,), uid=cliF), "not_provider"))
+ok("feriados: la campanita trae la fecha del feriado y que todavía no eligió (los dos avisos)",
+   sorted(x["kind"] for x in pn if x["ref"] == str(f5) and x["open"] is None) == ["holiday", "holiday_bookings"])
+ok("feriados: no se elige un día que no es feriado", err(q("select holiday_decide(%s, true)", (f5 + dt.timedelta(days=1),), uid=ownF), "not_holiday"))
+ok("feriados: no se elige uno que ya pasó", err(q("select holiday_decide(%s, true)", (fpas,), uid=ownF)))
+ok("feriados: otro usuario no elige por el profesional", err(q("select holiday_decide(%s, true)", (f5,), uid=cliF), "not_provider"))
+# «Voy a trabajar este día»
+ro = q("select holiday_decide(%s, true)", (f5,), uid=ownF)[0][0]
+hs = horarios(f5)
+ok("feriados cerrados: el profesional lo abre y vuelve a tener horarios (menos el del turno que ya tenía)",
+   ro["open"] is True and ro["bookings"] == 1 and len(hs) == 17 and dt.time(11, 0) not in [h.time() for h in hs] and cerrados() == [str(f20)], str(ro))
+ok("feriados cerrados: …los avisos de ese día quedan leídos", all(x[2] for x in avisos("holiday") + avisos("holiday_bookings")))
+rb = q("select book_slot(%s, %s)", (sF, at(f5, 15)), uid=cliF)
+ok("feriados cerrados: …y un cliente reserva ese día", not err(rb) and rb[0][0]["status"] == "pending_payment", str(rb))
+hF = rb[0][0]["booking_ids"][0] if not err(rb) else None
+# «Cerrar el día de nuevo»: sin bloqueo, sin cancelar nada
 rc = q("select holiday_decide(%s, false)", (f5,), uid=ownF)[0][0]
-ok("feriados: Cierro bloquea el día y devuelve los turnos cancelados (como Bloquear días)", rc["blocked"] == 1 and [c["id"] for c in rc["cancelled"]] == [bF], str(rc))
-ok("feriados: …el turno queda cancelado por el profesional y al cliente le llega el aviso",
-   q("select status from bookings where id=%s", (bF,))[0][0] == "cancelled_provider" and q("select count(*) from client_messages where kind='cancel' and ref=%s", (str(bF),))[0][0] == 1)
-ok("feriados: …el día queda bloqueado con el nombre del feriado", q("select service_name from bookings where provider_id=%s and source='block' and starts_at::date = %s", (pF, f5))[0][0].startswith("🏖️ Feriado: Feriado corregido"))
-ok("feriados: …y el aviso queda leído, con lo que eligió", q("select read_at is not null from provider_notices where provider_id=%s and kind='holiday'", (pF,))[0][0] is True
-   and any(x["kind"] == "holiday" and x["open"] is False for x in q("select my_provider_notices()", uid=ownF)[0][0]))
+ok("feriados cerrados: lo vuelve a cerrar sin cancelar nada (devuelve cuántos turnos tiene ese día)",
+   rc["open"] is False and rc["bookings"] == 2 and "cancelled" not in rc
+   and q("select status from bookings where id=%s", (bF,))[0][0] == "confirmed" and q("select status from bookings where id=%s", (hF,))[0][0] == "hold"
+   and q("select count(*) from bookings where provider_id=%s and source='block'", (pF,))[0][0] == 0, str(rc))
+ok("feriados cerrados: …y vuelve a quedar sin horarios", horarios(f5) == [] and cerrados() == [str(f5), str(f20)])
 ok("feriados: el profesional ve su elección (y nadie más)", q("select open from provider_holidays where day=%s", (f5,), uid=ownF) == [(False,)] and q("select count(*) from provider_holidays", uid=cliF)[0][0] == 0)
-q("select holiday_decide(%s, true)", (f5,), uid=ownF)
-ok("feriados: Abro después de Cierro lo desbloquea (el turno cancelado sigue cancelado)",
-   q("select count(*) from bookings where provider_id=%s and source='block' and starts_at::date = %s", (pF, f5))[0][0] == 0
-   and q("select status from bookings where id=%s", (bF,))[0][0] == "cancelled_provider" and q("select open from provider_holidays where provider_id=%s and day=%s", (pF, f5))[0][0] is True)
 q("delete from provider_notices where provider_id=%s and kind='holiday'", (pF,)); q("select holiday_notices()")
 ok("feriados: con algo elegido, el aviso no se repite", q("select count(*) from provider_notices where provider_id=%s and kind='holiday'", (pF,))[0][0] == 0)
+# las elecciones del sistema anterior: «Abro» sigue abierto; «Cierro» (con block_days) sigue cerrado y su bloqueo no se toca
+q("insert into provider_holidays (provider_id, day, open) values (%s, %s, true)", (pF, f20))
+ok("feriados cerrados: un «Abro» de antes sigue abierto", len(horarios(f20)) == 18 and cerrados() == [str(f5)])
+q("select block_days(%s, %s, 'Feriado: Puente de prueba')", (f20, f20), uid=ownF); q("update provider_holidays set open = false where provider_id=%s and day=%s", (pF, f20))
+ok("feriados cerrados: un «Cierro» de antes sigue cerrado, con su bloqueo", horarios(f20) == [] and cerrados() == [str(f5), str(f20)]
+   and q("select count(*) from bookings where provider_id=%s and source='block' and service_name like '🏖️ Feriado%%'", (pF,))[0][0] == 1)
+q("select holiday_decide(%s, true)", (f20,), uid=ownF)
+ok("feriados cerrados: …y si ahora lo abre, el bloqueo de antes se saca", len(horarios(f20)) == 18
+   and q("select count(*) from bookings where provider_id=%s and source='block'", (pF,))[0][0] == 0)
+# el admin corrige la lista de un año confirmado: un feriado nuevo cierra el día (y avisa a quien tiene turnos); sacarlo lo abre
+bM = q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,'Agendada','Corte F','manual','confirmed',%s,%s,5000) returning id",
+       (pF, at(f12, 10), at(f12, 10, 30)))[0][0]
+ok("feriados cerrados: antes de agregarlo, el día tiene horarios", len(horarios(f12)) == 17)
+q("select admin_holiday_save(%s, 'Feriado nuevo', 'inamovible')", (f12,), uid=admF)
+ok("feriados cerrados: el admin agrega un feriado a un año confirmado y el día queda cerrado", horarios(f12) == [] and str(f12) in cerrados()
+   and q("select status from bookings where id=%s", (bM,))[0][0] == "confirmed")
+nb12 = [x for x in avisos("holiday_bookings") if x[0] == str(f12)]
+ok("feriados cerrados: …y a quien ya tenía turnos ese día le llega el aviso", len(nb12) == 1 and nb12[0][1].startswith("Tenés 1 turno el "), str(nb12))
+q("select admin_holiday_delete(%s)", (f12,), uid=admF)
+ok("feriados cerrados: lo saca y el día vuelve a tener horarios", len(horarios(f12)) == 17 and str(f12) not in cerrados())
+ok("feriados cerrados: …y su aviso deja de verse", not any(x["ref"] == str(f12) for x in q("select my_provider_notices()", uid=ownF)[0][0]))
+q("select admin_holiday_save(%s, 'Ya pasó', 'inamovible')", (fpas,), uid=admF)
+ok("feriados cerrados: corregir un feriado que ya pasó no avisa nada", not [x for x in avisos("holiday_bookings") if x[0] == str(fpas)])
+ok("feriados cerrados: provider_closed_days no muestra profesionales que no están activos",
+   q("select count(*) from provider_closed_days((select id from providers where status <> 'active' limit 1), %s, %s)", (hoyF, f20), role="anon")[0][0] == 0)
 q("delete from provider_hours where provider_id=%s and dow=%s", (pF, (f20.isoweekday() % 7)))
 ok("feriados: un feriado que cae en un día que no atiende se marca (la app no lo ofrece)", [h["works"] for h in q("select my_holidays()", uid=ownF)[0][0] if h["day"] == str(f20)] == [False])
 q("insert into provider_hours select %s, %s, 1, '09:00', '18:00' on conflict do nothing", (pF, (f20.isoweekday() % 7)))

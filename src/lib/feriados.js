@@ -19,7 +19,19 @@ export function holidayLabel(day) {
 // los próximos feriados que tocan a un profesional: desde hoy y en un día que atiende, los primeros `limit`
 export const upcomingHolidays = (list, today, limit = 6) =>
   (list || []).filter((h) => h.day >= today && h.works !== false).sort((a, b) => a.day.localeCompare(b.day)).slice(0, limit);
+// 10/11 · Feriados cerrados por defecto (D39): un feriado de un año confirmado queda cerrado para el profesional salvo
+// que lo abra («Voy a trabajar este día», open = true). open = false (lo dejó cerrado) o sin elegir (null): cerrado.
+export const holidayIsOpen = (h) => !!h && h.open === true;
+// ¿ese día es un feriado cerrado, según la lista de un profesional? (los que ya pasaron no cuentan)
+export function closedHolidayOn(list, day, today) {
+  if (!day || (today && day < today)) {
+    return false;
+  }
+  const h = (list || []).find((item) => item.day === day);
+  return !!h && !holidayIsOpen(h);
+}
 // lo que eligió, en palabras
-export const holidayState = (h) => (h.open === true ? "Abrís" : h.open === false ? "Cerrado" : "Sin elegir: queda abierto");
-// texto del bloqueo de un feriado ("Feriado: <nombre>", hasta 40 letras como cualquier motivo de Bloquear días)
-export const holidayReason = (h) => ("Feriado: " + (h ? h.name : "")).slice(0, 40);
+export const holidayState = (h) => (holidayIsOpen(h) ? "Vas a trabajar" : "Cerrado");
+// los turnos que ya tenía ese día (se mantienen)
+export const holidayBookingsNote = (count) =>
+  count === 1 ? "Tenés 1 turno ese día: se mantiene" : `Tenés ${count} turnos ese día: se mantienen`;
