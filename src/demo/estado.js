@@ -55,6 +55,7 @@ store.COMMBY = {
 store.DEMO_PENDING = demoPending0();
 store.DEMO_NOTES = {};
 store.DEMO_AEXP = [];
+store.DEMO_AFIX = [];
 store.DEMO_ACL = {};
 store.AEID = 1;
 store.NID = 1;
