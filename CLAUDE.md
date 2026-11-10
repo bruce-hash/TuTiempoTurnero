@@ -73,7 +73,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - V4 resto: C31 gastos fijos en `src/lib/fijos.js` (qué corre cada mes; en la demo, la misma regla) y en la base
     (`fixed_expenses`, `fixed_expenses_sync` al abrir el panel, `fixed_expense_save`/`_stop` solo desde el mes actual, D40; `fixed_id`/`fixed_month` solo las funciones, S16; un mes cerrado
     no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost`; las ventas, con «Vender producto» en la Caja del día (`saleForm`, 7/11).
-    D41 (10/11): el stock lo lleva la base: sube con «Cargar compra» (`product_buy`, con su gasto), baja con la venta (trigger
+    D46 (10/11): el stock lo lleva la base: sube con «Cargar compra» (`product_buy`, con su gasto), baja con la venta (trigger
     `walkins_stock`, `no_stock`) o «Ajustar stock» (`product_adjust`, `stock_adjustments`: roto, vencido, uso en el local; ni venta
     ni gasto); alta con `product_add`. La app no escribe `products.stock` (`products_stock_guard`): nada de `setStock`.
   - V5 resto (C29): interruptor global de sellos (`app_settings.stamps_on`, `stampsOn()` en `src/ui/sellos.js`; todo lo de
