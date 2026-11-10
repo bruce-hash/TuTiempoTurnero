@@ -16,8 +16,10 @@ export function appFee(pay: Record<string, any>): number | null {
 }
 
 // aviso descartado o rechazado (mp_webhook_event suma hits si se repite)
-export async function discard(db: Db, payId: string, pid: number | null, acc: number | null, reason: string, detail?: string) {
-  const { error } = await db.rpc("mp_webhook_event", { p_payment_id: payId, p_provider: pid, p_account: acc, p_reason: reason, p_detail: detail ?? null });
+// diag (11/11, H06): datos para diagnosticar un rechazo (de dónde salió data.id, request-id, ts, el texto firmado), nunca la
+// clave ni la firma completa
+export async function discard(db: Db, payId: string, pid: number | null, acc: number | null, reason: string, detail?: string, diag?: Record<string, unknown>) {
+  const { error } = await db.rpc("mp_webhook_event", { p_payment_id: payId, p_provider: pid, p_account: acc, p_reason: reason, p_detail: detail ?? null, p_diag: diag ?? null });
   if (error) console.error("mp_webhook_event", error);
 }
 

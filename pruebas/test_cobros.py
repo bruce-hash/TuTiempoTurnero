@@ -209,6 +209,38 @@ rv = one("select admin_review()", uid=adm)
 ok("Paso 1: Para revisar trae el detalle y las veces de cada aviso, y el resumen de rechazados",
    any(e["mp_payment_id"] == "P1-FIRMA" and e["hits"] == 2 and e["detail"] for e in rv["webhook_events"])
    and rv["webhook_alert"]["rejected"] >= 3 and rv["webhook_alert"]["rejected_reason"] in ("bad_signature", "no_signature"))
+# 11/11 · H06: diagnóstico del rechazo, firma válida que apaga el aviso, agrupados por motivo
+ok("H06: Para revisar dice que el aviso sigue (rechazos sin una firma válida después)", rv["webhook_alert"]["active"] is True and rv["webhook_alert"]["last_ok"] is None)
+svc_role("select mp_webhook_event('P1-FIRMA', %s, %s, 'bad_signature', 'la firma no coincide', %s::jsonb)",
+         (pid, acc1, '{"id_from": "url", "manifest": "id:p1-firma;request-id:abc;ts:1;", "v1_start": "0a1b2c3d"}'))
+ok("H06: el rechazo guarda el diagnóstico (en la misma fila: suma hits)",
+   q("select hits, diag->>'id_from', diag->>'manifest' from mp_webhook_events where mp_payment_id = 'P1-FIRMA'") == [(3, "url", "id:p1-firma;request-id:abc;ts:1;")])
+svc_role("select mp_webhook_event('P1-LARGO', %s, null, 'bad_signature', null, %s::jsonb)", (pid, '{"manifest": "' + "x" * 3000 + '"}'))
+ok("H06: un diagnóstico demasiado largo no se guarda entero", one("select diag from mp_webhook_events where mp_payment_id = 'P1-LARGO'") == {"truncated": True})
+ok("H06: la base no acepta un diagnóstico que no sea un objeto corto",
+   err(q("insert into mp_webhook_events (reason, diag) values ('bad_signature', '[1]'::jsonb)")) and err(q("insert into mp_webhook_events (reason, diag) values ('bad_signature', jsonb_build_object('x', repeat('y', 3000)))")))
+ok("H06: ni la app ni el admin registran firmas válidas ni leen el estado sin ser admin",
+   err(q("select mp_webhook_ok(%s, 'principal')", (pid,), uid=cli)) and err(q("select mp_webhook_ok(%s, 'principal')", (pid,), uid=adm))
+   and q("select * from mp_webhook_status", uid=cli) == [] and err(q("insert into mp_webhook_status (provider_key) values (1)", uid=adm)))
+rv = one("select admin_review()", uid=adm)
+g = {x["reason"]: x for x in rv["webhook_groups"]}
+ok("H06: los descartados vienen agrupados por motivo (cuántos avisos, en cuántas filas) y con el diagnóstico",
+   g.get("bad_signature", {}).get("hits", 0) >= 4 and g["bad_signature"]["rows"] >= 2 and "no_signature" in g
+   and any(e["mp_payment_id"] == "P1-FIRMA" and e["diag"]["v1_start"] == "0a1b2c3d" for e in rv["webhook_events"]))
+# una firma válida sin prestador (por ejemplo, la simulación del panel) no apaga los rechazos de un prestador; la de ese
+# prestador, sí (y un rechazo sin prestador se apaga con cualquier firma válida)
+svc_role("select mp_webhook_ok(null, 'principal')")
+rv = one("select admin_review()", uid=adm)
+ok("H06: con una firma válida de otro lado, el aviso sigue por los rechazos del prestador", rv["webhook_alert"]["active"] is True and rv["webhook_alert"]["last_ok"] is not None)
+svc_role("select mp_webhook_ok(%s, 'principal')", (pid,))
+svc_role("select mp_webhook_ok(%s, 'principal')", (pid,))
+rv = one("select admin_review()", uid=adm)
+ok("H06: cuando los avisos vuelven a validar, el aviso de Para revisar se apaga solo (los rechazos quedan en la lista)",
+   rv["webhook_alert"]["active"] is False and rv["webhook_alert"]["rejected"] >= 5 and any(e["mp_payment_id"] == "P1-FIRMA" for e in rv["webhook_events"]))
+svc_role("select mp_webhook_event('P1-FIRMA2', %s, %s, 'bad_signature', 'la firma no coincide')", (pid, acc1))
+ok("H06: un rechazo nuevo después de la última firma válida lo vuelve a prender", one("select admin_review()", uid=adm)["webhook_alert"]["active"] is True)
+ok("H06: mp_webhook_ok cuenta las firmas válidas por prestador (0: sin prestador)",
+   q("select provider_key, ok_hits, last_ok_via from mp_webhook_status order by provider_key") == [(0, 1, "principal"), (pid, 2, "principal")])
 ok("Paso 1: el cron de la consulta no llama a nada si no hay cobros que consultar (ni sin Vault)", svc_role("select run_mp_reconcile(true)") is None)
 
 # ---------- D29: el pago llega cuando la hora del turno ya pasó → se devuelve, aunque el horario esté libre ----------

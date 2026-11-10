@@ -158,7 +158,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   exacta: si cambiás o agregás una migración, regeneralo con `npm run sql:build` y verificá con `npm run sql:check`
   (el CI falla si no son idénticos).
 - `supabase/functions/`: Edge Functions de Mercado Pago (desde el Paso 1, `mp-reconcile` le pregunta a Mercado Pago por los
-  cobros sin pago registrado, cron `tt-mp-sync`; el webhook y la consulta registran el pago con `_shared/pago.ts`; cada
+  cobros sin pago registrado, cron `tt-mp-sync`; el webhook y la consulta registran el pago con `_shared/pago.ts`; H06 (11/11): cada rechazo guarda su `diag` (sin la clave ni la firma),
+  cada firma válida queda en `mp_webhook_status` (el aviso de «Para revisar» se apaga solo) y el aviso del panel se procesa por su `user_id`; cada
   cobro queda en `mp_checkouts` con su token de regreso, D28), `dni-cleanup` (borra las fotos del DNI, D24), `holidays-sync` (feriados, D39), `push-send` (notificaciones
   push, Bloque C: cola `push_outbox`, cifrado y VAPID en `_shared/webpush.ts`, secretos `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y
   `VAPID_SUBJECT`; `PUSH_TEST_ORIGINS` solo en pruebas) y `email-send` (avisos por

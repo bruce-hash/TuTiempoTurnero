@@ -287,6 +287,63 @@ ev = await rech("9105", "config_error");
 ok("Paso 1: sin MP_WEBHOOK_SECRET → 500 (Mercado Pago reintenta) y queda como config_error", r.status === 500 && ev && /MP_WEBHOOK_SECRET/.test(ev.detail), JSON.stringify(ev));
 r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&data.id=77&type=merchant_order`, { method: "POST", body: "{}" }));
 ok("Paso 1: un aviso que no es de un pago (merchant_order) sin firma no llena la tabla", r.status === 401 && Number(await one("select count(*) from mp_webhook_events where mp_payment_id = '77'")) === 0);
+// ---------- 11/11 · H06: avisos rechazados por firma ----------
+{
+  const d = (await q("select diag from mp_webhook_events where mp_payment_id = '9001' and reason = 'bad_signature'"))[0]?.diag;
+  const txt = JSON.stringify(d ?? {});
+  ok("H06: el rechazo por firma guarda con qué se armó el texto firmado (de dónde salió data.id, request-id, ts, el texto, el comienzo del v1)",
+     d?.id_from === "url" && d?.id_url === "9001" && /^[0-9a-f-]{36}$/.test(d?.request_id ?? "") && /^\d{13}$/.test(d?.ts ?? "")
+     && d?.manifest === `id:9001;request-id:${d?.request_id};ts:${d?.ts};` && d?.v1_count === 1 && d?.v1_start === "00000000" && d?.secrets === 1
+     && Array.isArray(d?.query) && d.query.includes("provider"), txt);
+  ok("H06: …sin la clave ni la firma completa", !txt.includes(WHSEC) && !txt.includes("0".repeat(9)), txt);
+  // firma válida con un aviso firmado a mano: devuelve el encabezado y el cuerpo
+  const signed = async (texto: string, secret = WHSEC) => ({ v1: await hmacHex(secret, texto) });
+  const ts = () => String(Date.now());
+  // el encabezado con dos v1 (el primero de otra clave): vale si coincide uno
+  {
+    const t = ts(), reqId = crypto.randomUUID(), { v1 } = await signed(`id:9001;request-id:${reqId};ts:${t};`);
+    r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&account=${A.id}&data.id=9001&type=payment`,
+      { method: "POST", headers: { "x-signature": `ts=${t},v1=${"ab".repeat(32)},v1=${v1}`, "x-request-id": reqId }, body: JSON.stringify({ type: "payment", data: { id: "9001" } }) }));
+    ok("H06: x-signature con dos v1: vale si coincide cualquiera", r.status === 200 && (await body(r)).result?.status === "already_processed", String(r.status));
+  }
+  // el aviso sin data.id en la dirección: se firma con el del cuerpo
+  {
+    const t = ts(), reqId = crypto.randomUUID(), { v1 } = await signed(`id:9001;request-id:${reqId};ts:${t};`);
+    r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&account=${A.id}&type=payment`,
+      { method: "POST", headers: { "x-signature": `ts=${t},v1=${v1}`, "x-request-id": reqId }, body: JSON.stringify({ type: "payment", data: { id: "9001" } }) }));
+    ok("H06: sin data.id en la dirección, vale el del cuerpo", r.status === 200 && (await body(r)).result?.status === "already_processed", String(r.status));
+  }
+  // dos claves en MP_WEBHOOK_SECRET (la nueva y la anterior, separadas por coma): vale cualquiera
+  Deno.env.set("MP_WEBHOOK_SECRET", `otra-clave-de-prueba, ${WHSEC}`);
+  r = await webhook(pid, A.id, "9001");
+  Deno.env.set("MP_WEBHOOK_SECRET", WHSEC);
+  ok("H06: MP_WEBHOOK_SECRET con dos claves separadas por coma: vale cualquiera", r.status === 200, String(r.status));
+  const okRow = (await q("select last_ok_at, last_ok_via, ok_hits from mp_webhook_status where provider_key = $1", [pid]))[0];
+  ok("H06: cada firma válida queda en mp_webhook_status (por prestador, con la variante que validó)",
+     okRow && okRow.last_ok_at && /clave 2/.test(okRow.last_ok_via) && Number(okRow.ok_hits) >= 3, JSON.stringify(okRow));
+  ok("H06: un rechazo con una firma válida después ya no está abierto (el aviso de Para revisar se apaga solo)",
+     (await one("select public.mp_webhook_rejected_open($1, (select last_at from mp_webhook_events where mp_payment_id = '9001' and reason = 'bad_signature'))", [pid])) === false);
+  await webhook(pid, A.id, "9001", { firma: false });
+  ok("H06: …y uno nuevo después de la última firma válida, sí",
+     (await one("select public.mp_webhook_rejected_open($1, (select last_at from mp_webhook_events where mp_payment_id = '9001' and reason = 'bad_signature'))", [pid])) === true);
+  // el aviso del webhook del panel de Mercado Pago: sin ?provider, con el user_id de la cuenta conectada que cobró
+  const bp = await book();
+  mp.pago({ id: "9106", collector: "1001", status: "approved", amount: 6000, fee: 1000, ref: bp.join(",") });
+  const t = ts(), reqId = crypto.randomUUID(), { v1 } = await signed(`id:9106;request-id:${reqId};ts:${t};`);
+  const panel = (sig: string, user: unknown) => fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?data.id=9106&type=payment`,
+    { method: "POST", headers: { "x-signature": sig, "x-request-id": reqId },
+      body: JSON.stringify({ action: "payment.created", api_version: "v1", type: "payment", live_mode: true, user_id: user, data: { id: "9106" } }) }));
+  r = await panel(`ts=${t},v1=${"0".repeat(64)}`, 1001);
+  ev = await rech("9106", "bad_signature");
+  ok("H06: el aviso del panel rechazado por firma queda con su prestador (por el user_id) y el user_id en el diagnóstico",
+     r.status === 401 && ev && Number(ev.provider_id) === pid && (await q("select diag->>'user_id' as u from mp_webhook_events where mp_payment_id = '9106'"))[0]?.u === "1001", JSON.stringify(ev));
+  r = await panel(`ts=${t},v1=${v1}`, 1001);
+  ok("H06: el aviso del panel con firma válida y el user_id de una cuenta conectada se procesa: turno confirmado",
+     r.status === 200 && (await st(bp[0])) === "confirmed", String(r.status));
+  r = await panel(`ts=${t},v1=${v1}`, 5555);
+  ok("H06: con el user_id de una cuenta que no está conectada → bad_request con el user_id",
+     r.status === 200 && /no está conectada \(user_id 5555\)/.test((await rech("9106", "bad_request"))?.detail ?? ""));
+}
 
 // ---------- D30 (V1): el cobro suma el costo de Mercado Pago del plazo; la comisión que informa se compara ----------
 await q("update app_settings set mp_pct_instant = 7.61, mp_pct_d10 = 5.31");

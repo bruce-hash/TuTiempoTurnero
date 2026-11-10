@@ -222,6 +222,15 @@ export async function providerAccounts(db: SupabaseClient, pid: number): Promise
   return (data as MpAccount[]) ?? [];
 }
 
+// 11/11 · H06: las cuentas de una cuenta de Mercado Pago conectada (por el user_id que manda el aviso del panel, que no trae
+// ?provider): las que tienen llave, la activa primero.
+export async function accountsByMpUser(db: SupabaseClient, mpUserId: string): Promise<MpAccount[]> {
+  if (!/^\d{1,20}$/.test(mpUserId)) return [];
+  const data = must("leer las cuentas de MP por user_id", await db.from("mp_accounts").select(ACCOUNT_COLS).eq("mp_user_id", mpUserId).neq("status", "purged")
+    .order("status", { ascending: true }).order("connected_at", { ascending: false }));
+  return (data as MpAccount[]) ?? [];
+}
+
 // ---------- Llaves cifradas (Bloque 2a, H13) ----------
 // AES-256-GCM con Web Crypto. Cada valor: "v<n>:<iv>:<cifrado>" en base64, con un IV aleatorio de 12 bytes. La clave es
 // MP_TOKENS_KEY (v1) o MP_TOKENS_KEY_V2, _V3… (32 bytes en base64, secretos de las funciones): se lee con cualquier

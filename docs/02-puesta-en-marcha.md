@@ -596,8 +596,33 @@ el aviso, mirá Supabase → Edge Functions → **mp-webhook → Invocations / L
 | 401 y "la firma está vencida" | El aviso tardó más de 10 minutos o el reloj está corrido | Nada: la consulta automática lo registra. Si se repite, avisame. |
 | 500 y "falta configurar la función" | Falta `MP_WEBHOOK_SECRET` | Cargarlo (paso 9). |
 | 500 con "permission denied" en los logs | La base no tiene los permisos de las funciones (H32) | Correr la migración `20261027190000_permisos_servidor.sql` (o `TODO_EN_UNO.sql`). |
-| 200 y "le faltan datos (sin ?provider)" | Llega el aviso del panel de Mercado Pago, sin los datos del cobro | Normal si también llega el de la preferencia; si es el único, avisame. |
+| 200 y "le faltan datos (sin ?provider…)" | Llega un aviso sin el prestador en la dirección ni el `user_id` de una cuenta conectada | Desde el 11/11 el aviso del panel se procesa por su `user_id`; si dice «cuenta que no está conectada», es de una cuenta de Mercado Pago que no es de ningún negocio (por ejemplo, la tuya). |
 | 200 con "el pago no existe en ninguna cuenta" o "cobrado por otra cuenta" | El prestador cobró con una cuenta que no es la conectada | Ver "Para revisar" (D16). |
+
+##### Rechazados por firma: qué mandarme (H06, 11/11)
+Desde el 11/11 cada rechazo guarda con qué se armó el texto firmado (sin la clave ni la firma completa) y «Para revisar»
+lo muestra al desplegar «N avisos rechazados por firma». El aviso de arriba se va solo cuando un aviso del mismo negocio
+vuelve a validar.
+1. Desplegá `mp-webhook` y la migración `20261111000000_mp_firma.sql` (o el `TODO_EN_UNO.sql`).
+2. Esperá el próximo pago real del negocio con el problema (o hacé uno chico de prueba con una cuenta de cliente real).
+3. En el SQL Editor, esta consulta solo lee:
+   ```sql
+   select e.mp_payment_id, e.last_at, e.hits, e.detail, e.diag
+     from mp_webhook_events e
+    where e.reason = 'bad_signature' and e.diag is not null
+    order by e.last_at desc limit 5;
+   select provider_key, last_ok_at, last_ok_via, ok_hits from mp_webhook_status order by last_ok_at desc;
+   ```
+4. Mandame el resultado (no tiene datos personales ni la clave) y decime si en Mercado Pago → Tus integraciones → la
+   aplicación de TuTiempo → Webhooks está configurado el **modo productivo** con el evento **Pagos** y qué URL tiene.
+   Con eso se ve si el texto armado es el que firma Mercado Pago (`id:<data.id>;request-id:<x-request-id>;ts:<ts>;`) o
+   si la firma viene de otra clave.
+5. Si en `mp_webhook_status` aparece `last_ok_via` distinto de `principal`, la firma validó con una variante (id del
+   cuerpo, mayúsculas, otra clave): mandámelo también.
+
+Si los avisos de los cobros (los de la `notification_url`, con `?provider=`) siguen sin validar y los del webhook del
+panel sí (que ahora se procesan por el `user_id` de la cuenta conectada), la salida es dejar solo el webhook del panel.
+No lo cambio sin tu OK: es sacar `notification_url` de las preferencias en `mp-create-preference`.
 
 ### 3. Hostinger (subdominio de prueba)
 > Desde el 7/11 el despliegue a prueba es automático (GitHub → Actions → «Desplegar prueba»): ver **docs/10**. Los pasos de

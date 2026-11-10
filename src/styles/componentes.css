@@ -359,6 +359,8 @@ body.am-open{overflow:hidden}
 .adml li.admal.new{background:var(--warn-soft);border-radius:8px}
 .admal-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .admal-h .lbl{margin:0}
+.admgrp{margin-top:6px}.admgrp > summary{cursor:pointer;font-size:14px;font-weight:600}.admgrp .adml{margin-top:6px}
+.adml code{font-size:12px;overflow-wrap:anywhere;word-break:break-all}
 .nudgebox{grid-column:1/-1;margin-top:4px;text-align:left}
 .nudgebox b{display:inline;font-size:inherit}.nudgebox span{font-size:inherit;color:inherit}
 .nudgebox textarea{width:100%;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--fg);resize:vertical}
