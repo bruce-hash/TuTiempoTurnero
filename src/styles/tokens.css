@@ -23,7 +23,6 @@
   --bar-i:#d6d3d1; --glow:rgba(4,64,243,.35);
   --ph-ov:radial-gradient(80% 60% at 20% 10%,rgba(255,255,255,.35),transparent 60%); --ph-h0:30; --ph-hk:1; --ph-s:16%; --ph-l1:90%; --ph-l2:76%; --ph-fg:#121212;
   --oc-lo:#f5f5f4; --oc-lo-f:#292524; --oc-md:#d6d3d1; --oc-md-f:#0c0a09; --oc-hi:#78716c; --oc-hi-f:#fff; --oc-fu:#292524; --oc-fu-f:#fff;
-  --ev-app:#f5f5f4; --ev-app-l:#d6d3d1; --ev-man:#ebe8f6; --ev-man-l:#a8a29e; --ev-walk:#dcfce7; --ev-walk-l:#86efac;
   --quick-bg:#f5f5f4; --quick-fg:#292524;
 }
 body[data-seg="b"],.seg-b{
@@ -42,7 +41,6 @@ body[data-seg="b"],.seg-b{
   --bar-i:#52525b; --glow:rgba(255,255,255,.22);
   --ph-ov:radial-gradient(120% 70% at 50% 125%,rgba(255,255,255,.24),transparent 60%); --ph-h0:0; --ph-hk:1; --ph-s:12%; --ph-l1:16%; --ph-l2:2%; --ph-fg:#fff;
   --oc-lo:#27272a; --oc-lo-f:#d4d4d8; --oc-md:#52525b; --oc-md-f:#f4f4f5; --oc-hi:#a1a1aa; --oc-hi-f:#09090b; --oc-fu:#f4f4f5; --oc-fu-f:#09090b;
-  --ev-app:rgba(255,255,255,.09); --ev-app-l:rgba(255,255,255,.42); --ev-man:rgba(255,255,255,.04); --ev-man-l:#71717a; --ev-walk:rgba(74,222,128,.12); --ev-walk-l:rgba(74,222,128,.5);
   --quick-bg:rgba(255,255,255,.08); --quick-fg:#fff;
 }
 body[data-seg="p"],.seg-p{
@@ -60,7 +58,6 @@ body[data-seg="p"],.seg-p{
   --bar-i:#d8b6c3; --glow:rgba(124,74,96,0.4);
   --ph-ov:radial-gradient(80% 60% at 20% 10%,rgba(255,255,255,.35),transparent 60%); --ph-h0:330; --ph-hk:.05; --ph-s:28%; --ph-l1:64%; --ph-l2:42%; --ph-fg:#fff;
   --oc-lo:#f4ebef; --oc-lo-f:#62384a; --oc-md:#d8b6c3; --oc-md-f:#2f1922; --oc-hi:#a76a83; --oc-hi-f:#fff; --oc-fu:#62384a; --oc-fu-f:#fff;
-  --ev-app:#f4ebef; --ev-app-l:#d8b6c3; --ev-man:#ece3f4; --ev-man-l:#c18da2; --ev-walk:#dcfce7; --ev-walk-l:#86efac;
   --quick-bg:#f4ebef; --quick-fg:#62384a;
 }
 body[data-seg="m"],.seg-m{
@@ -78,7 +75,6 @@ body[data-seg="m"],.seg-m{
   --bar-i:#a0bca9; --glow:rgba(57,82,68,0.4);
   --ph-ov:radial-gradient(80% 60% at 20% 10%,rgba(255,255,255,.35),transparent 60%); --ph-h0:140; --ph-hk:.05; --ph-s:28%; --ph-l1:64%; --ph-l2:42%; --ph-fg:#fff;
   --oc-lo:#e3ebe5; --oc-lo-f:#2f4338; --oc-md:#a0bca9; --oc-md-f:#141f1a; --oc-hi:#597f68; --oc-hi-f:#fff; --oc-fu:#2f4338; --oc-fu-f:#fff;
-  --ev-app:#e3ebe5; --ev-app-l:#a0bca9; --ev-man:#e2e4ef; --ev-man-l:#789b84; --ev-walk:#dcfce7; --ev-walk-l:#86efac;
   --quick-bg:#e3ebe5; --quick-fg:#2f4338;
 }
 body[data-seg="l"],.seg-l{
@@ -96,7 +92,6 @@ body[data-seg="l"],.seg-l{
   --bar-i:#cdc4ee; --glow:rgba(117,77,180,0.4);
   --ph-ov:radial-gradient(80% 60% at 20% 10%,rgba(255,255,255,.35),transparent 60%); --ph-h0:262; --ph-hk:.05; --ph-s:28%; --ph-l1:64%; --ph-l2:42%; --ph-fg:#fff;
   --oc-lo:#f0edfa; --oc-lo-f:#624097; --oc-md:#cdc4ee; --oc-md-f:#332253; --oc-hi:#987cd6; --oc-hi-f:#fff; --oc-fu:#624097; --oc-fu-f:#fff;
-  --ev-app:#f0edfa; --ev-app-l:#cdc4ee; --ev-man:#eae6fc; --ev-man-l:#b3a2e3; --ev-walk:#dcfce7; --ev-walk-l:#86efac;
   --quick-bg:#f0edfa; --quick-fg:#624097;
 }
 body[data-seg="u"],.seg-u{
@@ -114,7 +109,6 @@ body[data-seg="u"],.seg-u{
   --bar-i:#ebbaaf; --glow:rgba(155,71,54,0.4);
   --ph-ov:radial-gradient(80% 60% at 20% 10%,rgba(255,255,255,.35),transparent 60%); --ph-h0:12; --ph-hk:.05; --ph-s:28%; --ph-l1:64%; --ph-l2:42%; --ph-fg:#fff;
   --oc-lo:#f9eae5; --oc-lo-f:#803d31; --oc-md:#ebbaaf; --oc-md-f:#391a14; --oc-hi:#cf725e; --oc-hi-f:#fff; --oc-fu:#803d31; --oc-fu-f:#fff;
-  --ev-app:#f9eae5; --ev-app-l:#ebbaaf; --ev-man:#efe4f0; --ev-man-l:#de9382; --ev-walk:#dcfce7; --ev-walk-l:#86efac;
   --quick-bg:#f9eae5; --quick-fg:#803d31;
 }
 body[data-seg="d"],.seg-d{
@@ -132,7 +126,6 @@ body[data-seg="d"],.seg-d{
   --bar-i:#dec36b; --glow:rgba(151,87,38,0.4);
   --ph-ov:radial-gradient(80% 60% at 20% 10%,rgba(255,255,255,.35),transparent 60%); --ph-h0:38; --ph-hk:.05; --ph-s:28%; --ph-l1:64%; --ph-l2:42%; --ph-fg:#fff;
   --oc-lo:#f5edd0; --oc-lo-f:#7c4524; --oc-md:#dec36b; --oc-md-f:#3a1d0e; --oc-hi:#cd9433; --oc-hi-f:#3a1d0e; --oc-fu:#7c4524; --oc-fu-f:#fff;
-  --ev-app:#f5edd0; --ev-app-l:#dec36b; --ev-man:#ece4e1; --ev-man-l:#d6af49; --ev-walk:#dcfce7; --ev-walk-l:#86efac;
   --quick-bg:#f5edd0; --quick-fg:#7c4524;
 }
 .seg-n,.seg-b,.seg-p,.seg-m,.seg-l,.seg-u,.seg-d{color:var(--fg);font-family:var(--font)}
