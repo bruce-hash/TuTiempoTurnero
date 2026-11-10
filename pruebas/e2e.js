@@ -593,16 +593,20 @@ async function turnoConMargen(p) {
     await pg.click('.movs li:has-text("Corte de ayer") [data-act=movEdit]'); await wait(200);
     await pg.fill("#wed_m", "6500"); await pg.click("#fWalkEd button[type=submit]");
     ok("10/11 caja: se corrige el movimiento de ayer", await until("select amount from walkins where provider_id=$1 and description='Corte de ayer'", [p8.id], (r) => r[0]?.amount === 6500));
-    await wait(1500);
+    await pg.waitForFunction(() => /Cambios después de cerrar/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 10000 }).catch(() => {});
     ok("10/11 caja: el cambio queda en el registro del día, a la vista", /Cambios después de cerrar/.test(await txt()) && /Cambiaste Corte de ayer: \$4\.000 en Efectivo → \$6\.500 en Efectivo/.test(await txt()));
     await pg.click("#fCloseDay button[type=submit]");
     ok("10/11 caja: se cierra de nuevo con el total nuevo", await until("select income from cash_closings where provider_id=$1 and kind='day' and period=$2", [p8.id, ayer], (r) => r[0]?.income >= 6500));
     if (mismoMes) {
-      const ing1 = await ingresos();
+      let ing1 = 0;
+      for (let i = 0; i < 8 && (ing1 = await ingresos()) - ing0 !== 2500; i++) await wait(1000);
       ok("10/11 caja: Finanzas del mes se pone al día sola (+$2.500)", ing1 - ing0 === 2500, `${ing0} → ${ing1}`);
     }
     await pg.click("[data-btab=finanzas]"); await wait(200); await pg.click("[data-fp=dia]"); await wait(300);
     await pg.click("[data-act=cajaHoy]").catch(() => {}); await wait(300);
+    // la caja de hoy quedó cerrada más arriba: se vuelve a abrir para seguir cobrando (con la caja cerrada no se corrige)
+    if (await pg.locator(`[data-act=reopenDay]`).count()) { await pg.click("[data-act=reopenDay]"); await wait(1500); }
+    ok("10/11 caja: la caja de hoy, abierta otra vez para seguir", (await q("select count(*)::int c from cash_closings where provider_id=$1 and kind='day' and period=(now() at time zone 'America/Argentina/Buenos_Aires')::date", [p8.id]))[0].c === 0);
   }
   // V4b · C25 "Cargar diferencia": al marcar "Asistió", el resto en dos medios; después se cambia desde la Caja del día
   {
