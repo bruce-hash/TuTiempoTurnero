@@ -9437,7 +9437,7 @@ begin
   end if;
   if p_status in (404, 410) then
     insert into public.push_gone (user_id, label, host, status, kind)
-    select s.user_id, s.label, substring(s.endpoint from '^https://([^/]+)'), p_status, o.kind
+    select s.user_id, s.label, substring(s.endpoint from '^[a-z]+://([^/]+)'), p_status, o.kind
       from public.push_subscriptions s where s.id = o.subscription_id;
     delete from public.push_gone where gone_at < now() - interval '90 days';
     delete from public.push_subscriptions where id = o.subscription_id;
