@@ -1191,6 +1191,103 @@ ok("C36: el producto guarda el precio de compra", not err(q("insert into product
    and q("select price, cost from products where provider_id=%s and name='Cera'", (p7,))[0] == (8000, 4500))
 ok("C36: un precio de compra negativo se rechaza", err(q("insert into products (provider_id, name, price, cost) values (%s,'Gel',1,-1)", (p7,), uid=own7)))
 
+# ---------- 10/11 · punto 9: el stock solo cambia por una compra, una venta o un ajuste (la base lo lleva) ----------
+pc7 = q("select id from products where provider_id=%s and name='Cera'", (p7,))[0][0]
+stk = lambda: q("select stock from products where id=%s", (pc7,))[0][0]
+prods_mes = lambda: {r[0]: r[6] for r in q("select * from provider_month_summary(%s)", (m0.year,), uid=own7)}[m0.month]
+hoy7 = q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date")[0][0]
+antes = prods_mes()
+rb = q("select product_buy(%s, 4, 18000)", (pc7,), uid=own7)
+ok("punto 9: «Cargar compra» suma al stock (3 + 4) y devuelve el stock nuevo", not err(rb) and rb[0][0]["stock"] == 7 and stk() == 7, str(rb))
+ok("punto 9: …y carga el gasto de productos de hoy, ligado al producto y con la cantidad",
+   q("select concept, amount, category, spent_on, product_id, qty from expenses where id=%s", (rb[0][0]["expense_id"],))[0] == ("Compra: Cera × 4", 18000, "Productos", hoy7, pc7, 4))
+ok("punto 9: …que entra en «Gastos de productos» del mes", prods_mes() == antes + 18000, f"{antes} → {prods_mes()}")
+ok("punto 9: cantidad o monto en 0 o negativos se rechazan (y el stock no cambia)",
+   err(q("select product_buy(%s, 0, 100)", (pc7,), uid=own7), "bad_qty") and err(q("select product_buy(%s, 1, 0)", (pc7,), uid=own7), "bad_amount")
+   and err(q("select product_buy(%s, -2, 100)", (pc7,), uid=own7), "bad_qty") and stk() == 7)
+ok("punto 9: otro prestador no compra sobre un producto ajeno", err(q("select product_buy(%s, 5, 100)", (pc7,), uid=own4), "product_not_found") and stk() == 7)
+ok("punto 9: un cliente o anon tampoco", err(q("select product_buy(%s, 5, 100)", (pc7,), uid=cli1), "not_provider") and err(q("select product_buy(%s, 5, 100)", (pc7,), role="anon")) and stk() == 7)
+q("insert into cash_closings (provider_id, kind, period) values (%s, 'month', %s)", (p7, m0))
+ok("punto 9: con el mes cerrado la compra no entra (ni el stock ni el gasto)",
+   err(q("select product_buy(%s, 2, 900)", (pc7,), uid=own7), "month_closed") and stk() == 7
+   and q("select count(*) from expenses where provider_id=%s and amount=900", (p7,))[0][0] == 0)
+q("delete from cash_closings where provider_id=%s and kind='month' and period=%s", (p7, m0))
+ok("punto 9: la app no cambia el stock por update (ni a mano ni con upsert)",
+   err(q("update products set stock=99 where id=%s", (pc7,), uid=own7))
+   and err(q("insert into products (provider_id, name, price, stock) values (%s,'Cera',8000,99) on conflict (provider_id, lower(name)) do update set stock = excluded.stock", (p7,), uid=own7))
+   and stk() == 7)
+ok("punto 9: editar nombre y precios sigue andando (el stock no cambia)",
+   not err(q("update products set name='Cera mate', price=8500, cost=4600 where id=%s", (pc7,), uid=own7))
+   and q("select name, price, cost, stock from products where id=%s", (pc7,))[0] == ("Cera mate", 8500, 4600, 7))
+# el trigger lo frena aunque la app vuelva a tener el permiso (y las tareas sin sesión sí pueden)
+q("grant update (stock) on products to authenticated")
+ok("punto 9: aun con permiso en la columna, el trigger frena el cambio de stock desde la app",
+   err(q("update products set stock=99 where id=%s", (pc7,), uid=own7), "stock_locked") and stk() == 7)
+q("revoke update (stock) on products from authenticated")
+ok("punto 9: sin sesión (SQL Editor, cron) el stock se puede corregir", not err(q("update products set stock=8 where id=%s", (pc7,))) and stk() == 8)
+q("update products set stock=7 where id=%s", (pc7,))
+# la venta (Caja del día → «Vender producto»)
+sale = lambda n, prod=pc7, uid=own7, pv=p7: q("insert into walkins (provider_id, kind, description, amount, method, product_id, qty) values (%s,'product','Cera mate',8500,'cash',%s,%s) returning id", (pv, prod, n), uid=uid)
+w7 = sale(2)
+ok("punto 9: una venta de 2 baja el stock en la base (7 → 5)", not err(w7) and stk() == 5, str(w7)); w7 = w7[0][0]
+ok("punto 9: sin stock suficiente la venta falla (no_stock) y no queda guardada",
+   err(sale(6), "no_stock") and stk() == 5 and q("select count(*) from walkins where provider_id=%s and product_id=%s", (p7, pc7))[0][0] == 1)
+ok("punto 9: una venta con un producto de otro prestador se rechaza", err(sale(1, pc7, own4, p4), "product_not_found") and stk() == 5)
+ok("punto 9: cambiar la cantidad de una venta ajusta la diferencia (2 → 3: stock 4)",
+   not err(q("update walkins set qty=3 where id=%s", (w7,), uid=own7)) and stk() == 4)
+ok("punto 9: …y no deja pasar del stock (3 → 9: no_stock)", err(q("update walkins set qty=9 where id=%s", (w7,), uid=own7), "no_stock") and stk() == 4)
+ok("punto 9: editar el monto o el medio de una venta no toca el stock",
+   not err(q("update walkins set amount=9000, method='transfer' where id=%s", (w7,), uid=own7)) and stk() == 4)
+ok("punto 9: borrar la venta devuelve las unidades (4 + 3 = 7)", not err(q("delete from walkins where id=%s", (w7,), uid=own7)) and stk() == 7)
+ok("punto 9: una venta vieja sin producto no toca ningún stock",
+   not err(q("insert into walkins (provider_id, kind, description, amount, method) values (%s,'product','Cera mate',8500,'cash')", (p7,), uid=own7)) and stk() == 7)
+# «Ajustar stock»: lo que sale sin venderse (roto, vencido, uso en el local). Solo resta; no es venta ni gasto.
+nw7 = lambda: q("select count(*) from walkins where provider_id=%s", (p7,))[0][0]
+ne7 = lambda: q("select count(*), coalesce(sum(amount), 0) from expenses where provider_id=%s", (p7,))[0]
+w0, e0 = nw7(), ne7()
+ra7 = q("select product_adjust(%s, 2, 'broken')", (pc7,), uid=own7)
+ok("punto 9: «Ajustar stock» resta (7 − 2 = 5) y queda anotado con su motivo",
+   not err(ra7) and ra7[0][0]["stock"] == 5 and stk() == 5
+   and q("select provider_id, product_id, qty, reason from stock_adjustments where id=%s", (ra7[0][0]["id"],))[0] == (p7, pc7, 2, "broken"), str(ra7))
+ok("punto 9: …no va a la caja (walkins) ni a los gastos del mes", nw7() == w0 and ne7() == e0)
+ok("punto 9: el motivo es obligatorio y uno de roto, vencido o uso en el local",
+   err(q("select product_adjust(%s, 1, null)", (pc7,), uid=own7), "bad_reason") and err(q("select product_adjust(%s, 1, 'regalo')", (pc7,), uid=own7), "bad_reason")
+   and not err(q("select product_adjust(%s, 1, 'expired')", (pc7,), uid=own7)) and not err(q("select product_adjust(%s, 1, 'in_use')", (pc7,), uid=own7)) and stk() == 3)
+ok("punto 9: no se ajusta más que el stock ni una cantidad 0 o negativa (solo resta)",
+   err(q("select product_adjust(%s, 4, 'broken')", (pc7,), uid=own7), "no_stock") and err(q("select product_adjust(%s, 0, 'broken')", (pc7,), uid=own7), "bad_qty")
+   and err(q("select product_adjust(%s, -3, 'broken')", (pc7,), uid=own7), "bad_qty") and stk() == 3)
+ok("punto 9: otro prestador no ajusta un producto ajeno, ni ve sus ajustes",
+   err(q("select product_adjust(%s, 1, 'broken')", (pc7,), uid=own4), "product_not_found") and stk() == 3
+   and q("select count(*) from stock_adjustments", uid=own4)[0][0] == 0 and q("select count(*) from stock_adjustments", uid=own7)[0][0] == 3)
+ok("punto 9: nadie escribe directo en los ajustes (ni anon ni el dueño)",
+   err(q("insert into stock_adjustments (provider_id, product_id, qty, reason) values (%s,%s,1,'broken')", (p7, pc7), uid=own7))
+   and err(q("update stock_adjustments set qty=9 where provider_id=%s", (p7,), uid=own7)) and err(q("delete from stock_adjustments", uid=own7))
+   and err(q("select count(*) from stock_adjustments", role="anon")) and q("select count(*) from stock_adjustments where provider_id=%s", (p7,))[0][0] == 3)
+q("update products set stock=7 where id=%s", (pc7,))
+# el producto nuevo con su stock inicial, todo junto
+ra = q("select product_add('Gel C9', 6000, 2500, 4, 1)", uid=own7)
+ok("punto 9: producto nuevo con stock inicial y precio de compra: el producto y el gasto «Stock inicial» (4 × $2.500)",
+   not err(ra) and q("select stock, min_stock, cost from products where id=%s", (ra[0][0]["id"],))[0] == (4, 1, 2500)
+   and q("select concept, amount, category, product_id, qty from expenses where id=%s", (ra[0][0]["expense_id"],))[0] == ("Stock inicial: Gel C9 × 4", 10000, "Productos", ra[0][0]["id"], 4), str(ra))
+rn = q("select product_add('Peine C9', 3000, null, 2, 0)", uid=own7)
+ok("punto 9: sin precio de compra, el producto entra sin gasto", not err(rn) and rn[0][0]["expense_id"] is None
+   and q("select stock from products where id=%s", (rn[0][0]["id"],))[0][0] == 2)
+ok("punto 9: un nombre repetido o un stock negativo se rechazan", err(q("select product_add('gel c9', 1, null, 0, 0)", uid=own7))
+   and err(q("select product_add('Otro C9', 1, null, -1, 0)", uid=own7), "bad_qty"))
+q("insert into cash_closings (provider_id, kind, period) values (%s, 'month', %s)", (p7, m0))
+ok("punto 9: con el mes cerrado, un producto con stock inicial a costo no entra (sin costo, sí)",
+   err(q("select product_add('Cerrado C9', 1000, 500, 2, 0)", uid=own7), "month_closed")
+   and q("select count(*) from products where provider_id=%s and name='Cerrado C9'", (p7,))[0][0] == 0
+   and not err(q("select product_add('Sin costo C9', 1000, null, 2, 0)", uid=own7)))
+q("delete from cash_closings where provider_id=%s and kind='month' and period=%s", (p7, m0))
+ok("punto 9: un cliente no da de alta productos", err(q("select product_add('Hack', 1, null, 1, 0)", uid=cli1), "not_provider"))
+own9 = mkuser("ajustes9@test.ar", "Ajustes")
+p9 = q("select register_provider('Ajustes P9', 'Calle 9', array['b'], '2284 0909', null)", uid=own9)[0][0]
+pr9 = q("select product_add('Cera P9', 1000, null, 3, 0)", uid=own9)[0][0]["id"]
+q("select product_adjust(%s, 1, 'in_use')", (pr9,), uid=own9)
+ok("punto 9: al dar de baja el negocio, sus ajustes de stock se borran", not err(q("select delete_my_provider()", uid=own9))
+   and q("select count(*) from stock_adjustments where provider_id=%s", (p9,))[0][0] == 0)
+
 # ---------- V5 resto · C29 interruptor global de los sellos ----------
 own29 = mkuser("sellos29@test.ar", "Sellos")
 p29 = q("select register_provider('Sellos C29', 'Calle 29', array['b'], '2284 2929', null)", uid=own29)[0][0]

@@ -91,6 +91,12 @@ const ERRS = {
   bad_amount: "Escribí un monto válido.",
   empty_concept: "Escribí el concepto.",
   bad_day: "Fecha inválida.",
+  // 10/11 · punto 9: el stock lo lleva la base (compra, venta, ajuste)
+  no_stock: "No alcanza el stock de ese producto. Revisalo en Productos.",
+  stock_locked: "El stock cambia solo con una compra, una venta o un ajuste.",
+  product_not_found: "Ese producto ya no está en tu lista.",
+  bad_qty: "Escribí la cantidad con números enteros (1 o más).",
+  bad_reason: "Elegí el motivo: roto, vencido o uso en el local.",
   // gastos fijos (C31, D44): se cambian solo desde el mes actual y desde «Gastos fijos»
   bad_month: "Los gastos fijos se cambian desde el mes actual en adelante.",
   fixed_expense: "Ese gasto es fijo: cambialo desde «Gastos fijos».",

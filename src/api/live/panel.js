@@ -133,7 +133,7 @@ export const livePanel = {
     // C31: los gastos fijos que falten hasta este mes (y los precargados la primera vez), antes de leer los gastos
     await call(sb.rpc("fixed_expenses_sync")).catch(() => null);
     await liveApi.loadFixed(pid);
-    const [bookings, clients, products, expenses, walkins, templates, finance, priv, occupancy, cards, closings, mpSt, notices, blocked] = await Promise.all([
+    const [bookings, clients, products, expenses, walkins, templates, finance, priv, occupancy, cards, closings, mpSt, notices, adjusts, blocked] = await Promise.all([
       call(bookingsQuery(pid, from, to)),
       call(sb.from("provider_clients").select("*").eq("provider_id", pid).limit(5e3)),
       call(sb.from("products").select("*").eq("provider_id", pid).order("name")),
@@ -180,6 +180,8 @@ export const livePanel = {
       // Bloque 1: si hoy puede cobrar y qué depende de cuentas anteriores; avisos de pagos devueltos o contracargos
       call(sb.rpc("my_mp_status")),
       call(sb.rpc("my_provider_notices")),
+      // 10/11 · punto 9: los últimos ajustes de stock (roto, vencido, uso en el local), para mostrarlos en cada producto
+      call(sb.from("stock_adjustments").select("product_id,at,qty,reason").eq("provider_id", pid).order("at", { ascending: false }).limit(300)).catch(() => []),
       // D45: Clientes → Bloqueados
       call(sb.rpc("my_blocked")).catch(() => []),
     ]);
@@ -219,6 +221,7 @@ export const livePanel = {
       min: row.min_stock,
       // C36: precio de compra (opcional)
       cost: row.cost == null ? null : row.cost,
+      adj: (adjusts || []).filter((adj) => adj.product_id === row.id).map((adj) => ({ d: isoToLocal(adj.at).date, qty: adj.qty, reason: adj.reason })),
     }));
     store.GASTOS = (expenses || []).map(expenseFromDb);
     store.CLOSINGS = {};
@@ -361,6 +364,8 @@ export const livePanel = {
     const [row, notices] = await Promise.all([
       call(sb.from("providers").select("followers,status").eq("id", pid).maybeSingle()),
       call(sb.rpc("my_provider_notices")),
+      // 10/11 · punto 9: los últimos ajustes de stock (roto, vencido, uso en el local), para mostrarlos en cada producto
+      call(sb.from("stock_adjustments").select("product_id,at,qty,reason").eq("provider_id", pid).order("at", { ascending: false }).limit(300)).catch(() => []),
     ]);
     const before = JSON.stringify([store.COMM.followers, S.notices, (S.setupBy || {})[pid]]);
     if (row) {

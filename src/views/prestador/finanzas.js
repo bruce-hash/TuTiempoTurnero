@@ -402,7 +402,7 @@ function vFinMes() {
   ${monthSummary(year, month - 1, totals)}
   ${fixedPanel(ym, current, closing)}
   <div class="panel"><p class="lbl">Gastos variables</p>
-   <p class="note" style="text-align:left;margin:-2px 0 10px">Lo que no se repite todos los meses; se suma en el resumen del mes. Las compras de productos se cargan solas desde Productos (el stock inicial y “Compré más”).</p>
+   <p class="note" style="text-align:left;margin:-2px 0 10px">Lo que no se repite todos los meses; se suma en el resumen del mes. Las compras de productos se cargan solas desde Productos (el stock inicial y «Cargar compra»).</p>
    ${fixed.length ? `<ul class="ag">${fixed.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c)}</b></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(exp.m)}</b>${closing ? "" : `<button class="xbtn" data-act="gDel" data-id="${exp.id}" aria-label="Borrar gasto">✕</button>`}</span></li>`).join("")}</ul>` : `<p class="note" style="text-align:left">Todavía no cargaste otros gastos este mes.</p>`}
    ${prodBuys.length ? `<p class="lbl" style="margin:12px 0 6px">${ic("productos")} Compras de productos</p><ul class="ag">${prodBuys.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c.replace(/^Compra: /, ""))}</b><span>Desde Productos</span></div><b class="price" style="font-size:15px">${money(exp.m)}</b></li>`).join("")}</ul>` : ""}
    ${
