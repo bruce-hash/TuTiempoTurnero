@@ -81,6 +81,9 @@ const ERRS = {
   bad_amount: "Escribí un monto válido.",
   empty_concept: "Escribí el concepto.",
   bad_day: "Fecha inválida.",
+  // gastos fijos (C31, D44): se cambian solo desde el mes actual y desde «Gastos fijos»
+  bad_month: "Los gastos fijos se cambian desde el mes actual en adelante.",
+  fixed_expense: "Ese gasto es fijo: cambialo desde «Gastos fijos».",
 };
 export function errMsg(err) {
   const text = (err && (err.message || err.error_description || err.msg)) || String(err || "");
