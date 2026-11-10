@@ -8,7 +8,7 @@ import { TODAY } from "../lib/fechas.js";
 import { ME, pr } from "../lib/prestadores.js";
 import { CAT_SLUGS } from "../lib/rubros.js";
 import { isReservedSlug } from "../lib/rutas.js";
-import { selDur } from "../lib/servicios.js";
+import { pickSvc, selDur } from "../lib/servicios.js";
 import { slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { P, store } from "../store.js";
@@ -159,7 +159,7 @@ async function openCheckout(pid, params, path) {
   if (!svc || !/^\d{4}-\d{2}-\d{2}$/.test(day || "") || !/^\d{2}:\d{2}$/.test(time || "")) {
     return showClient("perfil");
   }
-  S.svc = prov.svcs.indexOf(svc);
+  pickSvc(prov, prov.svcs.indexOf(svc));
   S.day = day;
   const free = slotsFor(pid, day, selDur(prov), S.reprog).list.some((slot) => slot.free && slot.time === time);
   if (!free) {

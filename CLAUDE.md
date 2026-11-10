@@ -85,6 +85,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
     «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
     de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
+  - 10/11 (punto 2): en el perfil, elegir un servicio pinta el perfil, el turnero, la confirmación y el pago con la paleta
+    de su rubro (`pickSvc` en `src/lib/servicios.js`: `S.pctx` y `S.svcPickedFor`); sin elegir, el rubro principal o el
+    de donde vino, con un servicio de ese rubro. El cambio se funde con `renderSmooth()` (View Transitions; sin soporte o
+    con movimiento reducido, directo).
   - D36: la campanita de avisos de la cabecera (`src/ui/campanita.js` + `src/actions/campanita.js`): `S.inbox` del
     cliente (con `msgAction`) y `S.notices` del profesional. Mis turnos y el panel ya no muestran avisos.
   - D37: íconos propios, sin emojis en la interfaz: `ic("nombre")` de `src/lib/iconos.js` (SVG en línea, trazo del color
