@@ -14,6 +14,11 @@ Object.assign(LM, {
   // 4/11 · Bloque 3: ofrecer un hueco libre a todos los seguidores (user null) o a uno. Devuelve {id, sent}.
   offerSlot: (day, from, to, user) =>
     saved(sb.rpc("offer_slot", { p_starts: localToIso(day, from), p_ends: localToIso(day, to), p_user: user || null })),
+  // D45: eliminar de la lista (contacto a mano: se borra; cliente de la app: sale de Clientes), bloquear y desbloquear.
+  // cancel: con turnos futuros, true los cancela con la devolución de siempre y false los deja.
+  removeClient: (client, cancel) => saved(sb.rpc("remove_client", { p_client: client.id, p_cancel: cancel == null ? null : !!cancel })),
+  blockClient: (user, cancel) => saved(sb.rpc("block_client", { p_user: user, p_cancel: cancel == null ? null : !!cancel })),
+  unblockClient: (user) => saved(sb.rpc("unblock_client", { p_user: user })),
   markBooking: (booking, status) =>
     saved(
       sb.rpc("mark_booking", {

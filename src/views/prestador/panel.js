@@ -34,6 +34,7 @@ export function useProvider(pid) {
   if (S.me != null) {
     STORE[S.me] = {
       CLIENTS: store.CLIENTS,
+      BLOCKED: store.BLOCKED,
       PRODS: store.PRODS,
       GASTOS: store.GASTOS,
       FIN: store.FIN,
@@ -48,6 +49,7 @@ export function useProvider(pid) {
   S.me = pid;
   const kept = STORE[pid] || (LIVE ? emptyStore() : seedStore(pid));
   store.CLIENTS = kept.CLIENTS;
+  store.BLOCKED = kept.BLOCKED || [];
   store.PRODS = kept.PRODS;
   store.GASTOS = kept.GASTOS;
   store.FIN = kept.FIN;

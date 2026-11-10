@@ -39,6 +39,8 @@
 .slot[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:var(--on-brand);box-shadow:0 8px 18px -8px var(--glow);transform:translateY(-1px)}
 .hh-leg{display:flex;align-items:center;gap:6px;justify-content:center;font-size:12px;color:var(--muted);margin:12px 0 0}
 .pk-full{text-align:center;padding:10px 0}
+/* D45: el perfil de un profesional que no le muestra horarios a quien lo mira */
+.pk-none{text-align:center;padding:26px 12px 18px}
 .pk-pol{padding:0 14px 12px;margin:0}
 .bookbar{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5;display:flex;align-items:center;gap:12px;background:var(--bar-bg);color:var(--bar-fg);border:1px solid var(--bar-bd);border-radius:max(var(--r),12px);padding:10px 10px 10px 16px;box-shadow:0 14px 30px -12px rgba(0,0,0,.55)}
 .bookbar .btn-pri,.prevbar .btn-pri{background:var(--bar-btn);color:var(--bar-btn-fg)}

@@ -66,6 +66,27 @@
 .folpick{padding:4px 2px 12px}
 .folgaps{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 .folgaps .slot{font-size:13px;padding:9px 6px}
+/* D45: Eliminar de la lista y Bloquear (al final de la ficha, chicos y grises), sus confirmaciones y Bloqueados */
+.cli-more{display:flex;justify-content:center;flex-wrap:wrap;gap:2px 26px;padding:2px 0 6px}
+.cli-more .lnk,.blk-link .lnk{color:var(--muted);font-size:13px;display:inline-flex;align-items:center;gap:6px;padding:8px 2px}
+.blk-link{display:flex;justify-content:center}
+.blk-link .lnk{padding:10px 4px}
+.cliask .ag{margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;list-style:none}
+.cliask .ag li{padding:0}
+.cliask .ag li+li{padding-top:10px;margin-top:10px}
+.cliask .sub{font-size:14px;margin:14px 0 0;font-weight:700}
+.optbtns{display:grid;gap:6px;margin-top:14px}
+.optbtns .note{text-align:left;margin:0 2px 8px}
+.optbtns .lnk{justify-self:center;color:var(--muted);font-size:14px;padding:8px}
+.optrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.blist .crow{cursor:default}
+.blist .cr-r{margin-left:auto;flex:none}
+.blist img.av{object-fit:cover}
+.folist .folblk{color:var(--muted);font-size:12.5px;display:inline-flex;align-items:center;gap:4px;padding:8px 4px}
+.folist .folblk .ic{width:14px;height:14px}
+/* Historial de la ficha: la columna del día entra entera («3 semanas», «Mañana») */
+.ag.hist li{grid-template-columns:minmax(52px,max-content) minmax(0,1fr) auto}
+.ag.hist .ag-t{white-space:nowrap}
 
 /* 10/11 (propuesta): la leyenda y los turnos, sin depender solo del color. Lo mismo en todos los rubros, salvo «Por la
    app», que lleva el color de la marca del rubro (la reserva paga, la que más importa ver) */

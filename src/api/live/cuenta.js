@@ -169,6 +169,8 @@ export const liveCuenta = {
             note: row.prep_note || "",
             reviewed: !!row.reviewed,
             stamped: !!row.stamped,
+            // D45: ese profesional no le muestra horarios (sin «Reprogramar» ni «Reservar de nuevo»)
+            noSlots: !!row.no_slots,
           },
           isoToLocal(row.starts_at),
         );

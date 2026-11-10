@@ -1913,6 +1913,99 @@ async function turnoConMargen(p) {
        && (await q("select count(*)::int c from client_messages where user_id = $1 and body = 'Novedad después de dejar de seguir'", [anaId]))[0].c === 0);
     await ctxS.close(); await ctxA.close();
   }
+  // ---- D45 inicio: eliminar clientes de la lista y bloquear (punto 10)
+  {
+    const sofi = (await q("select id, slug from providers where name like 'Sofía%'"))[0];
+    await db.query("update auth.users set encrypted_password = 'cliente12345', email_confirmed_at = coalesce(email_confirmed_at, now()) where email = 'ana@test.ar'");
+    const anaId = (await q("select id from auth.users where email = 'ana@test.ar'"))[0].id;
+    // Ana es clienta de Sofía (un turno al que fue) y la sigue; sin bloqueos ni marcas de antes
+    if (!(await q("select 1 from bookings where provider_id = $1 and client_id = $2 limit 1", [sofi.id, anaId])).length) {
+      await db.query("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Ana L.', 'Lifting de pestañas', 'app', 'done', now() - interval '9 days', now() - interval '9 days' + interval '1 hour', 15000)", [sofi.id, anaId]);
+    }
+    await db.query("select link_client($1, $2, 'Ana L.')", [sofi.id, anaId]);
+    await db.query("delete from client_blocks where provider_id = $1", [sofi.id]);
+    await db.query("update provider_clients set hidden_at = null where provider_id = $1", [sofi.id]);
+    await db.query("insert into follows (user_id, provider_id) values ($1, $2) on conflict do nothing", [anaId, sofi.id]);
+    const anaName = (await q("select name from provider_clients where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].name;
+    const login = async (page, email, pass) => {
+      await page.goto(BASE + "/ingresar"); await page.waitForSelector("#ai_e");
+      await page.fill("#ai_e", email); await page.fill("#ai_p", pass); await page.click("#fLogin button[type=submit]");
+      await page.waitForFunction(() => !!S.user, null, { timeout: 10000 }).catch(() => {}); await page.waitForTimeout(800);
+    };
+    const ctxS = await b.newContext({ viewport: { width: 400, height: 900 } }); const ps = await ctxS.newPage(); ps.on("pageerror", (e) => errs.push(e.message));
+    const ctxA = await b.newContext({ viewport: { width: 400, height: 900 } }); const pa = await ctxA.newPage(); pa.on("pageerror", (e) => errs.push(e.message));
+    const stxt = () => ps.locator("#app").innerText();
+    // un comienzo válido del primer día con lugar desde mañana (D31), del servicio más corto de Sofía
+    const svc = (await q("select id, duration_min from services where provider_id = $1 and active order by duration_min limit 1", [sofi.id]))[0];
+    const slot = (await q(`select (s at time zone public.provider_tz($1))::text t from generate_series(1, 14) d,
+                            lateral public.slot_starts($1, ((now() at time zone 'America/Argentina/Buenos_Aires')::date + d), $2) s
+                           order by s limit 1`, [sofi.id, svc.duration_min]))[0].t;
+    const tryBook = (page) => page.evaluate(async ([service, start]) => { const r = await sb.rpc("book_slot", { p_service: service, p_start: start }); return r.error ? r.error.message : r.data; }, [svc.id, slot]);
+    const tryFollow = (page) => page.evaluate(async ([pid, uid]) => { const r = await sb.from("follows").insert({ user_id: uid, provider_id: pid }); return r.error ? r.error.message : "ok"; }, [sofi.id, anaId]);
+
+    await login(ps, "sofia@test.ar", "prestador123");
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".folist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    ok("D45: en Seguidores cada fila tiene «Bloquear»", (await ps.locator(".folist [data-act=folBlock]").count()) >= 1);
+    await ps.locator(".folist li", { hasText: "Ana" }).locator("[data-act=folBlock]").click(); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: «Bloquear» de una seguidora que ya reservó abre su ficha con el recuadro (no le avisamos, se desbloquea en Bloqueados)",
+       new RegExp("Bloquear a " + anaName.replace(".", "\\.")).test(await ps.locator(".cliask").innerText().catch(() => "")) && /No le avisamos que lo bloqueaste/.test(await stxt()));
+    const keep = ps.locator('.cliask [data-act=cliDo][data-c="0"]');
+    await ((await keep.count()) ? keep.click() : ps.click(".cliask [data-act=cliDo]"));
+    const blocked = await until("select count(*)::int c from client_blocks where provider_id = $1 and user_id = $2", [sofi.id, anaId], (r) => r[0].c === 1);
+    await ps.waitForSelector(".ctabs", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    ok("D45: bloqueada: deja de seguirla y sale de Clientes", blocked && (await q("select count(*)::int c from follows where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].c === 0
+       && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 0);
+    ok("D45: al final de Clientes, «Bloqueados · 1»", /Bloqueados · 1/.test(await ps.locator(".blk-link").innerText().catch(() => "")));
+    await ps.click(".blk-link [data-act=ctab]"); await ps.waitForTimeout(400);
+    ok("D45: Bloqueados la muestra con «Desde el …» y «Desbloquear» (con su dirección)", new RegExp(anaName.replace(".", "\\.")).test(await ps.locator(".blist").innerText().catch(() => ""))
+       && /Desde el \d{1,2}\/\d{1,2}/.test(await ps.locator(".blist").innerText()) && new URL(ps.url()).searchParams.get("ver") === "bloqueados");
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".ctabs"); await ps.waitForTimeout(500);
+    ok("D45: …sale de Seguidores y el link también está ahí", !/Ana/.test(await ps.locator(".folist").innerText().catch(() => ""))
+       && /Bloqueados · 1/.test(await ps.locator(".blk-link").innerText().catch(() => "")));
+    // lo que ve Ana (sin decirle que la bloquearon)
+    await login(pa, "ana@test.ar", "cliente12345");
+    await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(500);
+    const perfilA = await pa.locator("#app").innerText();
+    ok("D45: la bloqueada ve los servicios pero «No hay turnos disponibles con este profesional», sin Seguir ni «Disponible»",
+       /No hay turnos disponibles con este profesional/.test(perfilA) && (await pa.locator(".sgroup").count()) >= 1 && (await pa.locator("[data-act=seguir], .phero .badge, [data-act=waitlist], .quick, .slot").count()) === 0
+       && !/bloque/i.test(perfilA));
+    ok("D45: por la API tampoco puede seguir ni reservar (mensajes neutros)", /follow_unavailable/.test(await tryFollow(pa)) && /no_slots/.test(String(await tryBook(pa))));
+    // desbloquear: vuelve enseguida a Clientes y puede reservar y seguir (no la vuelve a seguir sola)
+    await ps.goto(BASE + "/panel/clientes?ver=bloqueados"); await ps.waitForSelector(".blist", { timeout: 8000 }).catch(() => {});
+    await ps.click(".blist [data-act=unblock]");
+    const unblocked = await until("select count(*)::int c from client_blocks where provider_id = $1", [sofi.id], (r) => r[0].c === 0);
+    await ps.goto(BASE + "/panel/clientes"); await ps.waitForSelector(".clist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    ok("D45: desbloqueada vuelve a Clientes y no la sigue sola", unblocked && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 1
+       && (await ps.locator(".blk-link").count()) === 0 && (await q("select count(*)::int c from follows where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].c === 0);
+    await pa.reload(); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(500);
+    const booked = await tryBook(pa);
+    ok("D45: desbloqueada ve horarios y Seguir, y puede reservar", (await pa.locator("[data-act=seguir]").count()) >= 1 && !/No hay turnos disponibles/.test(await pa.locator("#app").innerText())
+       && booked && booked.status === "pending_payment", JSON.stringify(booked));
+    if (booked && booked.booking_ids) await db.query("update bookings set status = 'expired', hold_expires_at = null where id = any($1)", [booked.booking_ids]);
+    // eliminar de la lista: la clienta de la app (sale de Clientes, no se borra) y un contacto cargado a mano (se borra)
+    await ps.click(`.clist [data-cli="${anaName}"]`); await ps.waitForSelector(".cli-more", { timeout: 8000 }).catch(() => {});
+    await ps.click(".cli-more [data-act=cliAsk][data-k=del]"); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: «Eliminar de mi lista» explica que el historial queda y que vuelve si reserva", /Si vuelve a reservarte, aparece de nuevo en tu lista/.test(await ps.locator(".cliask").innerText().catch(() => "")));
+    const keepD = ps.locator('.cliask [data-act=cliDo][data-c="0"]');
+    await ((await keepD.count()) ? keepD.click() : ps.click(".cliask [data-act=cliDo]"));
+    const hidden = await until("select count(*)::int c from provider_clients where provider_id = $1 and user_id = $2 and hidden_at is not null", [sofi.id, anaId], (r) => r[0].c === 1);
+    await ps.waitForTimeout(300);
+    ok("D45: la clienta de la app sale de Clientes sin borrarse (sus turnos quedan)", hidden && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 0
+       && (await q("select count(*)::int c from bookings where provider_id = $1 and client_id = $2", [sofi.id, anaId]))[0].c >= 1);
+    await db.query("update provider_clients set hidden_at = null where provider_id = $1", [sofi.id]);
+    await db.query("insert into provider_clients (provider_id, name, phone) values ($1, 'Contacto E2E', '2284 101010') on conflict do nothing", [sofi.id]);
+    await ps.goto(BASE + "/panel/clientes"); await ps.waitForSelector(".clist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    await ps.click('.clist [data-cli="Contacto E2E"]'); await ps.waitForSelector(".cli-more", { timeout: 8000 }).catch(() => {});
+    ok("D45: al contacto cargado a mano, solo «Eliminar» (sin «Bloquear»)", (await ps.locator(".cli-more [data-k=del]").count()) === 1 && (await ps.locator(".cli-more [data-k=block]").count()) === 0);
+    await ps.click(".cli-more [data-act=cliAsk][data-k=del]"); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: el contacto avisa que se borra y no se puede deshacer", /Eliminar el contacto Contacto E2E/.test(await ps.locator(".cliask").innerText()) && /No se puede deshacer/.test(await ps.locator(".cliask").innerText()));
+    await ps.click(".cliask [data-act=cliDo]");
+    const gone = await until("select count(*)::int c from provider_clients where provider_id = $1 and name = 'Contacto E2E'", [sofi.id], (r) => r[0].c === 0);
+    await ps.waitForTimeout(300);
+    ok("D45: el contacto se borra y sale de la lista", gone && (await ps.locator('.clist [data-cli="Contacto E2E"]').count()) === 0);
+    await ctxS.close(); await ctxA.close();
+  }
+  // ---- D45 fin
   // 10/11 · punto 6: tocar un turno de la Agenda abre su detalle a la primera, en el celular y en la compu, tocando
   // varios seguidos y también si la Agenda se pone al día justo durante el toque
   {
