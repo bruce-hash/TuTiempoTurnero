@@ -953,6 +953,10 @@ await q("update message_templates set body = $1 where provider_id = $2 and key =
      && after.some((x: any) => x.label === "caido" && x.status === "pending" && x.attempts === 1 && x.last_status === 503)
      && after.some((x: any) => x.label === "otra-clave" && x.status === "failed" && x.last_status === 403));
   ok("410: la suscripción vencida se borró", Number(await one("select count(*) from push_subscriptions where endpoint = $1", [dB.endpoint])) === 0);
+  // 10/11: …y queda el rastro (cuenta, dispositivo, servidor de push y código), sin el endpoint
+  const gone = await q("select label, host, status, kind from push_gone order by id desc limit 1");
+  ok("410: queda el rastro en push_gone (dispositivo, servidor, código; sin el endpoint)", gone.length === 1 && gone[0].label === "viejo" && gone[0].status === 410
+     && gone[0].kind === "conf" && !!gone[0].host && !String(gone[0].host).includes("/"), JSON.stringify(gone));
   ok("el log dice qué pasó con el 403 (clave VAPID) sin el contenido ni el endpoint completo", logs.some((l) => l.includes("rechazó la firma VAPID (403)"))
      && !logs.some((l) => l.includes(dA.endpoint) || l.includes(dD.endpoint) || l.includes("Turno confirmado")));
   const n0 = ps.recibidos.length;
