@@ -8,6 +8,8 @@ const WHY = {
   booking_unavailable: "el turno ya no estaba disponible cuando se acreditó tu pago",
   amount_short: "el pago no alcanzó para el turno",
   booking_past: "tu pago se acreditó después de la hora del turno",
+  // D43 (10/11): el pago llegó con el profesional suspendido
+  provider_suspended: "el profesional no está tomando reservas por ahora",
 };
 export function refundText(booking) {
   const refund = booking.refund;

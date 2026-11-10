@@ -14,6 +14,11 @@ Object.assign(LM, {
   // 4/11 · Bloque 3: ofrecer un hueco libre a todos los seguidores (user null) o a uno. Devuelve {id, sent}.
   offerSlot: (day, from, to, user) =>
     saved(sb.rpc("offer_slot", { p_starts: localToIso(day, from), p_ends: localToIso(day, to), p_user: user || null })),
+  // D45: eliminar de la lista (contacto a mano: se borra; cliente de la app: sale de Clientes), bloquear y desbloquear.
+  // cancel: con turnos futuros, true los cancela con la devolución de siempre y false los deja.
+  removeClient: (client, cancel) => saved(sb.rpc("remove_client", { p_client: client.id, p_cancel: cancel == null ? null : !!cancel })),
+  blockClient: (user, cancel) => saved(sb.rpc("block_client", { p_user: user, p_cancel: cancel == null ? null : !!cancel })),
+  unblockClient: (user) => saved(sb.rpc("unblock_client", { p_user: user })),
   markBooking: (booking, status) =>
     saved(
       sb.rpc("mark_booking", {
@@ -138,32 +143,34 @@ Object.assign(LM, {
     prod.id
       ? saved(sb.from("products").update({ name: prod.n, price: prod.p, cost: prod.cost == null ? null : prod.cost }).eq("id", prod.id))
       : Promise.resolve(),
-  setStock: (prod) =>
+  // 10/11 · punto 9: el stock lo cambia la base. La compra suma al stock y carga el gasto del mes juntos (product_buy);
+  // devuelve el stock que quedó y el gasto
+  buyProduct: (prod, qty, cost, expense) =>
+    saved(sb.rpc("product_buy", { p_product: prod.id, p_qty: qty, p_cost: cost })).then((res) => {
+      if (expense && res) {
+        expense.id = res.expense_id;
+      }
+      return res;
+    }),
+  // «Ajustar stock» (roto, vencido, uso en el local): solo resta y queda anotado; no es venta ni gasto
+  adjustStock: (prod, qty, reason) => saved(sb.rpc("product_adjust", { p_product: prod.id, p_qty: qty, p_reason: reason })),
+  // el producto nuevo con su stock inicial y, con precio de compra, el gasto «Stock inicial» (product_add)
+  addProduct: (prod, expense) =>
     saved(
-      sb
-        .from("products")
-        .update({
-          stock: prod.stock,
-        })
-        .eq("id", prod.id),
-    ),
-  addProduct: (prod) =>
-    saved(
-      sb
-        .from("products")
-        .insert({
-          provider_id: S.me,
-          name: prod.n,
-          price: prod.p,
-          stock: prod.stock,
-          min_stock: prod.min,
-          // C36: precio de compra (opcional)
-          cost: prod.cost == null ? null : prod.cost,
-        })
-        .select("id")
-        .single(),
-    ).then((row) => {
-      prod.id = row.id;
+      sb.rpc("product_add", {
+        p_name: prod.n,
+        p_price: prod.p,
+        // C36: precio de compra (opcional)
+        p_cost: prod.cost == null ? null : prod.cost,
+        p_stock: prod.stock,
+        p_min: prod.min,
+      }),
+    ).then((res) => {
+      prod.id = res.id;
+      if (expense) {
+        expense.id = res.expense_id;
+        expense.prodId = res.id;
+      }
     }),
   addExpense: (expense) =>
     saved(

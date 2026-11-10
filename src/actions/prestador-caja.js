@@ -148,11 +148,11 @@ registerClick("movDelYes", (ev, el, act) => {
     return render();
   }
   refreshCaja(day, api.m.delWalk(walk));
-  // una venta borrada devuelve sus unidades al stock (4/11: con la cantidad vendida)
-  const prod = walk.kind === "prod" && store.PRODS.find((item) => (walk.pid && item.id === walk.pid) || item.n === walk.svc || walk.svc.startsWith(item.n + " × "));
+  // una venta borrada devuelve sus unidades al stock (4/11: con la cantidad vendida). 10/11: en vivo lo hace la base
+  // (walkins_stock, solo las ventas con producto); acá se muestra igual. En la demo no hay ids: busca por nombre.
+  const prod = walk.kind === "prod" && store.PRODS.find((item) => (walk.pid ? item.id === walk.pid : !walk.id && (item.n === walk.svc || walk.svc.startsWith(item.n + " × "))));
   if (prod) {
     prod.stock += walk.qty || 1;
-    api.m.setStock(prod);
   }
   toast("Borraste " + walk.svc + " de las " + walk.hora);
   render();
@@ -388,8 +388,8 @@ registerSubmit("fSale", (ev) => {
   };
   const list = walksOf(walk.date);
   list.push(walk);
+  // 10/11: el stock lo baja la base al guardar la venta (walkins_stock; no_stock si no alcanza)
   refreshCaja(walk.date, api.m.addWalk(walk));
-  api.m.setStock(prod);
   list.sort((one, other) => one.hora.localeCompare(other.hora));
   S.saleOpen = false;
   toast(`Venta guardada: ${walk.svc} · ${money(price)}. Quedan ${prod.stock} en stock.`);

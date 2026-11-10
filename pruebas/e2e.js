@@ -503,8 +503,34 @@ async function turnoConMargen(p) {
   await pg.click("[data-btab=productos]"); await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Gel top coat"); await pg.fill("#pnp", "8000"); await pg.fill("#pns", "3");
   await pg.click("#fProd button[type=submit]"); await wait(600);
   ok("producto guardado", (await q("select stock from products where name='Gel top coat'"))[0]?.stock === 3);
-  await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]"); await wait(800);
-  ok("compra suma stock y carga gasto", (await q("select stock from products where name='Gel top coat'"))[0].stock === 9 && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  // 10/11 · punto 9: el stock no se toca a mano: sube con «Cargar compra» y baja con una venta o «Ajustar stock»
+  ok("punto 9: Productos ya no tiene los botones + y − del stock, y la compra es «Cargar compra»",
+     (await pg.locator("[data-act=stk]").count()) === 0 && /Cargar compra/.test(await pg.locator('.plist li:has-text("Gel top coat") [data-act=buyOpen]').innerText()));
+  await pg.click("[data-act=buyOpen]"); await pg.fill("#bq", "6"); await pg.fill("#bc", "30000"); await pg.click("#fBuy button[type=submit]");
+  ok("compra suma stock y carga gasto", await until("select stock from products where name='Gel top coat'", [], (r) => r[0]?.stock === 9) && (await q("select count(*)::int c from expenses where amount=30000"))[0].c === 1);
+  ok("punto 9: la compra es un gasto de productos de hoy, ligado al producto y con la cantidad",
+     await until("select e.concept, e.category, e.qty, e.product_id = p.id same, e.spent_on = (now() at time zone 'America/Argentina/Buenos_Aires')::date hoy from expenses e join products p on p.name = 'Gel top coat' where e.amount = 30000", [],
+                 (r) => r.length === 1 && r[0].concept === "Compra: Gel top coat × 6" && r[0].category === "Productos" && r[0].qty === 6 && r[0].same && r[0].hoy));
+  ok("punto 9: …y el stock nuevo se ve en Productos", /9\s*en stock/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-n').innerText()));
+  // «Ajustar stock»: solo resta, con motivo; no es venta ni gasto
+  {
+    const nWalk = (await q("select count(*)::int c from walkins"))[0].c, nExp = (await q("select count(*)::int c, coalesce(sum(amount),0)::int s from expenses"))[0];
+    await wait(700);
+    await pg.click('.plist li:has-text("Gel top coat") [data-act=adjOpen]'); await wait(200);
+    await pg.fill("#aq", "2"); await pg.click("#fAdj button[type=submit]"); await wait(300);
+    ok("punto 9: «Ajustar stock» pide el motivo", /Elegí el motivo/.test(await pg.locator("#aerr").innerText()) && (await q("select stock from products where name='Gel top coat'"))[0].stock === 9);
+    await wait(700);
+    await pg.click('#fAdj [data-act=adjWhy][data-r=broken]'); await pg.click("#fAdj button[type=submit]");
+    ok("punto 9: el ajuste baja el stock (9 − 2) y queda anotado con su motivo",
+       await until("select p.stock, a.qty, a.reason from products p join stock_adjustments a on a.product_id = p.id where p.name = 'Gel top coat'", [], (r) => r.length === 1 && r[0].stock === 7 && r[0].qty === 2 && r[0].reason === "broken"));
+    ok("punto 9: …se ve en el producto («−2 Roto») con el stock nuevo", /−2 Roto/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-adjlog').innerText())
+       && /7\s*en stock/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-n').innerText()));
+    const nExp2 = (await q("select count(*)::int c, coalesce(sum(amount),0)::int s from expenses"))[0];
+    ok("punto 9: …y no entra en la caja ni en los gastos del mes", (await q("select count(*)::int c from walkins"))[0].c === nWalk && nExp2.c === nExp.c && nExp2.s === nExp.s);
+    await pg.reload(); await pg.waitForSelector("[data-btab=productos]"); await pg.click("[data-btab=productos]");
+    await pg.waitForSelector('.plist li:has-text("Gel top coat")', { timeout: 8000 }).catch(() => {}); await wait(300);
+    ok("punto 9: al volver a cargar, el ajuste sigue en el producto (lo trae la base)", /−2 Roto/.test(await pg.locator('.plist li:has-text("Gel top coat") .pl-adjlog').innerText().catch(() => "")));
+  }
   // 7/11: «Editar» cambia nombre, precio de venta y de compra; la compra ya cargada no cambia
   await pg.click('.plist li:has-text("Gel top coat") [data-act=prodEdit]'); await wait(300);
   ok("7/11: «Editar» abre el producto con su nombre y su precio", (await pg.inputValue("#pen")) === "Gel top coat" && (await pg.inputValue("#pep")) === "8000");
@@ -551,6 +577,7 @@ async function turnoConMargen(p) {
   ok("gasto del mes cargado una vez (sin categoría ni compras de productos)", (await q("select count(*)::int c from expenses where concept='Alquiler' and amount=150000"))[0].c === 1 && (await pg.locator("#gprod").count()) === 0);
   const msum = await pg.evaluate(() => (document.querySelector(".msum") || {}).textContent || "");
   ok("C33: el resumen del mes separa ingresos por origen y gastos fijos y de productos", /Resumen de [A-ZÁÉÍÓÚ]/.test(msum) && msum.includes("Sin turno") && msum.includes("Gastos fijos") && msum.includes("$150.000") && /Balance: /.test(msum), msum);
+  ok("punto 9: Finanzas → Mes: «Compras de productos» suma la compra ($30.000) y no el ajuste de stock", /Compras de productos\s*\$30\.000/.test(msum), msum);
   ok("C32: los meses van con mayúscula y el balance negativo en rojo", /Balance de [A-ZÁÉÍÓÚ]/.test(await pg.locator(".kpi.big").innerText()) && (await pg.locator(".msum .mbal.neg").count()) === 1);
   // C31 (V4 resto): gastos fijos precargados, sin monto; se cargan con ✎ y se repiten solos
   {
@@ -741,6 +768,9 @@ async function turnoConMargen(p) {
        && (pend0 ? (await pg.locator('.pendday li:has-text("Pendiente C30")').count()) === 0 && /Cerrar igual/.test(await pg.locator("#fCloseDay").innerText())
                  : (await pg.locator(".pendday").count()) === 0 && /Cerrar la caja ·/.test(await pg.locator("#fCloseDay").innerText())));
     // C36 (V4 resto): precio de compra y "Vendí uno" desde Productos, que entra en la Caja del día
+    // D46: con el mes cerrado el stock inicial (con su gasto) no entra: el mes que se cerró más arriba se vuelve a abrir
+    await q("delete from cash_closings where kind='month' and period = date_trunc('month', (now() at time zone 'America/Argentina/Buenos_Aires')::date)::date");
+    await pg.reload(); await wait(1500);
     await pg.click("[data-btab=productos]"); await wait(300);
     await pg.click("[data-act=prodOpen]"); await pg.fill("#pnn", "Cera C36"); await pg.fill("#pnp", "8000"); await pg.fill("#pnc", "4500"); await pg.fill("#pns", "2");
     await pg.click("#fProd button[type=submit]");
@@ -765,6 +795,15 @@ async function turnoConMargen(p) {
     ok("4/11: la venta de 2 queda en la caja con su cantidad y descuenta 2 del stock", await until("select amount, method, qty from walkins where kind='product' and description='Cera C36 × 2'", [], (r) => r.length === 1 && r[0].amount === 16000 && r[0].method === "transfer" && r[0].qty === 2)
        && await until("select stock from products where name='Cera C36'", [], (r) => r[0].stock === 0));
     ok("C36: …y se ve en los movimientos de hoy", (await pg.locator('.movs li:has-text("Cera C36 × 2")').count()) === 1);
+    // 10/11 · punto 9: sin stock, la venta no se ofrece; borrarla devuelve las unidades (lo hace la base)
+    await wait(700); await pg.click("[data-act=saleOpen]"); await wait(200);
+    ok("punto 9: sin stock, «Vender producto» no ofrece Cera C36", await pg.evaluate(() => [...document.querySelectorAll("#spr option")].some((o) => /Cera C36/.test(o.textContent) && o.disabled)));
+    await pg.click("[data-act=saleClose]"); await wait(200);
+    await pg.click('.movs li:has-text("Cera C36 × 2") [data-act=movDel]'); await wait(200); await pg.click("[data-act=movDelYes]");
+    ok("punto 9: borrar la venta la saca de la caja y devuelve las 2 unidades al stock",
+       await until("select (select stock from products where name='Cera C36') s, (select count(*)::int from walkins where description='Cera C36 × 2') w", [], (r) => r[0].s === 2 && r[0].w === 0));
+    await pg.click("[data-btab=productos]"); await wait(300);
+    ok("punto 9: …y Productos muestra el stock devuelto", /2\s*en stock/.test(await pg.locator('.plist li:has-text("Cera C36") .pl-n').innerText()));
   }
   // rubros y servicios: sumar Masajes
   await pg.click("[data-btab=perfil]"); await wait(300);
@@ -1888,6 +1927,63 @@ async function turnoConMargen(p) {
     ok("S19: …ni «Ofrecer» los huecos de la Agenda", (await ps.locator(".tl-gap").count()) >= 1 && (await ps.locator("[data-act=offerGap]").count()) === 0
        && /no podés escribirles a tus seguidores ni ofrecerles turnos/.test(await ps.locator(".tl-panel").innerText()));
     await q("update providers set status = 'active' where id = $1", [sofi.id]);
+    // ---------- 10/11 · punto 11 (D43): el admin suspende con un motivo; el profesional ve el aviso fijo en todo el panel ----------
+    {
+      const ctxC = await b.newContext({ viewport: { width: 1366, height: 900 } }); const pc = await ctxC.newPage(); pc.on("pageerror", (e) => errs.push(e.message));
+      await login(pc, "carla@test.ar", "Nueva2026zz");
+      // verificada con fecha (como las que aprueba el admin desde el 2b): se reactiva sin volver a pedir las fotos del DNI
+      await q("update provider_private set dni_verified_at = now() where provider_id = $1", [sofi.id]);
+      await pc.goto(BASE + "/admin/prestadores"); await pc.waitForSelector(`[data-act=admOpen][data-id="${sofi.id}"]`, { timeout: 8000 }).catch(() => {});
+      await pc.click(`[data-act=admOpen][data-id="${sofi.id}"]`); await pc.waitForSelector(`[data-act=admSusp][data-id="${sofi.id}"]`, { timeout: 8000 }).catch(() => {});
+      await pc.click(`[data-act=admSusp][data-id="${sofi.id}"]`); await pc.waitForSelector("#admSuspWhy", { timeout: 8000 }).catch(() => {});
+      ok("D43: «Suspender» abre el cuadro con el motivo opcional que ve el profesional (todavía no suspende)",
+         /Motivo \(lo ve el profesional\)/.test(await pc.locator(".admsusp").innerText().catch(() => "")) && (await q("select status from providers where id = $1", [sofi.id]))[0].status === "active");
+      const WHY = "Recibimos reclamos <b>de clientes</b>, escribinos";
+      await pc.fill("#admSuspWhy", WHY); await pc.click(".admsusp [data-act=admSet][data-s=suspended]");
+      const susp = await until("select status from providers where id = $1", [sofi.id], (r) => r[0].status === "suspended");
+      ok("D43: el admin la suspende con el motivo: aviso en la campanita y email en la cola", susp
+         && (await q("select count(*)::int c from provider_notices where provider_id = $1 and kind = 'suspended' and strpos(body, $2) > 0", [sofi.id, "Motivo: " + WHY + "."]))[0].c === 1
+         && (await q("select count(*)::int c from email_outbox o join provider_notices n on n.id = o.notice_id where n.provider_id = $1 and strpos(n.body, $2) > 0", [sofi.id, WHY]))[0].c === 1);
+      await pc.waitForSelector(".admsusp-now", { timeout: 8000 }).catch(() => {});
+      ok("D43: la ficha del admin muestra el motivo que ve el profesional (aparte de las notas privadas)",
+         (await pc.locator(".admsusp-now").innerText().catch(() => "")).includes("Motivo que ve el profesional: «" + WHY + "»") && (await pc.locator(`[data-act=admSet][data-id="${sofi.id}"][data-s=active]`).count()) === 1);
+      // Sofía, en el celular: el aviso fijo arriba de todo, en la Agenda y en las otras secciones
+      await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".suspbox", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+      const ab = await ps.locator(".suspbox").innerText().catch(() => "");
+      ok("D43: en la Agenda, «Tu cuenta está suspendida» con el motivo, qué significa y cómo resolverlo (WhatsApp y email)",
+         /Tu cuenta está suspendida/.test(ab) && ab.includes("Motivo: " + WHY) && /No aparecés en el listado/.test(ab) && /No recibís reservas nuevas/.test(ab)
+         && /No podés mandar avisos ni ofertas a tus seguidores/.test(ab) && /Tus turnos ya reservados siguen en pie: atendelos como siempre/.test(ab)
+         && (await ps.locator('.suspbox a[href="https://wa.me/5492284722825"][target=_blank][rel=noopener]').count()) === 1
+         && (await ps.locator('.suspbox a[href="mailto:contacto@tutiempo.com.ar"]').count()) === 1, ab);
+      ok("D43: el aviso va arriba de todo (sobre la cabecera del panel) y entra en el celular",
+         await ps.evaluate(() => { const a = document.querySelector(".suspbox"), h = document.querySelector(".bhead"); return !!a && !!h && a.getBoundingClientRect().bottom <= h.getBoundingClientRect().top + 1
+           && document.documentElement.scrollWidth <= window.innerWidth; }));
+      await ps.evaluate((d) => { S.aday = d; S.awk = null; render(); }, g2.split("|")[0]); await ps.waitForTimeout(300);
+      ok("D43: …sin «Ofrecer» en los huecos (S19), sin la tarjeta del alta y con «Turnos online» avisando que nadie puede reservar",
+         (await ps.locator(".tl-gap").count()) >= 1 && (await ps.locator("[data-act=offerGap]").count()) === 0 && (await ps.locator(".todo").count()) === 0
+         && /Cuenta suspendida: nadie puede reservarte online/.test(await ps.locator(".bhead").innerText()));
+      ok("D43: …y en la campanita, «Cuenta suspendida» con el motivo", await ps.evaluate((w) => (S.notices || []).some((n) => n.kind === "suspended" && n.body.includes(w)), WHY));
+      await ps.goto(BASE + "/panel/finanzas"); await ps.waitForSelector(".suspbox", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(300);
+      ok("D43: en Finanzas también está el aviso, con el motivo", (await ps.locator(".suspbox").innerText().catch(() => "")).includes("Motivo: " + WHY));
+      await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector(".suspbox", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(300);
+      ok("D43: …y en Trabajos, sin «Avisar a tus seguidores»", (await ps.locator(".suspbox").count()) === 1 && (await ps.locator("#postTxt, [data-act=publicar]").count()) === 0);
+      // reactivar: con la Agenda abierta; al volver a la pestaña el aviso desaparece solo (sin recargar)
+      await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".suspbox", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(300);
+      const t0 = (await q("select now() t"))[0].t;
+      await pc.click(`[data-act=admSet][data-id="${sofi.id}"][data-s=active]`);
+      const act = await until("select status from providers where id = $1", [sofi.id], (r) => r[0].status === "active");
+      await volver();
+      await ps.waitForFunction(() => !document.querySelector(".suspbox"), null, { timeout: 8000 }).catch(() => {});
+      await ps.evaluate((d) => { S.aday = d; S.awk = null; render(); }, g2.split("|")[0]); await ps.waitForTimeout(300);
+      ok("D43: el admin la reactiva y el aviso desaparece al volver a la pestaña, con «Ofrecer» de nuevo", act && (await ps.locator(".suspbox").count()) === 0
+         && (await ps.locator("[data-act=offerGap]").count()) >= 1 && !/Cuenta suspendida/.test(await ps.locator(".bhead").innerText()));
+      ok("D43: …y le llega «Tu cuenta está activa de nuevo» (campanita y email), sin el motivo guardado",
+         (await q("select count(*)::int c from provider_notices where provider_id = $1 and kind = 'reactivated' and created_at >= $2", [sofi.id, t0]))[0].c === 1
+         && (await q("select count(*)::int c from email_outbox o join provider_notices n on n.id = o.notice_id where n.provider_id = $1 and n.kind = 'reactivated' and n.created_at >= $2", [sofi.id, t0]))[0].c === 1
+         && (await ps.evaluate(() => (S.notices || []).some((n) => n.kind === "reactivated")))
+         && (await q("select suspended_reason from provider_private where provider_id = $1", [sofi.id]))[0].suspended_reason === null);
+      await ctxC.close();
+    }
     await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector("[data-act=seguir]", { timeout: 8000 }).catch(() => {});
     // Ana deja de seguir: sale de la lista de Sofía
     await pa.waitForSelector("[data-act=seguir]"); await pa.click("[data-act=seguir]");
@@ -1904,6 +2000,99 @@ async function turnoConMargen(p) {
        && (await q("select count(*)::int c from client_messages where user_id = $1 and body = 'Novedad después de dejar de seguir'", [anaId]))[0].c === 0);
     await ctxS.close(); await ctxA.close();
   }
+  // ---- D45 inicio: eliminar clientes de la lista y bloquear (punto 10)
+  {
+    const sofi = (await q("select id, slug from providers where name like 'Sofía%'"))[0];
+    await db.query("update auth.users set encrypted_password = 'cliente12345', email_confirmed_at = coalesce(email_confirmed_at, now()) where email = 'ana@test.ar'");
+    const anaId = (await q("select id from auth.users where email = 'ana@test.ar'"))[0].id;
+    // Ana es clienta de Sofía (un turno al que fue) y la sigue; sin bloqueos ni marcas de antes
+    if (!(await q("select 1 from bookings where provider_id = $1 and client_id = $2 limit 1", [sofi.id, anaId])).length) {
+      await db.query("insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price) values ($1, $2, 'Ana L.', 'Lifting de pestañas', 'app', 'done', now() - interval '9 days', now() - interval '9 days' + interval '1 hour', 15000)", [sofi.id, anaId]);
+    }
+    await db.query("select link_client($1, $2, 'Ana L.')", [sofi.id, anaId]);
+    await db.query("delete from client_blocks where provider_id = $1", [sofi.id]);
+    await db.query("update provider_clients set hidden_at = null where provider_id = $1", [sofi.id]);
+    await db.query("insert into follows (user_id, provider_id) values ($1, $2) on conflict do nothing", [anaId, sofi.id]);
+    const anaName = (await q("select name from provider_clients where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].name;
+    const login = async (page, email, pass) => {
+      await page.goto(BASE + "/ingresar"); await page.waitForSelector("#ai_e");
+      await page.fill("#ai_e", email); await page.fill("#ai_p", pass); await page.click("#fLogin button[type=submit]");
+      await page.waitForFunction(() => !!S.user, null, { timeout: 10000 }).catch(() => {}); await page.waitForTimeout(800);
+    };
+    const ctxS = await b.newContext({ viewport: { width: 400, height: 900 } }); const ps = await ctxS.newPage(); ps.on("pageerror", (e) => errs.push(e.message));
+    const ctxA = await b.newContext({ viewport: { width: 400, height: 900 } }); const pa = await ctxA.newPage(); pa.on("pageerror", (e) => errs.push(e.message));
+    const stxt = () => ps.locator("#app").innerText();
+    // un comienzo válido del primer día con lugar desde mañana (D31), del servicio más corto de Sofía
+    const svc = (await q("select id, duration_min from services where provider_id = $1 and active order by duration_min limit 1", [sofi.id]))[0];
+    const slot = (await q(`select (s at time zone public.provider_tz($1))::text t from generate_series(1, 14) d,
+                            lateral public.slot_starts($1, ((now() at time zone 'America/Argentina/Buenos_Aires')::date + d), $2) s
+                           order by s limit 1`, [sofi.id, svc.duration_min]))[0].t;
+    const tryBook = (page) => page.evaluate(async ([service, start]) => { const r = await sb.rpc("book_slot", { p_service: service, p_start: start }); return r.error ? r.error.message : r.data; }, [svc.id, slot]);
+    const tryFollow = (page) => page.evaluate(async ([pid, uid]) => { const r = await sb.from("follows").insert({ user_id: uid, provider_id: pid }); return r.error ? r.error.message : "ok"; }, [sofi.id, anaId]);
+
+    await login(ps, "sofia@test.ar", "prestador123");
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".folist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
+    ok("D45: en Seguidores cada fila tiene «Bloquear»", (await ps.locator(".folist [data-act=folBlock]").count()) >= 1);
+    await ps.locator(".folist li", { hasText: "Ana" }).locator("[data-act=folBlock]").click(); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: «Bloquear» de una seguidora que ya reservó abre su ficha con el recuadro (no le avisamos, se desbloquea en Bloqueados)",
+       new RegExp("Bloquear a " + anaName.replace(".", "\\.")).test(await ps.locator(".cliask").innerText().catch(() => "")) && /No le avisamos que lo bloqueaste/.test(await stxt()));
+    const keep = ps.locator('.cliask [data-act=cliDo][data-c="0"]');
+    await ((await keep.count()) ? keep.click() : ps.click(".cliask [data-act=cliDo]"));
+    const blocked = await until("select count(*)::int c from client_blocks where provider_id = $1 and user_id = $2", [sofi.id, anaId], (r) => r[0].c === 1);
+    await ps.waitForSelector(".ctabs", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    ok("D45: bloqueada: deja de seguirla y sale de Clientes", blocked && (await q("select count(*)::int c from follows where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].c === 0
+       && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 0);
+    ok("D45: al final de Clientes, «Bloqueados · 1»", /Bloqueados · 1/.test(await ps.locator(".blk-link").innerText().catch(() => "")));
+    await ps.click(".blk-link [data-act=ctab]"); await ps.waitForTimeout(400);
+    ok("D45: Bloqueados la muestra con «Desde el …» y «Desbloquear» (con su dirección)", new RegExp(anaName.replace(".", "\\.")).test(await ps.locator(".blist").innerText().catch(() => ""))
+       && /Desde el \d{1,2}\/\d{1,2}/.test(await ps.locator(".blist").innerText()) && new URL(ps.url()).searchParams.get("ver") === "bloqueados");
+    await ps.goto(BASE + "/panel/clientes?ver=seguidores"); await ps.waitForSelector(".ctabs"); await ps.waitForTimeout(500);
+    ok("D45: …sale de Seguidores y el link también está ahí", !/Ana/.test(await ps.locator(".folist").innerText().catch(() => ""))
+       && /Bloqueados · 1/.test(await ps.locator(".blk-link").innerText().catch(() => "")));
+    // lo que ve Ana (sin decirle que la bloquearon)
+    await login(pa, "ana@test.ar", "cliente12345");
+    await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(500);
+    const perfilA = await pa.locator("#app").innerText();
+    ok("D45: la bloqueada ve los servicios pero «No hay turnos disponibles con este profesional», sin Seguir ni «Disponible»",
+       /No hay turnos disponibles con este profesional/.test(perfilA) && (await pa.locator(".sgroup").count()) >= 1 && (await pa.locator("[data-act=seguir], .phero .badge, [data-act=waitlist], .quick, .slot").count()) === 0
+       && !/bloque/i.test(perfilA));
+    ok("D45: por la API tampoco puede seguir ni reservar (mensajes neutros)", /follow_unavailable/.test(await tryFollow(pa)) && /no_slots/.test(String(await tryBook(pa))));
+    // desbloquear: vuelve enseguida a Clientes y puede reservar y seguir (no la vuelve a seguir sola)
+    await ps.goto(BASE + "/panel/clientes?ver=bloqueados"); await ps.waitForSelector(".blist", { timeout: 8000 }).catch(() => {});
+    await ps.click(".blist [data-act=unblock]");
+    const unblocked = await until("select count(*)::int c from client_blocks where provider_id = $1", [sofi.id], (r) => r[0].c === 0);
+    await ps.goto(BASE + "/panel/clientes"); await ps.waitForSelector(".clist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    ok("D45: desbloqueada vuelve a Clientes y no la sigue sola", unblocked && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 1
+       && (await ps.locator(".blk-link").count()) === 0 && (await q("select count(*)::int c from follows where provider_id = $1 and user_id = $2", [sofi.id, anaId]))[0].c === 0);
+    await pa.reload(); await pa.waitForSelector(".sgroup", { timeout: 8000 }).catch(() => {}); await pa.waitForTimeout(500);
+    const booked = await tryBook(pa);
+    ok("D45: desbloqueada ve horarios y Seguir, y puede reservar", (await pa.locator("[data-act=seguir]").count()) >= 1 && !/No hay turnos disponibles/.test(await pa.locator("#app").innerText())
+       && booked && booked.status === "pending_payment", JSON.stringify(booked));
+    if (booked && booked.booking_ids) await db.query("update bookings set status = 'expired', hold_expires_at = null where id = any($1)", [booked.booking_ids]);
+    // eliminar de la lista: la clienta de la app (sale de Clientes, no se borra) y un contacto cargado a mano (se borra)
+    await ps.click(`.clist [data-cli="${anaName}"]`); await ps.waitForSelector(".cli-more", { timeout: 8000 }).catch(() => {});
+    await ps.click(".cli-more [data-act=cliAsk][data-k=del]"); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: «Eliminar de mi lista» explica que el historial queda y que vuelve si reserva", /Si vuelve a reservarte, aparece de nuevo en tu lista/.test(await ps.locator(".cliask").innerText().catch(() => "")));
+    const keepD = ps.locator('.cliask [data-act=cliDo][data-c="0"]');
+    await ((await keepD.count()) ? keepD.click() : ps.click(".cliask [data-act=cliDo]"));
+    const hidden = await until("select count(*)::int c from provider_clients where provider_id = $1 and user_id = $2 and hidden_at is not null", [sofi.id, anaId], (r) => r[0].c === 1);
+    await ps.waitForTimeout(300);
+    ok("D45: la clienta de la app sale de Clientes sin borrarse (sus turnos quedan)", hidden && (await ps.locator(`.clist [data-cli="${anaName}"]`).count()) === 0
+       && (await q("select count(*)::int c from bookings where provider_id = $1 and client_id = $2", [sofi.id, anaId]))[0].c >= 1);
+    await db.query("update provider_clients set hidden_at = null where provider_id = $1", [sofi.id]);
+    await db.query("insert into provider_clients (provider_id, name, phone) values ($1, 'Contacto E2E', '2284 101010') on conflict do nothing", [sofi.id]);
+    await ps.goto(BASE + "/panel/clientes"); await ps.waitForSelector(".clist", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+    await ps.click('.clist [data-cli="Contacto E2E"]'); await ps.waitForSelector(".cli-more", { timeout: 8000 }).catch(() => {});
+    ok("D45: al contacto cargado a mano, solo «Eliminar» (sin «Bloquear»)", (await ps.locator(".cli-more [data-k=del]").count()) === 1 && (await ps.locator(".cli-more [data-k=block]").count()) === 0);
+    await ps.click(".cli-more [data-act=cliAsk][data-k=del]"); await ps.waitForSelector(".cliask", { timeout: 8000 }).catch(() => {});
+    ok("D45: el contacto avisa que se borra y no se puede deshacer", /Eliminar el contacto Contacto E2E/.test(await ps.locator(".cliask").innerText()) && /No se puede deshacer/.test(await ps.locator(".cliask").innerText()));
+    await ps.click(".cliask [data-act=cliDo]");
+    const gone = await until("select count(*)::int c from provider_clients where provider_id = $1 and name = 'Contacto E2E'", [sofi.id], (r) => r[0].c === 0);
+    await ps.waitForTimeout(300);
+    ok("D45: el contacto se borra y sale de la lista", gone && (await ps.locator('.clist [data-cli="Contacto E2E"]').count()) === 0);
+    await ctxS.close(); await ctxA.close();
+  }
+  // ---- D45 fin
   // 10/11 · punto 6: tocar un turno de la Agenda abre su detalle a la primera, en el celular y en la compu, tocando
   // varios seguidos y también si la Agenda se pone al día justo durante el toque
   {

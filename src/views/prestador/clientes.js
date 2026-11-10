@@ -11,14 +11,14 @@ import { cliBest, cliStamps, stampCfg, stampGoal, stampGrid, stampSvcs } from ".
 import { inApp, vMsgCompose } from "./mensajes.js";
 import { demoClients } from "../../demo/clientes.js";
 import { vSeguidores } from "./seguidores.js";
+import { askPanel, blockedLink, cliMore, vBloqueados } from "./bloqueos.js";
 import { ic } from "../../ui/iconos.js";
 
 // nombres de clientes para mostrar: en vivo, todos los de la base con nombre (H21: ya no se descarta nadie por cómo
-// se llama); en la demo, además, sin los turnos de relleno de la agenda de ejemplo
-export const realClients = () =>
-  LIVE
-    ? Object.keys(store.CLIENTS).filter((name) => name.trim())
-    : demoClients(ME()).filter((name) => name.trim());
+// se llama); en la demo, además, sin los turnos de relleno de la agenda de ejemplo. D45: sin los que sacó de su lista ni
+// los bloqueados (quedan en store.CLIENTS para la Agenda, Finanzas y Estadísticas)
+const listed = (name) => name.trim() && !store.CLIENTS[name].hidden && !store.CLIENTS[name].blocked;
+export const realClients = () => (LIVE ? Object.keys(store.CLIENTS) : demoClients(ME())).filter(listed);
 // “Hace X días/semanas/meses” desde la última visita
 export const lastTxt = (days) =>
   days == null
@@ -45,6 +45,10 @@ export function vBClientes() {
   const tabs = `<div class="seg3 ctabs" role="group" aria-label="Ver"><button data-act="ctab" data-t="clientes" aria-pressed="${S.ctab !== "seguidores"}">Clientes <span>${names.length}</span></button><button data-act="ctab" data-t="seguidores" aria-pressed="${S.ctab === "seguidores"}">Seguidores <span>${store.COMM.followers || 0}</span></button></div>`;
   if (S.ctab === "seguidores") {
     return tabs + vSeguidores();
+  }
+  // D45: Clientes → Bloqueados (el link está al final de Clientes y de Seguidores)
+  if (S.ctab === "bloqueados") {
+    return vBloqueados();
   }
   // 7/11 · Bloque 5: sin el filtro «Cumplen este mes» (el cumpleaños queda en la ficha y en la base)
   const filter = S.cf in { todos: 1, recuperar: 1, fieles: 1, faltas: 1 } ? S.cf : "todos";
@@ -96,7 +100,7 @@ export function vBClientes() {
            .join("")}</ul><p class="note" id="cnone" hidden>No encontramos clientes con ese nombre.</p>`
        : '<p class="note">No hay clientes en este filtro.</p>'
    }
-  </div>`;
+  </div>${blockedLink()}`;
 }
 function vAddContact() {
   const draft = S.newC || {};
@@ -116,8 +120,13 @@ function vFicha(name) {
     (booking) => booking.cliente === name && booking.status === "confirmed" && booking.date + booking.time >= TODAY() + nowHM(),
   ).sort((one, other) => (one.date + one.time).localeCompare(other.date + other.time));
   const history = store.BOOK.filter((booking) => booking.cliente === name && booking.status !== "confirmed" && booking.status !== "cancelled");
-  return `<button class="back" data-act="cliBack">← Todos los clientes</button>
-  <div class="panel contact" style="gap:14px"><span class="av" style="width:54px;height:54px;font-size:18px;background:hsl(${(name.charCodeAt(0) * 37) % 360} 55% 45%)">${ini(name)}</span><div><b style="font-size:18px">${esc(name)}</b><div class="hint">${ic("telefono")} ${esc(client.tel)}${client.bday ? ` · ${ic("torta")} ${client.bday.slice(3)}/${client.bday.slice(0, 2)}` : ""}</div><div style="margin-top:6px">${relBadge(name)}</div></div></div>
+  const head = `<button class="back" data-act="cliBack">← Todos los clientes</button>
+  <div class="panel contact" style="gap:14px"><span class="av" style="width:54px;height:54px;font-size:18px;background:hsl(${(name.charCodeAt(0) * 37) % 360} 55% 45%)">${ini(name)}</span><div><b style="font-size:18px">${esc(name)}</b><div class="hint">${ic("telefono")} ${esc(client.tel)}${client.bday ? ` · ${ic("torta")} ${client.bday.slice(3)}/${client.bday.slice(0, 2)}` : ""}</div><div style="margin-top:6px">${relBadge(name)}</div></div></div>`;
+  // D45: «Eliminar de mi lista» o «Bloquear»: la ficha queda con la tarjeta del cliente y el recuadro de confirmación
+  if (S.cliAsk && S.cliAsk.name === name) {
+    return head + askPanel(S.cliAsk);
+  }
+  return `${head}
   <div class="stats2 s4"><div><b>${client.v}</b><span>Visitas</span></div><div><b>${client.n}</b><span>Faltas</span></div><div><b>${money(client.spend * client.v)}</b><span>Gastó en total</span></div><div><b>${client.last == null ? "—" : esc(lastTxt(client.last))}</b><span>Última visita</span></div></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-ok" data-act="msgOne" ${inApp(name) ? "" : "disabled"}>${inApp(name) ? `${ic("mensaje")} Mandar mensaje` : `${ic("sinapp")} Sin la app`}</button><button class="btn btn-pri" data-act="cliAgendar">+ Agendar turno</button></div>
   ${(() => {
@@ -139,7 +148,8 @@ function vFicha(name) {
      <p class="note" style="text-align:left;margin:10px 0 0">${canStamp ? "Cada turno atendido por la app suma solo en la tarjeta de ese servicio." : "Los sellos se guardan en la cuenta de la app del cliente: este contacto todavía no la tiene."}</p></div>`;
   })()}
   <div class="panel"><p class="lbl">Próximos turnos</p>${upcoming.length ? `<ul class="ag">${upcoming.map((booking) => `<li><span class="ag-t">${booking.time}</span><div><b>${esc(dayLabel(booking.date))}</b><span>${esc(booking.svc)}</span></div><span class="chip ok">✓ Confirmado</span></li>`).join("")}</ul>` : '<p class="note">No tiene turnos reservados.</p>'}</div>
-  <div class="panel"><p class="lbl">Historial</p><ul class="ag">${history.map((booking) => `<li><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(booking.svc)}</b><span>${money(booking.price)}</span></div>${booking.status === "noshow" ? '<span class="chip bad">No vino</span>' : `<span class="chip ok">${ic("ok")} Atendido</span>`}</li>`).join("")}
+  <div class="panel"><p class="lbl">Historial</p><ul class="ag hist">${history.map((booking) => `<li><span class="ag-t">${esc(dayLabel(booking.date))}</span><div><b>${esc(booking.svc)}</b><span>${money(booking.price)}</span></div>${booking.status === "noshow" ? '<span class="chip bad">No vino</span>' : `<span class="chip ok">${ic("ok")} Atendido</span>`}</li>`).join("")}
    ${client.last != null ? `<li><span class="ag-t">${lastTxt(client.last).replace("Hace ", "")}</span><div><b>Última visita registrada</b><span>Ticket promedio ${money(client.spend)}</span></div><span class="chip ok">${ic("ok")}</span></li>` : ""}</ul>
-   ${!history.length && client.last == null ? '<p class="note">Todavía no tiene visitas.</p>' : ""}</div>`;
+   ${!history.length && client.last == null ? '<p class="note">Todavía no tiene visitas.</p>' : ""}</div>
+  ${cliMore(name)}`;
 }

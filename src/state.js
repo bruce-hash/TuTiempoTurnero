@@ -31,6 +31,8 @@ export const fresh = () => ({
   ctab: "clientes",
   offeredTo: {},
   offerFor: null,
+  // D45: «Eliminar de mi lista» / «Bloquear» abierto ({kind, name, user, label}; fol: debajo de un seguidor)
+  cliAsk: null,
   // 4/11: "Crear cuenta" en ventana encima de /ingresar: lo que tenía la página (adónde volver, acción pendiente)
   authOnPage: null,
   // 4/11: cambiar contraseña en dos pasos ("form" y "code"); la nueva queda solo en memoria hasta confirmar el código

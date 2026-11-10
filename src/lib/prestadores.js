@@ -8,8 +8,14 @@ import { P, store } from "../store.js";
 export const pr = (id) => P.find((prov) => prov.id == id);
 // Prestador que se está viendo en el panel (en la demo, el 7 si no se eligió otro).
 export const ME = () => S.me || 7;
+// D45: quien mira este perfil no ve horarios, «Seguir» ni «Disponible» («No hay turnos disponibles con este profesional»).
+// En vivo lo dice la base (get_provider → no_slots); en la demo, si el profesional bloqueó a la cuenta de cliente de
+// ejemplo y se lo mira como cliente.
+export const noSlots = (prov) => !!prov && (LIVE ? !!prov.noSlots : !!prov.demoBlocked && S.role === "cliente" && !!S.user && !S.preview);
+// D45: «Reprogramar» / «Reservar de nuevo» de un turno de Mis turnos, solo si ese profesional le muestra horarios
+export const canRebook = (booking) => !booking.noSlots && !noSlots(pr(booking.pid));
 export const ph = (prov, cls = "", price) =>
-  `<div class="ph ${cls}" style="--h:${+prov.hue || 0}">${prov.photo ? `<img class="ph-img" src="${esc(prov.photo)}" alt="" loading="lazy">` : `<span class="ph-i">${ini(prov.name)}</span>`}<span class="badge">Disponible</span>${price ? `<span class="ph-price">Desde <b>${money(price)}</b></span>` : ""}</div>`;
+  `<div class="ph ${cls}" style="--h:${+prov.hue || 0}">${prov.photo ? `<img class="ph-img" src="${esc(prov.photo)}" alt="" loading="lazy">` : `<span class="ph-i">${ini(prov.name)}</span>`}${noSlots(prov) ? "" : '<span class="badge">Disponible</span>'}${price ? `<span class="ph-price">Desde <b>${money(price)}</b></span>` : ""}</div>`;
 const minPrice = (prov) =>
   (prov.svcs || []).length
     ? Math.min(...prov.svcs.map((svc) => svc[2]))

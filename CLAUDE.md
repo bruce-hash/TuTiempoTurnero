@@ -73,6 +73,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - V4 resto: C31 gastos fijos en `src/lib/fijos.js` (qué corre cada mes; en la demo, la misma regla) y en la base
     (`fixed_expenses`, `fixed_expenses_sync` al abrir el panel, `fixed_expense_save`/`_stop` solo desde el mes actual, D40; `fixed_id`/`fixed_month` solo las funciones, S16; un mes cerrado
     no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost`; las ventas, con «Vender producto» en la Caja del día (`saleForm`, 7/11).
+    D46 (10/11): el stock lo lleva la base: sube con «Cargar compra» (`product_buy`, con su gasto), baja con la venta (trigger
+    `walkins_stock`, `no_stock`) o «Ajustar stock» (`product_adjust`, `stock_adjustments`: roto, vencido, uso en el local; ni venta
+    ni gasto); alta con `product_add`. La app no escribe `products.stock` (`products_stock_guard`): nada de `setStock`.
   - D44 (Balance del admin): gastos de TuTiempo fijos (`admin_fixed_expenses`, filas por mes en `admin_expenses` con
     `fixed_id`/`fixed_month`, `admin_fixed_sync` al abrir el balance y al cerrar; `admin_fixed_save`/`_stop` solo desde el
     mes actual) y variables (`admin_expenses` sin `fixed_id`, `admin_update_expense`); resultado = comisiones − fijos −
@@ -92,6 +95,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - D42 (10/11): la Caja de los últimos 7 días se corrige (`dayState`, `walksOf` en `src/views/prestador/finanzas.js`); en la
     base, `cash_day_state` (open, day_closed, month_closed, day_too_old) con triggers en `walkins`, el resto de `bookings` y
     `cash_closings`; el registro de cambios de un día reabierto en `cash_day_log` (`my_cash_day`).
+  - D45 (punto 10): Eliminar de la lista y Bloquear (`src/views/prestador/bloqueos.js`, `src/actions/prestador-bloqueos.js`;
+    Clientes → Bloqueados en `?ver=bloqueados`). La base lo hace cumplir (`client_blocks`, `block_client`, `remove_client`,
+    `provider_clients.hidden_at`); al bloqueado le llega solo `no_slots` (`noSlots()` en `src/lib/prestadores.js`), nunca «bloqueo».
   - 10/11 (`docs/12-avisos-seguidores.md`): `src/lib/avisos-al-dia.js` pide los avisos del cliente cada minuto con la app
     abierta y, al llegar un push, el service worker le avisa a la app (`tt-push`) y se ponen al día (cliente o panel).
     Dejar de seguir saltea lo que quedaba en la cola (`push_due`, `unfollowed`); una suscripción vencida (404/410) deja
@@ -116,6 +122,11 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - 7/11 · Legales: `/privacidad` (`src/views/legal/privacidad.js`) y `/terminos` (`terminos.js`), con la marca «Borrador
     pendiente de revisión legal»; lo que falta revisar y las contradicciones con el PDF original, en `docs/11-legales.md`. Si
     cambia una regla de `docs/01-decisiones.md` (seña, comisión, devoluciones, borrado de datos), cambiá también estos textos.
+  - 10/11 · Cuenta suspendida (D43): `src/views/prestador/suspendida.js` (aviso fijo arriba del panel; lo que significa en
+    `SUSPENDED_MEANS`, una línea por cosa) y `suspension()` en `src/lib/alta.js` (de `my_setup`). El admin suspende con un motivo
+    opcional (`admin_set_provider(..., p_reason)` → `provider_private.suspended_reason`, sin grant de lectura); el trigger
+    `providers_status_notice` deja los avisos `suspended`/`reactivated` (campanita, push `account` y email: `email_outbox.notice_id`).
+    Un pago que llega con el profesional no activo se devuelve (`provider_suspended` en `confirm_payment_core`) y `mp-create-preference` no cobra.
   - C02: `src/lib/recarga.js` guarda la dirección en la pestaña y, si una recarga cae en "/" (servidor sin `.htaccess`),
     vuelve a la pantalla; el admin avisa si el servidor no devuelve la app en `/panel/agenda` (`checkRoutes`).
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma

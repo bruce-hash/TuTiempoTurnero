@@ -1,5 +1,6 @@
 // Manda por email los avisos de la app (Bloque 3, H07): confirmación, recordatorios de 24 h y de 2 h, reseña, cumpleaños y
-// cancelaciones, con el mismo texto que el cliente ve en Mis turnos. La cola la llena la base (email_outbox, desde
+// cancelaciones, con el mismo texto que el cliente ve en Mis turnos. Desde el 10/11 (D43), también los avisos de la cuenta
+// del profesional (suspendida / activa de nuevo), con el texto de su campanita. La cola la llena la base (email_outbox, desde
 // client_messages); esta función pide los pendientes (emails_due), los manda con Resend y avisa cada resultado
 // (email_result), que decide los reintentos. Cada email lleva su clave de idempotencia: si un reintento llega a Resend
 // después de un envío que sí salió, no sale dos veces.
@@ -13,7 +14,7 @@ const API = (Deno.env.get("EMAIL_API_URL") ?? "").replace(/\/+$/, "") || "https:
 // Resend acepta 2 pedidos por segundo
 const GAP_MS = Number(Deno.env.get("EMAIL_GAP_MS") ?? "550");
 
-type Due = { id: number; to_email: string; subject: string; body: string; provider_name: string; site_url: string; optional: boolean };
+type Due = { id: number; to_email: string; subject: string; body: string; provider_name: string; site_url: string; optional: boolean; for_provider: boolean };
 
 Deno.serve(async (req) => {
   const denied = cronOnly(req);
