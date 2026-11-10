@@ -36,7 +36,7 @@ function doneRest(item) {
     return `${loaded ? `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span></div>` : ""}<p class="note" style="text-align:left;margin:10px 0 8px">${why}`;
   }
   if (!loaded || S.restEd === item.id) {
-    return `<div class="restbox">${restEditor(item, loaded ? "restClose" : null)}</div>`;
+    return `<div class="restbox">${restEditor(item)}</div>`;
   }
   // 10/11: «Editar cobro» va abajo, junto a «Deshacer asistió» (deshacer.js)
   return `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span></div>`;

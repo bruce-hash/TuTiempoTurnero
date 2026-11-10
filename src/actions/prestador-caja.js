@@ -213,14 +213,9 @@ registerClick("restSplitOn", (ev, el, act) => {
     input.focus();
   }
 });
-// la Agenda: volver a abrir el editor de un turno que ya tiene el resto anotado, y cerrarlo
+// la Agenda: volver a abrir el editor de un turno que ya tiene el resto anotado (se cierra al elegir el medio)
 registerClick("restOpen", (ev, el, act) => {
   S.restEd = +el.dataset.id;
-  S.restSplit = null;
-  render();
-});
-registerClick("restClose", (ev, el, act) => {
-  S.restEd = null;
   S.restSplit = null;
   render();
 });

@@ -280,7 +280,7 @@ function movLine(line) {
   }
   if (editing) {
     const booking = store.BOOK.find((item) => item.id === line.b);
-    return booking ? `${head}<li class="movform">${restEditor(booking, "movEdClose")}</li>` : head;
+    return booking ? `${head}<li class="movform">${restEditor(booking)}</li>` : head;
   }
   return head;
 }
