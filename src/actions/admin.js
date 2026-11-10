@@ -232,25 +232,48 @@ registerClick("admAlertsClear", (ev, el, act) => {
     render();
   }).catch(() => {});
 });
+// 10/11 · punto 11 (D43): «Suspender» abre el cuadro con el motivo opcional (lo ve el profesional) y la confirmación
+// (antes pedía un segundo toque)
+registerClick("admSusp", (ev, el, act) => {
+  S.admSuspAsk = +el.dataset.id;
+  S.admSuspWhy = "";
+  render();
+  const box = $("#admSuspWhy");
+  if (box) {
+    box.focus();
+  }
+});
+registerClick("admSuspNo", (ev, el, act) => {
+  S.admSuspAsk = null;
+  S.admSuspWhy = "";
+  render();
+});
+registerInput("admSuspWhy", (ev) => {
+  S.admSuspWhy = ev.target.value;
+});
 registerClick("admSet", (ev, el, act) => {
   const id = +el.dataset.id;
   const status = el.dataset.s;
-  if (status === "suspended" && S.admAsk !== id) {
-    S.admAsk = id;
-    toast("Tocá de nuevo para suspenderlo: deja de aparecer y nadie puede reservarle.");
-    setTimeout(() => {
-      S.admAsk = null;
-    }, 3500);
+  // el motivo (opcional) solo al suspender, desde el cuadro
+  const reason = status === "suspended" ? (($("#admSuspWhy") || {}).value || "").trim().replace(/\s+/g, " ") : "";
+  if (reason.length > 280) {
+    const err = $("#admSuspErr");
+    if (err) {
+      err.textContent = "El motivo puede tener hasta 280 letras.";
+    }
     return;
   }
-  S.admAsk = null;
+  if (status === "suspended") {
+    S.admSuspAsk = null;
+    S.admSuspWhy = "";
+  }
   if (LIVE) {
     el.disabled = true;
     api.m
-      .adminSetProvider(id, status, status === "active" ? true : null)
+      .adminSetProvider(id, status, status === "active" ? true : null, reason || null)
       .then(() => api.adminLoad())
       .then(() => {
-        toast(status === "active" ? "Profesional activo." : "Profesional suspendido.");
+        toast(status === "active" ? "Profesional activo." : "Profesional suspendido: le avisamos en su panel, con una notificación y por email.");
         render();
       })
       .catch(() => {
@@ -278,6 +301,9 @@ registerClick("admSet", (ev, el, act) => {
     const prov = pr(id);
     if (prov) {
       prov.status = status;
+      // D43: en la demo, el motivo queda en el prestador (lo ve su panel con «Ver como»)
+      prov.suspReason = status === "suspended" ? reason || null : null;
+      prov.suspSince = status === "suspended" ? new Date().toISOString() : null;
       S.list = null;
       S.counts = null;
     }

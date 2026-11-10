@@ -562,8 +562,9 @@ ok("Bloque 6: …y en el momento se llama a dni-cleanup con la clave del cron",
 ok("Bloque 6: …que borra las dos fotos", due(ver6) == [("verificado", sorted([f"{ver6}/frente-1.jpg", f"{ver6}/dorso-1.jpg"]))])
 q("delete from storage.objects where bucket_id = 'dni' and split_part(name, '/', 1) = %s", (str(ver6),))
 q("select admin_set_provider(%s,'suspended',null)", (pver6,), uid=adm); q("delete from net.requests")
+# (10/11: reactivar le manda un aviso por push, que sí llama a push-send; dni-cleanup no)
 ok("Bloque 6: suspendido y reactivado (sin fotos), no se vuelve a pedir el borrado", not err(q("select admin_set_provider(%s,'active',null)", (pver6,), uid=adm))
-   and q("select count(*) from net.requests")[0][0] == 0)
+   and q("select count(*) from net.requests where url like '%%/dni-cleanup'")[0][0] == 0)
 ok("D24: el cron diario llama a la misma función", q("select run_dni_cleanup()", role="service_role")[0][0] is not None
    and q("select count(*) from net.requests where url like '%%/dni-cleanup'")[0][0] == 1)
 q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
@@ -1390,6 +1391,72 @@ ok("7/11 avisos: «Borrar los leídos» borra solo los leídos", q("select dismi
    and [n["id"] for n in q("select my_provider_notices()", uid=ownN)[0][0]] == [idsN[2]])
 q("insert into provider_notices (provider_id, kind, ref, body) values (%s, 'new_follower', 'a1', 'Ana te sigue') on conflict do nothing", (pN,))
 ok("7/11 avisos: uno borrado que se vuelve a generar (mismo tipo y referencia) no reaparece", len(q("select my_provider_notices()", uid=ownN)[0][0]) == 1)
+
+# ---------- 10/11 · punto 11: aviso de cuenta suspendida (D43) ----------
+ownS = mkuser("suspendida@test.ar", "Suspendida Prof")
+pS = q("select register_provider('Suspendida Studio', 'Calle 50', array['b'], '2284 5050', null)", uid=ownS)[0][0]
+# verificado (con fecha): se reactiva sin pedir de nuevo las fotos del DNI
+q("update providers set status = 'active', dni_verified = true where id = %s", (pS,))
+q("update provider_private set dni_verified_at = now() where provider_id = %s", (pS,))
+q("update auth.users set email_confirmed_at = now() where id = %s", (ownS,))
+q("insert into push_subscriptions (user_id, endpoint, p256dh, auth) values (%s, 'https://push.example/susp', %s, %s)", (ownS, "B" * 87, "a" * 22))
+avisosS = lambda: q("select kind, body from provider_notices where provider_id = %s order by id", (pS,))
+cuentaS = lambda: [r[0] for r in q("select n.kind from email_outbox o join provider_notices n on n.id = o.notice_id where n.provider_id = %s order by o.id", (pS,))]
+pushS = lambda: q("select count(*) from push_outbox where user_id = %s and kind = 'account'", (ownS,))[0][0]
+ok("D43: solo el admin suspende (con o sin motivo)", err(q("select admin_set_provider(%s,'suspended',null,'x')", (pS,), uid=ownS), "forbidden")
+   and err(q("select admin_set_provider(%s,'suspended',null,'x')", (pS,), uid=cli1), "forbidden"))
+ok("D43: un motivo de más de 280 letras se rechaza", err(q("select admin_set_provider(%s,'suspended',null,%s)", (pS, "x" * 281), uid=adm), "reason_too_long")
+   and q("select status from providers where id = %s", (pS,))[0][0] == "active")
+ok("D43: el admin suspende con un motivo", not err(q("select admin_set_provider(%s,'suspended',null,%s)", (pS, "  Fotos de   trabajos ajenos <b>  "), uid=adm))
+   and q("select status from providers where id = %s", (pS,))[0][0] == "suspended")
+supS = q("select my_setup()", uid=ownS)[0][0]
+ok("D43: el profesional lee el motivo y desde cuándo (my_setup)", supS["status"] == "suspended" and supS["suspension"]["reason"] == "Fotos de trabajos ajenos <b>"
+   and supS["suspension"]["since"] is not None)
+ok("D43: otro profesional y un cliente no lo leen", (q("select my_setup()", uid=prov)[0][0] or {}).get("suspension") is None and q("select my_setup()", uid=cli1)[0][0] is None
+   and err(q("select my_setup()", role="anon")))
+ok("D43: nadie lo lee directo de la tabla (ni el dueño ni anon)", err(q("select suspended_reason from provider_private where provider_id = %s", (pS,), uid=ownS))
+   and err(q("select suspended_reason from provider_private", role="anon")) and err(q("select suspended_reason from provider_private", uid=cli1)))
+ok("D43: el motivo no sale en lecturas públicas (perfil, listado)", "Fotos de trabajos" not in json.dumps(q("select get_provider(%s)", (pS,), role="anon")[0][0] or {})
+   and "Fotos de trabajos" not in json.dumps(q("select get_provider(%s)", (pS,), uid=cli1)[0][0] or {})
+   and not any(r0[0] == pS for r0 in q("select id from list_providers('olavarria', null, null, null, null, 48)", role="anon")))
+ok("D43: el admin lo ve en la ficha (aparte de las notas privadas)", [x.get("suspended_reason") for x in q("select admin_providers('suspended')", uid=adm)[0][0] if x["id"] == pS] == ["Fotos de trabajos ajenos <b>"])
+avS = avisosS()
+ok("D43: le queda el aviso «suspendida» en la campanita, con el motivo y cómo resolverlo", [a[0] for a in avS] == ["suspended"]
+   and "Motivo: Fotos de trabajos ajenos <b>." in avS[0][1] and "contacto@tutiempo.com.ar" in avS[0][1] and "WhatsApp" in avS[0][1]
+   and "Tus turnos ya reservados siguen en pie" in avS[0][1]
+   and [n["kind"] for n in q("select my_provider_notices()", uid=ownS)[0][0]] == ["suspended"])
+ok("D43: …y se encolan el push (tipo account) y el email", pushS() == 1 and cuentaS() == ["suspended"])
+pd = [r for r in q("select title, body, url from push_due(100)", role="service_role") if r[0].startswith("Tu cuenta")]
+ok("D43: el push dice «Tu cuenta está suspendida» y lleva a la Agenda", [(r[0], r[2]) for r in pd] == [("Tu cuenta está suspendida", "/panel/agenda")])
+ed = [r for r in q("select subject, body, provider_name, optional, for_provider from emails_due(100)", role="service_role") if r[4]]
+ok("D43: el email sale con su asunto, el texto del aviso y el nombre del negocio (no se puede apagar)",
+   [(r[0], r[2], r[3]) for r in ed] == [("Tu cuenta de TuTiempo está suspendida", "Suspendida Studio", False)] and "Motivo: Fotos" in ed[0][1])
+ok("D43: suspender de nuevo no duplica avisos (y un motivo nuevo lo reemplaza)", not err(q("select admin_set_provider(%s,'suspended',null,'Otro motivo')", (pS,), uid=adm))
+   and len(avisosS()) == 1 and pushS() == 1 and cuentaS() == ["suspended"] and q("select my_setup()", uid=ownS)[0][0]["suspension"]["reason"] == "Otro motivo")
+ok("D43: …y sin motivo deja el que estaba", not err(q("select admin_set_provider(%s,'suspended',null)", (pS,), uid=adm))
+   and q("select my_setup()", uid=ownS)[0][0]["suspension"]["reason"] == "Otro motivo")
+ok("D43: el admin lo reactiva", not err(q("select admin_set_provider(%s,'active',null)", (pS,), uid=adm)) and q("select status from providers where id = %s", (pS,))[0][0] == "active")
+avS = avisosS()
+ok("D43: le llega «Tu cuenta está activa de nuevo» (campanita, push y email) y el de suspendida queda leído",
+   [a[0] for a in avS] == ["suspended", "reactivated"] and "activa de nuevo" in avS[1][1] and pushS() == 2 and cuentaS() == ["suspended", "reactivated"]
+   and q("select read_at is not null from provider_notices where provider_id = %s and kind = 'suspended'", (pS,))[0][0] is True)
+ok("D43: activo, my_setup ya no trae la suspensión y el motivo se borra", q("select my_setup()", uid=ownS)[0][0].get("suspension") is None
+   and q("select suspended_reason, suspended_at from provider_private where provider_id = %s", (pS,))[0] == (None, None))
+ok("D43: suspender sin motivo anda (el aviso sin «Motivo»)", not err(q("select admin_set_provider(%s,'suspended',null)", (pS,), uid=adm))
+   and q("select my_setup()", uid=ownS)[0][0]["suspension"]["reason"] is None and "Motivo" not in avisosS()[-1][1] and avisosS()[-1][0] == "suspended")
+# un aviso que ya no corresponde no sale: el email de "activa de nuevo" de recién, con la cuenta otra vez suspendida
+ed = {r[0]: r[1] for r in q("select subject, for_provider from emails_due(100)", role="service_role") if r[1]}
+ok("D43: con la cuenta otra vez suspendida, el email de «activa de nuevo» pendiente se descarta",
+   "Tu cuenta de TuTiempo está activa de nuevo" not in ed and q("select o.status, o.skip_reason from email_outbox o join provider_notices n on n.id = o.notice_id "
+                                                               "where n.provider_id = %s and n.kind = 'reactivated'", (pS,))[0] == ("skipped", "stale"))
+q("update providers set status = 'active' where id = %s", (pS,))
+ok("D43: un cambio de estado por otro camino (sin el admin) también avisa", avisosS()[-1][0] == "reactivated")
+ok("D43: con un motivo de 280 letras el aviso entra entero (con el contacto al final)", not err(q("select admin_set_provider(%s,'suspended',null,%s)", (pS, "y" * 280), uid=adm))
+   and avisosS()[-1][0] == "suspended" and avisosS()[-1][1].endswith("o a contacto@tutiempo.com.ar.") and ("y" * 280) in avisosS()[-1][1])
+q("update providers set status = 'active' where id = %s", (pS,))
+ok("D43: la cola de emails no acepta una fila sin aviso ni con los dos", err(q("insert into email_outbox (user_id, kind, expires_at) values (%s, 'account', now() + interval '1 day')", (ownS,)))
+   and err(q("insert into email_outbox (message_id, notice_id, user_id, kind, expires_at) select m.id, n.id, %s, 'account', now() + interval '1 day' "
+             "from client_messages m, provider_notices n limit 1", (ownS,))))
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

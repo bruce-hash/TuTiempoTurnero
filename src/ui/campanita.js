@@ -117,8 +117,11 @@ const NOTICE_TITLE = {
   mp_refunded: "Cobros",
   mp_charged_back: "Cobros",
   mp_in_mediation: "Cobros",
+  // 10/11 (D43): TuTiempo suspendió la cuenta o la volvió a activar (el aviso fijo del panel dice cómo resolverlo)
+  suspended: "Cuenta suspendida",
+  reactivated: "Cuenta activa",
 };
-const NOTICE_IC = { new_follower: "clientes", holiday: "agenda", holiday_bookings: "agenda", mp_term: "mp", mp_connect: "mp", mp_reconnect: "mp", mp_cost: "mp", mp_refunded: "efectivo", mp_charged_back: "aviso", mp_in_mediation: "aviso" };
+const NOTICE_IC = { new_follower: "clientes", holiday: "agenda", holiday_bookings: "agenda", mp_term: "mp", mp_connect: "mp", mp_reconnect: "mp", mp_cost: "mp", mp_refunded: "efectivo", mp_charged_back: "aviso", mp_in_mediation: "aviso", suspended: "pausa", reactivated: "ok" };
 // el botón de la cabecera y, si está abierta, la lista
 export function bell() {
   if (!bellShown()) {

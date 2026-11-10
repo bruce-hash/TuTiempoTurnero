@@ -18,6 +18,8 @@ import { MSG_DEF } from "./mensajes.js";
 import { vBPerfil } from "./perfil.js";
 import { vBProductos } from "./productos.js";
 import { setupCard } from "./verificacion.js";
+import { suspendedBanner } from "./suspendida.js";
+import { suspension } from "../../lib/alta.js";
 import { ic } from "../../ui/iconos.js";
 
 export const STORE = {};
@@ -105,7 +107,7 @@ export function vBarbero() {
   const tabs = BTABS;
   const conf = cfg(ME());
   const head = `<div class="panel bhead"><div class="contact">${avatar(prov)}<div><b>${esc(prov.name)}</b><div class="cchips" style="justify-content:flex-start;margin-top:4px">${prov.cats.map((cat) => `<button class="cchip seg-${cat}" data-pctx="${cat}" aria-pressed="${cat === pcat(prov, S.pctx)}">${CAT[cat] ? catInfo(cat).ic : ""} ${esc(catName(cat))}</button>`).join("")}</div></div></div>
-   <div class="swrow"><div><b>${ic("agenda")} Turnos online</b><div class="hint">${!conf.on ? `${ic("estado-off")} Nadie puede reservar online` : LIVE && S.mp !== "ok" ? `${ic("aviso")} Sin Mercado Pago conectado: hoy nadie puede reservarte online` : `${ic("estado-on")} Tus clientes pueden reservar y pagar`}</div>${conf.on && LIVE && S.mp !== "ok" ? '<button class="lnk" data-btab="perfil">Conectar Mercado Pago</button>' : ""}</div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div>`;
+   <div class="swrow"><div><b>${ic("agenda")} Turnos online</b><div class="hint">${suspension() ? `${ic("estado-off")} Cuenta suspendida: nadie puede reservarte online` : !conf.on ? `${ic("estado-off")} Nadie puede reservar online` : LIVE && S.mp !== "ok" ? `${ic("aviso")} Sin Mercado Pago conectado: hoy nadie puede reservarte online` : `${ic("estado-on")} Tus clientes pueden reservar y pagar`}</div>${conf.on && LIVE && S.mp !== "ok" && !suspension() ? '<button class="lnk" data-btab="perfil">Conectar Mercado Pago</button>' : ""}</div><button class="tg" data-act="turnosOn" aria-pressed="${conf.on}" aria-label="Turnos online"></button></div></div>`;
   const tabBar = `<div class="btabw"><div class="btabs" role="tablist" aria-label="Secciones del panel">${tabs.map(([id, label, icon]) => `<button role="tab" data-btab="${id}" aria-selected="${S.btab === id}"><span class="bt-i" aria-hidden="true">${icon}</span><span class="bt-l">${label}</span>${id === "agenda" && S.newT ? '<i class="dotn"></i>' : ""}</button>`).join("")}</div></div>`;
   const body = (
     {
@@ -121,6 +123,7 @@ export function vBarbero() {
     }[S.btab] || (() => vBAgendaT())
   )();
   // en la compu: menú lateral (cabecera y pestañas) y la sección a la derecha; en el celular, todo en una columna, en el
-  // orden de siempre (cabecera, avisos, pestañas, sección: ver .pb en compu.css)
-  return `<div class="narrow stack cols2 pb" style="margin-top:20px"><div class="pb-side">${head}${tabBar}</div><div class="pb-main">${body}</div></div>`;
+  // orden de siempre (cabecera, avisos, pestañas, sección: ver .pb en compu.css). 10/11 (D43): con la cuenta suspendida,
+  // el aviso fijo va arriba de todo, en todas las secciones (en la compu, a lo ancho de las dos columnas)
+  return `<div class="narrow stack cols2 pb" style="margin-top:20px">${suspendedBanner()}<div class="pb-side">${head}${tabBar}</div><div class="pb-main">${body}</div></div>`;
 }
