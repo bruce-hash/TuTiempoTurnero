@@ -4,7 +4,7 @@ import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
 import { errMsg } from "../../lib/errores.js";
 import { dayLabel } from "../../lib/fechas.js";
-import { FOLLOW, avatar, ph, pr } from "../../lib/prestadores.js";
+import { FOLLOW, avatar, noSlots, ph, pr } from "../../lib/prestadores.js";
 import { CAT, RAMP, catInfo, catName, pcat } from "../../lib/rubros.js";
 import { pickSvc, svcMeta } from "../../lib/servicios.js";
 import { cfg } from "../../lib/turnero.js";
@@ -85,7 +85,7 @@ export function vPerfil() {
    <div class="panel pcard">
     <h1 class="h1">${esc(prov.name)}</h1>
     <div class="prow"><div class="cchips">${prov.cats.map((cat) => `<button class="cchip seg-${cat}" data-pctx="${cat}" aria-pressed="${cat === seg}">${CAT[cat] ? catInfo(cat).ic : ""} ${esc(catName(cat))}</button>`).join("")}</div>
-     <button class="btn btn-sm ${following ? "btn-ghost" : "btn-pri"} folbtn" data-act="seguir" aria-pressed="${!!following}">${following ? "✓ Siguiendo" : "+ Seguir"}</button></div>
+     ${noSlots(prov) ? "" : `<button class="btn btn-sm ${following ? "btn-ghost" : "btn-pri"} folbtn" data-act="seguir" aria-pressed="${!!following}">${following ? "✓ Siguiendo" : "+ Seguir"}</button>`}</div>
     ${prov.bio ? `<p class="pbio">${esc(prov.bio)}</p>` : ""}
     <div class="pstats"><span><b>★ ${rating(provComm).toFixed(1)}</b> ${nReviews} reseña${nReviews === 1 ? "" : "s"}</span><span><b>${provComm.followers}</b> seguidores</span><span><b>${nMedia}</b> trabajos</span></div>
     ${prov.verified !== false || prov.ig ? `<div class="chips" style="margin-top:8px">${prov.verified !== false ? '<span class="chip ok">Identidad verificada</span>' : ""}${prov.ig ? `<span class="chip">Instagram: ${esc(prov.ig)}</span>` : ""}</div>` : ""}
@@ -121,7 +121,7 @@ export function vPerfil() {
       ? `${prov.cats.length > 1 ? `<p class="note" style="margin:0">Hace ${prov.cats.length} rubros: todos sus servicios están acá, con una sola agenda.</p>` : ""}<div><p class="lbl">1 · Elegí el servicio</p><div class="stack" style="gap:10px">
     ${groups.map(([cat, items]) => `<div class="sgroup seg-${cat}"><p class="sg-h">${CAT[cat] ? catInfo(cat).ic : ""} ${esc(catName(cat))}${RAMP}</p>${items.map(svcBtn).join("")}</div>`).join("")}
    </div></div>
-   ${stampBox(prov)}
+   ${noSlots(prov) ? "" : stampBox(prov)}
    ${(() => {
      const svc = prov.svcs[S.svc];
      const meta = svcMeta(svc);

@@ -3,7 +3,7 @@ import { liveApi } from "../../api/live/index.js";
 import { LIVE } from "../../config.js";
 import { money } from "../../lib/dinero.js";
 import { esc } from "../../lib/dom.js";
-import { MESES, NOW, TODAY, addDays, capW, dayLabel, dkey, longLabel, nowHM, pad } from "../../lib/fechas.js";
+import { MESES, NOW, TODAY, addDays, capW, dayLabel, dkey, isoToLocal, longLabel, nowHM, pad } from "../../lib/fechas.js";
 import { MEDIOS, medioIcon } from "../../lib/medios.js";
 import { restMissing, restOf, restSplit } from "../../lib/resto.js";
 import { FIXED_CATS, demoSyncFixed, fixedFor, fixedRow } from "../../lib/fijos.js";
@@ -23,6 +23,28 @@ store.CLOSINGS = {};
 store.MBRK = {};
 // 4/11 · Bloque 4: lo cargado sin turno de otros días (Caja del día con el calendario), por fecha
 store.WALKDAY = {};
+// 10/11 · punto 8: el registro de cambios de cada día que se volvió a abrir (my_cash_day), por fecha
+store.CASHDAY = {};
+// la Caja de los últimos 7 días se corrige (hoy incluido); más atrás solo se ve
+export const EDIT_BACK = 7;
+// lo cargado sin turno de un día: el de hoy está en S.walk; el de otro día, en store.WALKDAY
+export function walksOf(day) {
+  if (day === TODAY()) {
+    return S.walk;
+  }
+  return (store.WALKDAY[day] ||= []);
+}
+// si ese día de la caja se puede corregir (las mismas reglas que la base, cash_day_state): open, day_closed (primero
+// «Volver a abrir la caja»), month_closed (primero reabrir el mes) o day_too_old (más de 7 días: solo se ve)
+export function dayState(day) {
+  if (day < dkey(addDays(-EDIT_BACK))) {
+    return "day_too_old";
+  }
+  if (store.CLOSINGS["month|" + day.slice(0, 7)]) {
+    return "month_closed";
+  }
+  return store.CLOSINGS["day|" + day] ? "day_closed" : "open";
+}
 export const ymk = (date) => date.slice(0, 7);
 // C32 (V4): los meses con mayúscula en Finanzas
 const mes = (index) => capW(MESES[index]);
@@ -70,15 +92,16 @@ export function dayLines(day) {
       }
       lines.push(...own);
     });
-  // 4/11: otro día (el calendario de la Caja del día): lo cargado ese día, solo para ver
+  // 4/11: otro día (el calendario de la Caja del día): lo cargado ese día (10/11: se corrige si es de los últimos 7)
   if (day !== TODAY()) {
-    (store.WALKDAY[day] || []).forEach((walk) =>
+    (store.WALKDAY[day] || []).forEach((walk, index) =>
       lines.push({
         h: walk.hora,
         t: walk.kind === "prod" ? walk.svc : walk.cliente || "Sin turno",
         s: walk.kind === "prod" ? "Venta de producto" : walk.svc,
         m: walk.precio + (walk.propina || 0),
         medio: walk.medio,
+        w: index,
       }),
     );
   }
@@ -233,6 +256,11 @@ export function vBFinanzas() {
 // C34 (V4): la Caja del día, con lo que se carga en el local (antes era la pestaña Caja). C25: cada movimiento se edita
 // y se borra (los de un turno: el medio con que se cobró el resto; la seña entra siempre por Mercado Pago).
 function movLine(line) {
+  // 10/11 · punto 8: se corrige solo con la caja de ese día abierta (y de los últimos 7 días)
+  if (dayState(cajaDay()) !== "open") {
+    line = Object.assign({}, line, { rest: false, w: undefined });
+  }
+  const walks = walksOf(cajaDay());
   const key = line.w != null ? "w" + line.w : line.rest ? "b" + line.b : null;
   // V4b: un turno puede tener dos o tres movimientos (dos medios y lo que falta); el editor va una vez, debajo del último
   const editing = key && S.movEd === key && (line.w != null || line.tail);
@@ -245,10 +273,10 @@ function movLine(line) {
         : "";
   const head = `<li class="${editing || deleting ? "on" : ""}"><span class="ag-t">${esc(line.h || "")}</span><div><b>${line.missing ? ic("espera") : medioIcon(line.medio)} ${esc(line.t)}</b><span>${esc(line.s || "")} · ${esc(line.medio)}</span></div><span style="display:flex;gap:6px;align-items:center"><b class="price ${line.missing ? "rs-miss" : ""}" style="font-size:15px">${money(line.m)}</b>${actions}</span></li>`;
   if (deleting) {
-    return `${head}<li class="movask"><div><b>¿Borrar ${esc(line.t)} de las ${esc(line.h)}?</b><span>${S.walk[line.w] && S.walk[line.w].kind === "prod" ? ((S.walk[line.w].qty || 1) > 1 ? `Las ${S.walk[line.w].qty} unidades vuelven al stock.` : "La unidad vuelve al stock.") : "Sale de la caja y de tus finanzas."}</span></div><span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="movDelNo">No</button><button class="btn btn-pri btn-sm" data-act="movDelYes" data-k="${key}">Sí, borrar</button></span></li>`;
+    return `${head}<li class="movask"><div><b>¿Borrar ${esc(line.t)} de las ${esc(line.h)}?</b><span>${walks[line.w] && walks[line.w].kind === "prod" ? ((walks[line.w].qty || 1) > 1 ? `Las ${walks[line.w].qty} unidades vuelven al stock.` : "La unidad vuelve al stock.") : "Sale de la caja y de tus finanzas."}</span></div><span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="movDelNo">No</button><button class="btn btn-pri btn-sm" data-act="movDelYes" data-k="${key}">Sí, borrar</button></span></li>`;
   }
   if (editing && line.w != null) {
-    return `${head}<li class="movform">${walkEditForm(S.walk[line.w])}</li>`;
+    return `${head}<li class="movform">${walkEditForm(walks[line.w])}</li>`;
   }
   if (editing) {
     const booking = store.BOOK.find((item) => item.id === line.b);
@@ -259,7 +287,8 @@ function movLine(line) {
 // C30 (V4 resto): lo que falta antes de cerrar el día: los turnos de hoy que ya empezaron y no están marcados (vino o no
 // vino) y los cobros del resto sin medio de pago anotado
 function dayPending(today) {
-  const now = nowHM();
+  // 10/11: de un día anterior, todos los turnos sin marcar
+  const now = today === TODAY() ? nowHM() : "99:99";
   const mine = store.BOOK.filter((booking) => booking.pid == ME() && booking.date === today && booking.type !== "block");
   return {
     unmarked: mine.filter((booking) => booking.status === "confirmed" && booking.time <= now).sort((one, other) => one.time.localeCompare(other.time)),
@@ -289,10 +318,32 @@ const cajaDay = () => {
 };
 const dayPicker = (day) =>
   `<label class="calbtn" title="Ver la caja de otro día">${ic("agenda")}<span class="vh">Ver la caja de otro día</span><input type="date" id="cajaDay" data-act="cajaCal" min="${dkey(addDays(-CAJA_BACK))}" max="${TODAY()}" value="${day}"></label>`;
+export const cajaDayNow = () => cajaDay();
+// 10/11 · punto 8: los cambios hechos después de volver a abrir la caja de ese día (qué y cuándo)
+function cashLogPanel(day) {
+  const log = (store.CASHDAY[day] && store.CASHDAY[day].log) || [];
+  if (!log.length) {
+    return "";
+  }
+  const when = (at) => {
+    const local = isoToLocal(at);
+    return `${local.date.slice(8, 10)}/${local.date.slice(5, 7)} ${local.time}`;
+  };
+  return `<div class="panel cashlog"><p class="lbl">Cambios después de cerrar · ${log.length}</p><ul class="ag">${log.map((row) => `<li><span class="ag-t">${esc(when(row.at))}</span><div><span>${esc(row.detail)}</span></div></li>`).join("")}</ul></div>`;
+}
+// el formulario para cerrar la caja (hoy o un día de los últimos 7 que se volvió a abrir)
+function closeForm(day, total, cash, nPending) {
+  const today = day === TODAY();
+  return `<form class="panel" id="fCloseDay" novalidate><p class="lbl">Cerrar la caja ${today ? "de hoy" : "de ese día"}</p>
+     <div class="f"><label for="cdCount">Efectivo que contaste en la caja (opcional)</label><input id="cdCount" inputmode="numeric" placeholder="${money(cash)}" autocomplete="off"><span class="hint">Si lo cargás, te decimos si te sobra o te falta plata.</span></div>
+     <div class="err" id="cderr"></div><button class="btn btn-pri btn-block" type="submit">${nPending ? "Cerrar igual" : "Cerrar la caja"} · ${money(total)}</button>${nPending ? `<p class="note" style="margin-top:6px">Te ${nPending === 1 ? "queda 1 pendiente" : `quedan ${nPending} pendientes`} arriba: si cerrás igual, lo que cambie después te avisa que la caja cambió.</p>` : ""}</form>`;
+}
 function vCajaOtroDia(day) {
   const loading = LIVE && !store.WALKDAY[day];
-  // de otro día solo se ven: sin editar ni borrar (el resto de un turno se cambia en el día)
-  const lines = dayLines(day).map((line) => Object.assign({}, line, { rest: false, w: undefined }));
+  const state = dayState(day);
+  const editable = state === "open";
+  // 10/11 · punto 8: de los últimos 7 días, con la caja abierta, se corrige como hoy; si no, solo se ve
+  const lines = dayLines(day).map((line) => (editable ? line : Object.assign({}, line, { rest: false, w: undefined })));
   // en la demo los días anteriores solo tienen el total (sin el detalle de cada movimiento)
   const fin = store.FIN.find((item) => item.date === day);
   const demoTotal = !LIVE && !lines.length && fin ? finTot(fin) : 0;
@@ -301,15 +352,28 @@ function vCajaOtroDia(day) {
   const missing = lines.filter((line) => line.missing).reduce((sum, line) => sum + line.m, 0);
   const closing = store.CLOSINGS["day|" + day];
   const diff = closing && closing.counted != null ? closing.counted - closing.cash : null;
+  const pending = dayPending(day);
+  const nPending = pending.unmarked.length + pending.noMedio.length;
+  const why =
+    state === "day_too_old"
+      ? `<p class="note cj-why">La caja de hace más de ${EDIT_BACK} días solo se ve: se corrige hasta ${EDIT_BACK} días atrás.</p>`
+      : state === "month_closed"
+        ? `<p class="note cj-why">El mes de este día está cerrado en Finanzas. Para corregir esta caja, primero volvé a abrir el mes.</p><button class="btn btn-ghost btn-block" data-fp="mes">Ir a Finanzas → Mes</button>`
+        : "";
   return `<div class="kpis"><div class="kpi big"><span class="cdate">${esc(longLabel(day))}${dayPicker(day)}</span><b>${money(total)}</b><small>Lo que entró ese día${missing ? ` · <b class="cmiss">quedó sin cobrar ${money(missing)}</b>` : ""}</small></div>${MEDIOS.map((medio) => `<div class="kpi"><span>${medioIcon(medio)} ${medio}</span><b>${money(byMedio(medio))}</b></div>`).join("")}</div>
   <div class="panel"><p class="lbl">Movimientos de ese día · ${lines.length}</p>${loading ? '<p class="note">Cargando…</p>' : lines.length ? `<ul class="ag movs">${lines.map(movLine).join("")}</ul>` : demoTotal ? `<p class="note">Ese día entraron ${money(demoTotal)}. En la demo no se guarda el detalle de los días anteriores.</p>` : '<p class="note">Ese día no entró nada.</p>'}
+   ${editable && !loading ? walkForm(pr(ME())) : ""}
    <button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="cajaHoy">Volver a la caja de hoy</button></div>
+  ${editable && !closing ? pendingPanel(pending) : ""}
   ${
     closing
       ? `<div class="panel cclosed"><b>✓ Caja de ese día cerrada${closing.at && closing.at !== "—" ? " a las " + esc(closing.at) : ""}</b><p class="note" style="text-align:left;margin:4px 0 0">Total ${money(closing.income)}${diff != null ? ` · contaste ${money(closing.counted)} en efectivo: ${diff === 0 ? "justo ✓" : diff > 0 ? "te sobran " + money(diff) : `<b class="cmiss">te faltan ${money(-diff)}</b>`}` : ""}</p>
-     ${closing.income !== total && !loading ? `<p class="alert">Después del cierre cambió la caja (${money(total - closing.income)}). Volvé a abrirla y cerrala para que quede exacta.</p>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="reopenDay" data-d="${day}">Volver a abrir la caja</button></div>`
-      : `<div class="panel"><p class="lbl">La caja de ese día no se cerró</p><button class="btn btn-pri btn-block" data-act="closePast" data-d="${day}" ${loading ? "disabled" : ""}>Cerrar la caja de ese día · ${money(total)}</button></div>`
-  }`;
+     ${closing.income !== total && !loading ? `<p class="alert">Después del cierre cambió la caja (${money(total - closing.income)}). Volvé a abrirla y cerrala para que quede exacta.</p>` : ""}${state === "day_closed" ? `<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="reopenDay" data-d="${day}">Volver a abrir la caja</button>` : why}</div>`
+      : editable
+        ? closeForm(day, total, byMedio("Efectivo"), nPending)
+        : `<div class="panel"><p class="lbl">La caja de ese día no se cerró</p><button class="btn btn-pri btn-block" data-act="closePast" data-d="${day}" ${loading ? "disabled" : ""}>Cerrar la caja de ese día · ${money(total)}</button>${why}</div>`
+  }
+  ${cashLogPanel(day)}`;
 }
 function vCajaDia() {
   const today = TODAY();
@@ -329,22 +393,21 @@ function vCajaDia() {
   const nPending = pending.unmarked.length + pending.noMedio.length;
   return `<div class="kpis"><div class="kpi big"><span class="cdate">${esc(longLabel(today))}${dayPicker(today)}</span><b>${money(total)}</b><small>Lo que entró hoy (las señas te llegan completas)</small></div>${MEDIOS.map((medio) => `<div class="kpi"><span>${medioIcon(medio)} ${medio}</span><b>${money(byMedio(medio))}</b></div>`).join("")}</div>
   <div class="panel"><p class="lbl">Movimientos de hoy · ${lines.length}</p>${lines.length ? `<ul class="ag movs">${lines.map(movLine).join("")}</ul>` : '<p class="note">Todavía no entró nada hoy. Se suma solo cuando marcás “Asistió” en la agenda o cargás algo acá.</p>'}
-   ${walkForm(pr(ME()))}</div>
+   ${closing ? "" : walkForm(pr(ME()))}</div>
   ${closing ? "" : pendingPanel(pending)}
   ${
     closing
       ? `<div class="panel cclosed"><b>✓ Caja de hoy cerrada a las ${esc(closing.at || "")}</b><p class="note" style="text-align:left;margin:4px 0 0">Total ${money(closing.income)} · efectivo ${money(closing.cash)} · transferencias y Mercado Pago ${money(closing.mp)}${diff != null ? ` · contaste ${money(closing.counted)} en efectivo: ${diff === 0 ? "justo ✓" : diff > 0 ? "te sobran " + money(diff) : `<b class="cmiss">te faltan ${money(-diff)}</b>`}` : ""}</p>
      ${closing.income !== total ? `<p class="alert">Después del cierre cambió la caja (${money(total - closing.income)}). Volvé a cerrarla para que quede exacta.</p>` : ""}<button class="btn btn-ghost btn-block" style="margin-top:10px" data-act="reopenDay" data-d="${today}">Volver a abrir la caja</button></div>`
-      : `<form class="panel" id="fCloseDay" novalidate><p class="lbl">Cerrar la caja de hoy</p>
-     <div class="f"><label for="cdCount">Efectivo que contaste en la caja (opcional)</label><input id="cdCount" inputmode="numeric" placeholder="${money(cash)}" autocomplete="off"><span class="hint">Si lo cargás, te decimos si te sobra o te falta plata.</span></div>
-     <div class="err" id="cderr"></div><button class="btn btn-pri btn-block" type="submit">${nPending ? "Cerrar igual" : "Cerrar la caja"} · ${money(total)}</button>${nPending ? `<p class="note" style="margin-top:6px">Te ${nPending === 1 ? "queda 1 pendiente" : `quedan ${nPending} pendientes`} arriba: si cerrás igual, lo que cambie después te avisa que la caja cambió.</p>` : ""}</form>`
+      : closeForm(today, total, cash, nPending)
   }
   ${
     open.length
       ? `<div class="panel"><p class="lbl">Días de este mes sin cerrar · ${open.length}</p><ul class="ag">${open.map((day) => `<li><span class="ag-t">${esc(dayLabel(day.date))}</span><div><b>${money(finTot(day))}</b><span>Entró ese día</span></div><button class="btn btn-ghost btn-sm" data-act="closePast" data-d="${day.date}">Cerrar</button></li>`).join("")}</ul>
     <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="closeAllPast">Cerrar todos</button></div>`
       : ""
-  }`;
+  }
+  ${cashLogPanel(today)}`;
 }
 // C31 (V4 resto): los gastos fijos del mes. Se repiten solos; ✎ cambia el monto "desde este mes en adelante" (los meses
 // cerrados no cambian) y "Dejar de repetirlo" lo saca desde este mes. Los precargados empiezan sin monto. Solo en el mes
@@ -402,7 +465,7 @@ function vFinMes() {
   ${monthSummary(year, month - 1, totals)}
   ${fixedPanel(ym, current, closing)}
   <div class="panel"><p class="lbl">Gastos variables</p>
-   <p class="note" style="text-align:left;margin:-2px 0 10px">Lo que no se repite todos los meses; se suma en el resumen del mes. Las compras de productos se cargan solas desde Productos (el stock inicial y “Compré más”).</p>
+   <p class="note" style="text-align:left;margin:-2px 0 10px">Lo que no se repite todos los meses; se suma en el resumen del mes. Las compras de productos se cargan solas desde Productos (el stock inicial y «Cargar compra»).</p>
    ${fixed.length ? `<ul class="ag">${fixed.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c)}</b></div><span style="display:flex;gap:6px;align-items:center"><b class="price" style="font-size:15px">${money(exp.m)}</b>${closing ? "" : `<button class="xbtn" data-act="gDel" data-id="${exp.id}" aria-label="Borrar gasto">✕</button>`}</span></li>`).join("")}</ul>` : `<p class="note" style="text-align:left">Todavía no cargaste otros gastos este mes.</p>`}
    ${prodBuys.length ? `<p class="lbl" style="margin:12px 0 6px">${ic("productos")} Compras de productos</p><ul class="ag">${prodBuys.map((exp) => `<li><span class="ag-t">${esc(dayLabel(exp.d))}</span><div><b>${esc(exp.c.replace(/^Compra: /, ""))}</b><span>Desde Productos</span></div><b class="price" style="font-size:15px">${money(exp.m)}</b></li>`).join("")}</ul>` : ""}
    ${

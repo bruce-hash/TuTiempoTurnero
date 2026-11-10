@@ -30,12 +30,14 @@ Object.assign(LM, {
   adminNudgeMp: (prov) => saved(sb.rpc("admin_nudge_mp", { p_provider: prov.id, p_body: prov.body || null })),
   // v2 (3/11): avisos del panel de TuTiempo vistos o borrados (admin_alert_marks)
   adminAlertMark: ({ keys, dismiss }) => saved(sb.rpc("admin_alert_mark", { p_keys: keys, p_dismiss: !!dismiss })),
-  adminSetProvider: (providerId, status, verified) =>
+  // 10/11 (D43): al suspender, el motivo que ve el profesional (opcional)
+  adminSetProvider: (providerId, status, verified, reason) =>
     saved(
       sb.rpc("admin_set_provider", {
         pid: providerId,
         p_status: status,
         p_verified: verified,
+        p_reason: reason || null,
       }),
     ),
   adminAddNote: (providerId, body) =>

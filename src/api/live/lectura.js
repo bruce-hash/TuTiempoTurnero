@@ -109,6 +109,8 @@ export const liveLectura = {
       nrev: data.rating_count,
       verified: !!data.dni_verified,
       canCharge: data.can_charge !== false,
+      // D45: para quien mira, sin horarios ni «Seguir» («No hay turnos disponibles con este profesional»)
+      noSlots: !!data.no_slots,
       full: Date.now(),
       deleted: false,
     });

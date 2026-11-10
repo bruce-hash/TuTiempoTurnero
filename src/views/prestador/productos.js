@@ -17,7 +17,26 @@ function editForm(prod) {
    <p class="note" style="text-align:left;margin:0 0 10px">Los precios nuevos valen desde ahora: las ventas y las compras que ya cargaste quedan como estaban.</p>
    <div class="err" id="perr3"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="prodEditClose">Cancelar</button><button class="btn btn-pri" type="submit">Guardar cambios</button></div></form>`;
 }
-// stock de productos para vender: alerta de reposición, sumar/restar, compras (van a gastos) y alta
+// 10/11 · punto 9: «Ajustar stock», lo que sale sin venderse (solo resta; no es venta ni gasto). Motivo obligatorio.
+export const ADJ_REASONS = { broken: "Roto", expired: "Vencido", in_use: "Uso en el local" };
+function adjForm(prod) {
+  return `<form class="buyform" id="fAdj" novalidate><p class="lbl" style="margin:0 0 6px">Ajustar stock de ${esc(prod.n)}</p>
+   <div class="f"><label for="aq">Cantidad que sale <span class="hint">(tenés ${prod.stock})</span></label><input id="aq" inputmode="numeric" placeholder="Ej: 1" autocomplete="off"></div>
+   <div class="f"><label>Motivo</label><div class="opts" style="grid-template-columns:repeat(3,minmax(0,1fr))">${Object.entries(ADJ_REASONS)
+     .map(([key, label]) => `<button type="button" class="opt" data-act="adjWhy" data-r="${key}" aria-pressed="${S.adjWhy === key}">${label}</button>`)
+     .join("")}</div></div>
+   <div class="err" id="aerr"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="adjClose">Cancelar</button><button class="btn btn-pri" type="submit">Restar del stock</button></div>
+   <p class="note" style="margin-top:6px">Solo resta. No es una venta (no entra en la caja) ni un gasto: queda anotado acá con su motivo.</p></form>`;
+}
+// los últimos ajustes del producto (fecha, cantidad y motivo), discretos
+function adjLog(prod) {
+  const last = (prod.adj || []).slice(0, 3);
+  return last.length
+    ? `<p class="pl-adjlog">Ajustes: ${last.map((item) => `${esc(fmtShort(item.d))} −${item.qty} ${esc(ADJ_REASONS[item.reason] || "")}`).join(" · ")}</p>`
+    : "";
+}
+const fmtShort = (day) => (day ? `${+String(day).slice(8, 10)}/${+String(day).slice(5, 7)}` : "");
+// stock de productos para vender: alerta de reposición, compras (van a gastos), ajustes y alta. Las ventas, en la Caja del día.
 export function vBProductos() {
   const low = store.PRODS.filter((prod) => prod.stock <= prod.min);
   const units = store.PRODS.reduce((sum, prod) => sum + prod.stock, 0);
@@ -31,8 +50,9 @@ export function vBProductos() {
        prod,
        index,
      ) => `<li><div class="pl-m"><b>${esc(prod.n)}</b><span>${money(prod.p)}${prod.cost != null ? ` · compra ${money(prod.cost)} · ganás ${money(prod.p - prod.cost)}` : ""} · mínimo ${prod.min} u.${prod.stock <= prod.min ? ' · <em class="lowtag">reponer</em>' : ""}</span></div>
-     <div class="pl-s"><button class="xbtn" data-act="stk" data-i="${index}" data-d="-1" aria-label="Restar uno">−</button><b class="pl-n ${prod.stock <= prod.min ? "low" : ""}">${prod.stock}<small>en stock</small></b><button class="xbtn" data-act="stk" data-i="${index}" data-d="1" aria-label="Sumar uno">+</button></div>
-     <span class="pl-acts"><button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">${ic("carrito")} Compré más</button><button class="btn btn-ghost pl-edit" data-act="prodEdit" data-i="${index}">${ic("editar")} Editar</button><button class="xbtn" data-act="prodDel" data-i="${index}" aria-label="Eliminar ${esc(prod.n)}">${ic("borrar")}</button></span>
+     <div class="pl-s"><b class="pl-n ${prod.stock <= prod.min ? "low" : ""}">${prod.stock}<small>en stock</small></b></div>
+     <span class="pl-acts"><button class="btn btn-ghost pl-buy" data-act="buyOpen" data-i="${index}">${ic("carrito")} Cargar compra</button><button class="btn btn-ghost pl-adj" data-act="adjOpen" data-i="${index}" ${prod.stock > 0 ? "" : "disabled"}>${ic("baja")} Ajustar stock</button><button class="btn btn-ghost pl-edit" data-act="prodEdit" data-i="${index}">${ic("editar")} Editar</button><button class="xbtn" data-act="prodDel" data-i="${index}" aria-label="Eliminar ${esc(prod.n)}">${ic("borrar")}</button></span>
+     ${adjLog(prod)}
      ${
        S.prodDel === index
          ? `<div class="movask"><div><b>¿Eliminar ${esc(prod.n)}?</b><span>Sale de tu lista y de la caja. Las ventas y compras que ya cargaste quedan en tus finanzas.</span></div><span style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm" data-act="prodDelNo">No</button><button class="btn btn-pri btn-sm" data-act="prodDelYes" data-i="${index}">Sí, eliminar</button></span></div>`
@@ -42,10 +62,11 @@ export function vBProductos() {
      ${
        S.buyI === index
          ? `<form class="buyform" id="fBuy" novalidate><div class="opts" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="f"><label for="bq">Cantidad</label><input id="bq" inputmode="numeric" placeholder="Ej: 6" autocomplete="off"></div><div class="f"><label for="bc">Cuánto pagaste</label><input id="bc" inputmode="numeric" placeholder="$" autocomplete="off"></div></div>
-       <div class="err" id="berr2"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="buyClose">Cancelar</button><button class="btn btn-pri" type="submit">Sumar al stock</button></div>
-       <p class="note" style="margin-top:6px">Se suma al stock y se carga sola en los gastos del mes (Finanzas). Las compras de productos se cargan solo desde acá.</p></form>`
+       <div class="err" id="berr2"></div><div style="display:grid;grid-template-columns:1fr 2fr;gap:8px"><button type="button" class="btn btn-ghost" data-act="buyClose">Cancelar</button><button class="btn btn-pri" type="submit">Cargar compra</button></div>
+       <p class="note" style="margin-top:6px">Se suma al stock y se carga sola en los gastos del mes (Finanzas). El stock sube solo con una compra y baja con una venta (Caja del día) o un ajuste.</p></form>`
          : ""
-     }</li>`,
+     }
+     ${S.adjI === index ? adjForm(prod) : ""}</li>`,
    ).join("")}</ul>
    ${
      S.prodOpen

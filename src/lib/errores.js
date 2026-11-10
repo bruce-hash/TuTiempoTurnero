@@ -67,14 +67,23 @@ const ERRS = {
   offer_past: "Ese horario ya pasó.",
   offer_limit: "Llegaste al límite de hoy: 5 ofertas a todos tus seguidores y 10 a seguidores puntuales. Mañana podés seguir.",
   not_follower: "Esa persona ya no te sigue.",
+  // D45: lo que ve quien fue bloqueado (sin decir que lo bloquearon) y el aviso al profesional
+  no_slots: "No hay turnos disponibles con este profesional.",
+  follow_unavailable: "No se puede seguir a este profesional.",
+  has_upcoming: "Tiene turnos reservados: elegí si los cancelás o los dejás.",
   // S19 / S01 (8/11): un negocio suspendido o pendiente no escribe a sus seguidores ni a sus clientes
   not_active: "Con tu negocio sin aprobar o suspendido no podés mandar avisos ni ofrecer turnos.",
   bad_offer: "Elegí un horario libre de los próximos días.",
   bad_commission: "La comisión tiene que estar entre 0% y 30%.",
   bad_site_url: "Escribí solo https:// y el dominio, sin barra al final ni nada después.",
+  // 10/11 (D43): el motivo de la suspensión que ve el profesional
+  reason_too_long: "El motivo puede tener hasta 280 letras.",
   empty_note: "Escribí la nota.",
   too_many_notes: "Ese profesional ya tiene demasiadas notas.",
   month_closed: "El mes está cerrado: reabrilo para cambiarlo.",
+  // 10/11 · punto 8: la Caja de los últimos 7 días
+  day_too_old: "Esa caja es de hace más de 7 días: solo se puede ver.",
+  day_closed: "La caja de ese día está cerrada: volvé a abrirla para corregirla.",
   // 10/11 · punto 7: marcar «Asistió» o «No vino»
   too_early: "Todavía falta para ese turno: «Asistió» y «No vino» se marcan desde 12 horas antes.",
   bad_state: "Ese turno ya cambió (se canceló, se marcó o sigue esperando el pago). Mirá la Agenda de nuevo.",
@@ -85,6 +94,12 @@ const ERRS = {
   bad_amount: "Escribí un monto válido.",
   empty_concept: "Escribí el concepto.",
   bad_day: "Fecha inválida.",
+  // 10/11 · punto 9: el stock lo lleva la base (compra, venta, ajuste)
+  no_stock: "No alcanza el stock de ese producto. Revisalo en Productos.",
+  stock_locked: "El stock cambia solo con una compra, una venta o un ajuste.",
+  product_not_found: "Ese producto ya no está en tu lista.",
+  bad_qty: "Escribí la cantidad con números enteros (1 o más).",
+  bad_reason: "Elegí el motivo: roto, vencido o uso en el local.",
   // gastos fijos (C31, D44): se cambian solo desde el mes actual y desde «Gastos fijos»
   bad_month: "Los gastos fijos se cambian desde el mes actual en adelante.",
   fixed_expense: "Ese gasto es fijo: cambialo desde «Gastos fijos».",
