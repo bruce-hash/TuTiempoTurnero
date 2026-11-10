@@ -8,15 +8,18 @@ import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { stampsOn } from "../../ui/sellos.js";
+import { DEPOSIT_PCT } from "../prestador/plazo.js";
 import { ic } from "../../ui/iconos.js";
 
-// D30: comisión de TuTiempo (% de la SEÑA) y % de Mercado Pago por plazo de acreditación. El ejemplo, con un corte de
-// $20.000 y seña del 50%, es solo para mostrar: la base hace la misma cuenta al reservar (charge_parts).
+// D34: comisión de TuTiempo (% del precio del servicio) y % de Mercado Pago por plazo de acreditación. El ejemplo, con un
+// corte de $20.000, la seña fija (D06, 30%) y los valores guardados (comisión y Mercado Pago al instante), es solo para
+// mostrar: la base hace la misma cuenta al reservar (charge_parts).
 const MP_REF = { instant: 7.61, d10: 5.31, d18: 4.1, d35: 1.8 };
 export function admCom(data) {
   const fees = store.FEES;
   const pct = fees.commission;
-  const ex = chargeFor(1e4, pct, fees.mp.instant, 2e4);
+  const price = 2e4;
+  const ex = chargeFor(Math.round((price * DEPOSIT_PCT) / 100), pct, fees.mp.instant, price);
   const rows = MP_TERMS.map(([term, name]) => `<tr><td>${name}</td><td><div class="comrow"><input id="admMp-${term}" type="text" inputmode="decimal" maxlength="5" value="${pctTxt(fees.mp[term])}" aria-label="Mercado Pago, ${name}, en porcentaje" autocomplete="off"><span class="pctl">%</span></div></td><td class="hint">${pctTxt(MP_REF[term])}%</td></tr>`).join("");
   return `<form class="panel" id="fCom" novalidate><p class="lbl">Comisión de TuTiempo</p>
     <div class="comrow"><input id="admCom" type="text" inputmode="decimal" maxlength="5" value="${pctTxt(pct)}" aria-label="Comisión en porcentaje del precio del turno" autocomplete="off"><span class="pctl">% del servicio</span></div>
@@ -24,12 +27,12 @@ export function admCom(data) {
     <p class="lbl" style="margin-top:14px">Comisión de Mercado Pago por plazo de acreditación</p>
     <table class="mptab"><thead><tr><th>Plazo</th><th>% que se suma</th><th>Referencia (con IVA)</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="note" style="text-align:left;margin:8px 0 10px">De 0 a 15. Cada profesional elige su plazo en Horarios (el mismo que en su cuenta de Mercado Pago). Con 0, al cliente no se le suma nada y el costo de Mercado Pago lo absorbe el profesional, como hasta ahora. Las referencias cambian según la provincia y Mercado Pago las actualiza.</p>
-    <div class="panel comex"><p class="lbl" style="margin:0 0 6px">Ejemplo: corte de ${money(2e4)}, seña del 50%, acreditación al instante</p><div class="sum">
+    <div class="panel comex"><p class="lbl" style="margin:0 0 6px">Ejemplo: corte de ${money(price)}, seña del ${DEPOSIT_PCT}%, acreditación al instante</p><div class="sum">
       <div><span>Seña para el profesional</span><span>${money(ex.deposit)}</span></div>
       <div><span>Comisión TuTiempo (${pctTxt(pct)}% del servicio)</span><span>${money(ex.fee)}</span></div>
       <div><span>Costo de Mercado Pago (${pctTxt(fees.mp.instant)}% del total)</span><span>${money(ex.mp)}</span></div>
       <div class="tot"><span>El cliente paga al reservar</span><span>${money(ex.total)}</span></div></div>
-      <p class="note" style="text-align:left;margin:6px 0 0">Total = (seña + comisión) / (1 − % de Mercado Pago), redondeado para arriba. El profesional recibe ${money(ex.deposit)} ahora y ${money(ex.deposit)} en el local; TuTiempo, ${money(ex.fee)}.</p></div>
+      <p class="note" style="text-align:left;margin:6px 0 0">Total = (seña + comisión) / (1 − % de Mercado Pago), redondeado para arriba. El profesional recibe ${money(ex.deposit)} ahora y ${money(price - ex.deposit)} en el local; TuTiempo, ${money(ex.fee)}.</p></div>
     <p class="note" style="text-align:left;margin:0 0 10px">Los cambios valen para las reservas nuevas; las ya hechas no cambian.</p>
     <div class="err" id="comerr"></div><button class="btn btn-pri btn-block" type="submit">Guardar comisiones</button></form>${dniPanel()}${stampsPanel()}${holidaysPanel()}${LIVE ? siteForm(data.siteUrl) : ""}`;
 }
