@@ -597,6 +597,48 @@ async function turnoConMargen(p) {
     await pg.click('.movs [data-act=restMedio][data-m="Transferencia"]'); await wait(800);
     ok("V4b: un solo medio vuelve al resto entero (sin partes)", (await q("select rest_parts, rest_method from bookings where id=$1", [bd.id]))[0].rest_method === "transfer"
        && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
+    // 10/11 · punto 7: turno reservado por la app con seña de Mercado Pago → Asistió → el resto en uno y en dos medios;
+    // queda en la Caja del día y en Finanzas. Uno de mañana no ofrece «Asistió» (la base lo rechaza: too_early)
+    {
+      const [cli7] = await q("select id from auth.users where email = 'ana@test.ar'");
+      const appT = async (name, hhmm, day = hoyBA) => (await q(`insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, paid_mp, pay_method)
+        values ($1,$2,$3,$4,'Corte','app','confirmed',($5||' '||$6)::timestamp at time zone 'America/Argentina/Buenos_Aires',($5||' '||$6)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '20 minutes',10000,3000,'cash') returning id`,
+        [sv.provider_id, sv.id, cli7.id, name, day, hhmm]))[0];
+      const a1 = await appT("App Un Medio", "06:00"), a2 = await appT("App Dos Medios", "06:20");
+      const manana = (await q("select ((now() at time zone 'America/Argentina/Buenos_Aires')::date + 1)::text d"))[0].d;
+      const a3 = await appT("App Mañana", "23:40", manana);
+      // lo que Finanzas cuenta de turnos de la app hoy (provider_finance, como la ve Sofía)
+      const finApp = async () => {
+        await q("select set_config('request.jwt.claims', $1, false)", [JSON.stringify({ sub: "11111111-1111-1111-1111-111111111111", role: "authenticated" })]);
+        try { return (await q("select coalesce(sum(app),0)::int t from provider_finance($1::date, $1::date) where day = $1::date", [hoyBA]))[0].t; }
+        finally { await q("select set_config('request.jwt.claims', '', false)"); }
+      };
+      const fin0 = await finApp();
+      await pg.reload(); await wait(1500);
+      await pg.click("[data-btab=agenda]"); await wait(300);
+      const abrir = async (b, day = hoyBA) => { await pg.evaluate(([x, d]) => { S.aday = d; S.sel = x; render() }, [b.id, day]); await wait(250); };
+      await abrir(a1); await pg.click(`[data-act=bDone][data-id="${a1.id}"]`);
+      await pg.waitForSelector(`[data-act=restMedio][data-id="${a1.id}"]`, { timeout: 8000 }).catch(() => {});
+      ok("10/11: turno de la app con seña: «Asistió» se guarda y pregunta cómo pagó el resto ($7.000)",
+         await until("select status from bookings where id=$1", [a1.id], (r) => r[0]?.status === "done") && /¿Cómo te pagó el resto\? · \$7\.000/.test(await pg.locator(".detail .restbox").innerText().catch(() => "")));
+      await pg.click(`[data-act=restMedio][data-id="${a1.id}"][data-m="Mercado Pago"]`);
+      ok("10/11: …el resto en un medio (Mercado Pago) queda en la base", await until("select rest_method from bookings where id=$1", [a1.id], (r) => r[0]?.rest_method === "mp"));
+      await abrir(a2); await pg.click(`[data-act=bDone][data-id="${a2.id}"]`);
+      await pg.waitForSelector(`[data-act=restSplitOn][data-id="${a2.id}"]`, { timeout: 8000 }).catch(() => {});
+      await pg.click(`[data-act=restSplitOn][data-id="${a2.id}"]`); await wait(200);
+      await pg.fill("#rs_a1", "4000"); await wait(600); await pg.click("#fRest button[type=submit]");
+      ok("10/11: …y en dos medios (efectivo $4.000 + transferencia $3.000)", await until("select rest_parts from bookings where id=$1", [a2.id],
+         (r) => JSON.stringify((r[0]?.rest_parts || []).map((x) => [x.method, x.amount])) === JSON.stringify([["cash", 4000], ["transfer", 3000]])));
+      const fin1 = await finApp();
+      ok("10/11: en Finanzas entran los dos turnos de la app (precio completo: seña + resto)", fin1 - fin0 === 20000, `${fin0} → ${fin1}`);
+      await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(400);
+      const movs = await pg.locator(".movs").first().innerText().catch(() => "");
+      ok("10/11: en la Caja del día, cada cobro del resto en su medio", /App Un Medio[\s\S]*Mercado Pago/.test(movs) && (await pg.locator('.movs li:has-text("App Dos Medios")').count()) === 2, movs.slice(0, 400));
+      await pg.click("[data-btab=agenda]"); await wait(300);
+      await abrir(a3, manana);
+      ok("10/11: un turno de la app de mañana no ofrece «Asistió» y dice desde cuándo se marca", (await pg.locator(`[data-act=bDone][data-id="${a3.id}"]`).count()) === 0
+         && /se marcan desde 12 horas antes del turno/.test(await pg.locator(".detail").innerText()));
+    }
     // C30 (V4 resto): antes de cerrar el día, lo pendiente: turnos de hoy sin marcar y cobros sin medio de pago (el
     // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba). Se cuentan los pendientes
     // que ya había (otro turno de hoy de esta prueba puede haber empezado). Sin esperas fijas: en el CI, la caja reabierta

@@ -75,6 +75,10 @@ const ERRS = {
   empty_note: "Escribí la nota.",
   too_many_notes: "Ese profesional ya tiene demasiadas notas.",
   month_closed: "El mes está cerrado: reabrilo para cambiarlo.",
+  // 10/11 · punto 7: marcar «Asistió» o «No vino»
+  too_early: "Todavía falta para ese turno: «Asistió» y «No vino» se marcan desde 12 horas antes.",
+  bad_state: "Ese turno ya cambió (se canceló, se marcó o sigue esperando el pago). Mirá la Agenda de nuevo.",
+  not_done: "Primero marcá «Asistió»: el resto se anota en un turno atendido.",
   period_not_over: "Todavía no terminó: se cierra cuando termina.",
   already_closed: "Ya estaba cerrado.",
   year_closed: "El año está cerrado: reabrí el año primero.",
