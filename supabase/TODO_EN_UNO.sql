@@ -10307,7 +10307,7 @@ begin
   return null;
 end $$;
 
--- ===================== 20261110180000_feriados_cerrados.sql =====================
+-- ===================== 20261110240000_feriados_cerrados.sql =====================
 -- 10/11 · Punto 13: feriados cerrados por defecto (cambia D39). Idempotente; no borra datos.
 --
 -- Antes: si el profesional no elegía, el feriado quedaba abierto, y «Cierro» lo bloqueaba con block_days (cancelando los
