@@ -32,8 +32,10 @@ body[data-seg="p"] .ph-i,.seg-p .ph-i{font-style:italic;font-weight:500}
 .segtile em::after{content:" →"}
 .segtile[aria-pressed="true"]{outline:2px solid currentColor;outline-offset:2px}
 .segtile[aria-pressed="true"] em::after{content:""}
-.seg-b.segtile b{font-size:18px}
-@media (max-width:380px){.segtile{padding:14px 12px 12px;min-height:128px}.segtile b{font-size:17px}.seg-b.segtile b{font-size:15px}}
+/* 10/11: la tarjeta de Barberías del inicio, como las demás (Barlow, sin mayúsculas ni letras espaciadas) */
+.seg-b.segtile b{text-transform:none;letter-spacing:.01em;font-weight:700}
+.seg-b.segtile em{text-transform:none;letter-spacing:.02em;font-size:12px}
+@media (max-width:380px){.segtile{padding:14px 12px 12px;min-height:128px}.segtile b{font-size:17px}}
 .hero-all{display:inline-block;margin-top:14px;background:none;border:0;color:var(--hero-fg);text-decoration:underline;text-underline-offset:3px;font-size:14px;font-weight:600}
 body[data-seg="b"] .booked{background:radial-gradient(120% 90% at 50% 125%,rgba(74,222,128,.22),transparent 62%),#050505;border:1px solid var(--ok-line)}
 body[data-seg="b"] .bk-ic{background:var(--ok);color:#03140a}

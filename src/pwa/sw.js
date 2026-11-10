@@ -80,8 +80,13 @@ self.addEventListener("push", (ev) => {
   const title = typeof data.title === "string" && data.title ? data.title.slice(0, 80) : "TuTiempo";
   const url = typeof data.url === "string" && data.url.startsWith("/") && !data.url.startsWith("//") ? data.url : "/";
   const tag = typeof data.tag === "string" && data.tag ? data.tag.slice(0, 40) : undefined;
+  // 10/11: si la app está abierta, que se ponga al día ya (campanita, seguidores, Agenda)
+  const tell = self.clients
+    .matchAll({ type: "window" })
+    .then((list) => list.forEach((client) => client.postMessage({ type: "tt-push" })))
+    .catch(() => {});
   ev.waitUntil(
-    self.registration.showNotification(title, {
+    Promise.all([tell, self.registration.showNotification(title, {
       body: typeof data.body === "string" ? data.body.slice(0, 160) : "",
       icon: "/icons/icon-192.png",
       badge: "/icons/badge-96.png",
@@ -89,7 +94,7 @@ self.addEventListener("push", (ev) => {
       tag,
       renotify: !!tag,
       data: { url },
-    }),
+    })]),
   );
 });
 self.addEventListener("notificationclick", (ev) => {
