@@ -9723,7 +9723,7 @@ grant execute on function public.admin_fixed_save(bigint, text, int, date), publ
   public.admin_update_expense(bigint, text, int), public.admin_delete_expense(bigint), public.admin_finance(int),
   public.admin_close(text, date) to authenticated;
 
--- ===================== 20261110200000_deshacer_asistio.sql =====================
+-- ===================== 20261110230000_deshacer_asistio.sql =====================
 -- =====================================================================
 -- TuTiempo · 10/11 · punto 4 · deshacer o editar «Asistió» (decidido por Bruno el 10/11)
 --   - undo_attendance(turno, 'confirmed' | 'no_show'): el turno atendido vuelve a Confirmado o pasa a No vino.
