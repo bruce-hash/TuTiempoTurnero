@@ -11,6 +11,7 @@ import { freeGaps } from "../../lib/huecos.js";
 import { feeOf } from "./finanzas.js";
 import { restOf } from "../../lib/resto.js";
 import { restEditor, restSummary } from "./resto.js";
+import { cajaClosed, doneActions } from "./deshacer.js";
 import { ic } from "../../ui/iconos.js";
 import { followersBlockedNote, provActive } from "../../lib/alta.js";
 
@@ -24,7 +25,8 @@ function doneRest(item) {
   if (!loaded || S.restEd === item.id) {
     return `<div class="restbox">${restEditor(item, loaded ? "restClose" : null)}</div>`;
   }
-  return `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span><button type="button" class="lnk" data-act="restOpen" data-id="${item.id}">Cambiar</button></div>`;
+  // 10/11: «Editar cobro» va abajo, junto a «Deshacer asistió» (deshacer.js)
+  return `<div class="restbox rs-done"><span>Resto: ${restSummary(item)}</span></div>`;
 }
 
 // agenda del prestador: semanas de un período de 31 días y la línea de tiempo del día elegido, con turnos,
@@ -191,7 +193,7 @@ function detailCard(item) {
    ${stats && item.type !== "block" && item.type !== "walk" ? `<p class="note" style="text-align:left;margin:8px 0 0">Historial: ${stats.v} turno${stats.v === 1 ? "" : "s"} · ${stats.n} falta${stats.n === 1 ? "" : "s"}</p>` : ""}
    ${item.cliente && store.CLIENTS[item.cliente] && item.type !== "block" && item.type !== "walk" ? `<button class="lnk" style="font-size:13px;margin-top:6px" data-cli="${esc(item.cliente)}">Ver cliente →</button>` : ""}
    ${item.price ? `<div class="sum" style="margin-top:10px"><div><span>Precio</span><span>${money(item.price)}</span></div><div><span>Seña pagada (Mercado Pago)</span><span>${money(item.paid || 0)}</span></div>${item.price > (item.paid || 0) ? `<div class="tot"><span>A cobrar en el local${item.pay === "cash" ? " (efectivo)" : item.src === "app" ? " (Mercado Pago)" : ""}</span><span>${money(item.price - (item.paid || 0))}</span></div>` : ""}</div>` : ""}
-   ${isBooking && item.status === "confirmed" && item.type !== "block" ? (S.bAsk === item.id ? `<div class="bacts"><span class="hint">¿Cancelar? Se le devuelve todo al cliente.</span><button class="btn btn-ghost" data-act="bCancelNo">No</button><button class="btn btn-bad" data-act="bCancelYes" data-id="${item.id}">Sí, cancelar</button></div>` : `<div class="bacts" style="margin-top:12px"><button class="btn btn-ok" data-act="bDone" data-id="${item.id}">✓ Asistió</button><button class="btn btn-ghost" data-act="bNoShow" data-id="${item.id}">No vino</button><button class="btn btn-ghost" data-act="bCancel" data-id="${item.id}">Cancelar</button></div>`) : isBooking && item.type === "block" ? `<div class="bacts" style="margin-top:12px"><button class="btn btn-ghost" data-act="bUnblock" data-id="${item.id}">Desbloquear</button></div>` : item.status === "done" ? `<p class="note" style="text-align:left;margin-top:10px">${ic("ok")} Atendido</p>` + (isBooking ? doneRest(item) : "") : item.status === "noshow" ? '<p class="note" style="text-align:left;margin-top:10px">✕ No vino</p>' : ""}
+   ${isBooking && item.status === "confirmed" && item.type !== "block" ? (S.bAsk === item.id ? `<div class="bacts"><span class="hint">¿Cancelar? Se le devuelve todo al cliente.</span><button class="btn btn-ghost" data-act="bCancelNo">No</button><button class="btn btn-bad" data-act="bCancelYes" data-id="${item.id}">Sí, cancelar</button></div>` : `<div class="bacts" style="margin-top:12px"><button class="btn btn-ok" data-act="bDone" data-id="${item.id}">✓ Asistió</button><button class="btn btn-ghost" data-act="bNoShow" data-id="${item.id}">No vino</button><button class="btn btn-ghost" data-act="bCancel" data-id="${item.id}">Cancelar</button></div>`) : isBooking && item.type === "block" ? `<div class="bacts" style="margin-top:12px"><button class="btn btn-ghost" data-act="bUnblock" data-id="${item.id}">Desbloquear</button></div>` : item.status === "done" ? `<p class="note" style="text-align:left;margin-top:10px">${ic("ok")} Atendido</p>` + (isBooking ? doneActions(item, cajaClosed(item) ? "" : doneRest(item)) : "") : item.status === "noshow" ? '<p class="note" style="text-align:left;margin-top:10px">✕ No vino</p>' : ""}
   </div>`;
 }
 // agendar a mano un turno para un cliente que escribió o llamó (sin comisión)

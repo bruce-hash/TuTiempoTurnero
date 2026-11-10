@@ -1253,5 +1253,87 @@ ok("7/11 avisos: «Borrar los leídos» borra solo los leídos", q("select dismi
 q("insert into provider_notices (provider_id, kind, ref, body) values (%s, 'new_follower', 'a1', 'Ana te sigue') on conflict do nothing", (pN,))
 ok("7/11 avisos: uno borrado que se vuelve a generar (mismo tipo y referencia) no reaparece", len(q("select my_provider_notices()", uid=ownN)[0][0]) == 1)
 
+# ---------- 10/11 · punto 4: deshacer o editar «Asistió» ----------
+own10 = mkuser("deshacer10@test.ar", "Deshacer")
+p10 = q("select register_provider('Deshacer Asistio', 'Calle 10', array['b'], '2284 1010', null)", uid=own10)[0][0]
+q("update providers set status='active' where id=%s", (p10,))
+s10 = q("insert into services (provider_id, category_id, name, duration_min, price) values (%s,'b','Corte D10',30,10000) returning id", (p10,), uid=own10)[0][0]
+q("update provider_settings set stamps_on=true where provider_id=%s", (p10,), uid=own10)
+q("update services set stamp_goal=15 where id=%s", (s10,), uid=own10)
+cl10 = mkuser("cli10@test.ar", "Clara Diez")
+otro10 = mkuser("otro10@test.ar", "Otro Diez")
+q("select register_provider('Otro Diez', 'Calle 11', array['b'], '2284 1011', null)", uid=otro10)
+def turno10(h, paid=3000):
+    t = dt.datetime.now(tz).replace(minute=0, second=0, microsecond=0) - dt.timedelta(hours=h)
+    return q("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, paid_mp) values (%s,%s,%s,'Clara Diez','Corte D10','app','confirmed',%s,%s,10000,%s) returning id",
+             (p10, s10, cl10, t, t + dt.timedelta(minutes=30), paid))[0][0]
+card10 = lambda: (q("select stamps from loyalty_cards where provider_id=%s and user_id=%s and service_id=%s", (p10, cl10, s10)) or [[0]])[0][0]
+ficha10 = lambda: q("select visits, no_shows, total_spent, last_visit from provider_clients where provider_id=%s and user_id=%s", (p10, cl10))[0]
+dia10 = lambda b: q("select (starts_at at time zone 'America/Argentina/Buenos_Aires')::date from bookings where id=%s", (b,))[0][0]
+undo = lambda b, to="confirmed", uid=own10: q("select undo_attendance(%s, %s)", (b, to), uid=uid)
+t1 = turno10(30)
+q("select mark_booking(%s, 'done')", (t1,), uid=own10)
+f_antes = ficha10()
+t2 = turno10(5)
+q("select mark_booking(%s, 'done')", (t2,), uid=own10)
+q("select set_rest_parts(%s, %s::jsonb)", (t2, '[{"method":"cash","amount":5000},{"method":"transfer","amount":2000}]'), uid=own10)
+rv10 = q("insert into reviews (provider_id, booking_id, author, stars, body) values (%s,%s,'Clara',5,'Excelente') returning id", (p10, t2), uid=cl10)
+act10 = lambda: q("select activity from providers where id=%s", (p10,))[0][0]
+a_antes, c_antes, f_con = act10(), card10(), ficha10()
+ok("10/11: antes de deshacer, el aviso sabe que se puede restar el sello y que la caja está abierta",
+   q("select attendance_undo_check(%s)", (t2,), uid=own10)[0][0] == {"status": "done", "stamp": "undo", "day_closed": False})
+r10 = undo(t2)
+ok("10/11: «Deshacer asistió» → vuelve a Confirmado y se borra lo cobrado en el local",
+   not err(r10) and r10[0][0] == {"status": "confirmed", "stamp": "undo"}
+   and q("select status, rest_parts, rest_method from bookings where id=%s", (t2,))[0] == ("confirmed", None, None), str(r10))
+ok("10/11: …se resta el sello que sumó (queda el rastro 'undo')", card10() == c_antes - 1
+   and q("select count(*) from loyalty_events where booking_id=%s and kind='undo'", (t2,))[0][0] == 1)
+ok("10/11: …la ficha vuelve a como estaba (visitas, lo gastado, última visita)", ficha10() == f_antes, f"{ficha10()} vs {f_antes}")
+ok("10/11: …la actividad baja sola", act10() == a_antes - 1)
+ok("10/11: …la seña de Mercado Pago no se toca (sin devolución)", q("select paid_mp from bookings where id=%s", (t2,))[0][0] == 3000
+   and q("select count(*) from refunds where booking_id=%s", (t2,))[0][0] == 0)
+ok("10/11: …la reseña que ya dejó queda", not err(rv10) and q("select count(*) from reviews where booking_id=%s", (t2,))[0][0] == 1, str(rv10))
+ok("10/11: …y en Finanzas ya no entra", q("select coalesce(sum(app),0) from provider_finance(%s, %s) where day=%s", (dia10(t2), dia10(t2), dia10(t2)), uid=own10)[0][0] == 0)
+ok("10/11: se puede volver a marcar Asistió (y suma el sello de nuevo)", not err(q("select mark_booking(%s, 'done')", (t2,), uid=own10)) and card10() == c_antes and ficha10() == f_con, f"{card10()} {ficha10()}")
+ok("10/11: …y el mismo turno no suma dos veces", err(q("select mark_booking(%s, 'done')", (t2,), uid=own10)) and card10() == c_antes)
+r11 = undo(t2, "no_show")
+ok("10/11: «Deshacer» → No vino: cuenta como falta", not err(r11) and q("select status from bookings where id=%s", (t2,))[0][0] == "no_show"
+   and ficha10()[:3] == (f_antes[0], f_antes[1] + 1, f_antes[2]), str(ficha10()))
+ok("10/11: un turno que no está atendido no se deshace", err(undo(t2), "bad_state") and err(undo(turno10(8, 0)), "bad_state"))
+ok("10/11: solo a Confirmado o a No vino", err(undo(t1, "done"), "bad_status") and err(undo(t1, "cancelled_provider"), "bad_status"))
+ok("10/11: otro profesional no puede, ni sin sesión", err(undo(t1, uid=otro10), "not_found") and err(q("select undo_attendance(%s, 'confirmed')", (t1,), role="anon"))
+   and err(q("select attendance_undo_check(%s)", (t1,), uid=otro10), "not_found"))
+# caja cerrada: ni deshacer ni cambiar el cobro hasta volver a abrirla
+t3 = turno10(4)
+q("select mark_booking(%s, 'done')", (t3,), uid=own10)
+q("select set_rest_method(%s, 'cash')", (t3,), uid=own10)
+q("insert into cash_closings (provider_id, kind, period, income) values (%s, 'day', %s, 7000)", (p10, dia10(t3)), uid=own10)
+ok("10/11: con la caja de ese día cerrada no se deshace", err(undo(t3), "day_closed") and q("select status from bookings where id=%s", (t3,))[0][0] == "done"
+   and q("select attendance_undo_check(%s)", (t3,), uid=own10)[0][0]["day_closed"] is True)
+ok("10/11: …ni se cambia cómo se cobró el resto (uno o dos medios)", err(q("select set_rest_method(%s, 'transfer')", (t3,), uid=own10), "day_closed")
+   and err(q("select set_rest_parts(%s, %s::jsonb)", (t3, '[{"method":"cash","amount":1000}]'), uid=own10), "day_closed")
+   and q("select rest_method from bookings where id=%s", (t3,))[0][0] == "cash")
+q("delete from cash_closings where provider_id=%s and kind='day' and period=%s", (p10, dia10(t3)), uid=own10)
+ok("10/11: …al volver a abrir la caja, sí", not err(q("select set_rest_method(%s, 'transfer')", (t3,), uid=own10)) and not err(undo(t3)))
+m10 = dia10(t1).replace(day=1)
+q("insert into cash_closings (provider_id, kind, period) values (%s, 'month', %s)", (p10, m10), uid=own10)
+ok("10/11: con el mes cerrado tampoco", err(undo(t1), "day_closed"))
+q("delete from cash_closings where provider_id=%s and kind='month'", (p10,), uid=own10)
+# ya canjeó el sello: no se deshace
+pc10 = q("select id from provider_clients where provider_id=%s and user_id=%s", (p10, cl10))[0][0]
+q("update loyalty_cards set stamps=15 where provider_id=%s and user_id=%s and service_id=%s", (p10, cl10, s10))
+ok("10/11: el profesional canjea el premio", not err(q("select redeem_stamps(%s,%s)", (pc10, s10), uid=own10)))
+ok("10/11: si el cliente ya canjeó el sello de ese turno, no se deshace (y lo dice antes)",
+   q("select attendance_undo_check(%s)", (t1,), uid=own10)[0][0]["stamp"] == "redeemed"
+   and err(undo(t1), "stamp_redeemed") and q("select status from bookings where id=%s", (t1,))[0][0] == "done")
+t4 = turno10(3)
+q("select mark_booking(%s, 'done')", (t4,), uid=own10)
+ok("10/11: un turno atendido después del canje sí se deshace (su sello está en la tarjeta)",
+   q("select attendance_undo_check(%s)", (t4,), uid=own10)[0][0]["stamp"] == "undo" and not err(undo(t4)) and card10() == 0)
+ok("10/11: un turno agendado a mano (sin sello) se deshace igual", (lambda b: not err(q("select mark_booking(%s, 'done')", (b,), uid=own10))
+   and q("select attendance_undo_check(%s)", (b,), uid=own10)[0][0]["stamp"] == "none" and not err(undo(b)))(
+     q("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) values (%s,'Juan Manual','Corte D10','manual','confirmed',now() - interval '2 hours', now() - interval '90 minutes', 8000) returning id", (p10,))[0][0]))
+ok("10/11: las funciones internas no se llaman desde la app", err(q("select booking_day_closed(%s, now())", (p10,), uid=own10)) and err(q("select attendance_stamp_state(%s)", (t1,), uid=own10)))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

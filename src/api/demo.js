@@ -84,6 +84,10 @@ export const demoApi = {
     const prov = P.find((item) => item.slug === slug);
     return prov ? prov.id : null;
   },
+  // 10/11: en la demo no hay base: el aviso de deshacer «Asistió» usa lo que sabe la app
+  async undoCheck() {
+    return null;
+  },
   m: new Proxy(
     {},
     {

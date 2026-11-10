@@ -85,6 +85,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     Agenda y «Ofrecer turno» a un seguidor (`src/actions/ofrecer.js` → `offer_slot`, huecos de `src/lib/huecos.js`) y
     «Avisar a tus seguidores» (`notify_followers`): avisos del cliente `offer` («Reservar») y `news`, con push. El número
     de seguidores y los avisos del panel se ponen al día con la Agenda (`refreshCommunityNow` en `agenda-al-dia.js`).
+  - D41 (10/11): «Editar cobro» y «Deshacer asistió» en la ficha del turno atendido (`src/views/prestador/deshacer.js`,
+    `src/actions/deshacer.js`); en la base `undo_attendance` y `attendance_undo_check` (sello ya canjeado → `stamp_redeemed`;
+    caja del día o mes cerrado → `day_closed`, también en `set_rest_method`/`set_rest_parts`).
   - D36: la campanita de avisos de la cabecera (`src/ui/campanita.js` + `src/actions/campanita.js`): `S.inbox` del
     cliente (con `msgAction`) y `S.notices` del profesional. Mis turnos y el panel ya no muestran avisos.
   - D37: íconos propios, sin emojis en la interfaz: `ic("nombre")` de `src/lib/iconos.js` (SVG en línea, trazo del color

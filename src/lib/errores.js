@@ -75,6 +75,9 @@ const ERRS = {
   empty_note: "Escribí la nota.",
   too_many_notes: "Ese profesional ya tiene demasiadas notas.",
   month_closed: "El mes está cerrado: reabrilo para cambiarlo.",
+  // 10/11 · punto 4
+  day_closed: "La caja de ese día está cerrada: volvé a abrirla para cambiar el turno o su cobro.",
+  stamp_redeemed: "No se puede deshacer: el cliente ya usó el sello de este turno en un canje.",
   period_not_over: "Todavía no terminó: se cierra cuando termina.",
   already_closed: "Ya estaba cerrado.",
   year_closed: "El año está cerrado: reabrí el año primero.",

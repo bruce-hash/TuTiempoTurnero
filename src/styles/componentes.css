@@ -258,6 +258,14 @@ body.am-open{overflow:hidden}
 .restask > div{display:grid;gap:2px;min-width:0}.restask > div > span{font-size:13px;color:var(--muted)}
 .restask .medios{display:flex;flex-wrap:wrap;gap:6px}
 .restbox{margin-top:10px}.restbox.rs-done{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;font-size:14px}
+/* 10/11 · punto 4: «Editar cobro» y «Deshacer asistió» en la ficha del turno atendido */
+.bacts.undo-bt{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:8px;margin-top:12px}
+.restbox.undo-ask{display:block;padding:12px;border:1px solid var(--line);border-radius:var(--r)}
+.undo-ask>b{display:block;margin-bottom:8px}
+.undo-to{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.undo-list{text-align:left;margin:4px 0 10px;padding-left:18px;line-height:1.45}
+.undo-list li+li{margin-top:4px}
+.note.undo-closed{text-align:left;margin:12px 0 8px}
 .restsplit{display:grid;gap:8px;background:var(--bg);border-radius:10px;padding:10px}.restsplit .lbl{margin:0}
 .rs-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.rs-row select,.rs-row input{width:100%;min-width:0}
 .rs-btns{display:grid;grid-template-columns:1fr 2fr;gap:8px}.rs-miss{color:var(--bad)}

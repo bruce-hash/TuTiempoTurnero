@@ -21,6 +21,9 @@ Object.assign(LM, {
         p_status: status === "noshow" ? "no_show" : "done",
       }),
     ),
+  // 10/11 · punto 4: deshacer «Asistió» (to: "confirmed" o "noshow"); nunca devuelve nada de Mercado Pago
+  undoAttendance: (booking, to) =>
+    saved(sb.rpc("undo_attendance", { p_booking: booking.id, p_to: to === "noshow" ? "no_show" : "confirmed" })),
   cancelProvider: (booking) =>
     saved(
       sb.rpc("cancel_by_provider", {

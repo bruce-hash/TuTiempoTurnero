@@ -25,6 +25,7 @@ import "./actions/formularios.js";
 import "./actions/navegacion.js";
 import "./actions/prestador-agenda.js";
 import "./actions/prestador-caja.js";
+import "./actions/deshacer.js";
 import "./actions/prestador-clientes.js";
 import "./actions/prestador-finanzas.js";
 import "./actions/prestador-horarios.js";
