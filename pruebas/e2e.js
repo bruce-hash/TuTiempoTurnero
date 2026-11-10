@@ -600,7 +600,9 @@ async function turnoConMargen(p) {
     // 10/11 · punto 7: turno reservado por la app con seña de Mercado Pago → Asistió → el resto en uno y en dos medios;
     // queda en la Caja del día y en Finanzas. Uno de mañana no ofrece «Asistió» (la base lo rechaza: too_early)
     {
-      const [cli7] = await q("select id from auth.users where email = 'ana@test.ar'");
+      // una clienta propia (Ana la usan otras pruebas: reseñas, Mis turnos)
+      await q("insert into auth.users (id, email, encrypted_password, raw_user_meta_data) values ('77777777-7777-7777-7777-777777777777','cli7@test.ar','cliente12345','{\"full_name\":\"Clara Siete\"}') on conflict do nothing");
+      const cli7 = { id: "77777777-7777-7777-7777-777777777777" };
       const appT = async (name, hhmm, day = hoyBA) => (await q(`insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, paid_mp, pay_method)
         values ($1,$2,$3,$4,'Corte','app','confirmed',($5||' '||$6)::timestamp at time zone 'America/Argentina/Buenos_Aires',($5||' '||$6)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '20 minutes',10000,3000,'cash') returning id`,
         [sv.provider_id, sv.id, cli7.id, name, day, hhmm]))[0];
@@ -632,8 +634,11 @@ async function turnoConMargen(p) {
       const fin1 = await finApp();
       ok("10/11: en Finanzas entran los dos turnos de la app (precio completo: seña + resto)", fin1 - fin0 === 20000, `${fin0} → ${fin1}`);
       await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(400);
-      const movs = await pg.locator(".movs").first().innerText().catch(() => "");
-      ok("10/11: en la Caja del día, cada cobro del resto en su medio", /App Un Medio[\s\S]*Mercado Pago/.test(movs) && (await pg.locator('.movs li:has-text("App Dos Medios")').count()) === 2, movs.slice(0, 400));
+      const filas = async (n) => (await pg.locator(`.movs li:has-text("${n}")`).allInnerTexts()).map((t) => t.replace(/\s+/g, " "));
+      const f1 = await filas("App Un Medio"), f2 = await filas("App Dos Medios");
+      ok("10/11: en la Caja del día, la seña y cada cobro del resto en su medio",
+         f1.some((t) => /Resto · App Un Medio.*Mercado Pago.*\$7\.000/.test(t)) && f1.some((t) => /Seña · App Un Medio/.test(t))
+         && f2.some((t) => /Efectivo.*\$4\.000/.test(t)) && f2.some((t) => /Transferencia.*\$3\.000/.test(t)), JSON.stringify([f1, f2]).slice(0, 400));
       await pg.click("[data-btab=agenda]"); await wait(300);
       await abrir(a3, manana);
       ok("10/11: un turno de la app de mañana no ofrece «Asistió» y dice desde cuándo se marca", (await pg.locator(`[data-act=bDone][data-id="${a3.id}"]`).count()) === 0
