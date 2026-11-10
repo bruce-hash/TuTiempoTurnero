@@ -59,6 +59,8 @@ export const liveAdmin = {
         id: prov.id,
         name: prov.name,
         status: prov.status,
+        // 10/11 (D43): el motivo de la suspensión que ve el profesional (no las notas privadas)
+        suspReason: prov.suspended_reason || "",
         verified: prov.dni_verified,
         dni: prov.dni_number || "",
         dniPhotos: prov.dni_photos || {},

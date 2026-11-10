@@ -125,6 +125,8 @@ export function admData() {
       id: prov.id,
       name: prov.name,
       status: prov.status || "active",
+      // D43: el motivo de la suspensión que ve el profesional (lo pone «Suspender» de la demo)
+      suspReason: prov.suspReason || "",
       verified: prov.verified !== false,
       cats: prov.cats,
       month: store.BOOK.filter((booking) => counts(booking) && booking.pid == prov.id && booking.date.slice(0, 7) === ym).length,
