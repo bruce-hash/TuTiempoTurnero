@@ -128,6 +128,11 @@ async function turnoConMargen(p) {
      && /WhatsApp 2284 722825/.test(foot) && /Llamar/.test(foot));
   ok("lista desde la base (2 prestadores)", (await pg.locator(".grid .card").count()) === 2);
   ok("conteo por rubro", (await pg.locator(".segtile.seg-l").innerText()).includes("1 con turnos"));
+  // 10/11: los rubros con sus emojis de antes y la tarjeta de Barberías como las demás (sin mayúsculas)
+  const tiles = await pg.evaluate(() => [...document.querySelectorAll(".segtile")].map((tile) => ({ k: tile.className.match(/seg-(\w)/)[1], ic: tile.querySelector(".st-k").textContent.trim(), svg: !!tile.querySelector(".st-k svg"), tt: getComputedStyle(tile.querySelector("b")).textTransform })));
+  const RUB = { b: "💈", p: "✂", m: "🌿", l: "👁", u: "💅", d: "✨" };
+  ok("rubros del inicio con su emoji", tiles.length === 6 && tiles.every((tile) => tile.ic === RUB[tile.k] && !tile.svg), JSON.stringify(tiles));
+  ok("Barberías sin mayúsculas, como las demás", tiles.every((tile) => tile.tt === "none"), JSON.stringify(tiles.map((tile) => tile.tt)));
   await pg.click(".segtile.seg-u"); await wait();
   ok("rubro Uñas: Sofía con paleta coral", (await seg()) === "u" && (await pg.locator(".grid .card.seg-u").count()) === 1);
   await pg.click(".grid .card [data-go=perfil]"); await pg.waitForSelector(".sgroup"); await wait();

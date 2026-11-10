@@ -175,6 +175,11 @@ async function normalizar(page) {
     if (!document.getElementById("cmp-16px")) {
       document.head.insertAdjacentHTML("beforeend", `<style id="cmp-16px">@media (max-width:1023px){input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]),select,textarea{font-size:16px!important}input.otp{font-size:20px!important}.comrow input{font-size:22px!important}.mptab .comrow input{font-size:16px!important}}</style>`);
     }
+    // 10/11 (cambio a propósito): la tarjeta de Barberías del inicio va como las demás (sin mayúsculas ni letras
+    // espaciadas). En las dos versiones, con el mismo estilo; lo nuevo lo prueba e2e.js.
+    if (!document.getElementById("cmp-barber")) {
+      document.head.insertAdjacentHTML("beforeend", `<style id="cmp-barber">.seg-b.segtile b{text-transform:none!important;letter-spacing:.01em!important;font-weight:700!important;font-size:18px!important}.seg-b.segtile em{text-transform:none!important;letter-spacing:.02em!important;font-size:12px!important}</style>`);
+    }
     // 10/11 (cambio a propósito): la leyenda y los colores de la Agenda (cada tipo con su relleno e ícono). En las dos
     // versiones la leyenda sale y los turnos van con el mismo estilo neutro; lo nuevo lo prueban e2e.js y ancho.mjs.
     // (el svg del ícono ya pasó a ser ■ más arriba: se saca ese ■ del principio de la hora)
