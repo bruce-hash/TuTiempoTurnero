@@ -933,5 +933,39 @@ ok("v2: el aviso de D30 que tenía el texto viejo queda con el nuevo (no se borr
 ok("…y los datos siguen igual", one("select count(*) from payments") > 10 and one("select status from mp_accounts where id = %s", (acc1,)) == "active"
    and one("select count(*) from mp_accounts where access_token !~ '^v[0-9]+:'") == 0)
 
+# ---------- D43 (10/11, Bruno): el pago que llega con el profesional suspendido se devuelve ----------
+def total_of(bid):
+    return one("select deposit + client_fee + mp_fee - paid_wallet from bookings where id = %s", (bid,))
+def fee_of(bid):
+    return one("select client_fee from bookings where id = %s", (bid,))
+cli3 = mkuser("carla@cobros.ar", "Carla Cobros")
+for d43 in range(30, 45):   # el primer día que atiende a las 9 (lejos de los turnos de arriba)
+    r43 = book(sv, at(d43, 9), cli3)
+    if not err(r43):
+        break
+ok("D43: (reserva antes de la suspensión)" + ("" if not err(r43) else " · " + str(r43)), not err(r43))
+hs = r43[0][0]["booking_ids"]
+q("update providers set status = 'suspended' where id = %s", (pid,))
+ok("D43: suspendido, no se reservan turnos nuevos", err(book(sv, at(d43, 10), cli3), "provider_not_available"))
+rs = pay(hs, "PAGO-SUSP", total_of(hs[0]), fee_of(hs[0]), pid, acc1)
+ok("D43: pago aprobado con el profesional suspendido → el turno no se confirma",
+   rs["confirmed"] == 0 and rs["refunded"] == 1 and bk(hs[0], "status, payment_id is not null") == ("expired", True))
+ok("D43: …la devolución queda registrada por todo lo cobrado, con el motivo provider_suspended",
+   q("select r.amount, r.reason, r.status from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = 'PAGO-SUSP'") == [(total_of(hs[0]), "provider_suspended", "pending")]
+   and one("select outcome from payments where mp_payment_id = 'PAGO-SUSP'") == "refund"
+   and q("select result, reason from payment_bookings pb join payments p on p.id = pb.payment_id where p.mp_payment_id = 'PAGO-SUSP'") == [("refund", "provider_suspended")])
+msg = q("select body from client_messages where ref = %s and kind = 'cancel'", (str(hs[0]),))
+ok("D43: …al cliente le llega el aviso (neutro, sin link al perfil) y entra a la cola de emails",
+   len(msg) == 1 and "por ahora no está tomando reservas" in msg[0][0] and "Te devolvemos todo lo que pagaste" in msg[0][0] and "reservá de nuevo" not in msg[0][0] and "http" not in msg[0][0]
+   and one("select count(*) from email_outbox o join client_messages m on m.id = o.message_id where m.ref = %s and m.kind = 'cancel'", (str(hs[0]),)) == 1)
+ok("D43: …y el profesional, el de pago devuelto", one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_refunded' and body like %s", (pid, "%cuenta suspendida%")) == 1)
+ok("D43: el mismo aviso de pago otra vez no devuelve dos veces", pay(hs, "PAGO-SUSP", total_of(hs[0]), fee_of(hs[0]), pid, acc1)["status"] == "already_processed"
+   and one("select count(*) from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = 'PAGO-SUSP'") == 1)
+q("update providers set status = 'active' where id = %s", (pid,))
+ha = book(sv, at(d43, 9), cli3)[0][0]["booking_ids"]
+ra = pay(ha, "PAGO-REACT", total_of(ha[0]), fee_of(ha[0]), pid, acc1)
+ok("D43: reactivado, un pago nuevo normal confirma el turno (y en el mismo horario que se devolvió)",
+   ra["confirmed"] == 1 and bk(ha[0], "status") == ("confirmed",) and one("select count(*) from refunds where booking_id = %s", (ha[0],)) == 0)
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)

@@ -1840,6 +1840,63 @@ async function turnoConMargen(p) {
     ok("S19: …ni «Ofrecer» los huecos de la Agenda", (await ps.locator(".tl-gap").count()) >= 1 && (await ps.locator("[data-act=offerGap]").count()) === 0
        && /no podés escribirles a tus seguidores ni ofrecerles turnos/.test(await ps.locator(".tl-panel").innerText()));
     await q("update providers set status = 'active' where id = $1", [sofi.id]);
+    // ---------- 10/11 · punto 11 (D43): el admin suspende con un motivo; el profesional ve el aviso fijo en todo el panel ----------
+    {
+      const ctxC = await b.newContext({ viewport: { width: 1366, height: 900 } }); const pc = await ctxC.newPage(); pc.on("pageerror", (e) => errs.push(e.message));
+      await login(pc, "carla@test.ar", "Nueva2026zz");
+      // verificada con fecha (como las que aprueba el admin desde el 2b): se reactiva sin volver a pedir las fotos del DNI
+      await q("update provider_private set dni_verified_at = now() where provider_id = $1", [sofi.id]);
+      await pc.goto(BASE + "/admin/prestadores"); await pc.waitForSelector(`[data-act=admOpen][data-id="${sofi.id}"]`, { timeout: 8000 }).catch(() => {});
+      await pc.click(`[data-act=admOpen][data-id="${sofi.id}"]`); await pc.waitForSelector(`[data-act=admSusp][data-id="${sofi.id}"]`, { timeout: 8000 }).catch(() => {});
+      await pc.click(`[data-act=admSusp][data-id="${sofi.id}"]`); await pc.waitForSelector("#admSuspWhy", { timeout: 8000 }).catch(() => {});
+      ok("D43: «Suspender» abre el cuadro con el motivo opcional que ve el profesional (todavía no suspende)",
+         /Motivo \(lo ve el profesional\)/.test(await pc.locator(".admsusp").innerText().catch(() => "")) && (await q("select status from providers where id = $1", [sofi.id]))[0].status === "active");
+      const WHY = "Recibimos reclamos <b>de clientes</b>, escribinos";
+      await pc.fill("#admSuspWhy", WHY); await pc.click(".admsusp [data-act=admSet][data-s=suspended]");
+      const susp = await until("select status from providers where id = $1", [sofi.id], (r) => r[0].status === "suspended");
+      ok("D43: el admin la suspende con el motivo: aviso en la campanita y email en la cola", susp
+         && (await q("select count(*)::int c from provider_notices where provider_id = $1 and kind = 'suspended' and strpos(body, $2) > 0", [sofi.id, "Motivo: " + WHY + "."]))[0].c === 1
+         && (await q("select count(*)::int c from email_outbox o join provider_notices n on n.id = o.notice_id where n.provider_id = $1 and strpos(n.body, $2) > 0", [sofi.id, WHY]))[0].c === 1);
+      await pc.waitForSelector(".admsusp-now", { timeout: 8000 }).catch(() => {});
+      ok("D43: la ficha del admin muestra el motivo que ve el profesional (aparte de las notas privadas)",
+         (await pc.locator(".admsusp-now").innerText().catch(() => "")).includes("Motivo que ve el profesional: «" + WHY + "»") && (await pc.locator(`[data-act=admSet][data-id="${sofi.id}"][data-s=active]`).count()) === 1);
+      // Sofía, en el celular: el aviso fijo arriba de todo, en la Agenda y en las otras secciones
+      await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".suspbox", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(400);
+      const ab = await ps.locator(".suspbox").innerText().catch(() => "");
+      ok("D43: en la Agenda, «Tu cuenta está suspendida» con el motivo, qué significa y cómo resolverlo (WhatsApp y email)",
+         /Tu cuenta está suspendida/.test(ab) && ab.includes("Motivo: " + WHY) && /No aparecés en el listado/.test(ab) && /No recibís reservas nuevas/.test(ab)
+         && /No podés mandar avisos ni ofertas a tus seguidores/.test(ab) && /Tus turnos ya reservados siguen en pie: atendelos como siempre/.test(ab)
+         && (await ps.locator('.suspbox a[href="https://wa.me/5492284722825"][target=_blank][rel=noopener]').count()) === 1
+         && (await ps.locator('.suspbox a[href="mailto:contacto@tutiempo.com.ar"]').count()) === 1, ab);
+      ok("D43: el aviso va arriba de todo (sobre la cabecera del panel) y entra en el celular",
+         await ps.evaluate(() => { const a = document.querySelector(".suspbox"), h = document.querySelector(".bhead"); return !!a && !!h && a.getBoundingClientRect().bottom <= h.getBoundingClientRect().top + 1
+           && document.documentElement.scrollWidth <= window.innerWidth; }));
+      await ps.evaluate((d) => { S.aday = d; S.awk = null; render(); }, g2.split("|")[0]); await ps.waitForTimeout(300);
+      ok("D43: …sin «Ofrecer» en los huecos (S19), sin la tarjeta del alta y con «Turnos online» avisando que nadie puede reservar",
+         (await ps.locator(".tl-gap").count()) >= 1 && (await ps.locator("[data-act=offerGap]").count()) === 0 && (await ps.locator(".todo").count()) === 0
+         && /Cuenta suspendida: nadie puede reservarte online/.test(await ps.locator(".bhead").innerText()));
+      ok("D43: …y en la campanita, «Cuenta suspendida» con el motivo", await ps.evaluate((w) => (S.notices || []).some((n) => n.kind === "suspended" && n.body.includes(w)), WHY));
+      await ps.goto(BASE + "/panel/finanzas"); await ps.waitForSelector(".suspbox", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(300);
+      ok("D43: en Finanzas también está el aviso, con el motivo", (await ps.locator(".suspbox").innerText().catch(() => "")).includes("Motivo: " + WHY));
+      await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector(".suspbox", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(300);
+      ok("D43: …y en Trabajos, sin «Avisar a tus seguidores»", (await ps.locator(".suspbox").count()) === 1 && (await ps.locator("#postTxt, [data-act=publicar]").count()) === 0);
+      // reactivar: con la Agenda abierta; al volver a la pestaña el aviso desaparece solo (sin recargar)
+      await ps.goto(BASE + "/panel/agenda"); await ps.waitForSelector(".suspbox", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(300);
+      const t0 = (await q("select now() t"))[0].t;
+      await pc.click(`[data-act=admSet][data-id="${sofi.id}"][data-s=active]`);
+      const act = await until("select status from providers where id = $1", [sofi.id], (r) => r[0].status === "active");
+      await volver();
+      await ps.waitForFunction(() => !document.querySelector(".suspbox"), null, { timeout: 8000 }).catch(() => {});
+      await ps.evaluate((d) => { S.aday = d; S.awk = null; render(); }, g2.split("|")[0]); await ps.waitForTimeout(300);
+      ok("D43: el admin la reactiva y el aviso desaparece al volver a la pestaña, con «Ofrecer» de nuevo", act && (await ps.locator(".suspbox").count()) === 0
+         && (await ps.locator("[data-act=offerGap]").count()) >= 1 && !/Cuenta suspendida/.test(await ps.locator(".bhead").innerText()));
+      ok("D43: …y le llega «Tu cuenta está activa de nuevo» (campanita y email), sin el motivo guardado",
+         (await q("select count(*)::int c from provider_notices where provider_id = $1 and kind = 'reactivated' and created_at >= $2", [sofi.id, t0]))[0].c === 1
+         && (await q("select count(*)::int c from email_outbox o join provider_notices n on n.id = o.notice_id where n.provider_id = $1 and n.kind = 'reactivated' and n.created_at >= $2", [sofi.id, t0]))[0].c === 1
+         && (await ps.evaluate(() => (S.notices || []).some((n) => n.kind === "reactivated")))
+         && (await q("select suspended_reason from provider_private where provider_id = $1", [sofi.id]))[0].suspended_reason === null);
+      await ctxC.close();
+    }
     await pa.goto(BASE + "/" + sofi.slug); await pa.waitForSelector("[data-act=seguir]", { timeout: 8000 }).catch(() => {});
     // Ana deja de seguir: sale de la lista de Sofía
     await pa.waitForSelector("[data-act=seguir]"); await pa.click("[data-act=seguir]");

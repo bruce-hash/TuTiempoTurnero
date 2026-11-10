@@ -341,15 +341,21 @@ export const livePanel = {
       return false;
     }
     const [row, notices] = await Promise.all([
-      call(sb.from("providers").select("followers").eq("id", pid).maybeSingle()),
+      call(sb.from("providers").select("followers,status").eq("id", pid).maybeSingle()),
       call(sb.rpc("my_provider_notices")),
     ]);
-    const before = JSON.stringify([store.COMM.followers, S.notices]);
+    const before = JSON.stringify([store.COMM.followers, S.notices, (S.setupBy || {})[pid]]);
     if (row) {
       store.COMM.followers = row.followers;
     }
     S.notices = notices || [];
-    return JSON.stringify([store.COMM.followers, S.notices]) !== before;
+    // 10/11 (D43): si TuTiempo lo suspendió o lo reactivó mientras tenía el panel abierto, el aviso fijo (y lo que
+    // depende del estado, como «Ofrecer») se pone al día sin recargar
+    const setup = (S.setupBy || {})[pid];
+    if (row && setup && setup.status && row.status !== setup.status) {
+      await liveApi.mySetup().catch(() => null);
+    }
+    return JSON.stringify([store.COMM.followers, S.notices, (S.setupBy || {})[pid]]) !== before;
   },
   m: {},
 };

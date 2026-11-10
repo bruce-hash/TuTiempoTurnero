@@ -31,6 +31,16 @@ export function provActive(pid = ME()) {
   const prov = pr(pid);
   return !prov || !prov.status || prov.status === "active";
 }
+// 10/11 · punto 11 (D43): la suspensión del negocio, { reason, since } (null si no está suspendido). En vivo la trae
+// my_setup (el motivo que escribió el admin al suspenderlo); en la demo, el del prestador (lo pone el admin de la demo).
+export function suspension(pid = ME()) {
+  const setup = setupOf(pid);
+  if (setup && setup.status) {
+    return setup.status === "suspended" ? setup.suspension || { reason: null, since: null } : null;
+  }
+  const prov = pr(pid);
+  return prov && prov.status === "suspended" ? { reason: prov.suspReason || null, since: prov.suspSince || null } : null;
+}
 export const followersBlockedNote = (pid = ME()) =>
   (setupOf(pid) || pr(pid) || {}).status === "suspended"
     ? "Tu negocio está suspendido: no podés escribirles a tus seguidores ni ofrecerles turnos."
