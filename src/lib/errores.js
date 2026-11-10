@@ -78,12 +78,19 @@ const ERRS = {
   // 10/11 · punto 8: la Caja de los últimos 7 días
   day_too_old: "Esa caja es de hace más de 7 días: solo se puede ver.",
   day_closed: "La caja de ese día está cerrada: volvé a abrirla para corregirla.",
+  // 10/11 · punto 7: marcar «Asistió» o «No vino»
+  too_early: "Todavía falta para ese turno: «Asistió» y «No vino» se marcan desde 12 horas antes.",
+  bad_state: "Ese turno ya cambió (se canceló, se marcó o sigue esperando el pago). Mirá la Agenda de nuevo.",
+  not_done: "Primero marcá «Asistió»: el resto se anota en un turno atendido.",
   period_not_over: "Todavía no terminó: se cierra cuando termina.",
   already_closed: "Ya estaba cerrado.",
   year_closed: "El año está cerrado: reabrí el año primero.",
   bad_amount: "Escribí un monto válido.",
   empty_concept: "Escribí el concepto.",
   bad_day: "Fecha inválida.",
+  // gastos fijos (C31, D44): se cambian solo desde el mes actual y desde «Gastos fijos»
+  bad_month: "Los gastos fijos se cambian desde el mes actual en adelante.",
+  fixed_expense: "Ese gasto es fijo: cambialo desde «Gastos fijos».",
 };
 export function errMsg(err) {
   const text = (err && (err.message || err.error_description || err.msg)) || String(err || "");

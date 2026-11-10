@@ -128,6 +128,11 @@ async function turnoConMargen(p) {
      && /WhatsApp 2284 722825/.test(foot) && /Llamar/.test(foot));
   ok("lista desde la base (2 prestadores)", (await pg.locator(".grid .card").count()) === 2);
   ok("conteo por rubro", (await pg.locator(".segtile.seg-l").innerText()).includes("1 con turnos"));
+  // 10/11: los rubros con sus emojis de antes y la tarjeta de Barberías como las demás (sin mayúsculas)
+  const tiles = await pg.evaluate(() => [...document.querySelectorAll(".segtile")].map((tile) => ({ k: tile.className.match(/seg-(\w)/)[1], ic: tile.querySelector(".st-k").textContent.trim(), svg: !!tile.querySelector(".st-k svg"), tt: getComputedStyle(tile.querySelector("b")).textTransform })));
+  const RUB = { b: "💈", p: "✂", m: "🌿", l: "👁", u: "💅", d: "✨" };
+  ok("rubros del inicio con su emoji", tiles.length === 6 && tiles.every((tile) => tile.ic === RUB[tile.k] && !tile.svg), JSON.stringify(tiles));
+  ok("Barberías sin mayúsculas, como las demás", tiles.every((tile) => tile.tt === "none"), JSON.stringify(tiles.map((tile) => tile.tt)));
   await pg.click(".segtile.seg-u"); await wait();
   ok("rubro Uñas: Sofía con paleta coral", (await seg()) === "u" && (await pg.locator(".grid .card.seg-u").count()) === 1);
   await pg.click(".grid .card [data-go=perfil]"); await pg.waitForSelector(".sgroup"); await wait();
@@ -473,6 +478,20 @@ async function turnoConMargen(p) {
   ok("panel de Sofía con sus 3 rubros", (await pg.locator(".bhead .cchip").count()) === 3);
   await pg.evaluate((d) => { S.aday = d; render() }, d); await wait(300);
   ok("su agenda muestra la reserva de la app", (await pg.locator(".ev.app").count()) >= 1);
+  // 10/11: la leyenda con los seis tipos (cada uno con su muestra e ícono) y cada turno con el ícono de su tipo; «Por la
+  // app» y «Agendado» ya no se confunden (fondos distintos: el color de la marca contra el de la tarjeta)
+  {
+    const leg = await pg.evaluate(() => {
+      const items = [...document.querySelectorAll(".tl-leg .lgi")];
+      const bg = (k) => getComputedStyle(document.querySelector(`.tl-leg .lgi.${k}`)).backgroundColor;
+      return { labels: items.map((el) => el.textContent.trim()), icons: items.filter((el) => el.querySelector("svg")).length, app: bg("app"), man: bg("man"), walk: bg("walk"),
+        evIcon: !!document.querySelector(".ev.app .ev-t svg") };
+    });
+    ok("10/11: la leyenda de la Agenda tiene los seis tipos (con Bloqueado y No trabajás) y los cuatro de turnos con ícono",
+       leg.labels.join("|") === "Por la app|Agendado|Sin turno|Bloqueado|No trabajás|Libre" && leg.icons === 4, JSON.stringify(leg));
+    ok("10/11: «Por la app», «Agendado» y «Sin turno» con fondos distintos, y la reserva de la app con su ícono",
+       new Set([leg.app, leg.man, leg.walk]).size === 3 && leg.evIcon, JSON.stringify(leg));
+  }
   // bloquear horario
   // en un día hábil sin turnos: el día de la reserva de Ana chocaba con ella si su primer turno libre caía a las 20:00
   const dBloq = await pg.evaluate(() => { for (let i = 9; ; i++) { const k = dkey(addDays(i)); if (![0, 6].includes(new Date(k + "T12:00:00").getDay())) return k } });
@@ -645,6 +664,53 @@ async function turnoConMargen(p) {
     await pg.click('.movs [data-act=restMedio][data-m="Transferencia"]'); await wait(800);
     ok("V4b: un solo medio vuelve al resto entero (sin partes)", (await q("select rest_parts, rest_method from bookings where id=$1", [bd.id]))[0].rest_method === "transfer"
        && (await q("select rest_parts from bookings where id=$1", [bd.id]))[0].rest_parts === null && !/Sin cobrar · Diferencia/.test(await txt()));
+    // 10/11 · punto 7: turno reservado por la app con seña de Mercado Pago → Asistió → el resto en uno y en dos medios;
+    // queda en la Caja del día y en Finanzas. Uno de mañana no ofrece «Asistió» (la base lo rechaza: too_early)
+    {
+      // una clienta propia (Ana la usan otras pruebas: reseñas, Mis turnos)
+      await q("insert into auth.users (id, email, encrypted_password, raw_user_meta_data) values ('77777777-7777-7777-7777-777777777777','cli7@test.ar','cliente12345','{\"full_name\":\"Clara Siete\"}') on conflict do nothing");
+      const cli7 = { id: "77777777-7777-7777-7777-777777777777" };
+      const appT = async (name, hhmm, day = hoyBA) => (await q(`insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, paid_mp, pay_method)
+        values ($1,$2,$3,$4,'Corte','app','confirmed',($5||' '||$6)::timestamp at time zone 'America/Argentina/Buenos_Aires',($5||' '||$6)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '20 minutes',10000,3000,'cash') returning id`,
+        [sv.provider_id, sv.id, cli7.id, name, day, hhmm]))[0];
+      const a1 = await appT("App Un Medio", "06:00"), a2 = await appT("App Dos Medios", "06:20");
+      const manana = (await q("select ((now() at time zone 'America/Argentina/Buenos_Aires')::date + 1)::text d"))[0].d;
+      const a3 = await appT("App Mañana", "23:40", manana);
+      // lo que Finanzas cuenta de turnos de la app hoy (provider_finance, como la ve Sofía)
+      const finApp = async () => {
+        await q("select set_config('request.jwt.claims', $1, false)", [JSON.stringify({ sub: "11111111-1111-1111-1111-111111111111", role: "authenticated" })]);
+        try { return (await q("select coalesce(sum(app),0)::int t from provider_finance($1::date, $1::date) where day = $1::date", [hoyBA]))[0].t; }
+        finally { await q("select set_config('request.jwt.claims', '', false)"); }
+      };
+      const fin0 = await finApp();
+      await pg.reload(); await wait(1500);
+      await pg.click("[data-btab=agenda]"); await wait(300);
+      const abrir = async (b, day = hoyBA) => { await pg.evaluate(([x, d]) => { S.aday = d; S.sel = x; render() }, [b.id, day]); await wait(250); };
+      await abrir(a1); await pg.click(`[data-act=bDone][data-id="${a1.id}"]`);
+      await pg.waitForSelector(`[data-act=restMedio][data-id="${a1.id}"]`, { timeout: 8000 }).catch(() => {});
+      ok("10/11: turno de la app con seña: «Asistió» se guarda y pregunta cómo pagó el resto ($7.000)",
+         await until("select status from bookings where id=$1", [a1.id], (r) => r[0]?.status === "done") && /¿Cómo te pagó el resto\? · \$7\.000/.test(await pg.locator(".detail .restbox").innerText().catch(() => "")));
+      await pg.click(`[data-act=restMedio][data-id="${a1.id}"][data-m="Mercado Pago"]`);
+      ok("10/11: …el resto en un medio (Mercado Pago) queda en la base", await until("select rest_method from bookings where id=$1", [a1.id], (r) => r[0]?.rest_method === "mp"));
+      await abrir(a2); await pg.click(`[data-act=bDone][data-id="${a2.id}"]`);
+      await pg.waitForSelector(`[data-act=restSplitOn][data-id="${a2.id}"]`, { timeout: 8000 }).catch(() => {});
+      await pg.click(`[data-act=restSplitOn][data-id="${a2.id}"]`); await wait(200);
+      await pg.fill("#rs_a1", "4000"); await wait(600); await pg.click("#fRest button[type=submit]");
+      ok("10/11: …y en dos medios (efectivo $4.000 + transferencia $3.000)", await until("select rest_parts from bookings where id=$1", [a2.id],
+         (r) => JSON.stringify((r[0]?.rest_parts || []).map((x) => [x.method, x.amount])) === JSON.stringify([["cash", 4000], ["transfer", 3000]])));
+      const fin1 = await finApp();
+      ok("10/11: en Finanzas entran los dos turnos de la app (precio completo: seña + resto)", fin1 - fin0 === 20000, `${fin0} → ${fin1}`);
+      await pg.click("[data-btab=finanzas]"); await wait(300); await pg.click("[data-fp=dia]"); await wait(400);
+      const filas = async (n) => (await pg.locator(`.movs li:has-text("${n}")`).allInnerTexts()).map((t) => t.replace(/\s+/g, " "));
+      const f1 = await filas("App Un Medio"), f2 = await filas("App Dos Medios");
+      ok("10/11: en la Caja del día, la seña y cada cobro del resto en su medio",
+         f1.some((t) => /Resto · App Un Medio.*Mercado Pago.*\$7\.000/.test(t)) && f1.some((t) => /Seña · App Un Medio/.test(t))
+         && f2.some((t) => /Efectivo.*\$4\.000/.test(t)) && f2.some((t) => /Transferencia.*\$3\.000/.test(t)), JSON.stringify([f1, f2]).slice(0, 400));
+      await pg.click("[data-btab=agenda]"); await wait(300);
+      await abrir(a3, manana);
+      ok("10/11: un turno de la app de mañana no ofrece «Asistió» y dice desde cuándo se marca", (await pg.locator(`[data-act=bDone][data-id="${a3.id}"]`).count()) === 0
+         && /se marcan desde 12 horas antes del turno/.test(await pg.locator(".detail").innerText()));
+    }
     // C30 (V4 resto): antes de cerrar el día, lo pendiente: turnos de hoy sin marcar y cobros sin medio de pago (el
     // turno es a las 00:00 para que siempre haya empezado, corra a la hora que corra la prueba). Se cuentan los pendientes
     // que ya había (otro turno de hoy de esta prueba puede haber empezado). Sin esperas fijas: en el CI, la caja reabierta
@@ -852,7 +918,8 @@ async function turnoConMargen(p) {
   const sg = await q("select s.name, s.stamp_goal from services s join providers p on p.id=s.provider_id where p.name like 'Sofía%' and s.stamp_goal is not null");
   ok("tarjeta solo en Esmaltado, con 16 sellos", sg.length === 1 && sg[0].name === "Esmaltado semipermanente" && sg[0].stamp_goal === 16);
   ok("tarjetas activadas en la base", (await q("select stamps_on from provider_settings ps join providers p on p.id=ps.provider_id where p.name like 'Sofía%'"))[0].stamps_on === true);
-  await pg.click("[data-btab=clientes]"); await wait(300); await pg.click(".clist [data-cli]"); await wait(300);
+  // Ana por nombre (se registró como «ana»; la lista va por última visita y otras pruebas cargan clientes atendidos hoy)
+  await pg.click("[data-btab=clientes]"); await wait(300); await pg.click('.clist [data-cli^="ana" i]'); await wait(300);
   ok("v2: el cliente se ve sin la ficha (números y teléfono)", (await pg.locator("#fNotas").count()) === 0 && /Visitas[\s\S]*Faltas[\s\S]*Gastó en total[\s\S]*Última visita/.test(await txt()) && (await pg.locator("#app .panel.contact .hint svg.ic").count()) > 0);
   await pg.click(`[data-act=stampAdd][data-sk="${esm}"]`); await wait(800);
   const anaStamps = async () => ((await q("select stamps from loyalty_cards lc join auth.users u on u.id=lc.user_id where u.email='ana@test.ar' and lc.service_id=$1", [esm]))[0] || {}).stamps || 0;
@@ -1260,6 +1327,41 @@ async function turnoConMargen(p) {
   await pg.click("[data-act=admMn][data-d='-1']"); await wait(1200);
   await pg.click("[data-act=admClose][data-k=month]"); await wait(200); await pg.click("[data-act=admClose][data-k=month]"); await wait(1500);
   ok("v30: cerrar el mes pasado", (await q("select count(*)::int c from admin_closings where kind='month'"))[0].c === 1 && (await pg.locator(".cclosed").count()) === 1);
+  // D44 (10/11 · punto 12): gastos fijos y variables de TuTiempo, como en Finanzas del profesional
+  {
+    const monthOf = () => pg.evaluate(() => { const f = S.admFin && S.admFin[+S.admM.slice(0, 4)]; return f && f.months.find((m) => m.month === S.admM) });
+    ok("D44: un mes cerrado no deja agregar, cambiar ni borrar gastos (fijos ni variables)",
+       (await pg.locator(".cclosed").count()) === 1 && (await pg.locator("#fAdmExp, #fAdmFixed, [data-act=admFxEdit], [data-act=admFxNew], [data-act=admExpEdit], [data-act=admExpDel]").count()) === 0
+       && /Mes cerrado: los gastos fijos de este mes quedan como están/.test(await pg.locator(".afix").innerText()) && /El mes está cerrado/.test(await pg.locator(".avar").innerText()));
+    await pg.click("[data-act=admMn][data-d='1']"); await pg.waitForSelector(".afix", { timeout: 8000 }).catch(() => {}); await wait(400);
+    const fx = await q("select id, concept from admin_fixed_expenses where preset is not null order by id");
+    ok("D44: los 4 gastos fijos precargados (hosting, base de datos, emails y dominio) dicen «Completá el monto»",
+       fx.length === 4 && (await pg.locator(".afix li.afx-missing").count()) === 4 && /Hostinger/.test(await pg.locator(".afix").innerText()) && /Completá el monto/.test(await pg.locator(".afix").innerText()));
+    ok("D44: el gasto que ya estaba cargado queda en «Gastos variables»", (await pg.locator(".avar li", { hasText: "Hosting" }).count()) === 1 && /gastos fijos · \$0/i.test(await pg.locator(".afix .lbl").innerText()));
+    await pg.click(`[data-act=admFxEdit][data-id="${fx[0].id}"]`); await wait(300);
+    await pg.fill("#afm", "12000"); await pg.click("#fAdmFixed button[type=submit]"); await pg.waitForSelector(".afix:not(:has(#fAdmFixed))", { timeout: 8000 }).catch(() => {}); await wait(600);
+    ok("D44: completar el monto de un fijo: se carga este mes en la base y en pantalla",
+       await until("select amount from admin_expenses where fixed_id=$1 and to_char(fixed_month, 'YYYY-MM')=$2", [fx[0].id, curM], (r) => r.length === 1 && r[0].amount === 12000)
+       && (await pg.locator(`.afix li[data-fx="${fx[0].id}"]`).innerText()).includes("$12.000") && (await pg.locator(".afix .lbl").innerText()).includes("$12.000"));
+    await pg.fill("#aec", "Publicidad"); await pg.fill("#aem", "30000"); await pg.click("#fAdmExp button[type=submit]"); await wait(1500);
+    const pub = await q("select id from admin_expenses where concept='Publicidad' and fixed_id is null");
+    ok("D44: agregar un gasto variable", pub.length === 1 && (await pg.locator(`.avar li[data-exp="${pub[0]?.id}"]`).count()) === 1);
+    await pg.click(`[data-act=admExpEdit][data-id="${pub[0]?.id}"]`); await wait(300);
+    await pg.fill("#aeec", "Publicidad en Instagram"); await pg.fill("#aeem", "35000"); await pg.click("#fAdmExpEd button[type=submit]"); await wait(1500);
+    ok("D44: cambiar un gasto variable (nombre y monto)", (await q("select concept, amount from admin_expenses where id=$1", [pub[0]?.id]))[0]?.amount === 35000
+       && (await pg.locator(`.avar li[data-exp="${pub[0]?.id}"]`).innerText()).includes("Publicidad en Instagram") && (await pg.locator("#fAdmExpEd").count()) === 0);
+    const mo = await monthOf();
+    const sum = await pg.locator(".asum").innerText().catch(() => "");
+    const res = mo ? await pg.evaluate((n) => money(n), mo.commission - 92000) : "?";
+    ok("D44: el resultado del mes = comisión − gastos fijos − gastos variables, con fijos y variables aparte",
+       mo && mo.fixed === 12000 && mo.variable === 80000 && /Gastos fijos\s*\$12\.000/.test(sum) && /Gastos variables\s*\$80\.000/.test(sum)
+       && sum.includes("Resultado: " + res) && (await pg.locator(".kpi.big b").innerText()) === res, JSON.stringify(mo) + " " + sum);
+    await pg.click(`[data-act=admExpDel][data-id="${pub[0]?.id}"]`); await wait(1500);
+    ok("D44: borrar un gasto variable", (await q("select count(*)::int c from admin_expenses where id=$1", [pub[0]?.id]))[0].c === 0 && (await pg.locator(`.avar li[data-exp="${pub[0]?.id}"]`).count()) === 0);
+    await pg.click("[data-act=admM][data-m='']"); await wait(600);
+    const head = await pg.locator(".ftbl").first().locator("thead").innerText();
+    ok("D44: el balance anual separa fijos y variables", /fijos/i.test(head) && /variables/i.test(head) && /resultado/i.test(head) && /variables/i.test(await pg.locator(".ftbl").nth(1).locator("thead").innerText()));
+  }
   await menu("[data-act=asClient][data-to=cuenta]"); await wait(400);
   ok("Bloque D: desde el panel de TuTiempo, Mi perfil vuelve a la cuenta como cliente", (await pg.evaluate(() => S.role === "cliente" && S.view === "cuenta")));
   probing = true; const reuse = await pg.evaluate(async (h) => { const r = await sb.auth.verifyOtp({ token_hash: h, type: "recovery" }); return !!r.error }, (await mailOf("carla@test.ar")).recovery); probing = false;
@@ -1765,6 +1867,15 @@ async function turnoConMargen(p) {
     await pa.click("nav [data-act=bellToggle]"); await pa.waitForSelector(".bellpanel .msg-act", { timeout: 8000 }).catch(() => {});
     ok("4/11: …y en la campanita se ve con «Ver perfil»", /Esta semana hay promo de esmaltado/.test(await pa.locator(".bellpanel").innerText()) && (await pa.locator(".bellpanel .msg-act[data-go=perfil]").count()) >= 1);
     await pa.keyboard.press("Escape");
+    // 10/11: con la app abierta, otra novedad llega a la campanita sin recargar (al llegar el push, el service worker le
+    // avisa a la app con "tt-push"; acá se simula ese mensaje: el recorrido real del service worker lo prueba pwa.js)
+    await ps.fill("#postTxt", "Segunda novedad con la app abierta"); await ps.click("[data-act=publicar]");
+    await until("select count(*)::int c from client_messages where kind = 'news' and user_id = $1", [anaId], (r) => r[0].c === 2);
+    const inboxHas2 = () => pa.evaluate(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"));
+    const before2 = await inboxHas2();
+    await pa.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "tt-push" } })));
+    await pa.waitForFunction(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"), null, { timeout: 8000 }).catch(() => {});
+    ok("10/11: con la app abierta, la novedad aparece en la campanita sin recargar", !before2 && (await inboxHas2()) && (await pa.locator(".bell-btn .bell-n").count()) >= 1);
     // S19 (8/11): con el negocio suspendido no hay «Avisar a tus seguidores» ni «Ofrecer» (la base también lo rechaza)
     await q("update providers set status = 'suspended' where id = $1", [sofi.id]);
     await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector(".avisarpanel", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
@@ -1785,7 +1896,65 @@ async function turnoConMargen(p) {
     await volver();
     await ps.waitForFunction(() => /Todavía no te sigue nadie/.test(document.querySelector("#app")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
     ok("4/11: quien deja de seguir sale de la lista y del número", /Todavía no te sigue nadie/.test(await stxt()) && /Seguidores\s*0/.test(await ps.locator(".ctabs").innerText()));
+    // 10/11: después de dejar de seguir, «Avisar a tus seguidores» ya no le llega
+    await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector("#postTxt", { timeout: 8000 }).catch(() => {});
+    await ps.fill("#postTxt", "Novedad después de dejar de seguir"); await ps.click("[data-act=publicar]"); await ps.waitForTimeout(1500);
+    ok("10/11: después de dejar de seguir no le llega nada más (sin seguidores, «Avisar» lo dice y no manda)",
+       /Todavía no tenés seguidores/.test(await ps.locator(".toast").innerText().catch(() => ""))
+       && (await q("select count(*)::int c from client_messages where user_id = $1 and body = 'Novedad después de dejar de seguir'", [anaId]))[0].c === 0);
     await ctxS.close(); await ctxA.close();
+  }
+  // 10/11 · punto 6: tocar un turno de la Agenda abre su detalle a la primera, en el celular y en la compu, tocando
+  // varios seguidos y también si la Agenda se pone al día justo durante el toque
+  {
+    const sofiP = (await q("select id from providers where name like 'Sofía%'"))[0].id;
+    const [sv6] = await q("select id from services where provider_id=$1 and active order by id limit 1", [sofiP]);
+    const dia6 = (await q("select ((now() at time zone 'America/Argentina/Buenos_Aires')::date + 3)::text d"))[0].d;
+    const nombres = ["Toque Uno", "Toque Dos", "Toque Tres", "Toque Cuatro"];
+    for (const [i, n] of nombres.entries()) {
+      await q(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)
+        values ($1,$2,$3,'Corte','manual','confirmed',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '40 minutes',5000)`,
+        [sofiP, sv6.id, n, dia6, ["10:00", "11:00", "12:00", "13:00"][i]]);
+    }
+    for (const [label, opts] of [["celular", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }], ["compu", { viewport: { width: 1366, height: 860 } }]]) {
+      const ctx = await b.newContext(opts); const p6 = await ctx.newPage(); p6.on("pageerror", (e) => errs.push(e.message));
+      await p6.goto(BASE + "/ingresar"); await p6.waitForSelector("#ai_e");
+      await p6.fill("#ai_e", "sofia@test.ar"); await p6.fill("#ai_p", "prestador123"); await p6.click("#fLogin button[type=submit]"); await p6.waitForTimeout(1500);
+      await p6.goto(BASE + "/panel/agenda?dia=" + dia6); await p6.waitForSelector(".tl .ev", { timeout: 8000 }).catch(() => {}); await p6.waitForTimeout(500);
+      const ids = await p6.evaluate((ns) => ns.map((n) => (BOOK.find((x) => x.cliente === n) || {}).id), nombres);
+      const toque = async (id) => { const el = p6.locator(`.ev[data-sel="${id}"]`); await el.scrollIntoViewIfNeeded(); if (label === "celular") await el.tap(); else await el.click(); await p6.waitForTimeout(150); };
+      const abierto = async (n) => new RegExp(n).test(await p6.locator(".detail").innerText().catch(() => ""));
+      let bien = 0;
+      for (const [i, id] of [ids[0], ids[1], ids[2], ids[1], ids[3], ids[0]].entries()) {
+        await toque(id);
+        if (await abierto(nombres[ids.indexOf(id)])) bien++;
+      }
+      ok(`10/11: ${label}: tocar 6 turnos seguidos (también uno ya abierto) abre cada detalle a la primera`, bien === 6, `${bien}/6`);
+      // la Agenda se pone al día (llega un turno nuevo) justo entre que el dedo baja y sube
+      // la pantalla quieta (el toque anterior la llevó hasta el detalle) y el turno a la vista, antes de apoyar el dedo
+      await p6.locator(`.ev[data-sel="${ids[2]}"]`).scrollIntoViewIfNeeded(); await p6.waitForTimeout(700);
+      const box = await p6.locator(`.ev[data-sel="${ids[2]}"]`).boundingBox();
+      const cx = box.x + box.width / 2, cy = box.y + Math.min(box.height / 2, 12);
+      const nuevo = async (h) => q(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)
+        values ($1,$2,$3,'Corte','manual','confirmed',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires',($4||' '||$5)::timestamp at time zone 'America/Argentina/Buenos_Aires' + interval '20 minutes',5000)`,
+        [sofiP, sv6.id, "Llega " + label + h, dia6, h]);
+      const refrescar = () => p6.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      if (label === "celular") {
+        const cdp = await ctx.newCDPSession(p6);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: cy }] });
+        await nuevo("16:00"); await refrescar(); await p6.waitForTimeout(900);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      } else {
+        await p6.mouse.move(cx, cy); await p6.mouse.down();
+        await nuevo("17:00"); await refrescar(); await p6.waitForTimeout(900);
+        await p6.mouse.up();
+      }
+      await p6.waitForTimeout(300);
+      ok(`10/11: ${label}: con la Agenda poniéndose al día durante el toque, el detalle se abre igual`, await abierto(nombres[2]));
+      await p6.waitForTimeout(1200);
+      ok(`10/11: ${label}: …y el turno nuevo aparece apenas termina el toque`, new RegExp("Llega " + label).test(await p6.locator(".tl").innerText().catch(() => "")));
+      await ctx.close();
+    }
   }
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);
   ok("sin bloqueos de la CSP", csp.length === 0); if (csp.length) console.log(csp.slice(0, 3));
