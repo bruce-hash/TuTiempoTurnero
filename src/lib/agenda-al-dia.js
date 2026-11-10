@@ -12,6 +12,40 @@ const EVERY = 30000;
 // no se toca la pantalla mientras el prestador está haciendo algo: guardando, con el formulario de turno manual o de
 // bloqueo abierto, o escribiendo en un campo
 const busy = () => pending.n > 0 || S.manOpen || S.blockOpen || typing();
+
+// 10/11 · punto 6: si la Agenda se redibuja entre que el dedo (o el mouse) baja y sube, el turno tocado se reemplaza
+// por uno nuevo y el navegador no manda el toque: había que tocar dos veces. Mientras hay un toque en curso (y un
+// instante después) no se redibuja; los datos nuevos quedan guardados y se dibujan con el toque o apenas termina.
+let pointerDown = false;
+let lastUp = 0;
+let deferred = false;
+const touching = () => pointerDown || Date.now() - lastUp < 600;
+if (typeof document !== "undefined") {
+  document.addEventListener("pointerdown", () => (pointerDown = true), true);
+  const up = () => {
+    pointerDown = false;
+    lastUp = Date.now();
+    if (deferred) {
+      setTimeout(() => {
+        if (deferred && !touching() && !busy()) {
+          deferred = false;
+          render();
+        }
+      }, 700);
+    }
+  };
+  document.addEventListener("pointerup", up, true);
+  document.addEventListener("pointercancel", up, true);
+}
+// dibuja ahora, o apenas termine el toque en curso
+function drawSoon() {
+  if (touching()) {
+    deferred = true;
+    return;
+  }
+  deferred = false;
+  render();
+}
 const onAgenda = () => S.role === "barbero" && S.btab === "agenda" && !!S.me;
 
 let running = false;
@@ -24,7 +58,7 @@ export async function refreshAgendaNow() {
     const changed = await api.refreshAgenda();
     // mientras llegaba la respuesta pudo cambiar de pestaña o abrir un formulario
     if (changed && onAgenda() && !busy()) {
-      render();
+      drawSoon();
     }
     return changed;
   } catch {
@@ -49,7 +83,7 @@ export async function refreshCommunityNow() {
       await api.followers().catch(() => {});
     }
     if (changed && S.role === "barbero" && !busy()) {
-      render();
+      drawSoon();
     }
     return changed;
   } catch {

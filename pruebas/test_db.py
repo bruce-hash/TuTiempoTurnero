@@ -714,6 +714,91 @@ ok("cerrar un año que terminó cierra sus 12 meses", not err(q("select admin_cl
 ok("con el año cerrado no se reabre un mes", err(q("select admin_reopen('month', make_date(%s,3,1))", (yy - 2,), uid=adm), "year_closed"))
 ok("el resumen de años muestra el año cerrado", any(x["year"] == yy - 2 for x in q("select admin_finance(%s)", (yy,), uid=adm)[0][0]["years"]))
 ok("nadie lee los cierres ni los gastos directo", err(q("select * from admin_closings", uid=adm)) and err(q("select * from admin_expenses", uid=prov)))
+# D44 · Balance del admin: gastos fijos y variables de TuTiempo
+m0 = hoy_ar.replace(day=1)
+def mes_atras(n):
+    d = m0
+    for _ in range(n): d = (d - dt.timedelta(days=1)).replace(day=1)
+    return d
+pm2, pm3 = mes_atras(2), mes_atras(3)
+ok("D44: la precarga existe una vez (hosting, base de datos, emails y dominio), sin monto y desde este mes",
+   q("select count(*), count(distinct preset), sum(amount), min(since), max(since) from admin_fixed_expenses where preset is not null")[0] == (4, 4, 0, m0, m0))
+FX = q("select admin_finance(%s)", (yy,), uid=adm)[0][0]
+ok("D44: el balance trae los gastos fijos precargados (sin monto: no cargan gastos)",
+   sum(1 for f in FX["fixed_items"] if f["preset"] and f["amount"] == 0) == 4
+   and q("select count(*) from admin_expenses e join admin_fixed_expenses f on f.id = e.fixed_id where f.preset is not null")[0][0] == 0)
+ok("D44: solo el admin cambia gastos fijos y variables (un prestador y anon no)",
+   err(q("select admin_fixed_save(null, 'x', 10, %s)", (m0,), uid=prov), "forbidden") and err(q("select admin_fixed_save(null, 'x', 10, %s)", (m0,), role="anon"))
+   and err(q("select admin_fixed_stop(1, %s)", (m0,), uid=prov), "forbidden") and err(q("select admin_fixed_stop(1, %s)", (m0,), role="anon"))
+   and err(q("select admin_update_expense(%s, 'x', 10)", (e1[0][0],), uid=prov), "forbidden") and err(q("select admin_update_expense(%s, 'x', 10)", (e1[0][0],), role="anon"))
+   and err(q("select admin_delete_expense(%s)", (e1[0][0],), uid=prov), "forbidden") and err(q("select admin_finance(%s)", (yy,), role="anon")))
+ok("D44: nadie lee los gastos fijos directo (ni el admin) y la app no llama la carga de los fijos",
+   err(q("select * from admin_fixed_expenses", uid=adm)) and err(q("select * from admin_fixed_expenses", uid=prov)) and err(q("select * from admin_fixed_expenses", role="anon"))
+   and err(q("select admin_fixed_sync()", uid=adm)) and err(q("select admin_month_live(%s)", (m0,), uid=adm)))
+# un gasto fijo que empezó hace 3 meses (como si se hubiera creado entonces)
+fx = q("insert into admin_fixed_expenses (concept, amount, since, applies_from) values ('Servidor', 1000, %s, %s) returning id", (pm3, pm3))[0][0]
+q("select admin_finance(%s)", (yy,), uid=adm)
+fxrows = lambda: dict(q("select fixed_month, amount from admin_expenses where fixed_id=%s", (fx,)))
+ok("D44: un gasto fijo se carga solo cada mes desde que empieza (en el mes cerrado no)", fxrows() == {pm3: 1000, pm2: 1000, m0: 1000}, str(fxrows()))
+q("select admin_finance(%s)", (yy,), uid=adm)
+ok("D44: volver a abrir el balance no lo duplica", q("select count(*) from admin_expenses where fixed_id=%s", (fx,))[0][0] == 3)
+ok("D44: un fijo se cambia o se deja de repetir solo desde el mes actual (un mes pasado: bad_month)",
+   err(q("select admin_fixed_save(%s, 'Servidor', 3000, %s)", (fx, pm2), uid=adm), "bad_month") and err(q("select admin_fixed_stop(%s, %s)", (fx, pm2), uid=adm), "bad_month")
+   and err(q("select admin_fixed_save(null, 'Otro', 3000, %s)", (pm2,), uid=adm), "bad_month"))
+ok("D44: editar un fijo desde el mes actual", not err(q("select admin_fixed_save(%s, 'Servidor VPS', 2500, %s)", (fx, m0), uid=adm)))
+ok("D44: … cambia este mes y no los anteriores (monto ni nombre)", fxrows() == {pm3: 1000, pm2: 1000, m0: 2500}
+   and q("select concept from admin_expenses where fixed_id=%s and fixed_month=%s", (fx, pm2))[0][0] == "Servidor"
+   and q("select concept from admin_expenses where fixed_id=%s and fixed_month=%s", (fx, m0))[0][0] == "Servidor VPS")
+fx0 = q("select id from admin_expenses where fixed_id=%s and fixed_month=%s", (fx, m0))[0][0]
+ok("D44: la fila de un fijo no se edita ni se borra suelta",
+   err(q("select admin_delete_expense(%s)", (fx0,), uid=adm), "fixed_expense") and err(q("select admin_update_expense(%s, 'x', 5)", (fx0,), uid=adm), "fixed_expense"))
+host = q("select id from admin_fixed_expenses where preset='hosting'")[0][0]
+ok("D44: completar el monto de un precargado lo carga desde este mes (no hacia atrás)",
+   not err(q("select admin_fixed_save(%s, 'Hosting (Hostinger)', 9000, %s)", (host, m0), uid=adm))
+   and q("select fixed_month, amount from admin_expenses where fixed_id=%s", (host,)) == [(m0, 9000)])
+ok("D44: un fijo nuevo pide monto", err(q("select admin_fixed_save(null, 'Otro', 0, %s)", (m0,), uid=adm), "bad_amount"))
+# gastos variables del mes actual: agregar, editar y borrar
+v1 = q("select admin_add_expense(%s, 'Publicidad', 50000)", (hoy_ar,), uid=adm)[0][0]
+ok("D44: editar un gasto variable", not err(q("select admin_update_expense(%s, 'Publicidad en Instagram <b>', 60000)", (v1,), uid=adm))
+   and q("select concept, amount, fixed_id from admin_expenses where id=%s", (v1,))[0] == ("Publicidad en Instagram b", 60000, None))
+ok("D44: gastos variables inválidos rechazados", err(q("select admin_update_expense(%s, ' ', 10)", (v1,), uid=adm), "empty_concept") and err(q("select admin_update_expense(%s, 'x', 0)", (v1,), uid=adm), "bad_amount"))
+mm0 = [m for m in q("select admin_finance(%s)", (yy,), uid=adm)[0][0]["months"] if m["month"] == m0.strftime("%Y-%m")][0]
+var0 = q("select coalesce(sum(amount), 0) from admin_expenses where fixed_id is null and day >= %s and day < %s", (m0, (m0 + dt.timedelta(days=32)).replace(day=1)))[0][0]
+ok("D44: el mes trae comisión, gastos fijos y variables por separado (resultado = comisión − fijos − variables)",
+   mm0["fixed"] == 11500 and mm0["variable"] == var0 and var0 >= 60000 and mm0["expenses"] == mm0["fixed"] + mm0["variable"]
+   and mm0["commission"] - mm0["fixed"] - mm0["variable"] == mm0["commission"] - mm0["expenses"], json.dumps(mm0))
+ok("D44: borrar un gasto variable", not err(q("select admin_delete_expense(%s)", (v1,), uid=adm)) and q("select count(*) from admin_expenses where id=%s", (v1,))[0][0] == 0)
+# mes cerrado: nada se agrega, edita ni borra (fijos ni variables)
+ok("D44: en un mes cerrado no se edita un gasto variable", err(q("select admin_update_expense(%s, 'x', 10)", (e1[0][0],), uid=adm), "month_closed")
+   and q("select amount from admin_expenses where id=%s", (e1[0][0],))[0][0] == 15000)
+q("insert into admin_closings (kind, period) values ('month', %s)", (m0,))   # simula el mes actual cerrado
+ok("D44: con el mes cerrado no se agrega, cambia ni deja de repetir un fijo, ni se carga un variable",
+   err(q("select admin_fixed_save(%s, 'Servidor VPS', 4000, %s)", (fx, m0), uid=adm), "month_closed") and err(q("select admin_fixed_save(null, 'Otro', 4000, %s)", (m0,), uid=adm), "month_closed")
+   and err(q("select admin_fixed_stop(%s, %s)", (fx, m0), uid=adm), "month_closed") and err(q("select admin_add_expense(%s, 'x', 10)", (hoy_ar,), uid=adm), "month_closed")
+   and fxrows()[m0] == 2500)
+q("delete from admin_closings where kind='month' and period=%s", (m0,))
+ok("D44: cerrar un mes guarda los fijos aparte", not err(q("select admin_close('month', %s)", (pm2,), uid=adm))
+   and q("select expenses, expenses_fixed from admin_closings where kind='month' and period=%s", (pm2,))[0] == (1000, 1000))
+mm2 = [m for m in q("select admin_finance(%s)", (pm2.year,), uid=adm)[0][0]["months"] if m["month"] == pm2.strftime("%Y-%m")][0]
+ok("D44: … y el mes cerrado muestra fijos y variables de la foto", mm2["state"] == "closed" and mm2["fixed"] == 1000 and mm2["variable"] == 0, json.dumps(mm2))
+ok("D44: el balance anual trae fijos y variables por año", all("fixed" in y0 and "variable" in y0 for y0 in q("select admin_finance(%s)", (yy,), uid=adm)[0][0]["years"]))
+ok("D44: dejar de repetir un fijo desde este mes (los meses anteriores quedan)", not err(q("select admin_fixed_stop(%s, %s)", (fx, m0), uid=adm))
+   and fxrows() == {pm3: 1000, pm2: 1000} and not err(q("select admin_finance(%s)", (yy,), uid=adm)) and fxrows() == {pm3: 1000, pm2: 1000})
+ok("D44: … sigue en la lista de los meses en que corrió y ya no se edita",
+   any(f["id"] == fx and f["until"] == mes_atras(1).strftime("%Y-%m") for f in q("select admin_finance(%s)", (yy,), uid=adm)[0][0]["fixed_items"])
+   and err(q("select admin_fixed_save(%s, 'Servidor VPS', 4000, %s)", (fx, m0), uid=adm), "not_found"))
+dom = q("select id from admin_fixed_expenses where preset='domain'")[0][0]
+ok("D44: dar de baja un precargado lo saca de la lista", not err(q("select admin_fixed_stop(%s, %s)", (dom, m0), uid=adm))
+   and not any(f["id"] == dom for f in q("select admin_finance(%s)", (yy,), uid=adm)[0][0]["fixed_items"]))
+import os, re
+precarga = re.search(r"insert into public\.admin_fixed_expenses \(concept, amount, since, applies_from, preset\).*?do nothing;",
+                     open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "supabase", "migrations", "20261110170000_balance_gastos_admin.sql"), encoding="utf8").read(), re.S)
+ok("D44: la precarga está en la migración", precarga is not None)
+if precarga: q(precarga.group(0))
+ok("D44: volver a correr la migración no duplica los precargados ni devuelve el dado de baja",
+   q("select count(*) from admin_fixed_expenses where preset is not null")[0][0] == 4
+   and not any(f["id"] == dom for f in q("select admin_finance(%s)", (yy,), uid=adm)[0][0]["fixed_items"])
+   and q("select amount from admin_fixed_expenses where id=%s", (host,))[0][0] == 9000)
 
 # borrar cuentas
 ok("borrar cuenta de cliente", not err(q("select delete_my_account()", uid=cli1)) and q("select count(*) from auth.users where id=%s", (cli1,))[0][0] == 0)

@@ -40,6 +40,9 @@ reg = {"name": "Pendiente", "categories": ["b"], "phone": "2284 0", "dni": "3011
 q("insert into auth.users (email, raw_user_meta_data) values ('pendiente@test.ar', %s), ('viejo@test.ar', %s), ('cliente@test.ar', %s)",
   (json.dumps({"full_name": "Pendiente", "provider_reg": reg}), json.dumps({"full_name": "Viejo", "dni": "30111998"}),
    json.dumps({"full_name": "Cliente", "provider_reg": None})))
+# versión 31: gastos de TuTiempo y un mes cerrado del balance del admin (D44: pasan a gastos variables)
+q("insert into admin_expenses (day, concept, amount) values ('2026-03-05', 'Hosting viejo', 45000), ('2026-03-10', 'Publicidad', 80000)")
+q("insert into admin_closings (kind, period, commission, expenses) values ('month', '2026-03-01', 200000, 125000)")
 
 for m in resto:
     q(m.read_text())
@@ -76,6 +79,14 @@ ok("alta por pasos: los prestadores de la versión 31 quedan con los 5 pasos hec
 q("select set_config('request.jwt.claims', '', false)")
 ok("provider_secrets ya no existe", q("select to_regclass('public.provider_secrets')")[0][0] is None)
 
+ok("D44: los gastos de TuTiempo ya cargados quedan como gastos variables, con el mismo monto",
+   q("select concept, amount, fixed_id from admin_expenses order by id") == [("Hosting viejo", 45000, None), ("Publicidad", 80000, None)]
+   and q("select admin_month_live('2026-03-01') @> '{\"expenses\": 125000, \"fixed\": 0, \"variable\": 125000}'")[0][0])
+ok("D44: el mes cerrado de antes queda igual (todo variable)",
+   q("select expenses, expenses_fixed from admin_closings where kind = 'month' and period = '2026-03-01'") == [(125000, 0)])
+ok("D44: los 4 gastos fijos precargados, sin monto",
+   q("select count(*), count(distinct preset), sum(amount) from admin_fixed_expenses where preset is not null")[0] == (4, 4, 0))
+
 # reconectar la misma cuenta: la fila vuelve a cobrar con llaves cifradas
 q("set role service_role")
 q("select mp_connect(%s, '111', 'v1:aXY=:bnVldmE=', 'v1:aXY=:cmVm', 15552000)", (con_id,))
@@ -90,6 +101,8 @@ ok("las migraciones se pueden volver a correr: la cuenta reconectada sigue cobra
    q("select status from mp_accounts where provider_id = %s", (con_id,)) == [("active",)]
    and q("select count(*) from provider_notices where kind = 'mp_reconnect'")[0][0] == 2
    and q("select count(*) from provider_settings where setup_done <> '{1,2,3,4,5}'")[0][0] == 0)
+ok("D44: los gastos fijos precargados no se duplican al volver a correr las migraciones",
+   q("select count(*) from admin_fixed_expenses")[0][0] == 4 and q("select count(*) from admin_expenses")[0][0] == 2)
 
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
