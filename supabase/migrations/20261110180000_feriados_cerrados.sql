@@ -259,10 +259,13 @@ begin
   end if;
 end $$;
 
--- push_due: igual que en 20261106210000_feriados.sql, con los dos avisos de feriado (10/11)
-create or replace function public.push_due(p_limit int default 100)
-returns table (id bigint, endpoint text, p256dh text, auth text, title text, body text, url text, tag text, ttl int, urgency text)
-language plpgsql security definer set search_path = public as $$
+-- push_due: igual que en 20261110120000_avisos_seguidores.sql (con 'unfollowed'), con los dos avisos de feriado (10/11)
+create or replace function public.push_due(p_limit integer DEFAULT 100)
+ RETURNS TABLE(id bigint, endpoint text, p256dh text, auth text, title text, body text, url text, tag text, ttl integer, urgency text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare r record; skip text; hday text; t text; b text; u text; who text; svc text; pname text; lt timestamp;
         b_status text; b_start timestamptz; b_pid bigint; b_svc text; b_client text;
         o_start timestamptz; o_pid bigint; o_slug text; o_body text;
@@ -295,6 +298,10 @@ begin
                  when r.expires_at <= now() then 'stale'
                  when r.kind in ('conf','r24','r2','new_booking') and (b_status is distinct from 'confirmed' or b_start <= now()) then 'stale'
                  when r.kind = 'client_cancel' and (b_start is null or b_start <= now()) then 'stale'
+                 -- 10/11: dejó de seguir al profesional → lo que quedaba en la cola de ese profesional ya no le llega
+                 when r.kind in ('offer','news') and not exists (
+                        select 1 from public.client_messages m join public.follows f on f.provider_id = m.provider_id and f.user_id = m.user_id
+                         where m.id = r.source_id) then 'unfollowed'
                  when r.kind = 'offer' and (o_start is null or o_start <= now()) then 'stale'
                  -- 10/11 · feriados (D39): el de 7 días antes, si ya eligió; el de los turnos, si ya lo abrió; los dos, si el
                  -- admin sacó el feriado
@@ -370,7 +377,7 @@ begin
     urgency := case when r.kind in ('conf','cancel','r2','new_booking','client_cancel','mp_reconnect') then 'high' else 'normal' end;
     return next;
   end loop;
-end $$;
+end $function$;
 
 revoke execute on function public.push_due(int) from public, anon, authenticated;
 grant execute on function public.push_due(int) to service_role;
