@@ -282,7 +282,9 @@ document.addEventListener("click", (ev) => {
   }
   const selEl = ev.target.closest("[data-sel]");
   if (selEl) {
-    S.sel = String(S.sel) === selEl.dataset.sel ? null : selEl.dataset.sel;
+    // 10/11 · punto 6: tocar un turno siempre abre su detalle (antes, tocar el abierto lo cerraba y parecía que no
+    // respondía); se cierra con la ✕
+    S.sel = selEl.dataset.sel;
     S.bAsk = null;
     render();
     const detail = $(".detail");
