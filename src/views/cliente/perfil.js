@@ -16,7 +16,7 @@ import { render } from "../../ui/render.js";
 import { rating, reviewsHtml } from "../../ui/resenas.js";
 import { myStamps, stampBox, stampEarns, stampGoal, svcByKey } from "../../ui/sellos.js";
 import { toast } from "../../ui/toast.js";
-import { comm } from "../prestador/comunidad.js";
+import { comm } from "../../lib/comunidad.js";
 import { ic } from "../../ui/iconos.js";
 
 // en vivo el listado trae datos resumidos: el perfil completo se pide al abrirlo

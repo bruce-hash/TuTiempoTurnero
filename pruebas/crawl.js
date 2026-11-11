@@ -14,6 +14,8 @@ function leer(p){
  h=h.replace(/<script type="module" crossorigin src="\/([^"]+)"><\/script>\n?/g,(m,f)=>{js+=fs.readFileSync(path.join(p,f),'utf8');return''});
  h=h.replace(/<link rel="stylesheet" crossorigin href="\/([^"]+)">/g,(m,f)=>'<style>'+fs.readFileSync(path.join(p,f),'utf8')+'</style>');
  // dentro de una función: como script clásico, los nombres minificados del módulo no tienen que salir a window
+ // import.meta (la ayuda de Vite para import(), src/partes.js) no existe en un script clásico: va la URL de la página
+ js=js.replace(/\bimport\.meta\b/g,'({url:location.href})');
  return h.replace('</body>',()=>'<script>(function(){'+js.replace(/<\/script/g,'<\\/script')+'\n})()</script>\n</body>');
 }
 const html=RELOJ+leer(process.argv[2]);

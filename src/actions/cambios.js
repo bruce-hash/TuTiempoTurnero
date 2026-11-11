@@ -5,9 +5,8 @@ import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
-import { comm } from "../views/prestador/comunidad.js";
-import { fillMsg, updMsgCount } from "../views/prestador/mensajes.js";
-import { readSvcEditor } from "../views/prestador/perfil.js";
+import { comm } from "../lib/comunidad.js";
+import { part } from "../partes.js";
 
 // cambios en casillas y selectores: adicionales del servicio, acciones registradas por id, días y franjas de
 // Horarios, avisos automáticos, destinatarios de mensajes y rubros del editor de servicios
@@ -59,11 +58,11 @@ document.addEventListener("change", (ev) => {
   }
   if (ev.target.dataset && ev.target.dataset.mc !== void 0) {
     S.msg.sel[ev.target.dataset.mc] = ev.target.checked;
-    updMsgCount();
+    part("panel")?.updMsgCount();
     return;
   }
   if (ev.target.dataset && ev.target.dataset.rc) {
-    readSvcEditor();
+    part("panel")?.readSvcEditor();
     render();
     return;
   }
@@ -83,7 +82,7 @@ document.addEventListener("input", (ev) => {
   if (ev.target.id && /^mtx\d$/.test(ev.target.id)) {
     const preview = $(".ntf-t");
     if (preview) {
-      preview.textContent = fillMsg(ev.target.value);
+      preview.textContent = part("panel")?.fillMsg(ev.target.value) ?? ev.target.value;
     }
     return;
   }

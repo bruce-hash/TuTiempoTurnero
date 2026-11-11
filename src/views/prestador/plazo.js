@@ -3,8 +3,9 @@ import { pctTxt } from "../../lib/dinero.js";
 import { store } from "../../store.js";
 import { ic } from "../../ui/iconos.js";
 
-// 4/11 · Bloque 4: seña fija del 30% para todos (D06). La base no deja guardar otra (ps_fixed_deposit).
-export const DEPOSIT_PCT = 30;
+// 11/11: el número vive en src/lib/sena.js (lo usan también los Términos y el admin sin cargar el panel)
+export { DEPOSIT_PCT } from "../../lib/sena.js";
+import { DEPOSIT_PCT } from "../../lib/sena.js";
 export const depositNote = (style = "") =>
   `<p class="note depnote" style="text-align:left;${style}">${ic("sena")} <b>Seña: ${DEPOSIT_PCT}% del servicio</b>, igual para todos los profesionales de TuTiempo. El resto lo cobrás en el local. Si el cliente no viene, la seña te queda a vos.</p>`;
 

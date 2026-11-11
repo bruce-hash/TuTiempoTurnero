@@ -15,7 +15,7 @@ import { stampsOn } from "../ui/sellos.js";
 import { P, store } from "../store.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
-import { pushCancel } from "../views/prestador/bloqueo-dias.js";
+import { loadPart } from "../partes.js";
 
 registerClick("admV", (ev, el, act) => {
   S.admV = el.dataset.v;
@@ -112,8 +112,9 @@ registerClick("admDelYes", (ev, el, act) => {
       booking.status = "cancelled";
       booking.byProv = true;
       booking.refund = (booking.paid || 0) + (booking.fee || 0) + (booking.mpFee || 0);
+      // la demo simula el aviso al cliente (en vivo lo deja la base); está en la parte del panel
       if (booking.mine) {
-        pushCancel(booking);
+        loadPart("panel").then((mod) => mod.pushCancel(booking)).catch(() => {});
       }
       count++;
     }

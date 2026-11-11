@@ -1,7 +1,7 @@
 import { TODAY, addDays, dkey, nowHM, pad } from "../lib/fechas.js";
 import { store } from "../store.js";
 import { Z5 } from "../views/admin/balance.js";
-import { feeOf } from "../views/prestador/finanzas.js";
+import { feeOf } from "../lib/finanzas-base.js";
 
 export const demoPending0 = () => [
   {

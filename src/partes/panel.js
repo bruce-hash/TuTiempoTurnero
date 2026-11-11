@@ -1,0 +1,20 @@
+// 11/11 · Parte «panel del profesional» (src/partes.js): sus vistas y sus acciones, que se registran al cargarse
+import "../actions/prestador-agenda.js";
+import "../actions/prestador-caja.js";
+import "../actions/deshacer.js";
+import "../actions/prestador-clientes.js";
+import "../actions/prestador-bloqueos.js";
+import "../actions/prestador-finanzas.js";
+import "../actions/prestador-horarios.js";
+import "../actions/feriados.js";
+import "../actions/prestador-perfil.js";
+import "../actions/prestador-productos.js";
+export { vBarbero } from "../views/prestador/panel.js";
+export { scheduleHorarios } from "../actions/prestador-horarios.js";
+export { SMAX } from "../views/prestador/estadisticas.js";
+export { PRESETS } from "../views/prestador/horarios.js";
+export { fillMsg, pushNotice, updMsgCount } from "../views/prestador/mensajes.js";
+export { readSvcEditor } from "../views/prestador/perfil.js";
+export { loadFollowers } from "../views/prestador/seguidores.js";
+export { qrSheet } from "../views/prestador/comunidad.js";
+export { pushCancel } from "../views/prestador/bloqueo-dias.js";

@@ -1,7 +1,7 @@
 import { chargeFor } from "../../lib/cobro.js";
 import { money, pctTxt } from "../../lib/dinero.js";
 import { store } from "../../store.js";
-import { DEPOSIT_PCT } from "../prestador/plazo.js";
+import { DEPOSIT_PCT } from "../../lib/sena.js";
 import { LEGAL_VERSION, legalDraft } from "./privacidad.js";
 
 const sec = (title, body) => `<section><h2>${title}</h2>${body}</section>`;

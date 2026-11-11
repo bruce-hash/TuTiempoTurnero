@@ -11,7 +11,7 @@ import { store } from "../store.js";
 import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { loadList } from "../views/cliente/home.js";
-import { comm } from "../views/prestador/comunidad.js";
+import { comm } from "../lib/comunidad.js";
 
 // v2: borrar avisos (uno, o todos los leídos; 4/11: desde la campanita). En la base quedan guardados, fuera de la lista
 const dropMessages = (keep) => {

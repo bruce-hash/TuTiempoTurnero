@@ -7,7 +7,7 @@ import { isReservedSlug } from "../lib/rutas.js";
 import { skey } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
-import { BTABS } from "../views/prestador/panel.js";
+import { BTABS } from "../lib/panel-nav.js";
 
 const CITY_NAME = "Olavarría";
 const SITE = "TuTiempo";

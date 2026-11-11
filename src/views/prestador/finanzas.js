@@ -45,19 +45,10 @@ export function dayState(day) {
   }
   return store.CLOSINGS["day|" + day] ? "day_closed" : "open";
 }
-export const ymk = (date) => date.slice(0, 7);
+export { YEARS, feeOf, ymk } from "../../lib/finanzas-base.js";
+import { YEARS, feeOf, ymk } from "../../lib/finanzas-base.js";
 // C32 (V4): los meses con mayúscula en Finanzas
 const mes = (index) => capW(MESES[index]);
-// comisión que el cliente pagó en un turno de la app (no es del prestador)
-export const feeOf = (booking) => booking.feeIn || 0;
-export const YEARS = () => {
-  const year = NOW().getFullYear();
-  const years = [];
-  for (let value = year - 1; value <= Math.max(2028, year); value++) {
-    years.push(value);
-  }
-  return years;
-};
 // movimientos de caja de un día: seña y resto de los turnos de la app, turnos agendados a mano y lo cobrado
 // sin turno (solo hoy)
 export function dayLines(day) {

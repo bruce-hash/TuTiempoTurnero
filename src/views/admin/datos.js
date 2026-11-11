@@ -8,8 +8,8 @@ import { P, store } from "../../store.js";
 import { render } from "../../ui/render.js";
 import { rating } from "../../ui/resenas.js";
 import { stampSvcs } from "../../ui/sellos.js";
-import { comm } from "../prestador/comunidad.js";
-import { feeOf } from "../prestador/finanzas.js";
+import { comm } from "../../lib/comunidad.js";
+import { feeOf } from "../../lib/finanzas-base.js";
 
 // finanzas de la plataforma de un año: en vivo se piden una vez y se guardan en S.admFin
 export function admFin(year) {

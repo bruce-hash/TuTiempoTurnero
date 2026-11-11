@@ -12,8 +12,6 @@ import { installGuide, installMenuItem, updateBar } from "./avisos.js";
 import { accountMenu } from "./menu-cuenta.js";
 import { bell } from "./campanita.js";
 import { syncUrl } from "../router.js";
-import { vAdmin } from "../views/admin/admin.js";
-import { vNegocio } from "../views/auth/negocio.js";
 import { vNewPass } from "../views/auth/contrasena-nueva.js";
 import { vLogin } from "../views/auth/login.js";
 import { vCheckoutTurno } from "../views/cliente/checkout.js";
@@ -27,7 +25,7 @@ import { vTurnoOk } from "../views/cliente/turno.js";
 import { vNotFound } from "../views/legal/no-encontrado.js";
 import { vPrivacidad } from "../views/legal/privacidad.js";
 import { vTerminos } from "../views/legal/terminos.js";
-import { vBarbero } from "../views/prestador/panel.js";
+import { part, partFailed } from "../partes.js";
 
 function nav() {
   $("#logoLink").innerHTML = LOGO;
@@ -231,11 +229,11 @@ function renderMain() {
   });
   let html;
   if (S.role === "admin") {
-    html = vAdmin();
+    html = partView("admin", (mod) => mod.vAdmin(), "panel");
   } else if (S.role === "barbero") {
     html = S.preview
       ? `<div class="prevbar"><span>${ic("ver")} Así ve tu perfil un cliente</span><button class="btn btn-pri" data-act="exitPreview">Volver al panel</button></div>${vPerfil()}`
-      : vBarbero();
+      : partView("panel", (mod) => mod.vBarbero(), "panel");
   } else {
     switch (S.view) {
       case "perfil":
@@ -254,7 +252,7 @@ function renderMain() {
         html = vNewPass();
         break;
       case "negocio":
-        html = vNegocio();
+        html = partView("negocio", (mod) => mod.vNegocio(), "inicio");
         break;
       case "cuenta":
         html = S.user ? vCuenta() : vLogin(false);
@@ -288,6 +286,18 @@ function renderMain() {
     }
   }
   $("#app").innerHTML = html;
+}
+// 11/11 (división del código): la vista de una parte que se baja aparte (src/partes.js). Mientras llega, el mismo
+// esqueleto de la carga; si no se pudo bajar (sin conexión), un aviso con «Reintentar».
+function partView(name, view, skeleton) {
+  const mod = part(name);
+  if (mod) {
+    return view(mod);
+  }
+  if (partFailed(name)) {
+    return `<div class="apperr panel"><div class="hero-ic">${ic("triste")}</div><h1 class="h1">No se pudo cargar esta parte</h1><p class="lead">Revisá la conexión y probá de nuevo.</p><button class="btn btn-pri btn-block" data-act="partRetry" data-part="${name}">Reintentar</button></div>`;
+  }
+  return bootHtml(skeleton);
 }
 // navegación entre pantallas del cliente (id = prestador, para "perfil")
 export function go(view, id) {
