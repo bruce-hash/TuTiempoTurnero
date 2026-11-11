@@ -1415,7 +1415,7 @@ ok("feriados cerrados: «El <día> es feriado y tu agenda está cerrada. ¿Vas a
    nt and nt[0][1].startswith("El ") and nt[0][1].endswith(" es feriado y tu agenda está cerrada. ¿Vas a trabajar? Tenés 1 turno ese día: se mantiene."), nt and nt[0][1])
 pn = q("select my_provider_notices()", uid=ownF)[0][0]
 ok("feriados: la campanita trae la fecha del feriado y que todavía no eligió (los dos avisos)",
-   sorted(x["kind"] for x in pn if x["ref"] == str(f5) and x["open"] is None) == ["holiday", "holiday_bookings"])
+   sorted(x["kind"] for x in pn if x["ref"] == str(f5) and x["open"] is None and x["kind"].startswith("holiday")) == ["holiday", "holiday_bookings"])
 ok("feriados: no se elige un día que no es feriado", err(q("select holiday_decide(%s, true)", (f5 + dt.timedelta(days=1),), uid=ownF), "not_holiday"))
 ok("feriados: no se elige uno que ya pasó", err(q("select holiday_decide(%s, true)", (fpas,), uid=ownF)))
 ok("feriados: otro usuario no elige por el profesional", err(q("select holiday_decide(%s, true)", (f5,), uid=cliF), "not_provider"))
@@ -1662,7 +1662,7 @@ ok("D45: bloquear dejando los turnos", not err(rb) and rb[0][0]["cancelled"] == 
 ok("D45: sus turnos quedan en la agenda", q("select count(*) from bookings where client_id=%s and provider_id=%s and status='confirmed'", (cB, pB))[0][0] == 2)
 ok("D45: deja de seguirlo (y baja el número de seguidores)", q("select count(*) from follows where user_id=%s and provider_id=%s", (cB, pB))[0][0] == 0
    and q("select followers from providers where id=%s", (pB,))[0][0] == fol0 - 1)
-ok("D45: no se manda ningún aviso de «dejó de seguirte»", q("select count(*) from provider_notices where provider_id=%s and kind <> 'new_follower'", (pB,))[0][0] == 0)
+ok("D45: no se manda ningún aviso de «dejó de seguirte»", q("select count(*) from provider_notices where provider_id=%s and kind not in ('new_follower','new_booking','client_cancel')", (pB,))[0][0] == 0)
 ok("D45: lo que estaba en la cola de push de ese profesional no sale", q("select status from push_outbox where user_id=%s and kind='news'", (cB,))[0][0] == "skipped")
 ok("D45: el profesional ve su bloqueo en Bloqueados", [x["id"] for x in q("select my_blocked()", uid=ownB)[0][0]] == [str(cB)])
 ok("D45: el bloqueado no puede leer la tabla de bloqueos", q("select count(*) from client_blocks", uid=cB)[0][0] == 0

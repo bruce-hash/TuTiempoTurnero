@@ -241,6 +241,62 @@ q("select run_email_send()", role="service_role")
 ok("con los secretos, llama a email-send con la clave del cron", q("select url, headers->>'Authorization' from net.requests")
    == [("https://proyecto.supabase.co/functions/v1/email-send", "Bearer secreto-del-cron")])
 
+# ---------- 9. Reservas y cancelaciones al profesional (11/11, D25) ----------
+def pro_cola(bid, kind):
+    return q("select o.status, o.skip_reason, o.user_id = %s from email_outbox o join provider_notices n on n.id = o.notice_id "
+             "where o.booking_id = %s and o.kind = %s", (owner, bid, kind))
+def aviso(bid, kind):
+    return one("select body from provider_notices where provider_id = %s and kind = %s and ref = %s", (pid, kind, str(bid)))
+q("update email_outbox set status = 'skipped', skip_reason = 'stale' where status = 'pending'")   # lo anterior ya no interesa acá
+r1 = turno(ana, 30)                                   # reserva de la app que entra confirmada
+r2 = turno(ana, 32, status="hold"); q("update bookings set status = 'confirmed' where id = %s", (r2,))
+r3 = turno(ana, 34, status="hold"); q("update bookings set status = 'expired' where id = %s", (r3,)); q("update bookings set status = 'confirmed' where id = %s", (r3,))
+r_man = one("insert into bookings (provider_id, client_name, service_name, source, status, starts_at, ends_at, price) values "
+            "(%s, 'Mostrador', 'Corte', 'manual', 'confirmed', now() + interval '36 hours', now() + interval '37 hours', 10000) returning id", (pid,))
+r_hold = turno(ana, 38, status="hold"); q("update bookings set status = 'expired' where id = %s", (r_hold,))
+ok("reserva nueva de la app: aviso en la campanita del profesional con quién, qué y cuándo",
+   bool(aviso(r1, "new_booking")) and aviso(r1, "new_booking").startswith("Ana Mail reservó Corte para el ") and aviso(r1, "new_booking").endswith(" h."))
+ok("…también la que se paga (hold → confirmed) y la que se confirma con un pago tardío (expired → confirmed)", bool(aviso(r2, "new_booking")) and bool(aviso(r3, "new_booking")))
+ok("…no el turno que carga él ni la reserva que no se pagó", aviso(r_man, "new_booking") is None and aviso(r_hold, "new_booking") is None)
+ok("…y el email al profesional entra a la cola (a su cuenta, ligado al turno)", all(pro_cola(b, "new_booking") == [("pending", None, True)] for b in (r1, r2, r3)))
+q("update bookings set status = 'cancelled_client' where id = %s", (r2,))
+ok("el cliente cancela: aviso y email al profesional (el horario quedó libre)",
+   "canceló su turno de Corte del " in (aviso(r2, "client_cancel") or "") and "volvió a quedar libre" in aviso(r2, "client_cancel")
+   and pro_cola(r2, "client_cancel") == [("pending", None, True)])
+q("update bookings set status = 'cancelled_provider' where id = %s", (r3,))
+ok("si cancela el profesional, a él no le llega (lo hizo él)", aviso(r3, "client_cancel") is None)
+d = due()
+mine = {k: v for k, v in d.items() if v[0] == "dueno@mail.test"}
+subj = sorted(v[1].split(":")[0] for v in mine.values())
+ok("emails_due: «Nueva reserva: …» y «Se canceló una reserva: …», al email del profesional, con el nombre del negocio",
+   subj == ["Nueva reserva", "Se canceló una reserva"] and all(v[3] == "Barbería Mail" for v in mine.values())
+   and any("Ana Mail · " in v[1] for v in mine.values()))
+ok("…y dicen dónde apagarlos (optional)", len(mine) == 2 and all(v[5] is True for v in mine.values()))
+ok("…la reserva que se canceló antes de mandarse no sale (sale la cancelación); la del pago tardío cancelada por él, tampoco",
+   pro_cola(r2, "new_booking") == [("skipped", "stale", True)] and pro_cola(r3, "new_booking") == [("skipped", "stale", True)])
+# el interruptor «Emails de reservas y cancelaciones» (Perfil → Notificaciones), prendido por defecto
+ok("el interruptor está prendido por defecto y el profesional lo apaga (solo el suyo)",
+   q("select email_bookings from profiles where id = %s", (owner,), uid=owner) == [(True,)]
+   and not err(q("update profiles set email_bookings = false where id = %s", (owner,), uid=owner))
+   and q("update profiles set email_bookings = true where id = %s returning id", (owner,), uid=ana) == [])
+r4 = turno(ana, 40)
+due()
+ok("apagado: el email no sale (opt_out) pero el aviso en la campanita sí queda", pro_cola(r4, "new_booking") == [("skipped", "opt_out", True)] and bool(aviso(r4, "new_booking")))
+q("update profiles set email_bookings = true where id = %s", (owner,))
+ok("la campanita trae el día del turno (para «Ver la Agenda»)",
+   any(n["kind"] == "new_booking" and n["ref"] == one("select to_char(starts_at at time zone provider_tz(provider_id), 'YYYY-MM-DD') from bookings where id = %s", (r4,))
+       for n in one("select my_provider_notices()", uid=owner)))
+
+for i in range(25):
+    turno(ana, 60 + i)
+pn = one("select my_provider_notices()", uid=owner)
+ok("la campanita trae a lo sumo 20 reservas y cancelaciones, sin tapar los demás avisos",
+   sum(1 for n in pn if n["kind"] in ("new_booking", "client_cancel")) == 20)
+q("insert into provider_notices (provider_id, kind, ref, body) values (%s, 'mp_refunded', 'P-1', 'Mercado Pago devolvió un pago')", (pid,))
+for i in range(5):
+    turno(ana, 90 + i)
+ok("…un aviso de cobros sigue ahí aunque después lleguen más reservas", any(n["kind"] == "mp_refunded" for n in one("select my_provider_notices()", uid=owner)))
+
 # ---------- 8. Retención (D25): la limpieza diaria borra lo enviado, descartado o fallido con más de 90 días ----------
 viejos = [x[0] for x in q("select id from email_outbox where status in ('sent','skipped','failed') order by id limit 3")]
 pend = one("select id from email_outbox where status = 'pending' order by id limit 1")

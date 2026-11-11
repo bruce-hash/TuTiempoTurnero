@@ -69,6 +69,13 @@ registerChange("bPushBk", (ev) => {
   api.m.setPushPrefs({ push_bookings: on });
   toast(on ? "Listo: te avisamos cada reserva nueva y cada cancelación." : "Listo: ya no te avisamos las reservas ni las cancelaciones. Los avisos de cobros te siguen llegando.");
 });
+// 11/11 (D25): "Emails de reservas y cancelaciones" (el aviso en la campanita queda igual)
+registerChange("bMailBk", (ev) => {
+  const on = ev.target.checked;
+  S.user.emailBookings = on;
+  api.m.setPushPrefs({ email_bookings: on });
+  toast(on ? "Listo: te mandamos un email por cada reserva nueva y cada cancelación." : "Listo: ya no te mandamos emails de reservas ni cancelaciones (las seguís viendo en la campanita).");
+});
 // C06 (V8): "Nuevos seguidores" (aparte de las reservas: apagarlo no las silencia; el aviso en el panel queda)
 registerChange("bPushFl", (ev) => {
   const on = ev.target.checked;

@@ -222,7 +222,7 @@ end $$;
 -- ---------- El aviso, 7 días antes ----------
 alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
 alter table public.provider_notices add constraint provider_notices_kind_check
-  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect','new_follower','mp_term','holiday'));
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect','new_follower','mp_term','holiday')) not valid;  -- not valid (11/11): la migración más nueva la vuelve a crear validada (TODO_EN_UNO.sql se puede volver a correr)
 alter table public.push_outbox drop constraint if exists push_outbox_kind_check;
 alter table public.push_outbox add constraint push_outbox_kind_check
   check (kind in ('conf','r24','r2','rev','bday','cancel','new_booking','client_cancel','cobros','mp_reconnect','new_follower','offer','news','holiday'));

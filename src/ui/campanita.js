@@ -69,6 +69,10 @@ function noticeAction(notice) {
     }
     return `<div class="holbtns"><button class="btn btn-ghost btn-sm msg-act" data-act="holOpen" data-d="${day}">Abrir el día</button><button class="btn btn-ghost btn-sm msg-act" data-act="holClose" data-d="${day}">Dejarlo cerrado</button>${agenda}</div>`;
   }
+  // 11/11 (D25): una reserva nueva o una cancelación de un cliente: a la Agenda, en el día del turno (si no pasó)
+  if ((notice.kind === "new_booking" || notice.kind === "client_cancel") && notice.ref) {
+    return notice.ref < TODAY() ? "" : `<button class="btn btn-ghost btn-sm msg-act" data-act="bellGo" data-to="agenda" data-d="${esc(notice.ref)}">Ver la Agenda</button>`;
+  }
   // 4/11 · Bloque 4: Mercado Pago cobró la comisión de otro plazo: a donde se elige (9/11: Perfil → Cobros con Mercado Pago)
   if (notice.kind === "mp_term") {
     return go("perfil", "Revisar el plazo");
@@ -90,7 +94,7 @@ function clientList() {
 function providerList() {
   const notices = S.notices || [];
   if (!notices.length) {
-    return '<p class="note bell-empty">No tenés avisos. Acá te llegan los seguidores nuevos y las novedades de tus cobros.</p>';
+    return '<p class="note bell-empty">No tenés avisos. Acá te llegan las reservas nuevas, las cancelaciones, los seguidores nuevos y las novedades de tus cobros.</p>';
   }
   return `<ul class="ag">${notices
     .map(
@@ -107,6 +111,9 @@ const liClass = (item) => (fresh(item) ? "unread" : "seen");
 const seenMark = (item) => (fresh(item) ? "" : "✓ Visto · ");
 // título e ícono de cada aviso del profesional (el texto lo arma la base)
 const NOTICE_TITLE = {
+  // 11/11 (D25): cada reserva nueva de la app y cada cancelación de un cliente (también por email y push)
+  new_booking: "Nueva reserva",
+  client_cancel: "Cancelación de un cliente",
   new_follower: "Nuevo seguidor",
   holiday: "Feriado",
   holiday_bookings: "Turnos en un feriado",
@@ -121,7 +128,7 @@ const NOTICE_TITLE = {
   suspended: "Cuenta suspendida",
   reactivated: "Cuenta activa",
 };
-const NOTICE_IC = { new_follower: "clientes", holiday: "agenda", holiday_bookings: "agenda", mp_term: "mp", mp_connect: "mp", mp_reconnect: "mp", mp_cost: "mp", mp_refunded: "efectivo", mp_charged_back: "aviso", mp_in_mediation: "aviso", suspended: "pausa", reactivated: "ok" };
+const NOTICE_IC = { new_booking: "agenda", client_cancel: "agenda", new_follower: "clientes", holiday: "agenda", holiday_bookings: "agenda", mp_term: "mp", mp_connect: "mp", mp_reconnect: "mp", mp_cost: "mp", mp_refunded: "efectivo", mp_charged_back: "aviso", mp_in_mediation: "aviso", suspended: "pausa", reactivated: "ok" };
 // el botón de la cabecera y, si está abierta, la lista
 export function bell() {
   if (!bellShown()) {

@@ -19,6 +19,14 @@ const PUSH_TEXT = {
   prestador: ["Enterate al toque de cada reserva", "Te avisamos cuando alguien reserva o cancela, y si hay novedades de tus cobros. De tus clientes, solo el nombre de pila."],
 };
 
+// 11/11 (D25): lo que llega igual por email, según quién mira (el profesional, solo si no apagó los emails de reservas)
+function byEmail(kind) {
+  if (kind === "prestador" || kind === "panel") {
+    return S.user && S.user.emailBookings === false ? "" : " Igual te avisamos por email cada reserva nueva y cada cancelación.";
+  }
+  return " Igual te mandamos todo por email.";
+}
+
 // tarjeta para activar las notificaciones: después de reservar (cliente) y arriba de la Agenda (prestador).
 // "Ahora no" la esconde 30 días en este dispositivo.
 export function pushCard(kind) {
@@ -30,7 +38,7 @@ export function pushCard(kind) {
     return card(
       ic("instalar"),
       "Para recibir avisos en el iPhone, agregá TuTiempo a tu pantalla de inicio",
-      `${iosSteps(true)}<p class="note pwa-note">Apple solo permite notificaciones a las apps agregadas a inicio (iOS 16.4 o más nuevo). Igual te mandamos todo por email.</p>`,
+      `${iosSteps(true)}<p class="note pwa-note">Apple solo permite notificaciones a las apps agregadas a inicio (iOS 16.4 o más nuevo).${byEmail(kind)}</p>`,
       `<div class="pwa-acts one"><button class="btn btn-ghost" data-act="pushLater" data-k="ios_${kind}">Entendido</button></div>`,
     );
   }
@@ -66,17 +74,26 @@ export const installMenuItem = () => (S.canInstall || needsIosInstall()) && !inA
 // Mi perfil (cliente) y Perfil del panel (prestador): este dispositivo y la opción de cada uno
 export function pushPanel(scope) {
   const push = S.push || {};
-  if (push.avail === "none" || !S.user) {
+  if (!S.user) {
     return "";
+  }
+  // 11/11 (D25): el profesional recibe por email cada reserva nueva y cada cancelación (se apaga acá); va aunque este
+  // navegador no tenga notificaciones
+  const mail =
+    scope === "prestador"
+      ? `<label class="chk pwa-opt"><input type="checkbox" id="bMailBk"${S.user.emailBookings === false ? "" : " checked"}> Emails de reservas y cancelaciones</label>`
+      : "";
+  if (push.avail === "none") {
+    return mail ? `<div class="panel push-panel"><p class="lbl">Notificaciones</p>${mail}</div>` : "";
   }
   const here = /Android|iPhone|iPad/.test(navigator.userAgent) ? "este celular" : "esta compu";
   let device;
   if (push.avail === "ios-install") {
     device = `<p class="note pwa-note">En el iPhone, las notificaciones funcionan con TuTiempo agregada a la pantalla de inicio:</p>${iosSteps(true)}`;
   } else if (push.avail === "ios-old") {
-    device = '<p class="note pwa-note">Tu iPhone necesita iOS 16.4 o más nuevo para recibir notificaciones. Igual te avisamos todo por email.</p>';
+    device = `<p class="note pwa-note">Tu iPhone necesita iOS 16.4 o más nuevo para recibir notificaciones.${byEmail(scope)}</p>`;
   } else if (push.avail === "unsupported") {
-    device = '<p class="note pwa-note">Este navegador no permite notificaciones. Igual te avisamos todo por email.</p>';
+    device = `<p class="note pwa-note">Este navegador no permite notificaciones.${byEmail(scope)}</p>`;
   } else if (push.avail === "denied") {
     device = `<p class="note pwa-note">Bloqueaste las notificaciones de TuTiempo en este navegador. Para recibirlas, habilitalas en la configuración del sitio (el candado al lado de la dirección → Notificaciones → Permitir) y volvé acá.</p>`;
   } else if (push.on) {
@@ -88,8 +105,8 @@ export function pushPanel(scope) {
   }
   const option =
     scope === "prestador"
-      ? `<label class="chk pwa-opt"><input type="checkbox" id="bPushBk"${S.user.pushBookings === false ? "" : " checked"}> Nuevas reservas y cancelaciones de clientes</label>
-     <label class="chk pwa-opt"><input type="checkbox" id="bPushFl"${S.user.pushFollowers === false ? "" : " checked"}> Nuevos seguidores</label>
+      ? `${mail}<label class="chk pwa-opt"><input type="checkbox" id="bPushBk"${S.user.pushBookings === false ? "" : " checked"}> Notificaciones de reservas y cancelaciones</label>
+     <label class="chk pwa-opt"><input type="checkbox" id="bPushFl"${S.user.pushFollowers === false ? "" : " checked"}> Notificaciones de nuevos seguidores</label>
      <p class="note pwa-note">Los avisos de cobros (pagos devueltos, contracargos, reconectar Mercado Pago) te llegan siempre.</p>`
       : `<label class="chk pwa-opt"><input type="checkbox" id="uPush"${S.user.pushNotices === false ? "" : " checked"}> Recordatorios y novedades por notificación</label>
      <p class="note pwa-note">Igual que en email: la confirmación y las cancelaciones llegan siempre. En la notificación no va nada privado: el detalle lo ves al abrir la app.</p>`;

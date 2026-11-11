@@ -185,6 +185,9 @@ ok("una reserva que no se pagó (hold → expired) no avisa", cola(owner, "new_b
 q("update bookings set status = 'confirmed' where id = %s", (b_exp,))
 ok("11/11: …pero si el pago llega tarde y se confirma igual (expired → confirmed), sí avisa", cola(owner, "new_booking", b_exp) == [("new_booking", "pending", None)])
 q("update bookings set status = 'cancelled_refunded' where id = %s", (b_exp,))
+ok("11/11 (D25): la reserva deja su aviso en la campanita, pero no un segundo push (el de «Nueva reserva» alcanza)",
+   one("select count(*) from provider_notices where kind = 'new_booking' and ref = %s", (str(b_new),)) == 1
+   and one("select count(*) from push_outbox o join provider_notices n on n.id = o.source_id where o.source = 'notice' and n.kind in ('new_booking','client_cancel')") == 0)
 b_past = turno(ana, -2, status="hold")
 q("update bookings set status = 'confirmed' where id = %s", (b_past,))
 ok("una reserva que ya empezó no avisa", cola(owner, "new_booking", b_past) == [])
