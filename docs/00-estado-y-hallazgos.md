@@ -67,6 +67,26 @@ el id ni la fecha de la devolución hecha. Registrar cada intento y resultado, y
 firma con la clave de la aplicación de TuTiempo los avisos de pagos cobrados con la llave del prestador
 (`notification_url` de la preferencia). Si no, ningún turno se confirmaría.
 **30/10:** pasó con pagos reales (H35). Desde el Paso 1 ya no depende solo del aviso: ver H35.
+**11/11 · reabierto:** en 7 días, 81 avisos rechazados por firma («no coincide con MP_WEBHOOK_SECRET»), todos de
+pagos reales de un negocio conectado por OAuth; la simulación del panel con la misma clave da 200. Los pagos se
+registran por `mp-reconcile`, con demora. Causa **sin confirmar** (falta ver un rechazo real con su diagnóstico).
+Hipótesis: (a) los avisos de la `notification_url` de un cobro hecho con la llave del vendedor se firman distinto que
+los del webhook del panel (otra clave o, en marketplace, la de otra aplicación); (b) `data.id` o `x-request-id`
+distintos de lo que espera la plantilla. Lo que cambió:
+- Cada rechazo guarda su diagnóstico (`mp_webhook_events.diag`, solo el admin): de dónde salió `data.id` (la dirección,
+  el cuerpo o IPN), el de la dirección y el del cuerpo, `x-request-id`, `ts`, el texto armado para firmar, cuántos `v1`
+  trajo y sus primeros 8 caracteres, cuántas claves se probaron, los nombres de los parámetros de la dirección, el
+  `user_id`, `live_mode`, `action` y `api_version`. Nunca la clave ni la firma completa. También va al log de la función.
+- La firma se valida como dice Mercado Pago (`id:<data.id de la dirección, en minúsculas>;request-id:…;ts:…;`, sin las
+  partes que no vienen) y, de respaldo, con el id del cuerpo y tal como vino; el encabezado puede traer varios `v1`;
+  `MP_WEBHOOK_SECRET` acepta varias claves separadas por coma. Si valida una variante que no es la documentada, queda
+  en `mp_webhook_status.last_ok_via` y en el log (así se sabe cuál era).
+- El aviso del webhook del panel (sin `?provider`, con el `user_id` de la cuenta conectada que cobró) ahora se procesa:
+  la cuenta se busca por `mp_accounts.mp_user_id`.
+- Cada firma válida queda en `mp_webhook_status` (por prestador) y el aviso de «Para revisar» se apaga solo cuando un
+  aviso del mismo prestador vuelve a validar después del último rechazo (no se borra a mano). Los descartados se ven
+  agrupados por motivo («81 avisos rechazados por firma», se despliega).
+Para confirmar la causa: docs/02 → «Si los pagos no se registran» → «Rechazados por firma: qué mandarme».
 
 ### H07 · Media · Recordatorios solo dentro de la app (resuelto en el Bloque 3)
 `send_scheduled_notices` crea avisos en `client_messages`: quien no abre la app no se entera del recordatorio de

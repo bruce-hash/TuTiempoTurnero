@@ -1396,14 +1396,29 @@ async function turnoConMargen(p) {
   await db.query("update mp_accounts set last_error = null where last_error = 'No se pudo renovar la llave (400)'");
   // Paso 1: avisos de Mercado Pago rechazados (por ejemplo, la clave de la firma mal) y un pago recuperado sin aviso
   await db.query("select mp_webhook_event('1999000111', p.id, null, 'bad_signature', 'la firma no coincide con MP_WEBHOOK_SECRET') from providers p where p.name like 'Sofía%'");
-  await db.query("select mp_webhook_event('1999000111', p.id, null, 'bad_signature', 'la firma no coincide con MP_WEBHOOK_SECRET') from providers p where p.name like 'Sofía%'");
+  await db.query(`select mp_webhook_event('1999000111', p.id, null, 'bad_signature', 'la firma no coincide con MP_WEBHOOK_SECRET',
+    '{"id_from":"url","id_url":"1999000111","request_id":"req-1","ts":"1762800000000","manifest":"id:1999000111;request-id:req-1;ts:1762800000000;","v1_count":1,"v1_start":"0a1b2c3d","secrets":1}'::jsonb) from providers p where p.name like 'Sofía%'`);
   await db.query("select mp_webhook_event('1999000111', p.id, null, 'recovered', 'pago aprobado sin aviso: lo encontró la consulta automática') from providers p where p.name like 'Sofía%'");
   await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForFunction(() => /no están llegando bien/.test(document.body.innerText), null, { timeout: 8000 }).catch(() => {}); await wait(300);
   ok("Paso 1: Para revisar avisa que los avisos de Mercado Pago no llegan bien (rechazados y pagos sin aviso) y dónde mirar",
      /Los avisos de Mercado Pago no están llegando bien/.test(await txt()) && /2 avisos rechazados en 7 días \(rechazado: la firma no es válida\)/.test(await txt())
      && /1 pago registrado sin aviso/.test(await txt()) && /MP_WEBHOOK_SECRET/.test(await txt()));
-  ok("Paso 1: …y la lista de avisos dice el detalle y cuántas veces llegó", /la firma no coincide con MP_WEBHOOK_SECRET\) · [^·]+ · 2 veces/.test(await txt()) && /Pago recuperado · pago 1999000111/.test(await txt()));
-  await db.query("delete from mp_webhook_events where mp_payment_id = '1999000111'");
+  // 11/11 · H06: los descartados, una línea por motivo que se despliega
+  ok("H06: los descartados van agrupados por motivo, plegados («2 avisos rechazados por firma», «1 pago recuperado sin aviso»)",
+     /2 avisos rechazados por firma/.test(await txt()) && /1 pago recuperado sin aviso/.test(await txt()) && !/2 veces/.test(await txt())
+     && (await pg.locator("details.admgrp:not([open])").count()) === 2);
+  await pg.click('details.admgrp[data-reason="bad_signature"] > summary'); await pg.click('details.admgrp[data-reason="recovered"] > summary'); await wait(200);
+  ok("Paso 1: …y al desplegar, el detalle y cuántas veces llegó", /la firma no coincide con MP_WEBHOOK_SECRET\) · [^·]+ · 2 veces/.test(await txt()) && /Pago recuperado · pago 1999000111/.test(await txt()));
+  ok("H06: …con el diagnóstico del rechazo (de dónde salió data.id, request-id, ts, el texto firmado, sin la firma completa)",
+     /data\.id de la dirección · request-id sí · ts 1762800000000 · 1 v1 \(empieza 0a1b2c3d…\)/.test(await txt()) && (await txt()).includes("Texto firmado: id:1999000111;request-id:req-1;ts:1762800000000;"));
+  ok("H06: el aviso «no están llegando bien» no se borra a mano y dice que se va solo", (await pg.locator("li.admwh .xbtn").count()) === 0
+     && /se va solo cuando los avisos vuelvan a validar \(todavía no validó ninguno\)/.test(await txt()));
+  await pg.reload(); await pg.waitForFunction(() => /Comisión de TuTiempo este mes/.test(document.body.innerText), null, { timeout: 10000 }).catch(() => {}); await wait(1200);
+  ok("H06: …sigue en la visita siguiente (con los rechazados), aunque ya se leyó", /no están llegando bien/.test(await txt()) && /2 avisos rechazados por firma/.test(await txt()) && !/pago recuperado sin aviso/.test(await txt()));
+  await db.query("select mp_webhook_ok(p.id, 'principal') from providers p where p.name like 'Sofía%'");
+  await pg.evaluate(() => { S.admRev = null; render() }); await pg.waitForFunction(() => !/no están llegando bien/.test(document.body.innerText), null, { timeout: 8000 }).catch(() => {}); await wait(300);
+  ok("H06: cuando un aviso vuelve a validar, el aviso de Para revisar se va solo", !/no están llegando bien/.test(await txt()));
+  await db.query("delete from mp_webhook_events where mp_payment_id = '1999000111'"); await db.query("delete from mp_webhook_status");
   // 7/11: un pago recuperado sin aviso (informativo) no prende "no están llegando bien" y, una vez visto, en la visita
   // siguiente ya no está
   await db.query("select mp_webhook_event('1999000222', p.id, null, 'recovered', 'pago aprobado sin aviso: lo encontró la consulta automática') from providers p where p.name like 'Sofía%'");

@@ -1,4 +1,4 @@
-import { alertDismissed, alertItems, alertRead } from "../../lib/avisos-admin.js";
+import { alertDismissed, alertRead } from "../../lib/avisos-admin.js";
 import { api } from "../../api/index.js";
 import { LIVE } from "../../config.js";
 import { admReviewDemo } from "../../demo/admin.js";
@@ -73,6 +73,35 @@ const EVENT_WHY = {
   recovered: "pago sin aviso: lo encontró la consulta automática",
 };
 const REJECTED = ["bad_signature", "stale_signature", "no_signature", "bad_request", "config_error"];
+// 11/11 (H06): los descartados van agrupados por motivo, una línea por motivo que se despliega («81 avisos rechazados
+// por firma»); n = cuántos avisos (sumando las veces que llegó cada uno)
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const GROUP_TITLE = {
+  bad_signature: (n) => `${plural(n, "aviso rechazado", "avisos rechazados")} por firma`,
+  stale_signature: (n) => `${plural(n, "aviso rechazado", "avisos rechazados")} por firma vencida`,
+  no_signature: (n) => `${plural(n, "aviso rechazado", "avisos rechazados")} por llegar sin firma`,
+  bad_request: (n) => `${plural(n, "aviso rechazado", "avisos rechazados")} por datos incompletos`,
+  config_error: (n) => `${plural(n, "aviso rechazado", "avisos rechazados")} por falta de configuración`,
+  recovered: (n) => `${plural(n, "pago recuperado", "pagos recuperados")} sin aviso`,
+};
+const groupTitle = (reason, n) => (GROUP_TITLE[reason] ? GROUP_TITLE[reason](n) : `${plural(n, "aviso descartado", "avisos descartados")}: ${EVENT_WHY[reason] || reason}`);
+// H06: con qué se armó el texto firmado de un aviso rechazado (sin la clave ni la firma completa), para diagnosticar
+function diagLine(diag) {
+  if (!diag || typeof diag !== "object") {
+    return "";
+  }
+  const from = { url: "la dirección", body: "el cuerpo", ipn: "id= (IPN)", none: "ningún lado" }[diag.id_from] || diag.id_from;
+  const bits = [
+    diag.id_from ? `data.id de ${from}` : "",
+    diag.id_url && diag.id_body && diag.id_url !== diag.id_body ? `(dirección ${diag.id_url}, cuerpo ${diag.id_body})` : "",
+    `request-id ${diag.request_id ? "sí" : "no"}`,
+    diag.ts ? `ts ${diag.ts}` : "sin ts",
+    diag.v1_count != null ? `${diag.v1_count} v1${diag.v1_start ? ` (empieza ${diag.v1_start}…)` : ""}` : "",
+    diag.user_id ? `user_id ${diag.user_id}` : "",
+    diag.secrets > 1 ? `${diag.secrets} claves probadas` : "",
+  ].filter(Boolean);
+  return `<span class="hint">${esc(bits.join(" · "))}</span>${diag.manifest ? `<span class="hint">Texto firmado: <code>${esc(diag.manifest)}</code></span>` : ""}`;
+}
 const paymentWhy = (reason, payment) =>
   (reason === "mp_cost_mismatch" || reason === "mp_term_mismatch") && payment && payment.mp_cost != null
     ? `${PAYMENT_WHY[reason]}: cobró ${money(payment.mp_cost)} y se esperaba ${money(payment.mp_cost_expected)} (revisar que el plazo del perfil del profesional sea el de su cuenta)`
@@ -114,10 +143,12 @@ export function admReview() {
   // v2 (3/11): los avisos de Mercado Pago descartados o recuperados son informativos: se pueden borrar (los borrados no
   // vuelven); los pagos y devoluciones para resolver salen solos al resolverlos
   // 7/11: además, se borran solos una vez leídos (se ven en una visita y en la siguiente ya no están)
-  const events = (data.webhook_events || []).filter((event) => !alertDismissed("mpev:" + event.id) && !alertRead("mpev:" + event.id));
-  const accounts = data.accounts || [];
+  // 11/11 (H06): mientras los avisos sigan rechazándose, los rechazados no se van al leerlos (con su diagnóstico)
   const alert = data.webhook_alert || {};
-  if (!refunds.length && !payments.length && !events.length && !accounts.length) {
+  const stillRejected = +alert.rejected > 0 && alert.active !== false;
+  const events = (data.webhook_events || []).filter((event) => !alertDismissed("mpev:" + event.id) && (!alertRead("mpev:" + event.id) || (stillRejected && REJECTED.includes(event.reason))));
+  const accounts = data.accounts || [];
+  if (!refunds.length && !payments.length && !events.length && !accounts.length && !stillRejected) {
     return "";
   }
   const open = S.admResolve || {};
@@ -134,21 +165,34 @@ export function admReview() {
      <span>Cuenta n° ${esc(account.mp_user_id || "?")} · ${account.status === "active" ? "cobra las reservas" : `solo devoluciones (${account.refunds_pending} pendiente${account.refunds_pending === 1 ? "" : "s"})`}</span>
      <span class="hint">${ic("error")} ${esc(account.last_error)} · desde ${esc(dmyIso(account.error_at))}. Si sigue, el profesional tiene que volver a conectarla (Perfil → Cobros).</span></div></li>`;
   const eventLi = (event) =>
-    `<li class="admal" data-k="mpev:${esc(String(event.id))}"><div><span>${event.reason === "recovered" ? "Pago recuperado" : "Aviso descartado"} · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)}${event.detail ? " (" + esc(event.detail) + ")" : ""} · ${esc(dmyIso(event.last_at || event.created_at))}${+event.hits > 1 ? ` · ${+event.hits} veces` : ""}</span></div><button type="button" class="xbtn" data-act="admAlertDel" data-k="mpev:${esc(String(event.id))}" aria-label="Borrar este aviso" title="Borrar">✕</button></li>`;
+    `<li class="admal" data-k="mpev:${esc(String(event.id))}"><div><span>${event.reason === "recovered" ? "Pago recuperado" : "Aviso descartado"} · pago ${esc(event.mp_payment_id || "?")}${event.provider_name ? " · " + esc(event.provider_name) : ""}</span><span class="hint">${esc(EVENT_WHY[event.reason] || event.reason)}${event.detail ? " (" + esc(event.detail) + ")" : ""} · ${esc(dmyIso(event.last_at || event.created_at))}${+event.hits > 1 ? ` · ${+event.hits} veces` : ""}</span>${diagLine(event.diag)}</div><button type="button" class="xbtn" data-act="admAlertDel" data-k="mpev:${esc(String(event.id))}" aria-label="Borrar este aviso" title="Borrar">✕</button></li>`;
   // Paso 1 (v4): Mercado Pago manda avisos que la app rechaza, o hubo pagos que se registraron sin aviso: arriba de todo,
   // porque mientras siga así los pagos se confirman con demora (los encuentra la consulta automática)
   // 7/11: solo los avisos RECHAZADOS (un problema de configuración) prenden este aviso. Un pago recuperado sin aviso
   // está registrado y es informativo: va en la lista de abajo y no hace volver este aviso una vez borrado.
+  // 11/11 (H06): el aviso no se borra a mano ni se va al leerlo: sigue mientras haya un rechazo sin una firma válida
+  // después ('active', de la base) y se apaga solo cuando los avisos vuelven a validar
   const webhookLi =
-    +alert.rejected
-      ? `<li><div><b>${ic("aviso")} Los avisos de Mercado Pago no están llegando bien</b>
-     <span>${+alert.rejected ? `${+alert.rejected} aviso${+alert.rejected === 1 ? "" : "s"} rechazado${+alert.rejected === 1 ? "" : "s"} en 7 días${alert.rejected_reason ? " (" + esc(EVENT_WHY[alert.rejected_reason] || alert.rejected_reason) + ")" : ""}${alert.rejected_last ? ", el último el " + esc(dmyIso(alert.rejected_last)) : ""}. ` : ""}${+alert.recovered ? `${+alert.recovered} pago${+alert.recovered === 1 ? "" : "s"} registrado${+alert.recovered === 1 ? "" : "s"} sin aviso por la consulta automática.` : ""}</span>
-     <span class="hint">Los pagos igual se registran (la app le pregunta a Mercado Pago cada 2 minutos), pero con demora. Revisá el webhook y MP_WEBHOOK_SECRET: docs/02 → "Si los pagos no se registran".</span></div></li>`
+    stillRejected
+      ? `<li class="admwh"><div><b>${ic("aviso")} Los avisos de Mercado Pago no están llegando bien</b>
+     <span>${`${+alert.rejected} aviso${+alert.rejected === 1 ? "" : "s"} rechazado${+alert.rejected === 1 ? "" : "s"} en 7 días${alert.rejected_reason ? " (" + esc(EVENT_WHY[alert.rejected_reason] || alert.rejected_reason) + ")" : ""}${alert.rejected_last ? ", el último el " + esc(dmyIso(alert.rejected_last)) : ""}. `}${+alert.recovered ? `${+alert.recovered} pago${+alert.recovered === 1 ? "" : "s"} registrado${+alert.recovered === 1 ? "" : "s"} sin aviso por la consulta automática.` : ""}</span>
+     <span class="hint">Los pagos igual se registran (la app le pregunta a Mercado Pago cada 2 minutos), pero con demora. Revisá el webhook y MP_WEBHOOK_SECRET: docs/02 → "Si los pagos no se registran". Este aviso se va solo cuando los avisos vuelvan a validar${alert.last_ok ? ` (última firma válida: ${esc(dmyIso(alert.last_ok))})` : " (todavía no validó ninguno)"}.</span></div></li>`
       : "";
-  const whKey = `mpwh:${alert.rejected_last || ""}`;
-  const wh = alertItems([webhookLi ? { key: whKey, html: webhookLi.replace(/^<li><div>/, "").replace(/<\/div><\/li>$/, "") } : null]);
-  const nAlert = wh.count;
+  const nAlert = webhookLi ? 1 : 0;
+  // los descartados, por motivo (los rechazados primero)
+  const groups = [];
+  events.forEach((event) => {
+    let group = groups.find((g) => g.reason === event.reason);
+    if (!group) {
+      groups.push((group = { reason: event.reason, hits: 0, items: [] }));
+    }
+    group.hits += Math.max(1, +event.hits || 1);
+    group.items.push(event);
+  });
+  groups.sort((a, b) => (REJECTED.includes(b.reason) ? 1 : 0) - (REJECTED.includes(a.reason) ? 1 : 0));
+  const groupHtml = (group) =>
+    `<details class="admgrp" data-reason="${esc(group.reason)}"><summary>${esc(groupTitle(group.reason, group.hits))}${group.items.length > 1 ? ` <span class="hint">· ${group.items.length} pagos</span>` : ""}</summary><ul class="adml">${group.items.map(eventLi).join("")}</ul></details>`;
   return `<div class="panel admalert"><p class="lbl">Para revisar · cobros <span class="cnt">${refunds.length + payments.length + accounts.length + nAlert}</span></p>
-   <ul class="adml">${wh.html}${accounts.map(accountLi).join("")}${refunds.map(refundLi).join("")}${payments.map(paymentLi).join("")}</ul>
-   ${events.length ? `<details${wh.count || REJECTED.includes((events[0] || {}).reason) ? " open" : ""}><summary class="hint">Avisos de Mercado Pago descartados o recuperados (últimos 30 días): ${events.length}</summary><div class="admal-h"><span></span><button type="button" class="lnk" data-act="admAlertsClear">Borrar los leídos</button></div><ul class="adml">${events.map(eventLi).join("")}</ul></details>` : ""}</div>`;
+   <ul class="adml">${webhookLi}${accounts.map(accountLi).join("")}${refunds.map(refundLi).join("")}${payments.map(paymentLi).join("")}</ul>
+   ${events.length ? `<details${nAlert || REJECTED.includes((events[0] || {}).reason) ? " open" : ""}><summary class="hint">Avisos de Mercado Pago descartados o recuperados (últimos 30 días): ${events.reduce((n, event) => n + Math.max(1, +event.hits || 1), 0)}</summary><div class="admal-h"><span></span><button type="button" class="lnk" data-act="admAlertsClear">Borrar los leídos</button></div>${groups.map(groupHtml).join("")}</details>` : ""}</div>`;
 }
