@@ -56,8 +56,10 @@ Deno.serve(async (req) => {
       marketplace_fee: fee,                 // comisión de TuTiempo: va a la cuenta de TuTiempo (dueña de MP_CLIENT_ID)
       binary_mode: true,                    // aprobado o rechazado al instante (nada de pagos "pendientes" que vencen el horario)
       payment_methods: { excluded_payment_types: [{ id: "ticket" }, { id: "atm" }] },   // sin efectivo en Rapipago/Pago Fácil
-      // el aviso dice qué cuenta cobró: así se consulta (y se devuelve) con su llave aunque el prestador reconecte otra
-      notification_url: `${env("SUPABASE_URL")}/functions/v1/mp-webhook?provider=${pid}&account=${acc.id}`,
+      // el aviso dice qué cuenta cobró: así se consulta (y se devuelve) con su llave aunque el prestador reconecte otra.
+      // source_news=webhooks (H06, 11/11): solo los avisos con formato Webhooks (data.id, firmados con la clave de
+      // Webhooks); sin esto Mercado Pago manda también los IPN viejos (id/topic), que no validan con esa clave.
+      notification_url: `${env("SUPABASE_URL")}/functions/v1/mp-webhook?provider=${pid}&account=${acc.id}&source_news=webhooks`,
       back_urls: { success: ret("success"), pending: ret("pending"), failure: ret("failure") },
       auto_return: "approved",
       expires: true,

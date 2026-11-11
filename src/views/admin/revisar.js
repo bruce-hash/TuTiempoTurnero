@@ -70,9 +70,11 @@ const EVENT_WHY = {
   no_signature: "rechazado: llegó sin firma",
   bad_request: "rechazado: le faltan datos",
   config_error: "rechazado: falta configurar la función",
+  ipn_ignored: "ignorado: aviso IPN (formato viejo), Mercado Pago no lo firma con la clave de Webhooks",
   recovered: "pago sin aviso: lo encontró la consulta automática",
 };
-const REJECTED = ["bad_signature", "stale_signature", "no_signature", "bad_request", "config_error"];
+// 11/11: un aviso IPN ignorado también cuenta: mientras no valide un aviso con formato Webhooks, los avisos no andan
+const REJECTED = ["bad_signature", "stale_signature", "no_signature", "bad_request", "config_error", "ipn_ignored"];
 // 11/11 (H06): los descartados van agrupados por motivo, una línea por motivo que se despliega («81 avisos rechazados
 // por firma»); n = cuántos avisos (sumando las veces que llegó cada uno)
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -82,6 +84,7 @@ const GROUP_TITLE = {
   no_signature: (n) => `${plural(n, "aviso rechazado", "avisos rechazados")} por llegar sin firma`,
   bad_request: (n) => `${plural(n, "aviso rechazado", "avisos rechazados")} por datos incompletos`,
   config_error: (n) => `${plural(n, "aviso rechazado", "avisos rechazados")} por falta de configuración`,
+  ipn_ignored: (n) => `${plural(n, "aviso IPN ignorado", "avisos IPN ignorados")} (formato viejo, sin firma de Webhooks)`,
   recovered: (n) => `${plural(n, "pago recuperado", "pagos recuperados")} sin aviso`,
 };
 const groupTitle = (reason, n) => (GROUP_TITLE[reason] ? GROUP_TITLE[reason](n) : `${plural(n, "aviso descartado", "avisos descartados")}: ${EVENT_WHY[reason] || reason}`);

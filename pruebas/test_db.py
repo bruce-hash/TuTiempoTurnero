@@ -199,8 +199,10 @@ ok("no puede usar la foto de otra persona", err(q("update providers set photo_pa
 
 # turnero de 31 días (hoy + 30)
 def weekday_at(n):
+    # día hábil a n días; 11/11: tampoco un feriado de la prueba de feriados (cerrados por defecto desde el punto 13):
+    # según el día de la semana en que corre, caía justo en el feriado de hoy+5 y book_slot daba slot_not_available
     d = today + dt.timedelta(days=n)
-    while d.weekday() >= 5: d += dt.timedelta(days=1)
+    while d.weekday() >= 5 or q("select exists (select 1 from holidays where day = %s)", (d,))[0][0]: d += dt.timedelta(days=1)
     return d
 d31 = weekday_at(31); d29 = today + dt.timedelta(days=29)
 while d29.weekday() >= 5: d29 -= dt.timedelta(days=1)
@@ -1638,7 +1640,7 @@ def bookB(uid, day, hh, mm=0):
     ids = r[0][0]["booking_ids"]
     q("select confirm_payment(%s::bigint[], %s, %s)", (ids, f"pay-b-{ids[0]}", r[0][0]["amount_due"]), role="service_role")
     return ids[0]
-dB1, dB2 = weekday_at(3), weekday_at(4)
+dB1 = weekday_at(3); dB2 = weekday_at((dB1 - today).days + 1)   # dos días distintos (aunque un feriado los corra)
 q("insert into follows (user_id, provider_id) values (%s, %s)", (cB, pB), uid=cB)
 bkB1 = bookB(cB, dB1, 10); bkB2 = bookB(cB, dB2, 10)
 ok("D45: el que se va a bloquear tiene dos turnos pagos", not err(bkB1) and not err(bkB2)
