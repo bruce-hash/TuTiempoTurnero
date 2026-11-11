@@ -2253,7 +2253,9 @@ async function turnoConMargen(p) {
       ok(`10/11: ${label}: tocar 6 turnos seguidos (también uno ya abierto) abre cada detalle a la primera`, bien === 6, `${bien}/6`);
       // la Agenda se pone al día (llega un turno nuevo) justo entre que el dedo baja y sube
       // la pantalla quieta (el toque anterior la llevó hasta el detalle) y el turno a la vista, antes de apoyar el dedo
-      await p6.locator(`.ev[data-sel="${ids[2]}"]`).scrollIntoViewIfNeeded(); await p6.waitForTimeout(700);
+      // al centro de la ventana: con scrollIntoViewIfNeeded podía quedar en el borde de arriba, debajo de la cabecera fija
+      // (11/11: pasó cuando el día de la prueba caía sábado, con la Agenda más corta) y el clic caía en la cabecera
+      await p6.locator(`.ev[data-sel="${ids[2]}"]`).evaluate((el) => el.scrollIntoView({ block: "center" })); await p6.waitForTimeout(700);
       const box = await p6.locator(`.ev[data-sel="${ids[2]}"]`).boundingBox();
       const cx = box.x + box.width / 2, cy = box.y + Math.min(box.height / 2, 12);
       const nuevo = async (h) => q(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)
