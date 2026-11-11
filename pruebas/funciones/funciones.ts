@@ -200,7 +200,8 @@ const b1 = await book();
 r = await preference(cli, b1);
 const pref = mp.preferencias.at(-1)!;
 ok("mp-create-preference: cobra con la llave de la cuenta activa", r.status === 200 && pref?.llave === A.token, String(r.status));
-ok("mp-create-preference: el aviso dice prestador y cuenta", pref?.body.notification_url === `${BASE}/functions/v1/mp-webhook?provider=${pid}&account=${A.id}`, pref?.body.notification_url);
+ok("mp-create-preference: el aviso dice prestador y cuenta, y pide solo avisos con formato Webhooks (source_news=webhooks, H06)",
+   pref?.body.notification_url === `${BASE}/functions/v1/mp-webhook?provider=${pid}&account=${A.id}&source_news=webhooks`, pref?.body.notification_url);
 ok("mp-create-preference: monto y comisión salen de la base", pref?.body.items[0].unit_price === 6000 && pref?.body.marketplace_fee === 1000);
 {
   const back = new URL(pref?.body.back_urls?.success ?? "http://x/");
@@ -262,8 +263,8 @@ r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?
 ev = await rech("9101", "no_signature");
 ok("Paso 1: aviso sin x-signature → 401 y queda como no_signature", r.status === 401 && ev && /sin x-signature/.test(ev.detail), JSON.stringify(ev));
 r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&id=9102&topic=payment`, { method: "POST", body: "{}" }));
-ev = await rech("9102", "no_signature");
-ok("Paso 1: aviso con el formato viejo (IPN, topic/id) sin firma → queda registrado como IPN", r.status === 401 && ev && /IPN/.test(ev.detail), JSON.stringify(ev));
+ev = await rech("9102", "ipn_ignored");
+ok("H06: aviso con el formato viejo (IPN, topic/id) sin firma → 200 (que no reintente) e ipn_ignored", r.status === 200 && ev && /IPN/.test(ev.detail), JSON.stringify(ev));
 {
   const ts = String(Date.now() - 20 * 60 * 1000), reqId = crypto.randomUUID();
   const v1 = await hmacHex(WHSEC, `id:9103;request-id:${reqId};ts:${ts};`);
@@ -340,6 +341,16 @@ ok("Paso 1: un aviso que no es de un pago (merchant_order) sin firma no llena la
   r = await panel(`ts=${t},v1=${v1}`, 1001);
   ok("H06: el aviso del panel con firma válida y el user_id de una cuenta conectada se procesa: turno confirmado",
      r.status === 200 && (await st(bp[0])) === "confirmed", String(r.status));
+  // 11/11: lo que pasó en producción. El IPN que Mercado Pago manda a la notification_url (?id=…&topic=payment) trae
+  // x-signature pero no valida con la clave de Webhooks: se ignora (200), queda con su diagnóstico y adelanta la consulta
+  {
+    const t2 = ts(), reqId2 = crypto.randomUUID();
+    r = await fn("mp-webhook", new Request(`https://fn.test/functions/v1/mp-webhook?provider=${pid}&account=${A.id}&id=9107&topic=payment`,
+      { method: "POST", headers: { "x-signature": `ts=${t2},v1=${"fa".repeat(32)}`, "x-request-id": reqId2 }, body: "" }));
+    const ign = (await q("select detail, diag->>'id_from' as f, diag->>'manifest' as m from mp_webhook_events where mp_payment_id = '9107' and reason = 'ipn_ignored'"))[0];
+    ok("H06: IPN con firma que no valida → 200, ipn_ignored con su diagnóstico (data.id de id=)",
+       r.status === 200 && ign?.f === "ipn" && ign?.m === `id:9107;request-id:${reqId2};ts:${t2};` && (await evento("9107", "bad_signature")) === 0, JSON.stringify(ign));
+  }
   r = await panel(`ts=${t},v1=${v1}`, 5555);
   ok("H06: con el user_id de una cuenta que no está conectada → bad_request con el user_id",
      r.status === 200 && /no está conectada \(user_id 5555\)/.test((await rech("9106", "bad_request"))?.detail ?? ""));
@@ -443,7 +454,7 @@ ok("devolver un pago de la cuenta vieja usa la llave de la cuenta vieja", dv?.pa
 const b4 = await book();
 await preference(cli, b4);
 ok("los cobros nuevos salen con la cuenta nueva", mp.preferencias.at(-1)?.llave === B.token
-   && mp.preferencias.at(-1)?.body.notification_url.endsWith(`account=${B.id}`));
+   && mp.preferencias.at(-1)?.body.notification_url.includes(`account=${B.id}&`));
 mp.pago({ id: "9005", collector: "1002", status: "approved", amount: 6000, fee: 1000, ref: b4.join(",") });
 await webhook(pid, B.id, "9005");
 await one("select cancel_by_provider($1)", [b4[0]], owner);
