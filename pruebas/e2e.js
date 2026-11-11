@@ -1331,8 +1331,10 @@ async function turnoConMargen(p) {
   await saveCom();
   const fs30 = (await q("select deposit_commission_pct, mp_pct_instant, mp_pct_d10, mp_pct_d18, mp_pct_d35 from app_settings"))[0];
   ok("admin/D34: comisiones guardadas en la base (7% del servicio; 7,61 / 5,31 / 4,10 / 1,80)", [fs30.deposit_commission_pct, fs30.mp_pct_instant, fs30.mp_pct_d10, fs30.mp_pct_d18, fs30.mp_pct_d35].map(Number).join() === "7,7.61,5.31,4.1,1.8");
-  ok("admin/D34: el ejemplo (corte $20.000, seña 50%, al instante) da $10.000 + $1.400 (7% de $20.000) + $939 = $12.339", (await pg.locator(".comex .tot").innerText()).includes("$12.339")
-     && (await pg.locator(".comex").innerText()).includes("$1.400") && (await pg.locator(".comex").innerText()).includes("$939"));
+  // 11/11: el ejemplo usa siempre la seña fija (D06, 30%) y los valores guardados
+  ok("admin/D06+D34: el ejemplo (corte $20.000, seña 30%, al instante) da $6.000 + $1.400 (7% de $20.000) + $610 = $8.010", (await pg.locator(".comex .tot").innerText()).includes("$8.010")
+     && /seña del 30%/i.test(await pg.locator(".comex").innerText()) && (await pg.locator(".comex").innerText()).includes("$1.400") && (await pg.locator(".comex").innerText()).includes("$610"));
+  ok("admin/D06: …y el profesional recibe $6.000 ahora y $14.000 en el local", (await pg.locator(".comex").innerText()).includes("recibe $6.000 ahora y $14.000 en el local"));
   await pg.fill("#admMp-d10", "16"); await pg.click("#fCom button[type=submit]"); await wait(700);   // la app ignora un segundo envío en menos de 450 ms (doble toque)
   ok("admin/D30: Mercado Pago fuera de rango no se guarda", (await pg.locator("#comerr").innerText()).includes("entre 0 y 15") && Number((await q("select mp_pct_d10 from app_settings"))[0].mp_pct_d10) === 5.31);
   await pg.fill("#admCom", "8,5"); await pg.fill("#admMp-d10", "5,31"); await saveCom();

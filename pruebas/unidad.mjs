@@ -97,6 +97,10 @@ ok("D34: corte $10.000, seña 50% ($5.000), 7% del total = $700 → con Mercado 
   JSON.stringify(d34) === JSON.stringify({ deposit: 5000, fee: 700, mp: 0, total: 5700 }));
 const d34mp = chargeFor(5000, 7, 7.61, 10000);
 ok("D34: con Mercado Pago al instante (7,61%): ⌈5.700 / 0,9239⌉ = $6.170 ($470 de Mercado Pago)", d34mp.fee === 700 && d34mp.total === 6170 && d34mp.mp === 470);
+// 11/11: el ejemplo del admin (Comisión) con la seña fija del 30% (D06): corte $20.000, 4% de TuTiempo, 7,61% al instante
+const exAdm = chargeFor(6000, 4, 7.61, 20000);
+ok("D06: corte $20.000, seña 30% ($6.000), 4% = $800, al instante ⌈6.800 / 0,9239⌉ = $7.361 ($561 de Mercado Pago, por el redondeo para arriba)",
+  JSON.stringify(exAdm) === JSON.stringify({ deposit: 6000, fee: 800, mp: 561, total: 7361 }));
 const D34 = { "3000|7.61": 4005, "3000|5.31": 3908, "3000|4.1": 3859, "3000|1.8": 3768, "4000|7.61": 5088, "4000|5.31": 4964,
   "4000|4.1": 4901, "4000|1.8": 4787, "5000|7.61": 6170, "5000|5.31": 6020, "5000|4.1": 5944, "5000|1.8": 5805 };
 const d34bad = Object.entries(D34).filter(([k, want]) => { const [dep, mp] = k.split("|").map(Number); return chargeFor(dep, 7, mp, 10000).total !== want; });
