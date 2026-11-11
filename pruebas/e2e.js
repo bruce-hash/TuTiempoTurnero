@@ -1049,6 +1049,15 @@ async function turnoConMargen(p) {
     ok("10/11 · feriados: el aviso «El <día> es feriado y tu agenda está cerrada. ¿Vas a trabajar?» llega a la campanita con Abrir el día / Dejarlo cerrado",
        (await hn.count()) === 1 && /es feriado y tu agenda está cerrada\. ¿Vas a trabajar\?/.test(await hn.innerText())
        && (await hn.locator("[data-act=holOpen]").innerText()) === "Abrir el día" && (await hn.locator("[data-act=holClose]").innerText()) === "Dejarlo cerrado");
+    // 11/11 (D25): las reservas de la app que Sofía recibió en esta prueba también están en su campanita, con «Ver la Agenda»
+    {
+      const nb = (await q(`select count(*)::int c from provider_notices n join bookings b on b.id::text = n.ref
+                            where n.provider_id = ${sof} and n.kind = 'new_booking' and b.starts_at > now()`))[0].c;
+      const li = pg.locator(".bellpanel li", { hasText: "Nueva reserva" });
+      ok("D25: cada reserva de la app llega a la campanita del profesional («Nueva reserva», quién, qué y cuándo) con «Ver la Agenda»",
+         nb >= 1 && (await li.count()) >= 1 && / reservó .+ para el /.test(await li.first().innerText())
+         && (await li.first().locator("[data-act=bellGo][data-to=agenda]").count()) === 1, String(nb));
+    }
     ok("10/11 · feriados: confirmado el año, ese día queda cerrado para los clientes", JSON.stringify(await closedDays()) === JSON.stringify([hd]));
     await hn.locator("[data-act=holClose]").click(); await wait(1500);
     ok("10/11 · feriados: «Dejarlo cerrado» guarda la elección sin bloquear el día (no es Bloquear días)",
@@ -1545,9 +1554,9 @@ async function turnoConMargen(p) {
   await pg.fill("#ai_e", "sofia@test.ar"); await pg.fill("#ai_p", "prestador123"); await pg.click("#fLogin button[type=submit]"); await pg.waitForSelector(".bhead"); await wait(800);
   // 4/11: los avisos del profesional, en la campanita de la cabecera
   const proBadge = await pg.locator("nav .bell-n").innerText().catch(() => "");
-  await pg.click("nav [data-act=bellToggle]"); await wait(300);
+  await pg.click("nav [data-act=bellToggle]"); await pg.waitForSelector(".bellpanel li", { timeout: 6000 }).catch(() => {}); await wait(300);
   const bellTxt = await pg.locator(".bellpanel").innerText().catch(() => "");
-  ok("Bloque 1: el aviso del reclamo llega al profesional (4/11: en la campanita, con el número)", +proBadge >= 2 && /Ana empezó a seguirte/.test(bellTxt) && /reclamo en Mercado Pago/.test(bellTxt) && !/Ana empezó a seguirte/.test(await txt()), bellTxt.slice(0, 200));
+  ok("Bloque 1: el aviso del reclamo llega al profesional (4/11: en la campanita, con el número)", parseInt(proBadge, 10) >= 2 && /Ana empezó a seguirte/.test(bellTxt) && /reclamo en Mercado Pago/.test(bellTxt) && !/Ana empezó a seguirte/.test(await txt()), bellTxt.slice(0, 200));
   ok("4/11: el aviso de seguidor nuevo lleva a Seguidores", (await pg.locator(".bellpanel [data-act=bellGo][data-to=seguidores]").count()) >= 1);
   {
     // v2 · Profesional: el texto del aviso usa el ancho de la caja (antes, una columna de 52 px, palabra por palabra)

@@ -22,7 +22,7 @@ export const liveCuenta = {
     }
     const user = session.user;
     const profile = await call(
-      sb.from("profiles").select("full_name,phone,avatar_path,email_notices,push_notices,push_bookings,push_followers").eq("id", user.id).maybeSingle(),
+      sb.from("profiles").select("full_name,phone,avatar_path,email_notices,email_bookings,push_notices,push_bookings,push_followers").eq("id", user.id).maybeSingle(),
     ).catch(() => null);
     S.user = {
       // D32: cuándo se creó la cuenta (la vuelta de Google con la casilla de negocio va directo al paso 1 si es nueva)
@@ -38,6 +38,8 @@ export const liveCuenta = {
       pushBookings: !profile || profile.push_bookings !== false,
       // C06: seguidores nuevos (prestador)
       pushFollowers: !profile || profile.push_followers !== false,
+      // 11/11 (D25): emails de reservas nuevas y cancelaciones de clientes (prestador; por defecto, sí)
+      emailBookings: !profile || profile.email_bookings !== false,
     };
     S.form.tel = (profile && profile.phone) || "";
     let pid = await call(sb.rpc("my_provider"));

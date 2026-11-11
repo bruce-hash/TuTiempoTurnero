@@ -211,6 +211,9 @@ async function normalizar(page) {
     // 9/11 (cambio a propósito): el plazo de Mercado Pago pasó de Horarios a Perfil → «Cobros con Mercado Pago» (el
     // panel «Cobros» cambia de nombre y el aviso de Horarios lleva ahí). Lo prueban e2e.js y ancho.mjs.
     document.querySelectorAll("#app .mpterm").forEach((el) => el.remove());
+    // 11/11 (D25, cambio a propósito): Perfil del panel suma «Notificaciones» con «Emails de reservas y cancelaciones»,
+    // aunque el navegador no tenga notificaciones (en esta comparación no las tiene). Lo prueban pwa.js y e2e.js.
+    document.querySelectorAll("#app .push-panel").forEach((el) => el.remove());
     document.querySelectorAll("#fHorarios p.note").forEach((el) => { if (el.querySelector("[data-tab=perfil]")) el.remove(); });
     document.querySelectorAll("#app .panel > .lbl").forEach((el) => { if (/^Cobros( con Mercado Pago)?$/i.test(el.textContent.trim())) el.textContent = "COBROS"; });
     document.querySelectorAll("#app .mpcobros > div").forEach((el) => { if (!el.children.length && !el.textContent.trim()) el.remove(); });

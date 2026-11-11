@@ -230,6 +230,11 @@ const PUSH_STUB = `(() => {
   ok("C06: Perfil del panel suma «Nuevos seguidores», prendido", await page.isChecked("#bPushFl"));
   await page.uncheck("#bPushFl"); await page.waitForTimeout(800);
   ok("C06: …que se guarda aparte (las reservas no cambian)", (await q("select push_followers, push_bookings from profiles where id = $1", [sofia.owner_id]))[0].push_followers === false);
+  // 11/11 (D25): «Emails de reservas y cancelaciones», prendido por defecto, aparte de las notificaciones
+  ok("D25: Perfil del panel suma «Emails de reservas y cancelaciones», prendido", await page.isChecked("#bMailBk") && /Emails de reservas y cancelaciones/.test(await page.locator(".push-panel").innerText()));
+  await page.uncheck("#bMailBk"); await page.waitForTimeout(800);
+  ok("D25: …que se guarda en la base (las notificaciones no cambian)", (await q("select email_bookings, push_followers from profiles where id = $1", [sofia.owner_id]))[0].email_bookings === false);
+  await page.check("#bMailBk"); await page.waitForTimeout(800);
   await open(page, "/panel/agenda?dia=" + new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10));
   ok("/panel/agenda?dia= (desde la notificación de una reserva) abre la Agenda en ese día", await page.evaluate(() => S.aday) === new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10));
   // instalar: el aviso del navegador (simulado: Chromium headless no lo dispara)

@@ -17,7 +17,7 @@ set search_path = public, extensions;
 -- es la que vale y revisa todas las filas.
 alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
 alter table public.provider_notices add constraint provider_notices_kind_check
-  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect','new_follower','mp_term'));
+  check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect','new_follower','mp_term')) not valid;  -- not valid (11/11): la migración más nueva la vuelve a crear validada (TODO_EN_UNO.sql se puede volver a correr)
 
 -- el plazo de la tabla del admin cuya comisión de Mercado Pago (sobre p_total, con o sin el 21% de IVA) es p_cost, con $2
 -- de margen; si el del prestador (p_current) coincide, gana ese. null si no coincide ninguno (o si todos están en 0).

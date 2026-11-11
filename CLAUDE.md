@@ -109,6 +109,10 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     abierta y, al llegar un push, el service worker le avisa a la app (`tt-push`) y se ponen al día (cliente o panel).
     Dejar de seguir saltea lo que quedaba en la cola (`push_due`, `unfollowed`); una suscripción vencida (404/410) deja
     rastro en `push_gone` (solo el SQL Editor la lee).
+  - D25 (11/11): el profesional recibe por email y en la campanita cada reserva nueva de la app y cada cancelación de un
+    cliente (`provider_notices` `new_booking`/`client_cancel`, trigger `bookings_provider_notice`; el push sigue siendo el de
+    `bookings_push`, `provider_notices_push` no manda otro). Interruptor «Emails de reservas y cancelaciones»
+    (`profiles.email_bookings`, `bMailBk` en `src/ui/avisos.js`, que va aunque el navegador no tenga notificaciones).
   - D36: la campanita de avisos de la cabecera (`src/ui/campanita.js` + `src/actions/campanita.js`): `S.inbox` del
     cliente (con `msgAction`) y `S.notices` del profesional. Mis turnos y el panel ya no muestran avisos.
   - D37: íconos propios, sin emojis en la interfaz: `ic("nombre")` de `src/lib/iconos.js` (SVG en línea, trazo del color

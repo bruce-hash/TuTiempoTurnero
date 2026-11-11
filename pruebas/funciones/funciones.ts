@@ -810,6 +810,22 @@ await q("update providers set status = 'active' where id = $1", [suspPid]);
 ej = await body(await emailRun());
 const mAct = rs.enviados.find((e) => e.body?.to?.[0] === "suspendido@fn.test" && e.body?.subject === "Tu cuenta de TuTiempo está activa de nuevo");
 ok("D43: al reactivarlo, «Tu cuenta de TuTiempo está activa de nuevo»", ej.sent === 1 && !!mAct && mAct?.body?.html.includes("Tu cuenta está activa de nuevo"));
+// 11/11 (D25): cada reserva nueva de la app le llega al profesional por email, con dónde apagarlos
+{
+  const svcS = Number(await one("insert into services (provider_id, category_id, name, duration_min, price) values ($1, 'u', 'Kapping', 60, 9000) returning id", [suspPid]));
+  const bR = Number(await one(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)
+    values ($1, $2, 'Ana <b>Pérez</b>', 'Kapping', 'app', 'confirmed', now() + interval '2 days', now() + interval '2 days 1 hour', 9000) returning id`, [suspPid, svcS]));
+  ej = await body(await emailRun());
+  const mR = rs.enviados.find((e) => e.body?.to?.[0] === "suspendido@fn.test" && /^Nueva reserva: /.test(e.body?.subject ?? ""))?.body;
+  const hR = [...(mR?.html ?? "").matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+  ok("D25: «Nueva reserva: …» le llega al profesional, con quién, qué y cuándo (el nombre sin < >)",
+     !!mR && mR.subject.startsWith("Nueva reserva: Ana b Pérez /b · ") && mR.html.includes("Ana b Pérez /b reservó Kapping para el ")
+     && !/<b>Pérez|&lt;b&gt;Pérez/.test(mR.html), JSON.stringify(mR ?? {}).slice(0, 300));
+  ok("D25: …con «Ir a mi panel» y «Perfil → Notificaciones» para dejar de recibirlos (sin «Mis turnos»)",
+     hR.includes("https://tutiempo.com.ar/panel/agenda") && hR.includes("https://tutiempo.com.ar/panel/perfil") && !mR?.html.includes("Mis turnos")
+     && mR?.text.includes("Para dejar de recibirlos: Perfil → Notificaciones (https://tutiempo.com.ar/panel/perfil)"), JSON.stringify(hR));
+  await q("delete from bookings where id = $1", [bR]);
+}
 
 // ---------- Usuario que llama: proyecto nuevo (claves asimétricas y publishable/secret) y viejo (HS256) ----------
 // Un proyecto nuevo firma las sesiones con ES256 y publica las claves en /auth/v1/.well-known/jwks.json; las claves

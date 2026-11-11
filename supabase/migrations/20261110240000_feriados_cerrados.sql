@@ -140,7 +140,7 @@ end $$;
 alter table public.provider_notices drop constraint if exists provider_notices_kind_check;
 alter table public.provider_notices add constraint provider_notices_kind_check
   check (kind in ('mp_refunded','mp_charged_back','mp_in_mediation','mp_reconnect','mp_cost','mp_connect','new_follower','mp_term','holiday',
-                  'suspended','reactivated','holiday_bookings'));
+                  'suspended','reactivated','holiday_bookings')) not valid;  -- not valid (11/11): la migración más nueva la vuelve a crear validada (TODO_EN_UNO.sql se puede volver a correr)
 
 -- «Tenés N turnos el <día>, que es feriado. Se mantienen; …»: a cada profesional con turnos en un feriado cerrado que no
 -- pasó (de un año confirmado). p_day: solo ese día; null: todos. Una sola vez por profesional y día (unique de provider_notices).
