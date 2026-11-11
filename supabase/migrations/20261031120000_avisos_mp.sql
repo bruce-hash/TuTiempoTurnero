@@ -17,7 +17,8 @@ alter table public.mp_webhook_events drop constraint if exists mp_webhook_events
 alter table public.mp_webhook_events add constraint mp_webhook_events_reason_check check (reason in (
   'unknown_provider','payment_not_found','wrong_collector','bad_currency',            -- después de consultar el pago
   'bad_signature','stale_signature','no_signature','bad_request','config_error',     -- antes de procesar (rechazados)
-  'recovered'));                                                                      -- pago sin aviso, lo encontró mp-reconcile
+  'recovered')) not valid;                                                            -- pago sin aviso, lo encontró mp-reconcile
+-- not valid (11/11): la migración más nueva la vuelve a crear validada (TODO_EN_UNO.sql se puede volver a correr)
 create index if not exists mp_webhook_events_dedupe on public.mp_webhook_events (reason, mp_payment_id, last_at desc);
 
 -- un solo registro por motivo, pago y prestador en 24 h (los reintentos de Mercado Pago suman hits); a lo sumo 500

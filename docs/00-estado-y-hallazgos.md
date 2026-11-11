@@ -87,6 +87,12 @@ distintos de lo que espera la plantilla. Lo que cambió:
   aviso del mismo prestador vuelve a validar después del último rechazo (no se borra a mano). Los descartados se ven
   agrupados por motivo («81 avisos rechazados por firma», se despliega).
 Para confirmar la causa: docs/02 → «Si los pagos no se registran» → «Rechazados por firma: qué mandarme».
+**11/11 · causa encontrada:** el diagnóstico del primer rechazo real (pago de sabelo barber) dice «data.id de id=
+(IPN)»: el aviso llegó con el formato viejo de IPN (`?id=…&topic=payment`, sin `data.id`), que Mercado Pago manda a la
+`notification_url` además del de Webhooks, y que no se firma con la clave de Webhooks. La clave estaba bien.
+Arreglo: las preferencias piden solo Webhooks (`&source_news=webhooks` en la `notification_url`) y un IPN que llegue
+igual (de un cobro abierto antes del cambio) queda como `ipn_ignored`: 200 (Mercado Pago no reintenta), adelanta la
+consulta de los cobros y sigue prendiendo el aviso de «Para revisar» hasta que valide un aviso con formato Webhooks.
 
 ### H07 · Media · Recordatorios solo dentro de la app (resuelto en el Bloque 3)
 `send_scheduled_notices` crea avisos en `client_messages`: quien no abre la app no se entera del recordatorio de
