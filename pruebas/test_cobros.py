@@ -241,6 +241,14 @@ svc_role("select mp_webhook_event('P1-FIRMA2', %s, %s, 'bad_signature', 'la firm
 ok("H06: un rechazo nuevo después de la última firma válida lo vuelve a prender", one("select admin_review()", uid=adm)["webhook_alert"]["active"] is True)
 ok("H06: mp_webhook_ok cuenta las firmas válidas por prestador (0: sin prestador)",
    q("select provider_key, ok_hits, last_ok_via from mp_webhook_status order by provider_key") == [(0, 1, "principal"), (pid, 2, "principal")])
+# 11/11: un aviso IPN ignorado prende el aviso de Para revisar igual que un rechazo, y figura en su grupo
+svc_role("select mp_webhook_ok(%s, 'principal')", (pid,))
+ok("H06: con una firma válida después de todo, el aviso está apagado", one("select admin_review()", uid=adm)["webhook_alert"]["active"] is False)
+svc_role("select mp_webhook_event('P1-IPN', %s, %s, 'ipn_ignored', 'aviso IPN', '{\"id_from\": \"ipn\"}'::jsonb)", (pid, acc1))
+rv = one("select admin_review()", uid=adm)
+ok("H06: un aviso IPN ignorado después de la última firma válida prende el aviso y tiene su grupo",
+   rv["webhook_alert"]["active"] is True and rv["webhook_alert"]["rejected_reason"] == "ipn_ignored"
+   and any(g["reason"] == "ipn_ignored" and g["hits"] == 1 for g in rv["webhook_groups"]))
 ok("Paso 1: el cron de la consulta no llama a nada si no hay cobros que consultar (ni sin Vault)", svc_role("select run_mp_reconcile(true)") is None)
 
 # ---------- D29: el pago llega cuando la hora del turno ya pasó → se devuelve, aunque el horario esté libre ----------

@@ -22,6 +22,9 @@ Deno.serve(async (req) => {
     // formato de webhooks (data.id y type) o el viejo de IPN (id y topic), por si la cuenta manda ese
     const urlId = url.searchParams.get("data.id"), bodyId = body?.data?.id != null ? String(body.data.id) : null, ipnId = url.searchParams.get("id");
     const idFrom = urlId ? "url" : bodyId ? "body" : ipnId ? "ipn" : "none";
+    // 11/11 · H06: aviso con el formato viejo de IPN (?id=…&topic=…, sin data.id). Mercado Pago no lo firma con la clave
+    // de Webhooks: si no valida, se ignora (200, para que no reintente) y solo adelanta la consulta de los cobros.
+    const isIpn = idFrom === "ipn";
     dataId = String(urlId ?? bodyId ?? ipnId ?? "");
     const type = url.searchParams.get("type") ?? body?.type ?? url.searchParams.get("topic") ?? body?.topic ?? "";
     let pid = posInt(url.searchParams.get("provider"));
@@ -58,7 +61,8 @@ Deno.serve(async (req) => {
     const sig = req.headers.get("x-signature") ?? "";
     const reqId = req.headers.get("x-request-id") ?? "";
     if (!sig) {
-      const ipn = url.searchParams.has("topic") || url.searchParams.has("id") && !url.searchParams.has("data.id");
+      if (isIpn) return await reject("ipn_ignored", "aviso IPN (formato viejo id/topic) sin x-signature: ignorado, se consulta el cobro", 200, "ipn_ignored");
+      const ipn = url.searchParams.has("topic");
       return await reject("no_signature", ipn ? "aviso sin x-signature con formato IPN (topic/id)" : `aviso sin x-signature${reqId ? "" : " ni x-request-id"}`, 401, "bad_signature");
     }
     // el encabezado puede traer más de un v1 (por ejemplo, mientras Mercado Pago cambia la clave)
@@ -81,6 +85,7 @@ Deno.serve(async (req) => {
       query: [...url.searchParams.keys()], user_id: mpUser || null, live_mode: body?.live_mode ?? null,
       action: body?.action ?? null, api_version: body?.api_version ?? null,
     };
+    if ((!ts || !v1s.length) && isIpn) return await reject("ipn_ignored", "aviso IPN (formato viejo id/topic) con x-signature incompleta: ignorado, se consulta el cobro", 200, "ipn_ignored");
     if (!ts || !v1s.length) return await reject("bad_signature", "x-signature sin ts o sin v1", 401, "bad_signature");
     const variants: [string, string][] = [["principal", main]];
     for (const id of ids) {
@@ -96,6 +101,9 @@ Deno.serve(async (req) => {
         if (v1s.some((v) => safeEqual(h, v))) { via = `${name}${secrets.length > 1 ? `, clave ${si + 1}` : ""}`; break; }
       }
       if (via) break;
+    }
+    if (!via && isIpn) {
+      return await reject("ipn_ignored", "aviso IPN (formato viejo id/topic): no valida con la clave de Webhooks; ignorado, se consulta el cobro", 200, "ipn_ignored");
     }
     if (!via) {
       return await reject("bad_signature", `la firma no coincide con MP_WEBHOOK_SECRET${reqId ? "" : " (sin x-request-id)"}`, 401, "bad_signature");
