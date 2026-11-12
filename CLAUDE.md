@@ -196,7 +196,8 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   ancha que la ventana en 390 y 1366 px y nada con `hidden` a la vista); `test_db.py`, `test_cobros.py` (base: pagos,
   devoluciones, cuentas de MP) y `test_emails.py` (avisos por email: cola, reintentos, opción del cliente);
   `test_mudanza.py` (una base de la versión 31 con llaves en texto plano, migrada hasta la última; base limpia aparte);
-  `funciones/` (las Edge Functions reales con Deno contra un Mercado Pago falso, `npm run test:funciones`).
+  `funciones/` (las Edge Functions reales con Deno contra un Mercado Pago falso, `npm run test:funciones`; `avisos.ts`,
+  `npm run test:avisos`: cada tipo de push y de email desde la acción real que lo dispara hasta lo que llega, con una tabla).
 
 ## Arquitectura del frontend (respetarla)
 
@@ -229,7 +230,7 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
   `developer`. Nunca commit directo a `main`. Commits chicos, en español.
 - Si trabajás en un entorno aislado, hacé push de la rama al terminar y avisá el nombre.
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
-  `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py`, `pruebas/test_push.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` y `npm run test:webpush` si tocás las
+  `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py`, `pruebas/test_push.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones`, `npm run test:avisos` y `npm run test:webpush` si tocás las
   Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:unidad`, `npm run test:crawl`,
   `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:verificar`, `npm run test:pwa`, `npm run test:partes` y `npm run test:comparar` (navegador
   real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` y `npm run test:litespeed` si tocás el
@@ -265,6 +266,7 @@ python3 pruebas/test_emails.py "host=... dbname=OTRA_BASE_LIMPIA user=postgres" 
 # Deno 2.1.4 (https://github.com/denoland/deno/releases) en el PATH, más Postgres y PostgREST como en el navegador
 npm run test:funciones  # mp-oauth, mp-create-preference, mp-webhook, mp-refunds, dni-cleanup y email-send reales (MP y Resend falsos)
 deno check --config pruebas/funciones/deno.json supabase/functions/*/index.ts   # tipos
+npm run test:avisos     # todas las push y los emails: cada tipo, desde la acción real hasta el servicio de push y el Resend falsos
 npm run test:webpush    # cifrado aes128gcm y VAPID contra los vectores de RFC 8291 y RFC 8292 (sin base)
 ```
 

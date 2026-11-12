@@ -268,6 +268,9 @@ jobs:
       - name: Funciones reales contra la base, PostgREST y un Mercado Pago falso
         run: npm run test:funciones
 
+      - name: Todas las notificaciones push y los emails, de punta a punta (cada tipo, desde la acción real)
+        run: npm run test:avisos
+
   apache:
     name: Apache y LiteSpeed (.htaccess real · fallback, HTTPS, CSP)
     runs-on: ubuntu-24.04
