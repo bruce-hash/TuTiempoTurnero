@@ -21,6 +21,10 @@ concurrency:
 jobs:
   desplegar:
     name: Base, funciones y sitio de prueba
+    # 12/11 · paso a producción: el proyecto de Supabase de prueba ES el de producción y prueba.tutiempo.com.ar redirige a
+    # https://tutiempo.com.ar. Este despliegue aplicaría migraciones a producción y pisaría la redirección: queda apagado.
+    # Se vuelve a usar solo con un proyecto de prueba NUEVO y aparte (docs/10) y la variable del repo PRUEBA_ACTIVA = si.
+    if: vars.PRUEBA_ACTIVA == 'si'
     runs-on: ubuntu-24.04
     environment: prueba
     timeout-minutes: 30

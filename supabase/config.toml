@@ -25,3 +25,8 @@ verify_jwt = false
 
 [functions.push-send]
 verify_jwt = false
+
+# 12/11: faltaba; sin esto, un `supabase functions deploy` de todas juntas la dejaba con verify_jwt y el cron (que llama
+# con CRON_SECRET, no con un JWT) recibía 401
+[functions.holidays-sync]
+verify_jwt = false

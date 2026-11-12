@@ -7,4 +7,4 @@ export function siteUrl(raw) {
   const url = String(raw == null ? "" : raw).trim().toLowerCase();
   return url.length <= 100 && SITE_URL_RE.test(url) ? url : null;
 }
-export const SITE_URL_ERR = "Escribí solo https:// y el dominio, sin barra al final ni nada después (por ejemplo https://prueba.tutiempo.com.ar).";
+export const SITE_URL_ERR = "Escribí solo https:// y el dominio, sin barra al final ni nada después (por ejemplo https://tutiempo.com.ar).";

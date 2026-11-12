@@ -14,8 +14,8 @@ on:
         description: Commit desplegado
         type: string
         required: false
-  schedule:
-    - cron: "15 3 * * *"
+  # 12/11 · paso a producción: sin la corrida de todas las noches (reservaba con cuentas fijas en el proyecto, que ahora
+  # es el de producción). Se vuelve a prender con un proyecto de prueba nuevo y aparte (docs/10).
 
 permissions:
   contents: read
@@ -27,6 +27,7 @@ concurrency:
 jobs:
   verificar:
     name: Sitio, cuentas de prueba, cobro sin pagar, base y funciones
+    if: vars.PRUEBA_ACTIVA == 'si'   # 12/11: apagado mientras prueba sea el proyecto de producción (ver desplegar-prueba.yml)
     runs-on: ubuntu-24.04
     environment: prueba
     timeout-minutes: 20

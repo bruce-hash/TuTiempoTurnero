@@ -187,7 +187,12 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   Claves del proyecto: `projectKey()` usa las nuevas (`SUPABASE_PUBLISHABLE_KEYS`/`SUPABASE_SECRET_KEYS`) si están, si no las
   viejas; `caller()` verifica la sesión ES256/RS256 con el JWKS del proyecto y la HS256 con Auth (H31). Ninguna función usa `verify_jwt`.
 - `supabase/seed/ejemplos.NO-USAR-EN-PRODUCCION.sql`: prestadores ficticios. Solo para pruebas locales (pide `set tt.ejemplos = 'si'` antes).
-- Despliegue a prueba (docs/10): `.github/workflows/desplegar-prueba.yml` (botón: `supabase db push`, Edge Functions que
+- Producción (12/11, D12/D47): la app está en `https://tutiempo.com.ar`, en el mismo proyecto de Supabase que era de
+  prueba. `tools/produccion/` tiene la limpieza de datos de prueba (`limpieza-1-listar.sql`, `limpieza-2-borrar.sql`; los
+  emails que se conservan se completan a mano, nunca en el repo) y lo que va en `public_html/prueba` (redirección 301 y un
+  `sw.js` que desinstala la app vieja). El paso a paso del día: `docs/12-dia-del-cambio.md`. `public/robots.txt` y
+  `public/sitemap.xml` son los de producción.
+- Despliegue a prueba (docs/10; **apagado desde el 12/11**, corre solo con la variable `PRUEBA_ACTIVA = si` y un proyecto de prueba aparte): `.github/workflows/desplegar-prueba.yml` (botón: `supabase db push`, Edge Functions que
   cambiaron, build con `tools/preparar_prueba.mjs`, FTPS con `tools/subir_prueba.sh`, etiqueta `prueba-desplegada`) y
   `verificar-prueba.yml` (botón y todas las noches: `pruebas/verificar_prueba.mjs`; en la base lee solo
   `verificacion_prueba()`, que nadie puede llamar salvo el usuario `tt_verificador`). En cada PR, `npm run test:verificar`
