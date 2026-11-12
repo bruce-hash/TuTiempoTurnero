@@ -2196,8 +2196,9 @@ async function turnoConMargen(p) {
     const perfilA = await pa.locator("#app").innerText();
     ok("D45: la bloqueada ve los servicios pero «No hay turnos disponibles con este profesional», sin Seguir ni «Disponible»",
        /No hay turnos disponibles con este profesional/.test(perfilA) && (await pa.locator(".sgroup").count()) >= 1 && (await pa.locator("[data-act=seguir], .phero .badge, [data-act=waitlist], .quick, .slot").count()) === 0
-       && !/bloque/i.test(perfilA));
-    ok("D45: por la API tampoco puede seguir ni reservar (mensajes neutros)", /follow_unavailable/.test(await tryFollow(pa)) && /no_slots/.test(String(await tryBook(pa))));
+       && !/bloque/i.test(perfilA), `${await pa.evaluate(() => (window.S && S.user ? S.user.email : "sin sesión"))} · ${perfilA.replace(/\s+/g, " ").slice(0, 300)}`);
+    const apiF = await tryFollow(pa), apiB = String(await tryBook(pa));
+    ok("D45: por la API tampoco puede seguir ni reservar (mensajes neutros)", /follow_unavailable/.test(apiF) && /no_slots/.test(apiB), `${apiF} · ${apiB}`);
     // desbloquear: vuelve enseguida a Clientes y puede reservar y seguir (no la vuelve a seguir sola)
     await ps.goto(BASE + "/panel/clientes?ver=bloqueados"); await ps.waitForSelector(".blist", { timeout: 8000 }).catch(() => {});
     await ps.click(".blist [data-act=unblock]");
