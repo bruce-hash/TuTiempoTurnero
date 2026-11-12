@@ -38,7 +38,7 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     toda llamada nueva a `signUp`, `signInWithPassword`, `signInWithOtp`, `resetPasswordForEmail` o `resend` lleva
     `captchaToken: await captchaToken("<formulario>")` y su vista, `captchaBox("<formulario>")`.
   - Bloque C: `src/lib/pwa.js` (service worker, instalar la app, versiones nuevas, freno `serviceWorker: false`),
-    `src/lib/push.js` (permiso y suscripción de este dispositivo; el permiso se pide solo con un toque), `src/ui/avisos.js`
+    `src/lib/push.js` (permiso y suscripción de este dispositivo; el permiso se pide solo con un toque; 12/11: con el permiso ya dado, `refreshPush` lo vuelve a suscribir solo al ingresar, al abrir y al renovarse la sesión, salvo "Desactivar" en ese dispositivo, `tt_push_off`; al cerrar sesión `forgetPushHere` borra solo la fila de la base; `push_gone` con la huella de la dirección vencida), `src/ui/avisos.js`
     (tarjetas, Mi perfil, guía de iPhone) y `src/pwa/sw.js` (plantilla del service worker: el build la escribe en `/sw.js`
     con la versión y los archivos; NUNCA guarda nada de otro origen ni `config.js`).
   - V1 (D30): `src/lib/cobro.js` (`chargeFor`) arma seña + comisión de TuTiempo (% de la seña) + costo de Mercado Pago

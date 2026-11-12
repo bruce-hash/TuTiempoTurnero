@@ -536,6 +536,17 @@ el día anterior, si el turno se reservó más de 24 h antes. Desde el 7/11 (D10
 Si en algún celular no llega nada: Edge Functions → push-send → Logs (el código de cada envío y el servicio) y la tabla
 `push_outbox` (`last_status`, `last_error`). 410 o 404 quiere decir que ese dispositivo se dio de baja: se borra solo.
 
+**12/11 · «Mandarme una de prueba»** (Mi perfil → Notificaciones, y Perfil → Notificaciones en el panel; con los avisos
+activados en ese dispositivo): manda una push a ese celular y abajo del botón dice cómo salió. Lo que quiere decir:
+
+| Dice | Qué pasa | Qué revisar |
+|---|---|---|
+| «La prueba salió» pero no apareció | El servicio de push la aceptó; el celular no la muestra | Permiso de notificaciones de TuTiempo en el celular (o del navegador), «No molestar», ahorro de batería |
+| «Todavía no salió del servidor» | Nadie la mandó en 40 s | Que `push-send` esté desplegada; la tarea `tt-push` (`select * from cron.job_run_details …`); los secretos `tt_project_url` y `tt_cron_secret` en Vault |
+| «Rechazó la prueba (401 · …)» o «(403 · BadJwtToken)» | La firma VAPID no vale | Que `VAPID_PUBLIC_KEY` de la función sea la misma que `vapidPublicKey` de `config.js`, y `VAPID_SUBJECT` con `mailto:` |
+| «Rechazó la prueba (400 · …)» | El mensaje está mal armado o el servicio no es conocido | El detalle; Logs de `push-send` |
+| «Había dejado de aceptar notificaciones» | 404/410: la suscripción venció | Nada: la app pidió una nueva; volver a probar |
+
 #### Paso 1 (correcciones v4, después del Bloque C): ningún pago sin registrar y vuelta de Mercado Pago sin sesión (D28)
 1. **Migración:** `supabase db push` (o `TODO_EN_UNO.sql`): `20261031120000_avisos_mp.sql`. Crea `mp_checkouts`, amplía
    `mp_webhook_events` y agrega la tarea `tt-mp-sync` (cada 2 minutos; usa los mismos `tt_project_url` y

@@ -66,6 +66,13 @@ export const demoApi = {
   async pushRegistered() {
     return false;
   },
+  async pushSubscribeQuiet() {},
+  async pushTest() {
+    return null;
+  },
+  async pushTestStatus() {
+    return { status: "gone" };
+  },
   // 4/11 · Bloque 3: seguidores de ejemplo (el número sigue siendo el de la demo)
   async followers() {
     store.FOLLOWERS = demoFollowers();

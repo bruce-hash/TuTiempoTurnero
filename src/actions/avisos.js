@@ -1,6 +1,6 @@
 import { registerChange, registerClick } from "./registro.js";
 import { api } from "../api/index.js";
-import { disablePush, enablePush } from "../lib/push.js";
+import { disablePush, enablePush, testPush } from "../lib/push.js";
 import { dismiss, needsIosInstall, promptInstall, reloadNow } from "../lib/pwa.js";
 import { S } from "../state.js";
 import { render } from "../ui/render.js";
@@ -27,6 +27,26 @@ registerClick("pushOff", (ev, el, act) => {
   el.disabled = true;
   disablePush().then(() => {
     toast("Listo: ya no te llegan notificaciones en este dispositivo. Los emails siguen igual.");
+    render();
+  });
+});
+// 12/11 · «Mandarme una de prueba»: la push a este dispositivo y, en Mi perfil, cómo salió (con el detalle si falló)
+registerClick("pushTest", (ev, el, act) => {
+  el.disabled = true;
+  S.pushTestNote = "Mandando la prueba…";
+  render();
+  testPush().then(({ result, detail }) => {
+    const notes = {
+      sent: "La prueba salió. Si no te apareció, revisá que las notificaciones de TuTiempo estén permitidas en este dispositivo (y que no esté en «No molestar»).",
+      pending: "La prueba todavía no salió del servidor. Probá de nuevo en un rato; si sigue igual, avisanos.",
+      failed: "El servicio de notificaciones rechazó la prueba.",
+      gone: "Este dispositivo había dejado de aceptar notificaciones: lo volvimos a activar. Probá de nuevo.",
+      wait: "Ya mandamos una hace un momento: esperá unos segundos y probá de nuevo.",
+      off: "Este dispositivo no está recibiendo avisos: tocá «Activar avisos».",
+      error: "No pudimos mandar la prueba. Probá de nuevo en un momento.",
+    };
+    S.pushTestNote = (notes[result] || notes.error) + (detail && result !== "wait" ? ` (detalle: ${detail})` : "");
+    toast(result === "sent" ? "Listo: mandamos la notificación de prueba." : notes[result] || notes.error);
     render();
   });
 });
@@ -61,7 +81,7 @@ registerChange("uPush", (ev) => {
   const on = ev.target.checked;
   S.user.pushNotices = on;
   api.m.setPushPrefs({ push_notices: on });
-  toast(on ? "Listo: te avisamos los recordatorios y novedades por notificación." : "Listo: ya no te mandamos recordatorios ni novedades por notificación. La confirmación y las cancelaciones te siguen llegando.");
+  toast(on ? "Listo: te avisamos los recordatorios, novedades y mensajes de tus profesionales por notificación." : "Listo: ya no te mandamos recordatorios, novedades ni mensajes por notificación (los seguís viendo en la campanita). La confirmación y las cancelaciones te siguen llegando.");
 });
 registerChange("bPushBk", (ev) => {
   const on = ev.target.checked;
