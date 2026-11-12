@@ -1,0 +1,218 @@
+import { savePendingPay } from "../../lib/cobro-pendiente.js";
+import { isStandalone } from "../../lib/pwa.js";
+import { liveApi } from "./index.js";
+import { feesFromDb } from "../mapeo.js";
+import { call } from "../saved.js";
+import { sb } from "../../config.js";
+import { safeRedirect } from "../../lib/dom.js";
+import { isoToLocal, localToIso, relDate } from "../../lib/fechas.js";
+import { pr } from "../../lib/prestadores.js";
+import { selAdds } from "../../lib/servicios.js";
+import { checkRoutes } from "../../lib/recarga.js";
+import { S } from "../../state.js";
+import { render } from "../../ui/render.js";
+import { store } from "../../store.js";
+import { avatarUrl } from "../../ui/fotos.js";
+
+export const liveAdmin = {
+  async adminCheck() {
+    const isAdmin = await call(sb.rpc("is_admin")).catch(() => false);
+    S.isAdmin = !!isAdmin;
+    return S.isAdmin;
+  },
+  async adminLoad() {
+    // C02: una vez por carga, si el servidor devuelve la app en las direcciones internas (el .htaccess)
+    if (S.routesOk == null) {
+      checkRoutes().then((routesOk) => {
+        S.routesOk = routesOk;
+        if (routesOk === false) {
+          render();
+        }
+      });
+    }
+    const [stats, providers, settings, clientCounts] = await Promise.all([
+      call(sb.rpc("admin_stats")),
+      call(
+        sb.rpc("admin_providers", {
+          p_status: null,
+        }),
+      ),
+      call(sb.from("app_settings").select("site_url,require_dni,deposit_commission_pct,mp_pct_instant,mp_pct_d10,mp_pct_d18,mp_pct_d35").maybeSingle()).catch(() => null),
+      // C44: "Clientes" cuenta solo las cuentas de cliente (admin_stats cuenta todas, también las de negocio)
+      call(sb.rpc("admin_client_counts")).catch(() => null),
+      // v2 (3/11): los avisos que este admin ya vio o borró
+      call(sb.rpc("admin_alert_marks_get")).then((marks) => (store.ADM_MARKS = marks || {})).catch(() => null),
+      // 7/11 · Feriados: el año en curso y el siguiente (pestaña Comisión → Feriados)
+      liveAdmin.adminHolidays().catch(() => null),
+    ]);
+    if (stats && clientCounts) {
+      stats.clients = clientCounts.clients;
+      stats.new_clients_month = clientCounts.new_clients_month;
+    }
+    // Bloque D (D26): "Exigir DNI para aprobar prestadores" (si no se puede leer, se exige, como hasta ahora)
+    S.requireDni = !settings || settings.require_dni !== false;
+    S.adm = {
+      stats: stats,
+      // H24: la dirección del sitio con la que la base arma los links de los avisos
+      siteUrl: (settings && settings.site_url) || "",
+      providers: (providers || []).map((prov) => ({
+        id: prov.id,
+        name: prov.name,
+        status: prov.status,
+        // 10/11 (D43): el motivo de la suspensión que ve el profesional (no las notas privadas)
+        suspReason: prov.suspended_reason || "",
+        verified: prov.dni_verified,
+        dni: prov.dni_number || "",
+        dniPhotos: prov.dni_photos || {},
+        verifiedAt: prov.dni_verified_at,
+        verifiedBy: prov.dni_verified_by || "",
+        owner: prov.owner_id,
+        cats: prov.categories || [],
+        month: prov.bookings_month,
+        activity: +prov.activity || 0,
+        mp: !!prov.mp_connected,
+        rating: +prov.rating_avg,
+        nrev: prov.rating_count,
+        created: prov.created_at,
+        notes: (prov.notes || []).map((note) => {
+          const at = isoToLocal(note.at);
+          return {
+            id: note.id,
+            body: note.body,
+            d: at.date,
+            t: at.time,
+          };
+        }),
+      })),
+    };
+    if (settings) {
+      store.FEES = feesFromDb(settings);
+    }
+    return S.adm;
+  },
+  async adminHolidays() {
+    S.admHol = (await call(sb.rpc("admin_holidays"))) || [];
+    return S.admHol;
+  },
+  // "Para revisar · cobros" (Bloque 1): devoluciones que fallan o se reintentan y pagos en revisión
+  async adminReview() {
+    S.admRev = (await call(sb.rpc("admin_review"))) || { refunds: [], payments: [] };
+    return S.admRev;
+  },
+  async adminFinance(year) {
+    const data = await call(
+      sb.rpc("admin_finance", {
+        p_year: year,
+      }),
+    );
+    S.admFin = S.admFin || {};
+    S.admFin[year] = data;
+    return data;
+  },
+  async myMessages() {
+    if (!S.user) {
+      return;
+    }
+    // 12/11: si mientras llegaba la respuesta se marcaron leídos o se borraron avisos (store.INBOX_EDIT), la respuesta es
+    // de antes y no pisa la lista (los avisos borrados volvían); si falla, queda la lista que había (no «No tenés avisos»)
+    const edit = store.INBOX_EDIT || 0;
+    const uid = S.user.id;
+    const rows = await call(sb.rpc("my_messages")).catch(() => null);
+    if (!S.user || S.user.id !== uid) {
+      return;
+    }
+    if (rows == null || (store.INBOX_EDIT || 0) !== edit) {
+      // los avisos de otra cuenta (otra sesión en este dispositivo) nunca quedan a la vista
+      if (store.INBOX_FOR !== uid) {
+        S.inbox = [];
+      }
+      return;
+    }
+    store.INBOX_FOR = uid;
+    S.inbox = rows.map((msg) => ({
+      id: msg.id,
+      pid: msg.provider_id,
+      name: msg.provider_name,
+      photo: avatarUrl(msg.photo_path),
+      hue: msg.hue,
+      body: msg.body,
+      d: relDate(msg.created_at),
+      read: !!msg.read,
+      auto: msg.kind && msg.kind !== "msg",
+      // v2: qué aviso es y de qué turno (conf, r24, r2, rev y cancel), para la acción de cada uno en Mis turnos
+      kind: msg.kind || "msg",
+      ref: msg.ref || null,
+      // 4/11 · Bloque 3: el horario de un turno ofrecido (kind "offer"), en hora de Argentina
+      slot: msg.slot && msg.slot.starts ? { ...isoToLocal(msg.slot.starts), to: isoToLocal(msg.slot.ends).time } : null,
+    }));
+  },
+  // Reserva: book_slot crea el turno (y los repetidos) en espera de pago con los montos que calcula la base. Si no hay
+  // nada que pagar queda confirmado; si no, se crea el cobro en Mercado Pago y se va a pagar. Si Mercado Pago falla,
+  // se libera la reserva.
+  async book({ pid: pid, svcIdx: svcIdx, date: date, time: time, rep: rep }) {
+    const prov = pr(pid);
+    const svc = prov.svcs[svcIdx];
+    const addonIds = selAdds(prov)
+      .map((addon) => addon[3])
+      .filter(Boolean);
+    const res = await call(
+      sb.rpc("book_slot", {
+        p_service: svc[4],
+        p_start: localToIso(date, time),
+        p_repeat_weeks: rep || 0,
+        // rep = cada cuántas semanas: siempre 3 turnos más además del primero
+        p_extra: rep ? 3 : 0,
+        p_pay: S.payM === "cash" ? "cash" : S.payM === "reward" ? "reward" : "mp",
+        p_addons: addonIds,
+        p_intake: {},
+      }),
+    );
+    if (res.status === "confirmed") {
+      await Promise.all([liveApi.myBookings(), liveApi.loadProvider(pid, true), liveApi.myStamps()]);
+      return {
+        id: res.booking_ids[0],
+        skipped: res.skipped,
+        count: res.booking_ids.length,
+        cash: res.pay === "cash",
+      };
+    }
+    const pref = await sb.functions.invoke("mp-create-preference", {
+      body: {
+        booking_ids: res.booking_ids,
+        app: isStandalone(),
+      },
+    });
+    if (pref.error || !pref.data || !pref.data.init_point) {
+      const why = await pref.error?.context?.json?.().catch(() => null);
+      await sb.rpc("cancel_by_client", {
+        p_booking: res.booking_ids[0],
+      });
+      // D43: el profesional no está activo (suspendido): el mensaje de book_slot para ese error (errores.js)
+      throw new Error(why && why.error === "provider_not_available" ? "provider_not_available" : "No pudimos abrir Mercado Pago. Probá de nuevo.");
+    }
+    // 4/11: el cobro queda guardado en la app (turno y token de regreso) para confirmarlo al volver, aunque la vuelta
+    // de Mercado Pago se abra en otro navegador (iPhone con la app instalada)
+    savePendingPay(pref.data.token, pref.data.booking || res.booking_ids[0]);
+    safeRedirect(pref.data.init_point);
+    return {
+      redirect: true,
+    };
+  },
+  // C54 (V8): volver a pagar un turno que sigue reservado (hold) después de que el pago no se completó en Mercado Pago.
+  // El monto lo vuelve a calcular la Edge Function desde la base; si el hold ya venció, avisa (hold_expired).
+  async payHold(ids) {
+    const pref = await sb.functions.invoke("mp-create-preference", { body: { booking_ids: ids, app: isStandalone() } });
+    if (pref.error || !pref.data || !pref.data.init_point) {
+      const why = await pref.error?.context?.json?.().catch(() => null);
+      throw new Error(
+        why && why.error === "hold_expired"
+          ? "El horario ya se liberó. Elegí otro."
+          : why && why.error === "provider_not_available"
+            ? "provider_not_available"
+            : "No pudimos abrir Mercado Pago. Probá de nuevo.",
+      );
+    }
+    savePendingPay(pref.data.token, pref.data.booking || ids[0]);
+    safeRedirect(pref.data.init_point);
+  },
+};

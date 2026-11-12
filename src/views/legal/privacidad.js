@@ -1,0 +1,23 @@
+import { ic } from "../../ui/iconos.js";
+
+// Política de privacidad: el texto del abogado (PDF «Política de Privacidad», versión 1.0, noviembre de 2026), tal cual.
+// 12/11 (paso a producción): sin la marca de borrador. La versión ampliada que tenía la app (DNI, CAPTCHA, emails,
+// notificaciones, proveedores, plazos) quedó en docs/11-legales.md como propuesta v1.1 para revisar con el abogado.
+// Los Términos siguen con la marca (legalDraft) hasta que estén revisados.
+export const LEGAL_VERSION = "Versión 1.0 · noviembre de 2026";
+export const legalDraft = () =>
+  `<div class="legal-draft" role="note">${ic("aviso")} <span><b>Borrador pendiente de revisión legal.</b> Este texto todavía no fue revisado por un abogado y puede cambiar.</span></div>`;
+const sec = (title, body) => `<section><h2>${title}</h2>${body}</section>`;
+
+export function vPrivacidad() {
+  return `<div class="narrow stack legalpage" style="margin-top:20px"><article class="panel legal-doc">
+   <p class="hint legal-ver">${LEGAL_VERSION}</p>
+   <h1 class="h1">Política de privacidad</h1>
+   <p>En TuTiempo nos comprometemos con la protección y seguridad de los datos de sus usuarios, de conformidad con la Ley N° 25326 de Protección de Datos Personales de nuestro país y sus normas reglamentarias. Cuando solicitamos al usuario completar los campos de información personal para registrarse en la plataforma y utilizar sus funcionalidades, lo hacemos asegurando que dichos datos sólo serán empleados de acuerdo con los términos de este documento.</p>
+   ${sec("Datos que recopilamos", `<p>Nuestro sitio web podrá recopilar los siguientes datos personales: nombre, apellido, correo electrónico y teléfono de contacto. Asimismo, el usuario podrá optar por registrarse o iniciar sesión mediante su cuenta de Google, en cuyo caso podremos recibir los datos que dicho proveedor comparta con nosotros para permitir su identificación y acceso a la plataforma. La información solicitada será utilizada para la creación y administración de la cuenta del usuario, la gestión de turnos y la comunicación con los prestadores de servicios.</p>`)}
+   ${sec("Uso de la información recopilada", `<p>La información recopilada será utilizada para gestionar y procesar las cuentas de los usuarios, facilitar la búsqueda y selección de prestadores, gestionar y coordinar los turnos y atender consultas y reclamos. La comunicación de datos podrá efectuarse cuando resulte necesaria para gestionar los turnos y facilitar el contacto entre usuarios y prestadores. TuTiempo no venderá los datos personales recopilados ni los comunicará a terceros para finalidades ajenas a las aquí informadas, salvo que exista una habilitación legal para ello. En todos los casos, TuTiempo procurará que el tratamiento y la comunicación de los datos personales se limiten a lo necesario para la finalidad correspondiente y se realicen de conformidad con la normativa vigente.</p>`)}
+   ${sec("Pagos electrónicos y servicios de terceros", `<p>Cuando el usuario opte por realizar el pago de su pedido de manera electrónica, la operación será procesada por Mercado Pago. El tratamiento de los datos personales en ese caso se regirá por las políticas de privacidad y los términos y condiciones de dicho proveedor, por lo que se recomienda al usuario consultarlos antes de utilizar sus servicios. TuTiempo no accede, recopila ni almacena los datos de las tarjetas u otros instrumentos de pago ingresados directamente en la plataforma de Mercado Pago.</p>`)}
+   ${sec("Tus derechos", `<p>Los titulares podrán ejercer los derechos de acceso, rectificación, actualización y supresión de sus datos personales conforme a la Ley 25326 de Protección de Datos Personales de nuestro país y sus normas reglamentarias. Para ello, podrán dirigirse a TuTiempo a través de su correo electrónico de contacto: <a class="lnk" href="mailto:contacto@tutiempo.com.ar">contacto@tutiempo.com.ar</a>, indicando su solicitud y proporcionando la información necesaria para verificar su identidad. La Agencia de Acceso a la Información Pública (AAIP), en su carácter de autoridad de control, tiene atribuciones para atender denuncias y reclamos relacionados con el incumplimiento de las normas sobre protección de datos personales.</p>`)}
+   ${sec("Actualizaciones", `<p>TuTiempo podrá actualizar la presente Política de Privacidad para reflejar modificaciones normativas, operativas o tecnológicas. La versión vigente estará disponible en nuestro sitio web, por lo que recomendamos consultar periódicamente esta página para mantenerse informado sobre sus posibles modificaciones.</p>`)}
+  </article><button class="btn btn-ghost btn-block" data-act="volver">← Volver</button></div>`;
+}

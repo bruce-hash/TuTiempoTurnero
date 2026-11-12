@@ -1,0 +1,355 @@
+import { mountCaptchas } from "../lib/captcha.js";
+import { authModal } from "./ingreso.js";
+import { isBusiness } from "../lib/cuentas.js";
+import { isStandalone, pwaAfterRender } from "../lib/pwa.js";
+import { $ } from "../lib/dom.js";
+import { ME, pr } from "../lib/prestadores.js";
+import { CAT, pcat } from "../lib/rubros.js";
+import { S } from "../state.js";
+import { store } from "../store.js";
+import { LOGO, ic } from "./iconos.js";
+import { installGuide, installMenuItem, updateBar } from "./avisos.js";
+import { accountMenu } from "./menu-cuenta.js";
+import { bell } from "./campanita.js";
+import { syncUrl } from "../router.js";
+import { vNewPass } from "../views/auth/contrasena-nueva.js";
+import { vLogin } from "../views/auth/login.js";
+import { vCheckoutTurno } from "../views/cliente/checkout.js";
+import { vAjustes, vCuenta } from "../views/cliente/cuenta.js";
+import { storyTick, vStory } from "../views/cliente/historias.js";
+import { myUpcoming, vHome } from "../views/cliente/home.js";
+import { vMisTurnos } from "../views/cliente/mis-turnos.js";
+import { vPerfil } from "../views/cliente/perfil.js";
+import { vPagoVuelta } from "../views/cliente/pago.js";
+import { vTurnoOk } from "../views/cliente/turno.js";
+import { vNotFound } from "../views/legal/no-encontrado.js";
+import { vPrivacidad } from "../views/legal/privacidad.js";
+import { vTerminos } from "../views/legal/terminos.js";
+import { part, partFailed } from "../partes.js";
+
+function nav() {
+  $("#logoLink").innerHTML = LOGO;
+  $("#logoFoot").innerHTML = LOGO;
+  // 7/11: el ícono de cada contacto del footer (WhatsApp y Llamar), una sola vez
+  document.querySelectorAll("footer [data-ic]:not(.has-ic)").forEach((el) => {
+    el.insertAdjacentHTML("afterbegin", ic(el.dataset.ic) + " ");
+    el.classList.add("has-ic");
+  });
+  const upcoming = myUpcoming().length;
+  const count = upcoming ? `<span class="cnt">${upcoming}</span>` : "";
+  const email = S.user && S.user.email;
+  // menú de cuenta (Bloque D): las mismas acciones que antes estaban sueltas (Mis turnos, Mi perfil, Salir)
+  if (S.role === "admin") {
+    $("#nav").innerHTML = accountMenu({
+      who: S.user || { name: "Admin TuTiempo" },
+      email,
+      items: [
+        [ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"'],
+        ...(S.user ? [[ic("perfil"), "Mi perfil", 'data-act="asClient" data-to="cuenta"'], [ic("misturnos"), "Mis turnos", 'data-act="asClient" data-to="misturnos"', count], [ic("candado"), "Ajustes", 'data-act="asClient" data-to="ajustes"']] : []),
+        ...(S.barberAuth ? [[ic("negocio"), "Panel de profesional", 'data-act="toPanel"']] : []),
+        ...installItem(),
+        ...(S.user ? [[ic("salir"), "Cerrar sesión", 'data-act="logout"']] : [[ic("salir"), "Salir del panel", 'data-act="salirAdmin"']]),
+      ],
+    });
+    return;
+  }
+  // D33: una cuenta de negocio tiene el mismo menú en cualquier pantalla
+  if (S.role === "barbero" || isBusiness()) {
+    const prov = pr(ME());
+    // 4/11: la campanita de avisos, a la izquierda del menú de cuenta
+    $("#nav").innerHTML = bell() + accountMenu({
+      who: prov,
+      email,
+      items: [
+        // D33: una cuenta de negocio no reserva (sin Mis turnos ni "Reservar como cliente")
+        [ic("agenda"), "Mi agenda", 'data-act="toPanel"'],
+        // 4/11 · Bloque 4: "Mi perfil" es la pestaña Perfil del panel y "Ajustes", solo Seguridad
+        [ic("perfil"), "Mi perfil", 'data-act="toPanel" data-tab="perfil"'],
+        ...(S.user ? [[ic("candado"), "Ajustes", 'data-act="asClient" data-to="ajustes"']] : []),
+        ...(S.isAdmin ? [[ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
+        ...installItem(),
+        [ic("salir"), "Cerrar sesión", 'data-act="salirBarbero"'],
+      ],
+    });
+    return;
+  }
+  $("#nav").innerHTML = S.user
+    ? bell() +
+      accountMenu({
+        who: S.user,
+        email,
+        items: [
+          [ic("perfil"), "Mi perfil", 'data-go="cuenta"'],
+          [ic("misturnos"), "Mis turnos", 'data-go="misturnos"', count],
+          [ic("candado"), "Ajustes", 'data-go="ajustes"'],
+          ...(S.barberAuth ? [[ic("agenda"), "Mi agenda", 'data-act="toPanel"']] : []),
+          ...(S.isAdmin ? [[ic("admin"), "Panel de TuTiempo", 'data-act="toAdmin"']] : []),
+          ...installItem(),
+          ...(S.barberAuth || S.isAdmin ? [] : [[ic("negocio"), "Registrá tu negocio", 'data-act="bizStart"']]),
+          [ic("salir"), "Cerrar sesión", 'data-act="logout"'],
+        ],
+      })
+    : // un solo botón: clientes y prestadores entran por la misma ventana
+      '<button class="btn btn-pri" data-act="authOpen">Ingresar</button>';
+}
+// rubro que tiñe la página (data-seg del body): el del prestador que se está viendo, o "n" (neutro)
+function segNow() {
+  if (S.role === "admin") {
+    return "n";
+  }
+  if (S.role === "barbero") {
+    return pcat(pr(ME()), S.pctx);
+  }
+  const view = S.view;
+  if (view === "perfil" || view === "checkoutT") {
+    const prov = pr(S.pid);
+    if (prov) {
+      return pcat(prov, S.pctx);
+    } else {
+      return "n";
+    }
+  }
+  if (view === "turnoOk") {
+    const booking = store.BOOK.find((item) => item.id === S.turnoId);
+    const prov = booking && pr(booking.pid);
+    if (prov) {
+      return pcat(prov, booking.cat || S.pctx);
+    } else {
+      return "n";
+    }
+  }
+  if ((!view || view === "home") && CAT[S.cat] && S.cat !== "n") {
+    return S.cat;
+  } else {
+    return "n";
+  }
+}
+// dibuja toda la app desde el estado S; si una vista falla, muestra un aviso en lugar de una página rota
+// C02: mientras arranca (sesión y dirección sin resolver) solo la carga mínima, nunca el inicio ni otra pantalla
+function renderBoot() {
+  const app = document.getElementById("app");
+  const kind = bootKind();
+  if (app && !app.querySelector(`.bootload[data-sk="${kind}"]`)) {
+    app.innerHTML = bootHtml(kind);
+  }
+  const logo = document.getElementById("logoLink");
+  if (logo && !logo.innerHTML) {
+    logo.innerHTML = LOGO;
+  }
+}
+// v2 (opcional del cliente): la carga es un esqueleto (bloques grises con la forma de la página) en lugar de una barra.
+// El del panel imita la cabecera, el menú de 4 × 2 y la Agenda; el general, el inicio (el mismo que trae index.html).
+const bootKind = () => (/^\/panel(\/|$)/.test(location.pathname) ? "panel" : "inicio");
+const sk = (cls, n = 1) => Array.from({ length: n }, () => `<i class="sk ${cls}"></i>`).join("");
+export const bootHtml = (kind = "inicio") =>
+  `<div class="bootload" data-sk="${kind}" role="status" aria-label="Cargando"><span class="vh">Cargando…</span>` +
+  (kind === "panel"
+    ? `<div class="sk-col sk-pb"><div class="sk-side">${sk("sk-card sk-h")}<div class="sk-tabs">${sk("sk-tab", 8)}</div></div><div class="sk-main">${sk("sk-line w60")}<div class="sk-row">${sk("sk-stat", 3)}</div>${sk("sk-card sk-tall")}</div></div>`
+    : `<div class="sk-col sk-center">${sk("sk-pill")}${sk("sk-title")}${sk("sk-title w60")}${sk("sk-line")}${sk("sk-line w80")}${sk("sk-search")}<div class="sk-grid">${sk("sk-tile", 6)}</div></div>`) +
+  "</div>";
+export const BOOT_HTML = bootHtml("inicio");
+export function render() {
+  if (S.booting) {
+    renderBoot();
+    return;
+  }
+  document.body.classList.remove("booting");
+  try {
+    renderInner();
+    syncUrl();
+  } catch (err) {
+    console.error(err);
+    const app = document.getElementById("app");
+    if (app) {
+      app.innerHTML =
+        `<div class="apperr panel"><div class="hero-ic">${ic("triste")}</div><h1 class="h1">Algo salió mal</h1><p class="lead">No se perdió nada de lo que ya guardaste.</p><button class="btn btn-pri btn-block" data-act="recover">Volver al inicio</button></div>`;
+    }
+  }
+}
+// 10/11 · punto 2: si el dibujo nuevo cambia la paleta del rubro (elegir un servicio de otro rubro en un perfil), el
+// cambio de color se funde en lugar de saltar (View Transitions; sin soporte o con movimiento reducido, como siempre)
+export function renderSmooth() {
+  const before = document.body.dataset.seg;
+  const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (S.booting || reduce || typeof document.startViewTransition !== "function" || segNow() === before) {
+    render();
+    return;
+  }
+  document.documentElement.classList.add("seg-swap");
+  const swap = document.startViewTransition(() => render());
+  swap.finished.finally(() => document.documentElement.classList.remove("seg-swap"));
+}
+function renderInner() {
+  // la ventana de ingreso se anima solo al abrirse (no en cada dibujo mientras está abierta)
+  const modalWasOpen = !!document.querySelector(".authmodal");
+  renderMain();
+  const tab = document.querySelector(".btabs [aria-selected=true]");
+  if (tab && tab.parentElement) {
+    const bar = tab.parentElement;
+    bar.scrollLeft = Math.max(0, tab.offsetLeft - (bar.clientWidth - tab.offsetWidth) / 2);
+  }
+  const app = document.getElementById("app");
+  if (app && S.story) {
+    app.insertAdjacentHTML("beforeend", vStory());
+    storyTick();
+  }
+  // Bloque C: la guía de "Agregar a inicio" y la barra de versión nueva (si corresponden)
+  if (app) {
+    app.insertAdjacentHTML("beforeend", installGuide() + updateBar());
+  }
+  // la ventana de ingreso (se cierra sola al ingresar); el aviso de D33 solo con sesión
+  if (S.bizBlock && !S.user) {
+    S.bizBlock = null;
+  }
+  if (S.authModal && S.user) {
+    S.authModal = null;
+  }
+  const modal = authModal();
+  if (app && modal) {
+    app.insertAdjacentHTML("beforeend", modalWasOpen ? modal : modal.replace('class="authmodal"', 'class="authmodal am-anim"'));
+  }
+  document.body.classList.toggle("am-open", !!modal);
+  pwaAfterRender();
+  // H30: el CAPTCHA de los formularios de ingreso (si hay clave de Turnstile)
+  mountCaptchas();
+}
+// Bloque C: "Instalar la app" en el menú de cuenta, si este navegador lo permite
+const installItem = () => {
+  const item = installMenuItem();
+  // 4/11 · Bloque 1: la app instalada no tiene botón de recargar; "Actualizar" por si el gesto de deslizar choca con algo
+  return [...(item ? [item] : []), ...(isStandalone() ? [[ic("actualizar"), "Actualizar", 'data-act="appReload"']] : [])];
+};
+function renderMain() {
+  document.body.dataset.seg = segNow();
+  nav();
+  document.querySelectorAll("[data-role-view]").forEach((btn) => {
+    if (btn.closest(".sw")) {
+      btn.setAttribute("aria-pressed", btn.dataset.roleView === S.role);
+    }
+  });
+  let html;
+  if (S.role === "admin") {
+    html = partView("admin", (mod) => mod.vAdmin(), "panel");
+  } else if (S.role === "barbero") {
+    html = S.preview
+      ? `<div class="prevbar"><span>${ic("ver")} Así ve tu perfil un cliente</span><button class="btn btn-pri" data-act="exitPreview">Volver al panel</button></div>${vPerfil()}`
+      : partView("panel", (mod) => mod.vBarbero(), "panel");
+  } else {
+    switch (S.view) {
+      case "perfil":
+        html =
+          pr(S.pid) && pr(S.pid).deleted
+            ? '<div class="narrow" style="margin-top:24px"><div class="panel" style="text-align:center"><b>Este perfil ya no está disponible.</b><button class="btn btn-pri btn-block" style="margin-top:12px" data-go="home">Ver otros profesionales</button></div></div>'
+            : vPerfil();
+        break;
+      case "login":
+        html = vLogin(false);
+        break;
+      case "register":
+        html = vLogin(true);
+        break;
+      case "newpass":
+        html = vNewPass();
+        break;
+      case "negocio":
+        html = partView("negocio", (mod) => mod.vNegocio(), "inicio");
+        break;
+      case "cuenta":
+        html = S.user ? vCuenta() : vLogin(false);
+        break;
+      case "ajustes":
+        html = S.user ? vAjustes() : vLogin(false);
+        break;
+      case "terminos":
+        html = vTerminos();
+        break;
+      case "privacidad":
+        html = vPrivacidad();
+        break;
+      case "notfound":
+        html = vNotFound();
+        break;
+      case "misturnos":
+        html = S.user ? vMisTurnos() : vLogin(false);
+        break;
+      case "checkoutT":
+        html = vCheckoutTurno();
+        break;
+      case "turnoOk":
+        html = vTurnoOk();
+        break;
+      case "pagoVuelta":
+        html = vPagoVuelta();
+        break;
+      default:
+        html = vHome();
+    }
+  }
+  $("#app").innerHTML = html;
+}
+// 11/11 (división del código): la vista de una parte que se baja aparte (src/partes.js). Mientras llega, el mismo
+// esqueleto de la carga; si no se pudo bajar (sin conexión), un aviso con «Reintentar».
+function partView(name, view, skeleton) {
+  const mod = part(name);
+  if (mod) {
+    return view(mod);
+  }
+  if (partFailed(name)) {
+    return `<div class="apperr panel"><div class="hero-ic">${ic("triste")}</div><h1 class="h1">No se pudo cargar esta parte</h1><p class="lead">Revisá la conexión y probá de nuevo.</p><button class="btn btn-pri btn-block" data-act="partRetry" data-part="${name}">Reintentar</button></div>`;
+  }
+  return bootHtml(skeleton);
+}
+// navegación entre pantallas del cliente (id = prestador, para "perfil")
+export function go(view, id) {
+  // V7: ir a otra página cierra el ingreso en segunda capa (y olvida a dónde volvía)
+  if (S.authModal) {
+    S.authModal = null;
+    S.after = null;
+    S.authOnPage = null;
+  }
+  if (S.role === "barbero" && S.preview) {
+    S.preview = false;
+    render();
+    window.scrollTo(0, 0);
+    return;
+  }
+  if (view === "misturnos" && !S.user) {
+    S.after = "misturnos";
+    view = "login";
+  }
+  S.role = "cliente";
+  if (view !== S.view) {
+    S.prev = S.view;
+  }
+  if ((view === "login" || view === "register") && !S.keepLogin) {
+    S.login = {
+      mode: view === "register" ? "up" : "in",
+      email: "",
+      err: "",
+    };
+  }
+  S.keepLogin = false;
+  if ((view === "login" || view === "register") && S.user) {
+    S.view = "cuenta";
+    render();
+    window.scrollTo(0, 0);
+    return;
+  }
+  if (view === "home") {
+    S.reprog = null;
+  }
+  if (view !== "turnoOk") {
+    S.justBooked = false;
+    S.cancelAsk = false;
+  }
+  if (view === "perfil" && (!id || +id !== S.pid || S.view !== "perfil")) {
+    S.ptab = "svc";
+  }
+  S.story = null;
+  if (id) {
+    S.pid = +id;
+  }
+  S.view = view;
+  render();
+  window.scrollTo(0, 0);
+}

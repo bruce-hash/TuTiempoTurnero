@@ -1,0 +1,18 @@
+# public_html/prueba (prueba.tutiempo.com.ar) · desde el 12/11 la app está en https://tutiempo.com.ar
+# Todo pedido va a la misma dirección en el dominio principal, con 301 (la query, como ?pago=…, pasa tal cual).
+# La única excepción es /sw.js: es un service worker que se desinstala solo (el de esta carpeta). Sin él, quien instaló
+# la app de prueba seguiría viendo la versión guardada en su celular, porque el navegador no acepta una redirección
+# para actualizar el service worker.
+Options -Indexes
+# el navegador solo acepta un service worker servido como JavaScript
+AddType application/javascript .js
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^sw\.js$ - [L]
+  RewriteRule ^ https://tutiempo.com.ar%{REQUEST_URI} [R=301,L]
+</IfModule>
+<IfModule mod_headers.c>
+  <Files "sw.js">
+    Header set Cache-Control "no-store"
+  </Files>
+</IfModule>

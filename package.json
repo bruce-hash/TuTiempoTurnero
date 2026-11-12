@@ -1,0 +1,44 @@
+{
+  "name": "tutiempo",
+  "private": true,
+  "description": "TuTiempo · turnos online (Supabase + Hostinger)",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:test": "vite build --mode test",
+    "preview": "vite preview",
+    "test:unidad": "node pruebas/unidad.mjs",
+    "test:crawl": "vite build --mode test --logLevel warn && node pruebas/crawl.js dist-test",
+    "test:clicks": "python3 pruebas/audit_clicks.py src",
+    "test:sin-demo": "vite build --logLevel warn && node pruebas/sin_demo.mjs",
+    "test:partes": "vite build --logLevel warn && node pruebas/entorno_e2e.mjs dist -- node pruebas/partes.mjs",
+    "test:ancho": "vite build --mode test --logLevel warn && node pruebas/ancho.mjs dist-test",
+    "test:e2e": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/e2e.js {url} {pg}",
+    "test:rutas": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/rutas.js {url} {pg}",
+    "test:pwa": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/pwa.js {url} {pg}",
+    "test:captcha": "vite build --mode test --logLevel warn && node pruebas/entorno_e2e.mjs dist-test -- node pruebas/captcha.js {url} {pg}",
+    "test:verificar": "vite build --logLevel warn && node pruebas/entorno_e2e.mjs dist -- node pruebas/verificar_local.mjs",
+    "vapid": "node tools/vapid.mjs",
+    "test:webpush": "deno run --config pruebas/funciones/deno.json pruebas/funciones/webpush_rfc.ts",
+    "test:funciones": "node pruebas/entorno_e2e.mjs public -- deno run --config pruebas/funciones/deno.json --allow-net --allow-env --allow-read --allow-run pruebas/funciones/funciones.ts",
+    "test:avisos": "node pruebas/entorno_e2e.mjs public -- deno run --config pruebas/funciones/deno.json --allow-net --allow-env --allow-read --allow-run pruebas/funciones/avisos.ts",
+    "test:htaccess": "vite build --logLevel warn && bash pruebas/apache/local.sh",
+    "test:litespeed": "vite build --logLevel warn && node pruebas/litespeed.mjs dist",
+    "test:comparar": "vite build --logLevel warn && vite build --mode test --logLevel warn && node pruebas/comparar.mjs",
+    "sql:build": "node tools/todo_en_uno.mjs",
+    "sql:check": "node tools/todo_en_uno.mjs --check"
+  },
+  "devDependencies": {
+    "jsdom": "24.1.3",
+    "jsqr": "1.4.0",
+    "pg": "8.12.0",
+    "playwright": "1.56.0",
+    "vite": "8.3.4"
+  },
+  "dependencies": {
+    "qrcode-generator": "2.0.4"
+  }
+}

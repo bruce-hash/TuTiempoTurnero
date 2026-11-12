@@ -1,0 +1,487 @@
+// Prueba de direcciones (Bloque B) en navegador real contra la base, PostgREST y e2e_server.js (que imita el fallback
+// del .htaccess): cada ruta abierta directo (como una recarga), rutas reservadas, rutas con sesión, atrás/adelante,
+// historias y ficha de cliente, QR decodificado, link copiado, reserva con recarga y vuelta de Mercado Pago, y el link
+// de recuperación de contraseña.
+// Uso: node pruebas/entorno_e2e.mjs dist-test -- node pruebas/rutas.js {url} {pg}   (npm run test:rutas)
+const fs = require("fs");
+const path = require("path");
+const { chromium } = require("playwright");
+const { Client } = require("pg");
+const jsQR = require("jsqr");
+const BASE = process.argv[2] || "http://localhost:8787";
+const PG = process.argv[3];
+let F = 0;
+const ok = (name, cond, extra = "") => {
+  if (!cond) F++;
+  console.log((cond ? "OK   " : "FAIL ") + name + (cond || !extra ? "" : "  → " + extra));
+};
+const RESERVED = [...fs.readFileSync(path.join(__dirname, "..", "src", "lib", "rutas.js"), "utf8").matchAll(/^\s+"([a-z0-9-]+)",$/gm)].map((m) => m[1]);
+const SOFIA = "sofia-benitez-studio";
+
+// 8/11 (punto 11): el turno se elige con margen, el primer horario del próximo día abierto (no el «Primer turno», que puede
+// ser dentro de minutos y quedar en el pasado mientras corre la prueba: pasó a las 15:00 en el CI de #61)
+async function turnoConMargen(p) {
+  await p.locator(".wd[data-day]:not(.today):not([disabled]):not(.full)").first().click();
+  await p.waitForTimeout(200);
+  await p.locator(".slots [data-slot]").first().click();
+  await p.waitForTimeout(200);
+}
+(async () => {
+  const db = new Client({ connectionString: PG });
+  await db.connect();
+  const q = async (sql, args) => (await db.query(sql, args)).rows;
+  await q("insert into auth.users (email, encrypted_password, raw_user_meta_data) values ('ruta@test.ar', 'cliente12345', '{\"full_name\":\"Rita Ruta\"}'), ('admin@test.ar', 'admin12345', '{\"full_name\":\"Admin\"}')");
+  await q("insert into public.app_admins (user_id) select id from auth.users where email = 'admin@test.ar'");
+  const sofiaId = +(await q("select id from providers where slug = $1", [SOFIA]))[0].id;
+  const maxId = +(await q("select id from providers where slug = 'barberia-max'"))[0].id;
+  await q("insert into media (provider_id, storage_path, kind, label) values ($1, 'x/trabajo.jpg', 'image', 'Trabajo de prueba')", [sofiaId]);
+
+  const browser = await chromium.launch();
+  const errors = [];
+  const csp = [];
+  async function nueva() {
+    const ctx = await browser.newContext({ viewport: { width: 400, height: 900 } });
+    await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: BASE });
+    const page = await ctx.newPage();
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("console", (m) => {
+      if (m.type() === "error" && /Content Security Policy|Refused to/.test(m.text())) csp.push(m.text());
+    });
+    return page;
+  }
+  const wait = (page, ms = 500) => page.waitForTimeout(ms);
+  const here = (page) => { const u = new URL(page.url()); return u.pathname + u.search; };
+  const st = (page) => page.evaluate(() => ({ view: S.view, role: S.role, pid: S.pid, ptab: S.ptab, cat: S.cat, q: S.q, btab: S.btab, admT: S.admT, cli: S.cli, story: !!S.story, user: !!S.user }));
+  // abre la dirección y espera a que la app haya arrancado (el enrutador pone el título al primer dibujo)
+  const ready = (page) =>
+    page.waitForFunction(() => typeof S !== "undefined" && document.title && (document.querySelector("#app").children.length && !document.querySelector("#app .bootload")), null, { timeout: 10000 }).catch(async (err) => {
+      console.log("  (la app no arrancó en " + page.url() + ": " + (await page.content()).slice(0, 300).replace(/\s+/g, " ") + ")");
+      throw err;
+    });
+  const go = async (page, route) => { await page.goto(BASE + route); await ready(page); await wait(page, 700); return st(page); };
+  const text = (page) => page.locator("#app").innerText();
+  async function login(page, email, pass) {
+    await page.fill("#ai_e", email);
+    await page.fill("#ai_p", pass);
+    await page.click("#fLogin button[type=submit]");
+    await wait(page, 1200);
+  }
+  // ingreso y registro: el mismo formulario para todos
+  async function loginPanel(page) {
+    await login(page, "sofia@test.ar", "prestador123");
+    await wait(page, 300);
+  }
+
+  // ---------- 1. Cada ruta abierta directo (sin sesión) ----------
+  let page = await nueva();
+  let s = await go(page, "/");
+  ok("/ → inicio con el título del sitio", s.view === "home" && (await page.title()) === "TuTiempo · Turnos online en Olavarría");
+  s = await go(page, "/rubro/unas");
+  ok("/rubro/unas → inicio filtrado por Uñas (slug de categories)", s.view === "home" && s.cat === "u" && (await page.title()) === "Uñas en Olavarría · TuTiempo");
+  s = await go(page, "/rubro/no-existe");
+  ok("/rubro/no-existe → no encontrado", s.view === "notfound");
+  s = await go(page, "/buscar?q=corte");
+  await page.waitForSelector(".grid .card", { timeout: 8000 }).catch(() => {});
+  ok("/buscar?q=corte → búsqueda con resultados", s.view === "home" && s.q === "corte" && /barbería max/i.test(await text(page)));
+  s = await go(page, "/" + SOFIA);
+  const desc = await page.evaluate(() => document.querySelector('meta[name="description"]').getAttribute("content"));
+  ok("/<slug> → perfil con nombre, rubro y ciudad en el título", s.view === "perfil" && s.pid === sofiaId && /^Sofía Benítez Studio · .+ en Olavarría · TuTiempo$/.test(await page.title()), await page.title());
+  ok("/<slug> → descripción propia", desc.includes("Sofía Benítez Studio") && desc.includes("Olavarría"), desc);
+  s = await go(page, "/" + SOFIA + "/trabajos");
+  ok("/<slug>/trabajos → pestaña Trabajos", s.view === "perfil" && s.ptab === "works");
+  s = await go(page, "/" + SOFIA + "/resenas");
+  ok("/<slug>/resenas → pestaña Reseñas", s.view === "perfil" && s.ptab === "reviews");
+  s = await go(page, "/p/" + sofiaId);
+  ok("/p/<id> → perfil, y la dirección pasa a /<slug>", s.view === "perfil" && here(page) === "/" + SOFIA, here(page));
+  s = await go(page, "/nadie-se-llama-asi");
+  ok("slug inexistente → “no encontrado” y la dirección queda", s.view === "notfound" && here(page) === "/nadie-se-llama-asi" && (await text(page)).includes("No encontramos esta página"));
+  s = await go(page, "/" + SOFIA + "/otra-cosa");
+  ok("/<slug>/otra-cosa → no encontrado", s.view === "notfound");
+  for (const [route, view, title] of [
+    ["/ingresar", "login", "Ingresar · TuTiempo"],
+    ["/crear-cuenta", "register", "Crear cuenta · TuTiempo"],
+    ["/registrar-negocio", "negocio", "Registrá tu negocio · TuTiempo"],
+    ["/terminos", "terminos", "Términos y condiciones · TuTiempo"],
+    ["/privacidad", "privacidad", "Política de privacidad · TuTiempo"],
+    ["/nueva-contrasena", "newpass", "Contraseña nueva · TuTiempo"],
+  ]) {
+    s = await go(page, route);
+    ok(`${route} → su pantalla y su título`, s.view === view && here(page) === route && (await page.title()) === title, `${s.view} ${here(page)} ${await page.title()}`);
+  }
+  // direcciones viejas: el alta de antes y el acceso de prestadores
+  s = await go(page, "/sumate");
+  ok("/sumate (el alta de antes) → /registrar-negocio", s.view === "negocio" && here(page) === "/registrar-negocio", here(page));
+  s = await go(page, "/prestadores/ingresar");
+  ok("/prestadores/ingresar (link viejo) → el mismo ingreso de todos", s.view === "login" && here(page) === "/ingresar", here(page));
+  for (const step of ["1", "5", "listo"]) {
+    s = await go(page, "/registrar-negocio/" + step);
+    ok(`/registrar-negocio/${step} sin sesión → el paso 0 (la cuenta)`, s.view === "negocio" && here(page) === "/registrar-negocio", here(page));
+  }
+  s = await go(page, "/registrar-negocio/9");
+  ok("/registrar-negocio/9 → no encontrado", s.view === "notfound");
+
+  // ---------- 2. Rutas con sesión, sin sesión: al ingreso y de vuelta ----------
+  for (const [route, view] of [["/mis-turnos", "misturnos"], ["/cuenta", "cuenta"]]) {
+    s = await go(page, route);
+    ok(`${route} sin sesión → ingreso con ?volver=`, s.view === "login" && here(page) === "/ingresar?volver=" + encodeURIComponent(route), here(page));
+    await login(page, "ruta@test.ar", "cliente12345");
+    s = await st(page);
+    ok(`${route}: después de ingresar vuelve a ${route}`, s.view === view && here(page) === route, `${s.view} ${here(page)}`);
+    await page.context().clearCookies();
+    await page.evaluate(() => sb.auth.signOut());
+    await page.evaluate(() => localStorage.clear());
+  }
+  await page.context().close();
+  page = await nueva();
+  s = await go(page, "/turno/999999");
+  ok("/turno/<id> sin sesión → ingreso con ?volver=", s.view === "login" && here(page) === "/ingresar?volver=%2Fturno%2F999999");
+  s = await go(page, "/panel/agenda");
+  ok("/panel/agenda sin sesión → el ingreso de todos con ?volver=", s.view === "login" && here(page) === "/ingresar?volver=%2Fpanel%2Fagenda", here(page));
+  await loginPanel(page);
+  s = await st(page);
+  ok("panel: después de ingresar vuelve a /panel/agenda", s.role === "barbero" && s.btab === "agenda" && here(page) === "/panel/agenda", here(page));
+  await page.context().close();
+  page = await nueva();
+  s = await go(page, "/admin/balance");
+  ok("/admin/balance sin sesión → ingreso con ?volver=", s.view === "login" && here(page) === "/ingresar?volver=%2Fadmin%2Fbalance");
+  await login(page, "admin@test.ar", "admin12345");
+  s = await st(page);
+  ok("admin: después de ingresar vuelve a /admin/balance", s.role === "admin" && s.admT === "bal" && here(page) === "/admin/balance", here(page));
+  for (const [route, tab] of [["/admin/resumen", "res"], ["/admin/prestadores", "prov"], ["/admin/balance", "bal"], ["/admin/comision", "com"]]) {
+    await page.goto(BASE + route);
+    await page.reload();
+    await wait(page, 900);
+    s = await st(page);
+    ok(`recarga en ${route}: misma pantalla`, s.role === "admin" && s.admT === tab && here(page) === route && (await page.title()).endsWith("· Admin · TuTiempo"), here(page));
+  }
+  await page.context().close();
+  page = await nueva();
+  await go(page, "/ingresar");
+  await login(page, "ruta@test.ar", "cliente12345");
+  s = await go(page, "/admin/resumen");
+  ok("/admin con una cuenta que no es admin → no encontrado", s.view === "notfound" && s.role !== "admin");
+  s = await go(page, "/panel/agenda");
+  ok("/panel con una cuenta sin perfil de prestador → inicio (con aviso)", s.view === "home" && s.role === "cliente");
+  for (const [route, view] of [["/mis-turnos", "misturnos"], ["/cuenta", "cuenta"]]) {
+    await page.goto(BASE + route);
+    await page.reload();
+    await wait(page, 900);
+    s = await st(page);
+    ok(`recarga en ${route} con sesión: misma pantalla`, s.view === view && here(page) === route);
+  }
+  s = await go(page, "/ingresar?volver=%2Fmis-turnos");
+  ok("/ingresar?volver= con la sesión abierta → directo a la dirección", s.view === "misturnos" && here(page) === "/mis-turnos", here(page));
+
+  // ---------- 3. Atrás y adelante ----------
+  await go(page, "/");
+  await page.click(".segtile.seg-u");
+  await wait(page);
+  await page.click(".grid .card [data-go=perfil]");
+  await wait(page, 900);
+  await page.click("[data-act=ptab][data-t=works]");
+  await wait(page);
+  const steps = [here(page)];
+  await page.goBack(); await wait(page, 800); steps.push(here(page));
+  await page.goBack(); await wait(page, 800); steps.push(here(page));
+  await page.goBack(); await wait(page, 800); steps.push(here(page));
+  await page.goForward(); await wait(page, 800); steps.push(here(page));
+  ok("atrás: trabajos → perfil → rubro → inicio; adelante: rubro", JSON.stringify(steps) === JSON.stringify(["/" + SOFIA + "/trabajos", "/" + SOFIA, "/rubro/unas", "/", "/rubro/unas"]), steps.join(" · "));
+  s = await st(page);
+  ok("adelante deja la pantalla que corresponde a la dirección", s.view === "home" && s.cat === "u");
+
+  // ---------- 4. Historias: atrás las cierra; la X también, sin dejar una entrada de más ----------
+  await go(page, "/");
+  await page.goto(BASE + "/" + SOFIA);
+  await wait(page, 900);
+  await page.click(".pav.ring");
+  await wait(page);
+  ok("abrir una historia → ?historia=0", here(page) === "/" + SOFIA + "?historia=0" && (await st(page)).story, here(page));
+  await page.goBack();
+  await wait(page);
+  s = await st(page);
+  ok("atrás cierra la historia y queda en el perfil", !s.story && s.view === "perfil" && here(page) === "/" + SOFIA, here(page));
+  await page.click(".pav.ring");
+  await wait(page);
+  await page.click("[data-act=storyClose]");
+  await wait(page);
+  s = await st(page);
+  ok("la X cierra la historia y vuelve a la misma entrada", !s.story && here(page) === "/" + SOFIA && !(await page.evaluate(() => history.state && history.state.overlay)));
+  await page.goBack();
+  await wait(page, 800);
+  ok("después de cerrarla, atrás va a la pantalla anterior (no a la historia)", here(page) === "/", here(page));
+
+  // ---------- 5. Reserva: el horario va en la dirección, la recarga lo conserva y vuelve de Mercado Pago ----------
+  await page.goto(BASE + "/" + SOFIA);
+  await wait(page, 900);
+  await page.click(".sgroup.seg-u .svci");
+  await turnoConMargen(page);
+  await page.click("[data-act=reservarT]");
+  await wait(page, 900);
+  const checkout = here(page);
+  ok("confirmar turno → /<slug>/reservar?servicio=&dia=&hora=", /^\/sofia-benitez-studio\/reservar\?servicio=\d+&dia=\d{4}-\d{2}-\d{2}&hora=\d{2}%3A\d{2}$/.test(checkout), checkout);
+  await page.reload();
+  await wait(page, 1500);
+  ok("recarga en la confirmación: sigue ahí con el mismo horario", (await st(page)).view === "checkoutT" && here(page) === checkout && (await page.locator("#fTurno").count()) === 1);
+  await Promise.all([page.waitForURL(/\/turno\/\d+$/, { timeout: 10000 }).catch(() => {}), page.click("#fTurno button[type=submit]")]);
+  await wait(page, 1200);
+  ok("vuelta de Mercado Pago (?mp=success&b=) → /turno/<id> con el “¡Listo!”", /^\/turno\/\d+$/.test(here(page)) && (await page.locator(".booked").count()) === 1, here(page));
+  const turno = here(page);
+  await page.reload();
+  await wait(page, 1200);
+  ok("recarga en /turno/<id>: el detalle del turno", (await st(page)).view === "turnoOk" && here(page) === turno);
+  // Bloque 1: en vivo no se puede mover un turno; ?reprogramar=<id> lleva al detalle del turno, sin "Cambiar" ni reserva
+  const idTurno = turno.split("/").pop();
+  const antesR = +(await q("select count(*) from bookings"))[0].count;
+  s = await go(page, "/" + SOFIA + "?reprogramar=" + idTurno);
+  ok("?reprogramar=<id> en vivo → /turno/<id>, sin modo “Cambiar”", s.view === "turnoOk" && here(page) === turno
+     && !(await page.evaluate(() => S.reprog)) && !/Cambiar|Elegí el nuevo horario/.test(await page.locator("#app").innerText()), here(page));
+  ok("…y no crea ninguna reserva", +(await q("select count(*) from bookings"))[0].count === antesR);
+  s = await go(page, "/" + SOFIA + "?reprogramar=abc");
+  ok("?reprogramar= inválido en vivo → inicio, sin error", s.view === "home" && here(page) === "/", here(page));
+  await page.context().close();
+
+  // ---------- 6. Panel: recarga en cada pestaña, ficha de cliente, QR y link ----------
+  page = await nueva();
+  await go(page, "/prestadores/ingresar");
+  await loginPanel(page);
+  for (const [word, tab] of [["agenda", "agenda"], ["finanzas", "finanzas"], ["clientes", "clientes"], ["productos", "productos"], ["horarios", "horarios"], ["estadisticas", "stats"], ["trabajos", "comunidad"], ["perfil", "perfil"]]) {
+    await page.goto(BASE + "/panel/" + word);
+    await page.reload();
+    await wait(page, 1000);
+    s = await st(page);
+    ok(`recarga en /panel/${word}: misma pestaña`, s.role === "barbero" && s.btab === tab && here(page) === "/panel/" + word, here(page));
+  }
+  // C34 (V4): la Caja ahora es la Caja del día de Finanzas
+  await page.goto(BASE + "/panel/caja");
+  await wait(page, 1000);
+  s = await st(page);
+  ok("/panel/caja (dirección vieja) → Finanzas, en la Caja del día", s.btab === "finanzas" && (await page.evaluate(() => S.fp)) === "dia" && here(page) === "/panel/finanzas", here(page));
+  await page.goto(BASE + "/panel/clientes");
+  await wait(page, 1000);
+  const name = await page.locator("[data-cli]").first().getAttribute("data-cli");
+  await page.click("[data-cli]");
+  await wait(page);
+  const ficha = here(page);
+  const clientId = +(await q("select id from provider_clients where provider_id = $1 and name = $2", [sofiaId, name]))[0].id;
+  ok("ficha de cliente → ?cliente=<id de provider_clients>, nunca el nombre", ficha === "/panel/clientes?cliente=" + clientId && !ficha.includes(encodeURIComponent(name)), ficha);
+  await page.reload();
+  await wait(page, 1200);
+  ok("recarga en la ficha: el mismo cliente", (await st(page)).cli === name);
+  await page.goBack();
+  await wait(page);
+  ok("atrás cierra la ficha", !(await st(page)).cli && here(page) === "/panel/clientes", here(page));
+  await page.goto(BASE + "/panel/trabajos");
+  await wait(page, 1000);
+  const pixels = await page.evaluate(async () => {
+    const svg = document.querySelector(".qr svg");
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 264;
+    const g = canvas.getContext("2d");
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, 264, 264);
+    g.drawImage(img, 0, 0, 264, 264);
+    return Array.from(g.getImageData(0, 0, 264, 264).data);
+  });
+  const decoded = jsQR(Uint8ClampedArray.from(pixels), 264, 264);
+  ok("el QR se decodifica y es la dirección del perfil", decoded && decoded.data === BASE + "/" + SOFIA, decoded && decoded.data);
+  ok("el link que se muestra es el mismo (sin https://)", (await text(page)).includes(new URL(BASE).host + "/" + SOFIA));
+  await page.click("[data-act=copiarLink]");
+  await wait(page, 300);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  ok("“Copiar link” copia la dirección del perfil con el dominio actual", copied === BASE + "/" + SOFIA, copied);
+  // C40 (V3b): "Imprimir o guardar el QR en PDF" arma una hoja con el nombre, el QR grande y el link, y abre la impresión
+  await page.evaluate(() => { window.__prints = 0; window.print = () => { window.__prints++; }; });
+  await page.click("[data-act=qrPrint]");
+  await wait(page, 200);
+  const sheet = await page.evaluate(() => ({ prints: window.__prints, cls: document.body.classList.contains("printing-qr"), text: (document.querySelector(".qrsheet") || {}).innerText || "", px: +((document.querySelector(".qrsheet .qs-qr svg") || { getAttribute: () => 0 }).getAttribute("width")) }));
+  ok("C40: el botón abre la impresión con la hoja del QR", sheet.prints === 1 && sheet.cls, JSON.stringify(sheet));
+  await page.emulateMedia({ media: "print" });
+  const printed = await page.evaluate(() => ({ app: document.getElementById("app").checkVisibility() ? "visible" : "none", sheet: getComputedStyle(document.querySelector(".qrsheet")).display, text: document.querySelector(".qrsheet").innerText }));
+  ok("C40: al imprimir solo sale la hoja: nombre, “Reservá tu turno online”, el QR de 340 px y el link", printed.app === "none" && printed.sheet !== "none" && printed.text.includes("Reservá tu turno online") && printed.text.includes(new URL(BASE).host + "/" + SOFIA) && sheet.px === 340, JSON.stringify(printed));
+  const sheetPixels = await page.evaluate(async () => {
+    const svg = document.querySelector(".qrsheet .qs-qr svg");
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 340;
+    const g = canvas.getContext("2d");
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, 340, 340);
+    g.drawImage(img, 0, 0, 340, 340);
+    return Array.from(g.getImageData(0, 0, 340, 340).data);
+  });
+  const sheetQr = jsQR(Uint8ClampedArray.from(sheetPixels), 340, 340);
+  ok("C40: el QR de la hoja también lleva al perfil", sheetQr && sheetQr.data === BASE + "/" + SOFIA, sheetQr && sheetQr.data);
+  const pdfBuf = await page.pdf({ format: "A4" }); if (process.env.QR_PDF) require("fs").writeFileSync(process.env.QR_PDF, pdfBuf);
+  const pdf = pdfBuf.toString("latin1");
+  ok("C40: guardada en PDF es una sola hoja A4", (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length === 1);
+  // generar el PDF es imprimir: al terminar llega "afterprint" y la hoja se va
+  await page.emulateMedia({ media: "screen" });
+  ok("C40: después de imprimir la hoja desaparece", await page.evaluate(() => !document.querySelector(".qrsheet") && !document.body.classList.contains("printing-qr")));
+  await page.context().close();
+  page = await nueva();
+  s = await go(page, new URL(copied).pathname);
+  ok("el link copiado abre el perfil", s.view === "perfil" && s.pid === sofiaId);
+
+  // ---------- 7. Palabras reservadas: cada una abre su pantalla y nunca un perfil ----------
+  // como un dato viejo, de antes de la lista: el trigger que rechaza slugs reservados se apaga solo para cargarlo
+  await q("alter table providers disable trigger providers_slug_not_reserved");
+  await q("update providers set slug = 'blog' where id = $1", [maxId]);
+  await q("alter table providers enable trigger providers_slug_not_reserved");
+  const screens = { ingresar: "login", "crear-cuenta": "register", "nueva-contrasena": "newpass", sumate: "negocio", "registrar-negocio": "negocio", terminos: "terminos", privacidad: "privacidad", buscar: "home", "mis-turnos": "login", cuenta: "login", panel: "login", admin: "login" };
+  const wrong = [];
+  const folders = ["assets", "fonts", "vendor"]; // carpetas reales del sitio: Apache responde 403, nunca la app
+  for (const word of RESERVED) {
+    if (folders.includes(word)) {
+      const status = (await fetch(BASE + "/" + word)).status;
+      if (status !== 403) wrong.push(`${word}→HTTP ${status}`);
+      continue;
+    }
+    s = await go(page, "/" + word);
+    const expected = screens[word] || "notfound";
+    if (s.view === "perfil" || s.view !== expected) wrong.push(`${word}→${s.view}`);
+  }
+  ok(`las ${RESERVED.length} palabras reservadas abren su pantalla (o “no encontrado”, o 403 si es una carpeta), nunca un perfil`, wrong.length === 0 && RESERVED.length > 20, wrong.join(", "));
+  s = await go(page, "/p/" + maxId);
+  ok("un prestador con un slug reservado (dato viejo) se ve en /p/<id> y la dirección queda así", s.view === "perfil" && s.pid === maxId && here(page) === "/p/" + maxId, here(page));
+
+  // ---------- 8. Link de recuperación de contraseña ----------
+  await go(page, "/ingresar");
+  await page.click("[data-act=authMode][data-m=forgot]");
+  await page.fill("#af_e", "ruta@test.ar");
+  await page.click("#fForgot button[type=submit]");
+  await wait(page, 800);
+  const mail = await (await fetch(BASE + "/__mail?email=ruta%40test.ar")).json();
+  s = await go(page, "/?token_hash=" + mail.recovery + "&type=recovery");
+  await wait(page, 800);
+  ok("link de recuperación (?token_hash=) → /nueva-contrasena", (await st(page)).view === "newpass" && here(page) === "/nueva-contrasena", here(page));
+
+  // ---------- 9. C02: recargar vuelve a la misma pantalla, aunque el hosting mande la recarga al inicio ----------
+  {
+    const p9 = await nueva();
+    await go(p9, "/ingresar");
+    await loginPanel(p9);
+    await go(p9, "/panel/finanzas");
+    await p9.reload(); await ready(p9); await wait(p9, 700);
+    ok("C02: con el .htaccess bien, recargar /panel/finanzas queda en Finanzas", here(p9) === "/panel/finanzas" && (await st(p9)).btab === "finanzas", here(p9));
+    await fetch(BASE + "/__rutas?modo=inicio");
+    const r = await fetch(BASE + "/panel/finanzas", { redirect: "manual" });
+    ok("C02: (el hosting roto de la prueba redirige /panel/finanzas al inicio)", r.status === 302 && r.headers.get("location") === "/");
+    await p9.reload(); await ready(p9); await wait(p9, 900);
+    s = await st(p9);
+    ok("C02: con el hosting roto, recargar /panel/finanzas vuelve a Finanzas (no al inicio)", here(p9) === "/panel/finanzas" && s.role === "barbero" && s.btab === "finanzas", here(p9) + " " + JSON.stringify(s));
+    await fetch(BASE + "/__rutas?modo=ok");
+    await go(p9, "/sofia-benitez-studio");
+    await fetch(BASE + "/__rutas?modo=inicio");
+    await p9.reload(); await ready(p9); await wait(p9, 900);
+    ok("C02: …y recargar un perfil vuelve al perfil", here(p9) === "/sofia-benitez-studio" && (await st(p9)).view === "perfil", here(p9));
+    await p9.goto(BASE + "/"); await ready(p9); await wait(p9, 700);
+    ok("C02: abrir el inicio a propósito (no es una recarga) sigue llevando al inicio", ["/", "/panel/agenda"].includes(here(p9)) && here(p9) !== "/sofia-benitez-studio", here(p9));
+    await p9.context().close();
+    // con el service worker (la app instalada): la navegación pasa por él y igual vuelve a la pantalla
+    await fetch(BASE + "/__rutas?modo=ok");
+    await fetch(BASE + "/__pwa?sw=1");
+    const p10 = await nueva();
+    await go(p10, "/ingresar");
+    await loginPanel(p10);
+    await p10.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 10000 }).catch(() => {});
+    await go(p10, "/panel/clientes");
+    await fetch(BASE + "/__rutas?modo=inicio");
+    await p10.reload(); await ready(p10); await wait(p10, 900);
+    ok("C02: con el service worker y el hosting roto, recargar /panel/clientes vuelve a Clientes",
+       (await p10.evaluate(() => !!navigator.serviceWorker.controller)) && here(p10) === "/panel/clientes" && (await st(p10)).btab === "clientes", here(p10));
+    await p10.evaluate(async () => { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); });
+    await p10.context().close();
+    await fetch(BASE + "/__pwa?sw=0");
+    // el panel de TuTiempo avisa que el sitio no devuelve la app en sus direcciones
+    await fetch(BASE + "/__rutas?modo=ok");
+    const pa = await nueva();
+    await go(pa, "/ingresar");
+    await login(pa, "admin@test.ar", "admin12345");
+    await go(pa, "/admin");
+    await wait(pa, 1500);
+    ok("C02: con el .htaccess bien, el panel de TuTiempo no avisa nada", !/El sitio no devuelve la app en sus direcciones/.test(await text(pa)) && here(pa).startsWith("/admin"), here(pa));
+    await fetch(BASE + "/__rutas?modo=inicio");
+    await pa.reload(); await ready(pa); await wait(pa, 2500);
+    ok("C02: con el hosting roto, el panel de TuTiempo avisa que falta el .htaccess", /El sitio no devuelve la app en sus direcciones/.test(await text(pa)) && /\.htaccess/.test(await text(pa)));
+    await fetch(BASE + "/__rutas?modo=ok");
+    await pa.context().close();
+  }
+
+  // ---------- 10. C02: recargar no muestra el inicio ni un instante (red lenta) ----------
+  // Mientras la app no resolvió la dirección y la sesión, en #app solo está la carga (.bootload). Un observador anota
+  // desde el primer byte cada pantalla que se dibuja; con la red lenta (latencia + API demorada) en ningún momento
+  // tiene que aparecer el inicio del cliente (.hero, .segtile) antes de la pantalla de la dirección.
+  {
+    async function lenta(page) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Network.enable");
+      await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 300, downloadThroughput: 200 * 1024, uploadThroughput: 100 * 1024 });
+      await page.route(/\/(rest|auth)\/v1\//, async (route) => { await new Promise((r) => setTimeout(r, 700)); await route.continue(); });
+      await page.addInitScript(() => {
+        window.__seen = [];
+        const look = () => {
+          const app = document.getElementById("app");
+          if (!app) return;
+          const what = app.querySelector(".hero, .segtile") ? "inicio" : app.querySelector(".bootload") ? "carga" : app.children.length ? "otra" : "vacía";
+          if (window.__seen[window.__seen.length - 1] !== what) window.__seen.push(what);
+        };
+        new MutationObserver(look).observe(document, { childList: true, subtree: true });
+        document.addEventListener("DOMContentLoaded", look);
+      });
+    }
+    // con la red lenta el arranque tarda más que los 10 s de ready(): se espera hasta 40 s y se anota cuánto tardó
+    const listo = (page) => page.waitForFunction(() => typeof S !== "undefined" && !S.booting && !document.querySelector("#app .bootload"), null, { timeout: 40000 });
+    const recargar = async (page) => {
+      const t0 = Date.now();
+      await page.reload();
+      await listo(page);
+      console.log(`  (${here(page)}: ${((Date.now() - t0) / 1000).toFixed(1)} s con la red lenta)`);
+      await wait(page, 600);
+      return page.evaluate(() => window.__seen);
+    };
+    const pc = await nueva();
+    await go(pc, "/ingresar");
+    await login(pc, "ruta@test.ar", "cliente12345");
+    await lenta(pc);
+    for (const [route, view] of [["/mis-turnos", "misturnos"], ["/turno/" + idTurno, "turnoOk"], ["/" + SOFIA, "perfil"]]) {
+      await pc.goto(BASE + route); await listo(pc); await wait(pc, 400);
+      const seen = await recargar(pc);
+      ok(`C02: recargar ${route} con la red lenta: carga y después la pantalla, nunca el inicio`,
+         !seen.includes("inicio") && seen[0] === "carga" && seen[seen.length - 1] === "otra" && here(pc) === route && (await st(pc)).view === view,
+         JSON.stringify(seen) + " " + here(pc) + " " + (await st(pc)).view);
+    }
+    await pc.context().close();
+    const pp = await nueva();
+    await go(pp, "/ingresar");
+    await loginPanel(pp);
+    await lenta(pp);
+    await pp.goto(BASE + "/panel/agenda"); await listo(pp); await wait(pp, 400);
+    const seen = await recargar(pp);
+    ok("C02: recargar /panel/agenda con la red lenta: carga y después la Agenda, nunca el inicio",
+       !seen.includes("inicio") && seen[0] === "carga" && seen[seen.length - 1] === "otra" && here(pp) === "/panel/agenda" && (await st(pp)).role === "barbero",
+       JSON.stringify(seen) + " " + here(pp));
+    // sin sesión, el inicio sí es la pantalla de "/" (después de la carga)
+    const p0 = await nueva();
+    await lenta(p0);
+    await p0.goto(BASE + "/"); await listo(p0); await wait(p0, 600);
+    const seen0 = await p0.evaluate(() => window.__seen);
+    ok("C02: abrir / muestra la carga y después el inicio", seen0[0] === "carga" && seen0[seen0.length - 1] === "inicio", JSON.stringify(seen0));
+    await p0.context().close();
+    await pp.context().close();
+  }
+
+  ok("sin errores de JavaScript", errors.length === 0, errors.join(" | "));
+  ok("sin bloqueos de la CSP", csp.length === 0, csp.join(" | "));
+  await browser.close();
+  await db.end();
+  console.log(F ? `${F} FALLAS` : "TODO OK");
+  process.exit(F ? 1 : 0);
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

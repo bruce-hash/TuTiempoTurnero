@@ -1,0 +1,316 @@
+# Pruebas de TuTiempo: la base (Postgres 16 con las mismas extensiones que Supabase), el frontend (Vite, modo demo)
+# y el navegador real (Chromium contra PostgREST + la base: e2e y comparación con la versión anterior al Bloque A).
+name: Pruebas
+
+on:
+  pull_request:
+  push:
+    branches: [developer, main]
+  workflow_dispatch:
+  # Todas las noches a las 23:30 de Argentina (02:30 UTC), sobre developer: a esa hora en UTC ya es mañana (y a fin de
+  # mes, otro mes), así que una prueba que use el "hoy" del runner en lugar del de Buenos Aires falla acá y no sola un
+  # día cualquiera. GitHub corre los cron con el workflow y el código de la rama por defecto, que es developer.
+  schedule:
+    - cron: "30 2 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  base:
+    name: Base (Postgres 16 · test_db.py · test_cobros.py · test_emails.py · test_push.py)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: TODO_EN_UNO.sql idéntico a las migraciones
+        run: node tools/todo_en_uno.mjs --check
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Driver de Postgres para Python
+        run: pip install "psycopg[binary]==3.3.*"
+
+      - name: Cargar las bases (emulación de Supabase + TODO_EN_UNO.sql; una limpia para cada prueba)
+        run: |
+          for db in tt tt_cobros tt_emails tt_push; do
+            createdb $db
+            psql -v ON_ERROR_STOP=1 -q -d $db -f pruebas/supabase_emulation.sql
+            psql -v ON_ERROR_STOP=1 -q -d $db -f supabase/TODO_EN_UNO.sql
+          done
+
+      - name: test_db.py
+        run: python3 pruebas/test_db.py "host=localhost port=5432 dbname=tt user=postgres password=postgres"
+
+      - name: test_cobros.py (pagos, devoluciones, cuentas de Mercado Pago)
+        run: python3 pruebas/test_cobros.py "host=localhost port=5432 dbname=tt_cobros user=postgres password=postgres"
+
+      - name: test_emails.py (avisos por email · cola, reintentos, opción del cliente)
+        run: python3 pruebas/test_emails.py "host=localhost port=5432 dbname=tt_emails user=postgres password=postgres"
+
+      - name: test_push.py (notificaciones push · suscripciones, cola, opciones, reintentos, vencidas)
+        run: python3 pruebas/test_push.py "host=localhost port=5432 dbname=tt_push user=postgres password=postgres"
+
+      - name: test_mudanza.py (base de la versión 31 con llaves en texto plano → última migración)
+        run: |
+          createdb tt_mudanza
+          psql -v ON_ERROR_STOP=1 -q -d tt_mudanza -f pruebas/supabase_emulation.sql
+          psql -v ON_ERROR_STOP=1 -q -d tt_mudanza -f pruebas/supabase_emulation_proyecto_viejo.sql
+          python3 pruebas/test_mudanza.py "host=localhost port=5432 dbname=tt_mudanza user=postgres password=postgres"
+
+  frontend:
+    name: Frontend (unidad · sin demo · crawl · ancho · clicks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Unidad (montos en pesos y dirección del sitio)
+        run: npm run test:unidad
+
+      - name: Build de producción sin nada de la demo
+        run: npm run test:sin-demo
+
+      - name: Crawl (cada botón de cada pantalla, reloj fijo)
+        run: npm run test:crawl
+
+      - name: Chromium (para test:ancho)
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: ""
+        run: npx playwright install --with-deps chromium
+
+      - name: Ancho (ninguna pantalla más ancha que la ventana en 390 y 1366 px, nada con hidden a la vista)
+        run: npm run test:ancho
+
+      - name: Clicks (cada data-act con su acción, cada formulario con su envío)
+        run: npm run test:clicks
+
+  windows:
+    # Bruno compila dist/ en Windows para subirlo a Hostinger: rutas con "\" y letra de unidad (fileURLToPath)
+    name: Build en Windows (npm ci · npm run build · dist sin demo)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm run build
+        run: npm run build
+
+      - name: dist/ completo (config.js, .htaccess) y sin la demo
+        run: node pruebas/revisar_build.mjs
+
+  navegador:
+    name: Navegador (e2e · rutas · captcha · app instalable · comparación con la versión anterior)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # comparar.mjs arma el build de referencia desde su commit
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci y Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: PostgREST 12.2.3
+        run: |
+          curl -sSfL https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz | tar xJ -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/postgrest" --version
+          echo "POSTGREST=$RUNNER_TEMP/postgrest" >> "$GITHUB_ENV"
+
+      - name: e2e (recorrido completo en navegador, en vivo)
+        run: npm run test:e2e
+
+      - name: Rutas (cada dirección, atrás/adelante, recarga, sesión, reservadas, QR)
+        run: npm run test:rutas
+
+      - name: CAPTCHA (Turnstile en cada llamada a Auth; sin clave, nada de Cloudflare)
+        run: npm run test:captcha
+
+      - name: Verificación de prueba en local (el recorrido de "Verificar prueba" contra el build de producción)
+        run: npm run test:verificar
+
+      - name: App instalable y push (manifest, service worker, sin conexión, versión nueva, notificaciones)
+        run: npm run test:pwa
+
+      - name: División del código (cada pantalla baja lo suyo, nada pasa de 500 kB, las partes sin conexión)
+        run: npm run test:partes
+
+      - name: Comparación con la versión anterior (demo y en vivo, texto y capturas)
+        run: npm run test:comparar
+
+      - name: Diferencias de la comparación
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: comparacion
+          path: .build/comparar/
+          if-no-files-found: ignore
+
+  funciones:
+    name: Edge Functions (Deno · Mercado Pago falso · Web Push con vectores RFC)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.1.4
+
+      - name: PostgREST 12.2.3
+        run: |
+          curl -sSfL https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz | tar xJ -C "$RUNNER_TEMP"
+          echo "POSTGREST=$RUNNER_TEMP/postgrest" >> "$GITHUB_ENV"
+
+      - name: Tipos de las Edge Functions (deno check)
+        run: deno check --config pruebas/funciones/deno.json supabase/functions/*/index.ts
+
+      - name: Web Push (cifrado aes128gcm y VAPID) contra los vectores oficiales de RFC 8291 y RFC 8292
+        run: |
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/rfc8291.txt" https://www.rfc-editor.org/rfc/rfc8291.txt
+          curl -sSfL --retry 3 -o "$RUNNER_TEMP/rfc8292.txt" https://www.rfc-editor.org/rfc/rfc8292.txt
+          deno run --config pruebas/funciones/deno.json --allow-read pruebas/funciones/webpush_rfc.ts --rfc "$RUNNER_TEMP/rfc8291.txt" "$RUNNER_TEMP/rfc8292.txt"
+
+      - name: Funciones reales contra la base, PostgREST y un Mercado Pago falso
+        run: npm run test:funciones
+
+      - name: Todas las notificaciones push y los emails, de punta a punta (cada tipo, desde la acción real)
+        run: npm run test:avisos
+
+  apache:
+    name: Apache y LiteSpeed (.htaccess real · fallback, HTTPS, CSP)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci y build de producción
+        run: |
+          npm ci
+          npm run build
+
+      - name: Apache 2.4 (contenedor httpd con mod_rewrite, mod_headers y mod_ssl) sirviendo dist/
+        run: |
+          mkdir -p "$RUNNER_TEMP/certs"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=localhost" \
+            -keyout "$RUNNER_TEMP/certs/tt.key" -out "$RUNNER_TEMP/certs/tt.crt"
+          chmod 644 "$RUNNER_TEMP/certs/"*
+          docker run -d --name tt-httpd -p 8080:8080 -p 8443:8443 \
+            -v "$PWD/dist:/srv/www:ro" -v "$PWD/pruebas/apache:/conf:ro" -v "$RUNNER_TEMP/certs:/certs:ro" \
+            httpd:2.4.62 sh -c 'mkdir -p /tmp/run && exec httpd -C "Define MODDIR /usr/local/apache2/modules" \
+              -C "Define DOCROOT /srv/www" -C "Define CERTS /certs" -C "Define RUNDIR /tmp/run" \
+              -C "Define RUNUSER www-data" -C "Define RUNGROUP www-data" -f /conf/httpd.conf -DFOREGROUND'
+
+      - name: Probar el .htaccess (rutas profundas, 404, HTTPS, CSP, retornos ?mp= y ?token_hash=)
+        run: node pruebas/htaccess.mjs dist
+
+      - name: C02 · el mismo .htaccess con OpenLiteSpeed (el servidor de Hostinger, versión libre)
+        run: node pruebas/litespeed.mjs dist
+
+      - name: Log de Apache
+        if: failure()
+        run: |
+          docker logs tt-httpd || true
+          docker exec tt-httpd cat /tmp/run/error.log || true
+

@@ -1,0 +1,20 @@
+# TuTiempo · producción (https://tutiempo.com.ar). El sitio de prueba se arma con otro (tools/preparar_prueba.mjs: Disallow).
+# Se indexa lo público: el inicio, los rubros, los perfiles de los profesionales y las páginas legales. Lo que es de una
+# cuenta (panel, admin, mis turnos, ingreso) no. «$» es el final de la dirección: /cuenta no tapa a un negocio /cuentas-claras.
+User-agent: *
+Allow: /
+Disallow: /panel$
+Disallow: /panel/
+Disallow: /admin$
+Disallow: /admin/
+Disallow: /cuenta$
+Disallow: /cuenta/
+Disallow: /mis-turnos$
+Disallow: /turno/
+Disallow: /ingresar$
+Disallow: /crear-cuenta$
+Disallow: /nueva-contrasena$
+Disallow: /buscar$
+Disallow: /*/reservar$
+
+Sitemap: https://tutiempo.com.ar/sitemap.xml

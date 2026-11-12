@@ -1,0 +1,393 @@
+// Enrutador (Bloque B) · de la dirección al estado: al abrir una URL (carga, recarga o atrás/adelante) arma S con la
+// pantalla, el prestador, la pestaña, el horario elegido… Si la pantalla pide sesión y no la hay, va al ingreso y
+// guarda adónde volver.
+import { isBusiness } from "../lib/cuentas.js";
+import { api } from "../api/index.js";
+import { LIVE } from "../config.js";
+import { TODAY } from "../lib/fechas.js";
+import { ME, pr } from "../lib/prestadores.js";
+import { CAT_SLUGS } from "../lib/rubros.js";
+import { isReservedSlug } from "../lib/rutas.js";
+import { pickSvc, selDur } from "../lib/servicios.js";
+import { slotsFor } from "../lib/turnero.js";
+import { S } from "../state.js";
+import { P, store } from "../store.js";
+import { svcByKey } from "../ui/sellos.js";
+import { toast } from "../ui/toast.js";
+import { setBtab } from "../lib/panel-nav.js";
+import { nextStep } from "../lib/alta.js";
+import { ADMIN_TABS, PANEL_TABS, PROFILE_TABS, SLUG_OF, keyOf } from "./direcciones.js";
+
+const safePath = (value) => (typeof value === "string" && /^\/(?!\/)/.test(value) && !/[\\\s]/.test(value) ? value : null);
+
+function resetTransient() {
+  S.story = null;
+  S.cli = null;
+  S.preview = false;
+  S.cancelAsk = false;
+  S.delAsk = null;
+  S.notFound = null;
+  S.rewardFor = null;
+}
+function showClient(view) {
+  if (S.view !== view) {
+    S.prev = S.view;
+  }
+  S.role = "cliente";
+  S.view = view;
+  if (view !== "turnoOk") {
+    S.justBooked = false;
+  }
+}
+function showNotFound(path) {
+  showClient("notfound");
+  S.notFound = path;
+}
+function showLogin(back, mode = "in") {
+  S.after = back;
+  S.afterSoft = false;
+  S.pending = null;
+  S.login = { mode, email: "", err: "", fails: S.login.fails || 0, locked: S.login.locked };
+  showClient(mode === "up" ? "register" : "login");
+}
+// Registrá tu negocio: /registrar-negocio (paso 0, la cuenta) y /registrar-negocio/1 … /5 y /listo
+function openBiz(parts, path) {
+  const word = parts[1];
+  if (parts.length > 2 || (word != null && !/^[1-5]$/.test(word) && word !== "listo")) {
+    return showNotFound(path);
+  }
+  // sin sesión: el paso 0 (crear la cuenta o ingresar); al ingresar sigue con el primer paso que falte
+  if (!S.user && !S.barberAuth) {
+    S.pending = { a: "negocio", at: Date.now() };
+    if (!S.keepLogin) {
+      S.login = { mode: "up", email: "", err: "", fails: S.login.fails || 0 };
+    }
+    S.keepLogin = false;
+    S.bizStep = 0;
+    return showClient("negocio");
+  }
+  // con sesión de cliente y todavía sin negocio (D33): primero, si usa esta cuenta o una aparte; con /1, el paso 1
+  if (!S.barberAuth) {
+    S.bizStep = word == null && !S.bizNew ? "cuenta" : 1;
+    if (S.bizStep === "cuenta") {
+      S.clientHist = null;
+    }
+    return showClient("negocio");
+  }
+  if (word == null) {
+    const next = nextStep();
+    if (!next) {
+      return applyUrl("/panel/agenda");
+    }
+    S.bizStep = next;
+  } else {
+    S.bizStep = word === "listo" ? "listo" : +word;
+  }
+  S.biz = {};
+  showClient("negocio");
+}
+// pantallas que piden sesión de cliente: sin sesión, al ingreso (y después vuelve a `path`)
+function needUser(path) {
+  if (S.user) {
+    return true;
+  }
+  showLogin(path);
+  return false;
+}
+function setStory(params, pid) {
+  const index = params.get("historia");
+  if (index != null && /^\d{1,3}$/.test(index)) {
+    S.story = { pid, i: +index };
+  }
+}
+async function openProfile(pid, parts, params, path) {
+  // En vivo no se puede mover un turno (no hay función en la base: F02). Un link viejo con ?reprogramar=<id> lleva al
+  // detalle de ese turno, sin modo "Cambiar" (que reservaba y cobraba otro turno dejando el original).
+  const moving = params.get("reprogramar");
+  if (LIVE && moving != null) {
+    if (/^\d{1,12}$/.test(moving) && needUser("/turno/" + moving)) {
+      S.turnoId = +moving;
+      S.justBooked = false;
+      showClient("turnoOk");
+    } else if (!/^\d{1,12}$/.test(moving)) {
+      showClient("home");
+    }
+    return;
+  }
+  if (S.pid !== pid) {
+    S.svc = 0;
+    S.day = null;
+    S.slot = null;
+    S.adds = [];
+    S.intake = {};
+    S.pctx = null;
+  }
+  S.pid = pid;
+  // 4/11 · Bloque 3: desde un turno ofrecido (aviso o push), el perfil con ese día elegido (/<perfil>?dia=AAAA-MM-DD)
+  const offerDay = params.get("dia");
+  if (/^\d{4}-\d\d-\d\d$/.test(offerDay || "") && offerDay >= TODAY()) {
+    S.day = offerDay;
+    S.slot = null;
+  }
+  const reprog = params.get("reprogramar");
+  // mover un turno existente es solo de la demo y de un turno confirmado (en vivo, ver arriba)
+  S.reprog = reprog && store.BOOK.some((booking) => booking.mine && booking.id == reprog && booking.status === "confirmed") ? +reprog : null;
+  const sub = parts[1];
+  if (parts.length > 2 || (sub && sub !== "reservar" && !keyOf(PROFILE_TABS, sub))) {
+    return showNotFound(path);
+  }
+  if (sub === "reservar") {
+    return openCheckout(pid, params, path);
+  }
+  S.ptab = keyOf(PROFILE_TABS, sub) || "svc";
+  showClient("perfil");
+  setStory(params, pid);
+}
+// /<slug>/reservar?servicio=&dia=&hora=: si el horario ya no está libre, vuelve al perfil
+async function openCheckout(pid, params, path) {
+  if (!needUser(path)) {
+    return;
+  }
+  let prov = pr(pid);
+  if (LIVE && (!prov || !prov.full)) {
+    prov = await api.loadProvider(pid).catch(() => null);
+  }
+  const svc = prov && svcByKey(prov, params.get("servicio"));
+  const day = params.get("dia");
+  const time = params.get("hora");
+  S.ptab = "svc";
+  if (!svc || !/^\d{4}-\d{2}-\d{2}$/.test(day || "") || !/^\d{2}:\d{2}$/.test(time || "")) {
+    return showClient("perfil");
+  }
+  pickSvc(prov, prov.svcs.indexOf(svc));
+  S.day = day;
+  const free = slotsFor(pid, day, selDur(prov), S.reprog).list.some((slot) => slot.free && slot.time === time);
+  if (!free) {
+    S.slot = null;
+    showClient("perfil");
+    toast("Ese horario ya no está libre. Elegí otro.");
+    return;
+  }
+  S.slot = { date: day, time };
+  showClient("checkoutT");
+}
+function openPanel(parts, params, path) {
+  if (!S.barberAuth) {
+    if (S.user && LIVE) {
+      toast("Esa cuenta todavía no tiene un negocio. Podés registrarlo desde “Registrá tu negocio”.");
+      return showClient("home");
+    }
+    // un solo ingreso para todos: después vuelve a esta dirección del panel
+    return showLogin(path);
+  }
+  const word = parts[1] || "agenda";
+  if (parts.length > 2) {
+    return showNotFound(path);
+  }
+  S.role = "barbero";
+  if (word === "vista-previa") {
+    S.preview = true;
+    S.pid = ME();
+    S.pctx = null;
+    S.day = null;
+    S.slot = null;
+    S.svc = 0;
+    return;
+  }
+  const tab = keyOf(PANEL_TABS, word);
+  if (!tab) {
+    return showNotFound(path);
+  }
+  if (tab !== S.btab) {
+    setBtab(tab);
+  }
+  // Bloque C: desde la notificación de una reserva, la Agenda en ese día (/panel/agenda?dia=AAAA-MM-DD)
+  const day = params.get("dia");
+  if (tab === "agenda" && /^\d{4}-\d\d-\d\d$/.test(day || "")) {
+    S.aday = day;
+    S.awk = null;
+  }
+  // 4/11: /panel/clientes?ver=seguidores (D45: y ?ver=bloqueados)
+  if (tab === "clientes") {
+    const ver = params.get("ver");
+    S.ctab = ver === "seguidores" || ver === "bloqueados" ? ver : "clientes";
+    S.cliAsk = null;
+  }
+  const clientId = params.get("cliente");
+  if (tab === "clientes" && clientId) {
+    const name = Object.keys(store.CLIENTS).find((key) => String(store.CLIENTS[key].id) === clientId);
+    if (name) {
+      S.cli = name;
+    }
+  }
+  setStory(params, ME());
+}
+function openAdmin(parts, path) {
+  if (LIVE && !S.user) {
+    return showLogin(path);
+  }
+  if (LIVE && !S.isAdmin) {
+    return showNotFound(path);
+  }
+  const tab = keyOf(ADMIN_TABS, parts[1] || "resumen");
+  const period = parts[2];
+  if (!tab || parts.length > 3 || (period && (tab !== "bal" || !/^\d{4}(-\d{2})?$/.test(period)))) {
+    return showNotFound(path);
+  }
+  S.role = "admin";
+  S.admT = tab;
+  S.admOpen = null;
+  S.admDel = null;
+  if (tab === "bal") {
+    S.admY = period ? +period.slice(0, 4) : S.admY;
+    S.admM = period && period.length === 7 ? period : null;
+  }
+}
+
+export async function applyUrl(href) {
+  const url = new URL(href, location.origin);
+  const params = url.searchParams;
+  const path = url.pathname + url.search;
+  let parts;
+  try {
+    parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  } catch (err) {
+    parts = ["\u0000"];
+  }
+  const first = (parts[0] || "").toLowerCase();
+  resetTransient();
+  const single = (view) => (parts.length === 1 ? showClient(view) : showNotFound(path));
+  switch (first) {
+    case "":
+      S.cat = "todos";
+      S.q = "";
+      S.reprog = null;
+      return showClient("home");
+    case "rubro": {
+      const cat = keyOf(CAT_SLUGS, parts[1]);
+      if (!cat || parts.length !== 2) {
+        return showNotFound(path);
+      }
+      S.cat = cat;
+      S.q = "";
+      return showClient("home");
+    }
+    case "buscar": {
+      const cat = keyOf(CAT_SLUGS, params.get("rubro"));
+      S.q = (params.get("q") || "").trim().slice(0, 60);
+      S.cat = cat || "todos";
+      return parts.length === 1 ? showClient("home") : showNotFound(path);
+    }
+    case "turno": {
+      if (parts.length !== 2 || !/^\d{1,12}$/.test(parts[1])) {
+        return showNotFound(path);
+      }
+      // Paso 1 (v4): vuelta de Mercado Pago con el token del cobro. Sin sesión (por ejemplo, pagó desde la app instalada
+      // y volvió al navegador): el estado del pago y del turno, y la opción de ingresar. Con sesión: el turno.
+      const token = /^[0-9a-f]{64}$/.test(params.get("pago") || "") ? params.get("pago") : null;
+      if (token && token !== S.payToken) {
+        S.payStatus = null;
+        S.payTries = 0;
+      }
+      S.payToken = token;
+      S.payBack = token ? params.get("mp") : null;
+      // 4/11: la vuelta de un pago hecho desde la app instalada (marca app=1 en la vuelta de Mercado Pago)
+      S.payFromApp = !!token && params.get("app") === "1";
+      if (token && !S.user) {
+        S.turnoId = +parts[1];
+        return showClient("pagoVuelta");
+      }
+      if (needUser(path)) {
+        S.turnoId = +parts[1];
+        S.justBooked = !!token && S.payBack === "success";
+        showClient("turnoOk");
+      }
+      return;
+    }
+    case "mis-turnos":
+    case "cuenta":
+      // 4/11 · Bloque 4: /cuenta/ajustes (solo Seguridad)
+      if (first === "cuenta" && parts.length === 2 && parts[1] === "ajustes") {
+        if (needUser(path)) {
+          showClient("ajustes");
+        }
+        return;
+      }
+      if (parts.length !== 1) {
+        return showNotFound(path);
+      }
+      // D33: una cuenta de negocio no tiene Mis turnos (no reserva); su "Mi perfil" es la pestaña Perfil del panel
+      if (first === "mis-turnos" && S.user && S.barberAuth && !S.isAdmin) {
+        return applyUrl("/panel/agenda");
+      }
+      if (first === "cuenta" && S.user && isBusiness() && !S.isAdmin) {
+        return applyUrl("/panel/perfil");
+      }
+      if (needUser(path)) {
+        showClient(first === "cuenta" ? "cuenta" : "misturnos");
+      }
+      return;
+    case "ingresar":
+    case "crear-cuenta": {
+      const back = safePath(params.get("volver"));
+      if (parts.length !== 1) {
+        return showNotFound(path);
+      }
+      if (S.user) {
+        // ya ingresó (por ejemplo, recargó el ingreso): directo adonde iba, o a su perfil
+        return back ? applyUrl(back) : S.barberAuth ? applyUrl("/panel/agenda") : showClient("cuenta");
+      }
+      return showLogin(back, first === "crear-cuenta" ? "up" : "in");
+    }
+    case "nueva-contrasena":
+      if (S.user && !S.recovering) {
+        S.npMode = "change";
+      }
+      return single("newpass");
+    case "prestadores": {
+      if (parts[1] !== "ingresar" || parts.length !== 2) {
+        return showNotFound(path);
+      }
+      // links viejos de "Acceso prestadores": el mismo ingreso que todos
+      const back = safePath(params.get("volver"));
+      if (S.barberAuth) {
+        return applyUrl(back && back.startsWith("/panel") ? back : "/panel/agenda");
+      }
+      if (S.user) {
+        return showClient("home");
+      }
+      return showLogin(back && back.startsWith("/panel") ? back : null);
+    }
+    // el alta de antes ("Sumate"): a Registrá tu negocio
+    case "sumate":
+      return parts.length === 1 ? applyUrl("/registrar-negocio") : showNotFound(path);
+    case "registrar-negocio":
+      return openBiz(parts, path);
+    case "terminos":
+      return single("terminos");
+    case "privacidad":
+      return single("privacidad");
+    case "panel":
+      return openPanel(parts, params, path);
+    case "admin":
+      return openAdmin(parts, path);
+    case "p":
+      if (!/^\d{1,12}$/.test(parts[1] || "")) {
+        return showNotFound(path);
+      }
+      return openProfile(+parts[1], parts.slice(1), params, path);
+    default: {
+      // una palabra reservada nunca es un perfil, aunque algún prestador tenga ese slug
+      if (isReservedSlug(first)) {
+        return showNotFound(path);
+      }
+      const known = P.find((prov) => prov.slug === first);
+      const pid = known ? known.id : await api.providerIdBySlug(first).catch(() => null);
+      if (!pid) {
+        return showNotFound(path);
+      }
+      SLUG_OF[pid] = first;
+      return openProfile(pid, parts, params, path);
+    }
+  }
+}

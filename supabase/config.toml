@@ -1,0 +1,32 @@
+# Configuración de las Edge Functions para `supabase functions deploy`.
+# Ninguna usa la verificación del gateway (verify_jwt): las que llama el navegador validan la sesión adentro (caller() en
+# _shared/util.ts, con las claves asimétricas de los proyectos nuevos o las HS256 de los viejos) y las demás no llevan JWT
+# de usuario (Mercado Pago, la vuelta de MP en el navegador, el cron con CRON_SECRET).
+[functions.mp-create-preference]
+verify_jwt = false
+
+[functions.mp-webhook]
+verify_jwt = false
+
+[functions.mp-oauth]
+verify_jwt = false
+
+[functions.mp-refunds]
+verify_jwt = false
+
+[functions.mp-reconcile]
+verify_jwt = false
+
+[functions.dni-cleanup]
+verify_jwt = false
+
+[functions.email-send]
+verify_jwt = false
+
+[functions.push-send]
+verify_jwt = false
+
+# 12/11: faltaba; sin esto, un `supabase functions deploy` de todas juntas la dejaba con verify_jwt y el cron (que llama
+# con CRON_SECRET, no con un JWT) recibía 401
+[functions.holidays-sync]
+verify_jwt = false

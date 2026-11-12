@@ -1,0 +1,76 @@
+# Verificar prueba (docs/10): revisa https://prueba.tutiempo.com.ar y su Supabase de verdad (pruebas/verificar_prueba.mjs).
+# Corre al final de "Desplegar prueba", con un botón en Actions y todas las noches a las 00:15 de Argentina (03:15 UTC),
+# después de la prueba nocturna de developer. Usa el código del commit desplegado (la etiqueta prueba-desplegada), así
+# compara contra sus migraciones y sus funciones aunque developer ya tenga cosas nuevas sin desplegar.
+# S21 (8/11): ese commit tiene que estar en developer. Cualquiera con permiso de escritura puede mover la etiqueta a un
+# commit de otra rama; sin este control, su código correría con los secretos del entorno prueba.
+name: Verificar prueba
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit desplegado
+        type: string
+        required: false
+  # 12/11 · paso a producción: sin la corrida de todas las noches (reservaba con cuentas fijas en el proyecto, que ahora
+  # es el de producción). Se vuelve a prender con un proyecto de prueba nuevo y aparte (docs/10).
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verificar-prueba
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    name: Sitio, cuentas de prueba, cobro sin pagar, base y funciones
+    if: vars.PRUEBA_ACTIVA == 'si'   # 12/11: apagado mientras prueba sea el proyecto de producción (ver desplegar-prueba.yml)
+    runs-on: ubuntu-24.04
+    environment: prueba
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # trae developer (origin/developer) y las etiquetas
+          persist-credentials: false
+
+      - name: El commit desplegado
+        env:
+          SHA_INPUT: ${{ inputs.sha }}
+        run: |
+          sha="${SHA_INPUT:-$(git rev-parse -q --verify 'refs/tags/prueba-desplegada^{commit}' || true)}"
+          if [ -z "$sha" ]; then echo "::error::Todavía no hubo ningún despliegue a prueba (falta la etiqueta prueba-desplegada)"; exit 1; fi
+          # S21: solo código que ya está en developer corre con los secretos de prueba
+          if ! git rev-parse -q --verify "refs/remotes/origin/developer" >/dev/null; then echo "::error::No se pudo leer la rama developer"; exit 1; fi
+          if ! git merge-base --is-ancestor "$sha" refs/remotes/origin/developer; then
+            echo "::error::El commit ${sha::12} no está en developer: no se verifica (solo corre con los secretos de prueba código que ya está en developer)"; exit 1
+          fi
+          git checkout -q "$sha"
+          if [ ! -f pruebas/verificar_prueba.mjs ]; then echo "::error::El commit desplegado ($sha) es anterior a la verificación: desplegá de nuevo"; exit 1; fi
+          echo "ESPERADO_SHA=$sha" >> "$GITHUB_ENV"
+          echo "Verificando el commit ${sha::7}"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verificar
+        env:
+          SITIO: https://prueba.tutiempo.com.ar
+          DB_URL: ${{ secrets.PRUEBA_DB_URL_LECTURA }}
+          CLIENTE_EMAIL: ${{ secrets.PRUEBA_CLIENTE_EMAIL }}
+          CLIENTE_PASSWORD: ${{ secrets.PRUEBA_CLIENTE_PASSWORD }}
+          PRO_EMAIL: ${{ secrets.PRUEBA_PRO_EMAIL }}
+          PRO_PASSWORD: ${{ secrets.PRUEBA_PRO_PASSWORD }}
+          MP_VENDEDOR_TOKEN: ${{ secrets.PRUEBA_MP_VENDEDOR_TOKEN }}
+        run: node pruebas/verificar_prueba.mjs

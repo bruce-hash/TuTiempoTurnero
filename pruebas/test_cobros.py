@@ -1,0 +1,1011 @@
+"""Pruebas de cobros (Bloque 1): pagos, devoluciones, cuentas de Mercado Pago y avisos.
+Reemplaza a reproducir_errores_cobro.py: H01 y H02 ya no se reproducen, terminan en devolución registrada.
+Corre contra una base LIMPIA con pruebas/supabase_emulation.sql + supabase/TODO_EN_UNO.sql:
+    python3 pruebas/test_cobros.py "host=... dbname=BASE_LIMPIA user=postgres"
+Las Edge Functions (llaves, webhook, devoluciones contra un Mercado Pago falso) se prueban en pruebas/funciones/."""
+import json, sys, uuid, datetime as dt
+import psycopg
+
+DSN = sys.argv[1] if len(sys.argv) > 1 else "host=/tmp port=54329 dbname=tt user=postgres"
+conn = psycopg.connect(DSN, autocommit=True)
+F = 0
+TZ = dt.timezone(dt.timedelta(hours=-3))
+
+
+def ok(name, cond):
+    global F
+    if not cond:
+        F += 1
+    print(("OK   " if cond else "FAIL ") + name)
+
+
+def q(sql, args=None, uid=None, role=None):
+    """Ejecuta como anon / authenticated(uid) / service_role / postgres. Devuelve filas o la excepción."""
+    with conn.cursor() as c:
+        try:
+            c.execute("begin")
+            if role or uid:
+                r = role or "authenticated"
+                claims = {"role": r}
+                if uid:
+                    claims["sub"] = str(uid)
+                c.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps(claims),))
+                c.execute(f"set local role {r}")
+            c.execute(sql, args)
+            rows = c.fetchall() if c.description else []
+            c.execute("commit")
+            return rows
+        except Exception as e:
+            c.execute("rollback")
+            return e
+
+
+def one(sql, args=None, **kw):
+    r = q(sql, args, **kw)
+    if isinstance(r, Exception):
+        raise r
+    return r[0][0] if r else None
+
+
+def err(x, txt=None):
+    return isinstance(x, Exception) and (txt is None or txt in str(x))
+
+
+def mkuser(email, name):
+    uid = uuid.uuid4()
+    q("insert into auth.users (id, email, raw_user_meta_data) values (%s, %s, %s)", (uid, email, json.dumps({"full_name": name})))
+    return uid
+
+
+def at(days, hh, mm=0):
+    # "hoy" en Buenos Aires, como la base (el runner del CI está en UTC: de 21 a 24 h de Argentina ya es mañana)
+    return dt.datetime.combine(dt.datetime.now(TZ).date() + dt.timedelta(days=days), dt.time(hh, mm), TZ)
+
+
+def svc_role(sql, args=None):
+    return one(sql, args, role="service_role")
+
+
+def enc(text):
+    """Llave "cifrada" de prueba: el formato que guardan las Edge Functions (v1:<iv>:<cifrado>). La base no descifra."""
+    import base64
+    return "v1:" + base64.b64encode(b"iv-de-prueba").decode() + ":" + base64.b64encode(text.encode()).decode()
+
+
+def connect(pid, mp_user):
+    return svc_role("select mp_connect(%s, %s, %s, %s, 15552000)", (pid, mp_user, enc(f"tok-{mp_user}"), enc(f"ref-{mp_user}")))
+
+
+def book(sv, start, uid, weeks=0, extra=0):
+    return q("select book_slot(%s, %s, %s, %s)", (sv, start, weeks, extra), uid=uid)
+
+
+def pay(ids, pay_id, amount, fee, pid=None, acct=None, raw=None):
+    return svc_role("select confirm_payment(%s::bigint[], %s, %s, p_provider => %s, p_account => %s, p_fee_mp => %s, p_raw => %s)",
+                    (ids, pay_id, amount, pid, acct, fee, json.dumps(raw) if raw is not None else None))
+
+
+def mp_update(pay_id, status, refunded=0):
+    return svc_role("select payment_mp_update(%s, %s, %s)", (pay_id, status, refunded))
+
+
+def bk(bid, cols="status, refund_pending, paid_mp, app_fee"):
+    return q(f"select {cols} from bookings where id = %s", (bid,))[0]
+
+
+def refunds_of(bid):
+    return q("select amount, reason, status, payment_id is not null, mp_payment_id, mp_account_id from refunds where booking_id = %s order by id", (bid,))
+
+
+def expire(bid):
+    q("update bookings set hold_expires_at = now() - interval '1 minute' where id = %s", (bid,))
+    q("select expire_holds(null)")
+
+
+# ---------- Datos: un prestador conectado, dos clientes, servicio de $10.000 (seña 50% = $5.000 + comisión 10% del precio = $1.000, D34) ----------
+owner = mkuser("prov@cobros.ar", "Prov Cobros")
+cli = mkuser("ana@cobros.ar", "Ana Cobros")
+cli2 = mkuser("beto@cobros.ar", "Beto Cobros")
+adm = mkuser("admin@cobros.ar", "Admin")
+q("insert into app_admins (user_id) values (%s)", (adm,))
+pid = one("select register_provider('Prov Cobros', 'Calle 1', array['b'], '2284 000111', '30111222')", uid=owner)
+q("update providers set status = 'active' where id = %s", (pid,))
+q("update provider_settings set online = true, notice_min = 0, step_min = 30, deposit_pct = 50, pay_mode = 'deposit' where provider_id = %s", (pid,))
+q("delete from provider_hours where provider_id = %s", (pid,))
+q("insert into provider_hours select %s, g, 1, '08:00', '21:00' from generate_series(0, 6) g", (pid,))
+q("select admin_set_commission(10)", uid=adm)
+# D34: la comisión de TuTiempo es un % del PRECIO del turno: 10% de $10.000 = $1.000 (con D30 era el 20% de la seña de
+# $5.000, el mismo monto). Mercado Pago en 0% (por defecto): no se suma nada.
+q("update app_settings set deposit_commission_pct = 10")
+sv = one("insert into services (provider_id, category_id, name, duration_min, price) values (%s, 'b', 'Corte', 30, 10000) returning id", (pid,), uid=owner)
+
+# ---------- H23 previo: sin cuenta de Mercado Pago no se reserva con seña ----------
+r = book(sv, at(2, 9), cli)
+ok("sin cuenta de Mercado Pago: book_slot rechaza la reserva con seña", err(r, "provider_mp_not_connected"))
+ok("la ficha pública informa que no puede cobrar (sin datos de la cuenta)",
+   one("select get_provider(%s)", (pid,), role="anon")["can_charge"] is False
+   and "mp_user_id" not in json.dumps(one("select get_provider(%s)", (pid,), role="anon")))
+ok("sin cuenta, el listado no ofrece próximo horario", one("select next_free_slot(%s)", (pid,), role="anon") is None)
+acc1 = connect(pid, "111")
+ok("conectar crea la cuenta activa y marca mp_connected", q("select status from mp_accounts where id = %s", (acc1,))[0][0] == "active"
+   and one("select mp_connected from provider_private where provider_id = %s", (pid,)) is True)
+ok("con cuenta: la ficha dice que puede cobrar y el listado ofrece horario",
+   one("select get_provider(%s)", (pid,), role="anon")["can_charge"] is True and one("select next_free_slot(%s)", (pid,), role="anon") is not None)
+
+# ---------- Paso 1 (v4): cobros abiertos (token de regreso, consulta sin aviso) y avisos rechazados ----------
+hk = book(sv, at(25, 9), cli)[0][0]["booking_ids"]
+ok("Paso 1: la app no abre cobros ni los consulta (solo la Edge Function)",
+   all(err(q(sql, (hk, acc1) if "open" in sql else None, uid=cli)) for sql in
+       ("select checkout_open(%s::bigint[], %s)", "select * from checkouts_due(10)", "select checkout_backfill(7)")))
+tok = svc_role("select checkout_open(%s::bigint[], %s)", (hk, acc1))
+ok("Paso 1: checkout_open devuelve un token de 64 hex y guarda solo su sha256", len(tok) == 64 and all(ch in "0123456789abcdef" for ch in tok)
+   and one("select count(*) from mp_checkouts where token_hash = encode(sha256(convert_to(%s, 'UTF8')), 'hex')", (tok,)) == 1
+   and one("select count(*) from mp_checkouts where token_hash = %s", (tok,)) == 0)
+ok("Paso 1: nadie lee mp_checkouts directo (ni anon, ni el cliente, ni el admin)",
+   all(err(q("select * from mp_checkouts", **kw)) for kw in ({"role": "anon"}, {"uid": cli}, {"uid": adm})))
+stt = one("select checkout_status(%s)", (tok,), role="anon")
+ok("Paso 1: checkout_status sin sesión: 'waiting', con servicio, prestador, día y hora del prestador (nada del cliente ni montos)",
+   stt["state"] == "waiting" and stt["service"] == "Corte" and stt["provider"] == "Prov Cobros" and stt["time"] == "09:00"
+   and stt["date"] == at(25, 9).date().isoformat() and "Ana" not in json.dumps(stt) and "amount" not in stt)
+ok("Paso 1: un token inválido o ajeno no muestra nada", one("select checkout_status('x')", role="anon") is None
+   and one("select checkout_status(%s)", ("a" * 64,), role="anon") is None)
+ok("Paso 1: checkout_open rechaza turnos que no están en hold o de otro cliente/prestador",
+   err(q("select checkout_open(array[999999]::bigint[], %s)", (acc1,), role="service_role"), "bad_checkout"))
+ok("Paso 1: recién abierto no toca consultarlo (el aviso llega en segundos): se consulta a los 2 minutos",
+   svc_role("select count(*) from checkouts_due(10)") == 0)
+q("update mp_checkouts set next_check_at = now() where token_hash = checkout_hash(%s)", (tok,))
+due = q("select id, external_reference from checkouts_due(10)", role="service_role")
+ok("Paso 1: checkouts_due devuelve lo que toca, con el external_reference en el orden original", len(due) == 1 and due[0][1] == ",".join(map(str, hk)))
+ok("Paso 1: …y lo reserva 2 minutos (dos corridas a la vez no consultan el mismo cobro)", svc_role("select count(*) from checkouts_due(10)") == 0)
+ck = due[0][0]
+svc_role("select checkout_checked(%s, false, 'Mercado Pago respondió 500')", (ck,))
+ok("Paso 1: sin pago, la próxima consulta queda más adelante (2, 3, 5, 10, 15, 30 min, después cada hora) con el error",
+   one("select checks = 1 and last_error like '%%500%%' and next_check_at > now() + interval '1 minute' and closed_at is null from mp_checkouts where id = %s", (ck,)))
+ok("Paso 1: la pantalla de regreso puede pedir consultar ya, a lo sumo cada 15 segundos",
+   svc_role("select checkout_poke(%s)", (tok,)) is None)   # se consultó recién
+q("update mp_checkouts set last_check_at = now() - interval '1 minute' where id = %s", (ck,))
+ok("Paso 1: …pasados 15 segundos, sí", svc_role("select checkout_poke(%s)", (tok,)) == ck)
+ok("Paso 1: la app no puede pedir la consulta ni tocar el cron directo", err(q("select checkout_poke(%s)", (tok,), role="anon")) and err(q("select checkout_hint(%s)", (pid,), uid=cli)))
+pay(hk, "PAGO-P1", 6000, 1000, pid, acc1)
+ok("Paso 1: con el pago registrado, el estado pasa a 'confirmed'", one("select checkout_status(%s)", (tok,), role="anon")["state"] == "confirmed")
+svc_role("select count(*) from checkouts_due(10)")
+ok("Paso 1: …y el cobro se cierra solo como pagado", one("select closed_reason from mp_checkouts where id = %s", (ck,)) == "paid")
+q("update mp_checkouts set created_at = now() - interval '4 days', closed_at = null, closed_reason = null where id = %s", (ck,))
+q("update bookings set payment_id = null, status = 'expired' where id = any(%s)", (hk,))
+svc_role("select count(*) from checkouts_due(10)")
+ok("Paso 1: a los 3 días sin pago se deja de consultar (gave_up) y el estado dice que no se pagó",
+   one("select closed_reason from mp_checkouts where id = %s", (ck,)) == "gave_up" and one("select checkout_status(%s)", (tok,), role="anon")["state"] == "not_paid")
+q("update mp_checkouts set closed_at = now() - interval '31 days' where id = %s", (ck,))
+svc_role("select count(*) from checkouts_due(10)")
+ok("Paso 1: los cobros cerrados hace más de 30 días se borran", one("select count(*) from mp_checkouts where id = %s", (ck,)) == 0)
+# backfill: cobros abiertos antes de la migración (con preferencia, sin pago)
+hb = book(sv, at(26, 9), cli)[0][0]["booking_ids"]
+q("update bookings set mp_preference_id = 'pref-viejo', status = 'expired' where id = any(%s)", (hb,))
+n_bf = one("select checkout_backfill(7)")
+ok("Paso 1: checkout_backfill suma los cobros viejos sin pago a la consulta (para ya), una sola vez",
+   n_bf >= 1 and one("select count(*) from mp_checkouts where booking_ids = %s::bigint[] and closed_at is null and next_check_at <= now()", (hb,)) == 1
+   and one("select checkout_backfill(7)") == 0)
+ok("Paso 1: la app no puede correr el backfill", err(q("select checkout_backfill(7)", uid=adm)) and err(q("select checkout_backfill(7)", role="anon")))
+q("update mp_checkouts set next_check_at = now() + interval '1 hour' where booking_ids = %s::bigint[]", (hb,))
+svc_role("select checkout_hint(%s)", (pid,))
+ok("Paso 1: un aviso rechazado del prestador adelanta la consulta de sus cobros abiertos",
+   one("select next_check_at <= now() from mp_checkouts where booking_ids = %s::bigint[]", (hb,)) is True)
+q("update bookings set status = 'cancelled_client' where id = any(%s)", (hb,))
+svc_role("select count(*) from checkouts_due(10)")   # se cierra: sus turnos ya no esperan pago
+# avisos rechazados: uno por motivo y pago en 24 h (suma hits), el id saneado, tope por hora
+svc_role("select mp_webhook_event('P1-FIRMA', %s, %s, 'bad_signature', 'la firma no coincide')", (pid, acc1))
+svc_role("select mp_webhook_event('P1-FIRMA', %s, %s, 'bad_signature', 'la firma no coincide')", (pid, acc1))
+ok("Paso 1: un aviso rechazado que se repite suma hits (una fila)", q("select hits, detail from mp_webhook_events where mp_payment_id = 'P1-FIRMA'") == [(2, "la firma no coincide")])
+svc_role("select mp_webhook_event('<script>alert(1)</script>', null, null, 'no_signature', %s)", ("<b>x</b>" + "y" * 300,))
+row = q("select mp_payment_id, detail from mp_webhook_events where reason = 'no_signature' order by id desc limit 1")[0]
+ok("Paso 1: el id del pago y el detalle se guardan saneados (sin < >, cortos)", row[0] == "scriptalert1script" and "<" not in row[1] and len(row[1]) <= 160)
+ok("Paso 1: un motivo inventado no entra", err(q("select mp_webhook_event('X', null, null, 'cualquiera')", role="service_role")))
+ok("Paso 1: la app no registra avisos", err(q("select mp_webhook_event('X', null, null, 'bad_signature')", uid=cli)))
+q("insert into mp_webhook_events (mp_payment_id, reason, last_at) select 'FLOOD-' || g, 'bad_signature', now() from generate_series(1, 500) g")
+svc_role("select mp_webhook_event('P1-TOPE', null, null, 'bad_signature')")
+ok("Paso 1: con 500 avisos en la última hora no se registran más (un ataque no llena la tabla)", one("select count(*) from mp_webhook_events where mp_payment_id = 'P1-TOPE'") == 0)
+q("delete from mp_webhook_events where mp_payment_id like 'FLOOD-%%'")
+rv = one("select admin_review()", uid=adm)
+ok("Paso 1: Para revisar trae el detalle y las veces de cada aviso, y el resumen de rechazados",
+   any(e["mp_payment_id"] == "P1-FIRMA" and e["hits"] == 2 and e["detail"] for e in rv["webhook_events"])
+   and rv["webhook_alert"]["rejected"] >= 3 and rv["webhook_alert"]["rejected_reason"] in ("bad_signature", "no_signature"))
+# 11/11 · H06: diagnóstico del rechazo, firma válida que apaga el aviso, agrupados por motivo
+ok("H06: Para revisar dice que el aviso sigue (rechazos sin una firma válida después)", rv["webhook_alert"]["active"] is True and rv["webhook_alert"]["last_ok"] is None)
+svc_role("select mp_webhook_event('P1-FIRMA', %s, %s, 'bad_signature', 'la firma no coincide', %s::jsonb)",
+         (pid, acc1, '{"id_from": "url", "manifest": "id:p1-firma;request-id:abc;ts:1;", "v1_start": "0a1b2c3d"}'))
+ok("H06: el rechazo guarda el diagnóstico (en la misma fila: suma hits)",
+   q("select hits, diag->>'id_from', diag->>'manifest' from mp_webhook_events where mp_payment_id = 'P1-FIRMA'") == [(3, "url", "id:p1-firma;request-id:abc;ts:1;")])
+svc_role("select mp_webhook_event('P1-LARGO', %s, null, 'bad_signature', null, %s::jsonb)", (pid, '{"manifest": "' + "x" * 3000 + '"}'))
+ok("H06: un diagnóstico demasiado largo no se guarda entero", one("select diag from mp_webhook_events where mp_payment_id = 'P1-LARGO'") == {"truncated": True})
+ok("H06: la base no acepta un diagnóstico que no sea un objeto corto",
+   err(q("insert into mp_webhook_events (reason, diag) values ('bad_signature', '[1]'::jsonb)")) and err(q("insert into mp_webhook_events (reason, diag) values ('bad_signature', jsonb_build_object('x', repeat('y', 3000)))")))
+ok("H06: ni la app ni el admin registran firmas válidas ni leen el estado sin ser admin",
+   err(q("select mp_webhook_ok(%s, 'principal')", (pid,), uid=cli)) and err(q("select mp_webhook_ok(%s, 'principal')", (pid,), uid=adm))
+   and q("select * from mp_webhook_status", uid=cli) == [] and err(q("insert into mp_webhook_status (provider_key) values (1)", uid=adm)))
+rv = one("select admin_review()", uid=adm)
+g = {x["reason"]: x for x in rv["webhook_groups"]}
+ok("H06: los descartados vienen agrupados por motivo (cuántos avisos, en cuántas filas) y con el diagnóstico",
+   g.get("bad_signature", {}).get("hits", 0) >= 4 and g["bad_signature"]["rows"] >= 2 and "no_signature" in g
+   and any(e["mp_payment_id"] == "P1-FIRMA" and e["diag"]["v1_start"] == "0a1b2c3d" for e in rv["webhook_events"]))
+# una firma válida sin prestador (por ejemplo, la simulación del panel) no apaga los rechazos de un prestador; la de ese
+# prestador, sí (y un rechazo sin prestador se apaga con cualquier firma válida)
+svc_role("select mp_webhook_ok(null, 'principal')")
+rv = one("select admin_review()", uid=adm)
+ok("H06: con una firma válida de otro lado, el aviso sigue por los rechazos del prestador", rv["webhook_alert"]["active"] is True and rv["webhook_alert"]["last_ok"] is not None)
+svc_role("select mp_webhook_ok(%s, 'principal')", (pid,))
+svc_role("select mp_webhook_ok(%s, 'principal')", (pid,))
+rv = one("select admin_review()", uid=adm)
+ok("H06: cuando los avisos vuelven a validar, el aviso de Para revisar se apaga solo (los rechazos quedan en la lista)",
+   rv["webhook_alert"]["active"] is False and rv["webhook_alert"]["rejected"] >= 5 and any(e["mp_payment_id"] == "P1-FIRMA" for e in rv["webhook_events"]))
+svc_role("select mp_webhook_event('P1-FIRMA2', %s, %s, 'bad_signature', 'la firma no coincide')", (pid, acc1))
+ok("H06: un rechazo nuevo después de la última firma válida lo vuelve a prender", one("select admin_review()", uid=adm)["webhook_alert"]["active"] is True)
+ok("H06: mp_webhook_ok cuenta las firmas válidas por prestador (0: sin prestador)",
+   q("select provider_key, ok_hits, last_ok_via from mp_webhook_status order by provider_key") == [(0, 1, "principal"), (pid, 2, "principal")])
+# 11/11: un aviso IPN ignorado prende el aviso de Para revisar igual que un rechazo, y figura en su grupo
+svc_role("select mp_webhook_ok(%s, 'principal')", (pid,))
+ok("H06: con una firma válida después de todo, el aviso está apagado", one("select admin_review()", uid=adm)["webhook_alert"]["active"] is False)
+svc_role("select mp_webhook_event('P1-IPN', %s, %s, 'ipn_ignored', 'aviso IPN', '{\"id_from\": \"ipn\"}'::jsonb)", (pid, acc1))
+rv = one("select admin_review()", uid=adm)
+ok("H06: un aviso IPN ignorado después de la última firma válida prende el aviso y tiene su grupo",
+   rv["webhook_alert"]["active"] is True and rv["webhook_alert"]["rejected_reason"] == "ipn_ignored"
+   and any(g["reason"] == "ipn_ignored" and g["hits"] == 1 for g in rv["webhook_groups"]))
+ok("Paso 1: el cron de la consulta no llama a nada si no hay cobros que consultar (ni sin Vault)", svc_role("select run_mp_reconcile(true)") is None)
+
+# ---------- D29: el pago llega cuando la hora del turno ya pasó → se devuelve, aunque el horario esté libre ----------
+pastb = one("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, hold_expires_at) "
+            "values (%s, %s, %s, 'Ana Cobros', 'Corte', 'app', 'expired', now() - interval '2 hours', now() - interval '90 minutes', 10000, 5000, 1000, null) returning id", (pid, sv, cli))
+rp = pay([pastb], "PAGO-D29", 6000, 1000, pid, acc1)
+ok("D29: pago de un turno que ya empezó → registrado como devolución, el turno no se confirma",
+   rp["confirmed"] == 0 and rp["refunded"] == 1 and one("select status from bookings where id = %s", (pastb,)) == "expired"
+   and one("select payment_id is not null from bookings where id = %s", (pastb,)) is True)
+ok("D29: …con la devolución pedida por todo lo cobrado y el motivo booking_past",
+   q("select r.amount, r.reason, r.status from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = 'PAGO-D29'") == [(6000, "booking_past", "pending")])
+ok("D29: …el cliente recibe el aviso con el motivo y el prestador, el de pago devuelto",
+   one("select count(*) from client_messages where ref = %s and kind = 'cancel' and body like %s", (str(pastb), "%después de la hora del turno%")) == 1
+   and one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_refunded' and body like %s", (pid, "%después de la hora del turno%")) == 1)
+futb = one("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, hold_expires_at) "
+           "values (%s, %s, %s, 'Ana Cobros', 'Corte', 'app', 'expired', %s, %s + interval '30 minutes', 10000, 5000, 1000, null) returning id", (pid, sv, cli, at(27, 10), at(27, 10)))
+rf = pay([futb], "PAGO-D29-FUT", 6000, 1000, pid, acc1)
+ok("D29: un pago tardío de un turno que todavía no empezó y con el horario libre se sigue confirmando",
+   rf["confirmed"] == 1 and one("select status from bookings where id = %s", (futb,)) == "confirmed")
+
+# ---------- Confirmación normal, idempotencia (mismo aviso dos veces), comisión de Mercado Pago ----------
+r = book(sv, at(2, 9), cli)[0][0]
+b0 = r["booking_ids"][0]
+ok("reserva: seña $5.000 + comisión $1.000", r["amount_due"] == 6000)
+res = pay([b0], "P-OK", 6000, 1000, pid, acc1, {"id": "P-OK", "status": "approved", "card": {"first_six_digits": "450995"},
+                                                 "payer": {"email": "ana@cobros.ar", "identification": {"number": "30111222"}},
+                                                 "additional_info": {"ip_address": "200.1.2.3", "payer": {"first_name": "Ana"}},
+                                                 "refunds": [{"id": 7, "amount": 100, "status": "approved", "date_created": "2026-10-24", "source": {"name": "Ana López"}}],
+                                                 "collector_id": 111, "fee_details": [{"type": "application_fee", "amount": 1000}]})
+ok("pago aprobado: confirma el turno", res["status"] == "processed" and res["confirmed"] == 1 and bk(b0)[0] == "confirmed")
+pm = q("select id, outcome, amount, fee_expected, fee_mp, mp_account_id, booking_ids from payments where mp_payment_id = 'P-OK'")[0]
+ok("queda en payments: monto, comisión calculada y la de MP, cuenta que cobró, turnos", pm[1:] == ("confirmed", 6000, 1000, 1000, acc1, [b0]))
+ok("el turno queda ligado al pago", one("select payment_id from bookings where id = %s", (b0,)) == pm[0])
+ok("lo cobrado por el turno queda en payment_bookings", q("select amount, fee, result from payment_bookings where payment_id = %s", (pm[0],))[0] == (6000, 1000, "confirmed"))
+raw = one("select mp_responses from payments where id = %s", (pm[0],))
+ok("3/11) se guarda solo la lista de campos permitidos de la respuesta de Mercado Pago (nada del comprador)",
+   len(raw) == 1 and raw[0]["body"]["id"] == "P-OK" and set(raw[0]["body"]) == {"id", "status", "collector_id", "fee_details", "refunds"}
+   and raw[0]["body"]["refunds"] == [{"id": 7, "amount": 100, "status": "approved", "date_created": "2026-10-24"}]
+   and not any(x in json.dumps(raw) for x in ("ana@cobros.ar", "200.1.2.3", "Ana López", "Ana\"", "30111222"))
+   and "450995" not in json.dumps(raw))
+again = pay([b0], "P-OK", 6000, 1000, pid, acc1, {"id": "P-OK", "status": "approved"})
+ok("mismo aviso dos veces: no hace nada más", again["status"] == "already_processed"
+   and one("select count(*) from payments where mp_payment_id = 'P-OK'") == 1
+   and one("select count(*) from client_messages where kind = 'conf' and ref = %s", (str(b0),)) == 1)
+ok("…pero guarda la segunda consulta", len(one("select mp_responses from payments where id = %s", (pm[0],))) == 2)
+
+r = book(sv, at(2, 10), cli)[0][0]
+res = pay(r["booking_ids"], "P-NOFEE", 6000, None, pid, acc1)
+ok("b) Mercado Pago no informa la comisión: el turno se confirma y el pago queda para revisar",
+   bk(r["booking_ids"][0])[0] == "confirmed" and q("select outcome, review_reasons from payments where mp_payment_id = 'P-NOFEE'")[0] == ("review", ["fee_missing"]))
+r = book(sv, at(2, 11), cli)[0][0]
+pay(r["booking_ids"], "P-BADFEE", 6000, 600, pid, acc1)
+ok("b) comisión distinta a la calculada: para revisar con su motivo",
+   q("select outcome, review_reasons, fee_mp, fee_expected from payments where mp_payment_id = 'P-BADFEE'")[0] == ("review", ["fee_mismatch"], 600, 1000))
+
+# ---------- H01: el hold venció, otro tomó el horario y el pago llega tarde ----------
+r = book(sv, at(3, 9), cli)[0][0]
+b1 = r["booking_ids"][0]
+expire(b1)
+ok("H01: otro cliente toma el horario liberado", not err(book(sv, at(3, 9), cli2)))
+res = pay([b1], "P-H01", 6000, 1000, pid, acc1)
+ok("H01: el pago se registra y el turno queda para devolver (no falla)", res["status"] == "processed" and res["refunded"] == 1
+   and bk(b1)[:2] == ("expired", 6000))
+ok("H01: la devolución queda ligada al pago, con el id de MP y la cuenta que cobró",
+   refunds_of(b1) == [(6000, "slot_taken", "pending", True, "P-H01", acc1)])
+ok("H01: el pago queda como 'refund'", one("select outcome from payments where mp_payment_id = 'P-H01'") == "refund")
+avc = q("select body from client_messages where kind = 'cancel' and ref = %s and user_id = %s", (str(b1), cli))
+ok("Bloque 3: el cliente recibe el aviso de que no se pudo confirmar, con el motivo y lo que se devuelve (y va por email)",
+   len(avc) == 1 and avc[0][0].startswith("No pudimos confirmar tu turno del") and "el horario ya no estaba libre" in avc[0][0]
+   and "Te devolvemos $6.000" in avc[0][0]
+   and one("select count(*) from email_outbox o join client_messages m on m.id = o.message_id where m.kind = 'cancel' and m.ref = %s", (str(b1),)) == 1)
+ok("H01: el reintento del webhook no duplica la devolución",
+   pay([b1], "P-H01", 6000, 1000, pid, acc1)["status"] == "already_processed" and len(refunds_of(b1)) == 1)
+late = q("select body from provider_notices where provider_id = %s and kind = 'mp_refunded' and ref = 'tarde-P-H01'", (pid,))
+ok("H28: el prestador recibe un aviso del pago tardío que se devuelve (uno por pago)", len(late) == 1
+   and "ya no estaba libre" in late[0][0] and "$6.000" in late[0][0] and "Ana Cobros" in late[0][0])
+
+# ---------- H02: el prestador cancela el hold y el cliente termina de pagar igual ----------
+r = book(sv, at(3, 10), cli)[0][0]
+b2 = r["booking_ids"][0]
+ok("H02: el prestador cancela la reserva en pago", one("select cancel_by_provider(%s)", (b2,), uid=owner)["status"] == "cancelled")
+res = pay([b2], "P-H02", 6000, 1000, pid, acc1)
+ok("H02: el pago se registra y se devuelve todo (antes: bookings_not_found y MP reintentando)",
+   res["status"] == "processed" and refunds_of(b2) == [(6000, "booking_unavailable", "pending", True, "P-H02", acc1)]
+   and bk(b2)[:2] == ("cancelled_provider", 6000))
+
+# ---------- H03 / D16: monto distinto ----------
+r = book(sv, at(3, 11), cli)[0][0]
+b3 = r["booking_ids"][0]
+res = pay([b3], "P-SHORT", 5000, 1000, pid, acc1)
+ok("D16: llegó menos → no se confirma nada y se devuelve todo lo cobrado",
+   res["confirmed"] == 0 and bk(b3)[:2] == ("expired", 5000) and refunds_of(b3) == [(5000, "amount_short", "pending", True, "P-SHORT", acc1)])
+ok("D16: el horario queda libre", not err(book(sv, at(3, 11), cli2)))
+r = book(sv, at(3, 12), cli)[0][0]
+b4 = r["booking_ids"][0]
+res = pay([b4], "P-OVER", 7000, 1000, pid, acc1)
+ok("D16: llegó más → se confirma y la diferencia va a revisión (no se devuelve sola)",
+   bk(b4)[0] == "confirmed" and res["extra"] == 1000 and refunds_of(b4) == []
+   and q("select outcome, review_reasons from payments where mp_payment_id = 'P-OVER'")[0] == ("review", ["amount_over"]))
+
+# ---------- Serie con el primero ocupado ----------
+r = book(sv, at(4, 9), cli, weeks=1, extra=2)[0][0]
+s_ids = r["booking_ids"]
+ok("serie de 3 turnos: $18.000", len(s_ids) == 3 and r["amount_due"] == 18000)
+for x in s_ids:
+    expire(x)
+ok("la serie vence y otro toma el PRIMER horario", not err(book(sv, at(4, 9), cli2)))
+res = pay(s_ids, "P-SERIE", 18000, 3000, pid, acc1)
+ok("serie con el primero ocupado: se confirman los otros dos y el primero queda para devolver",
+   res["confirmed"] == 2 and res["refunded"] == 1 and [bk(x)[0] for x in s_ids] == ["expired", "confirmed", "confirmed"])
+ok("serie: el primero tiene su devolución ligada al pago (antes quedaba sin mp_payment_id)",
+   refunds_of(s_ids[0]) == [(6000, "slot_taken", "pending", True, "P-SERIE", acc1)])
+ok("serie: los 3 turnos quedan ligados al mismo pago", q("select count(distinct payment_id), count(*) from bookings where id = any(%s)", (s_ids,))[0] == (1, 3))
+ok("serie: el pago queda como 'partial'", one("select outcome from payments where mp_payment_id = 'P-SERIE'") == "partial")
+
+# ---------- a) Nunca devolver más de lo cobrado ----------
+ps = one("select id from payments where mp_payment_id = 'P-SERIE'")
+ok("a) no se puede devolver más de lo cobrado por un turno",
+   err(q("select refund_request(%s, %s, 1, 'provider_cancelled')", (s_ids[0], ps)), "refund_exceeds_booking"))
+ok("a) cancelar otro turno de la serie devuelve solo lo de ese turno", one("select cancel_by_provider(%s)", (s_ids[1],), uid=owner)["refund_mp"] == 6000
+   and refunds_of(s_ids[1]) == [(6000, "provider_cancelled", "pending", True, "P-SERIE", acc1)])
+ok("a) la suma de devoluciones de la serie no supera el pago",
+   err(q("select refund_request(null, %s, 6001, 'unknown_booking')", (ps,)), "refund_exceeds_payment")
+   and one("select sum(amount) from refunds where payment_id = %s", (ps,)) == 12000)
+ok("a) una devolución hecha también cuenta para el tope",
+   err(q("update refunds set amount = amount + 1 where booking_id = %s", (s_ids[1],)), "refund_exceeds"))
+ok("a) la app no puede crear devoluciones", err(q("select refund_request(%s, %s, 1, 'provider_cancelled')", (s_ids[2], ps), uid=owner))
+   and err(q("insert into refunds (booking_id, amount, reason) values (%s, 1, 'provider_cancelled')", (s_ids[2],), uid=owner)))
+
+# ---------- D15: series hasta 90 días ----------
+r = book(sv, at(5, 9), cli, weeks=6, extra=3)[0][0]
+dias = [one("select (starts_at at time zone 'America/Argentina/Buenos_Aires')::date - (now() at time zone 'America/Argentina/Buenos_Aires')::date from bookings where id = %s", (x,)) for x in r["booking_ids"]]
+ok("D15: cada 6 semanas × 4: el 4° (día 131) pasa los 90 días y se saltea como un ocupado",
+   r["skipped"] == 1 and len(r["booking_ids"]) == 3 and max(dias) <= 90 and max(dias) > 31)
+r = book(sv, at(6, 9), cli, weeks=4, extra=3)[0][0]
+ok("D15: cada 4 semanas × 4 (hasta el día 90) entran todos", r["skipped"] == 0 and len(r["booking_ids"]) == 4)
+for x in r["booking_ids"]:
+    q("select cancel_by_client(%s)", (x,), uid=cli)
+ok("D15: el primer turno sigue limitado a los 31 días del turnero", err(book(sv, at(40, 9), cli), "slot_not_available"))
+
+# ---------- D17: devolución hecha desde Mercado Pago (fuera de la app) ----------
+r = book(sv, at(7, 9), cli, weeks=1, extra=1)[0][0]
+e_ids = r["booking_ids"]
+pay(e_ids, "P-EXT", 12000, 2000, pid, acc1)
+q("update bookings set starts_at = now() - interval '3 days', ends_at = now() - interval '3 days' + interval '30 minutes' where id = %s", (e_ids[0],))
+q("update bookings set status = 'done' where id = %s", (e_ids[0],))
+res = mp_update("P-EXT", "refunded", 12000)
+ok("D17: devuelto desde MP → el turno futuro se cancela con estado propio y el pasado no cambia",
+   res["cancelled"] == 1 and bk(e_ids[1])[0] == "cancelled_refunded" and bk(e_ids[0])[0] == "done")
+ok("D17: sin otra devolución", refunds_of(e_ids[1]) == [] and bk(e_ids[1])[1] == 0)
+ok("D17: aviso al cliente", any("Mercado Pago te devolvió el pago" in m["body"] for m in one("select my_messages()", uid=cli)))
+nt = one("select my_provider_notices()", uid=owner)
+ok("D17: aviso al prestador", any(n["kind"] == "mp_refunded" and "P-EXT" in n["body"] and "1 turno futuro" in n["body"] for n in nt))
+ok("D17: el pago queda refunded (sin revisión: no hay nada que decidir)", q("select mp_status, outcome from payments where mp_payment_id = 'P-EXT'")[0] == ("refunded", "confirmed"))
+ok("D17: el aviso repetido no hace nada", mp_update("P-EXT", "refunded", 12000)["status"] == "already_processed"
+   and len([n for n in one("select my_provider_notices()", uid=owner) if n["kind"] == "mp_refunded" and "P-EXT" in n["body"]]) == 1)
+ok("el cliente ve el turno como 'devuelto desde Mercado Pago', distinto de 'canceló el prestador'",
+   [b["status"] for b in one("select my_bookings()", uid=cli) if b["id"] == e_ids[1]] == ["cancelled_refunded"])
+# nuestra propia devolución total: MP avisa "refunded" y no es un caso externo
+r = book(sv, at(7, 11), cli)[0][0]
+bo = r["booking_ids"][0]
+pay([bo], "P-OURS", 6000, 1000, pid, acc1)
+q("select cancel_by_provider(%s)", (bo,), uid=owner)
+n_before = len(one("select my_provider_notices()", uid=owner))
+mp_update("P-OURS", "refunded", 6000)
+ok("devolución de la app informada por MP: se marca hecha y no avisa como externa",
+   refunds_of(bo)[0][2] == "done" and bk(bo)[1] == 0 and len(one("select my_provider_notices()", uid=owner)) == n_before)
+# devolución parcial
+r = book(sv, at(7, 12), cli, weeks=1, extra=1)[0][0]
+p_ids = r["booking_ids"]
+pay(p_ids, "P-PART", 12000, 2000, pid, acc1)
+q("select cancel_by_provider(%s)", (p_ids[1],), uid=owner)
+ok("parcial que coincide con la de la app (en curso): sin revisión",
+   mp_update("P-PART", "approved", 6000)["status"] == "ok" and one("select outcome from payments where mp_payment_id = 'P-PART'") == "confirmed")
+mp_update("P-PART", "approved", 2500)
+ok("D17: parcial que no coincide → revisión", q("select outcome, review_reasons from payments where mp_payment_id = 'P-PART'")[0] == ("review", ["partial_refund_mismatch"]))
+
+# ---------- D18: contracargo y reclamo ----------
+r = book(sv, at(8, 9), cli)[0][0]
+bc = r["booking_ids"][0]
+pay([bc], "P-CB", 6000, 1000, pid, acc1)
+res = mp_update("P-CB", "charged_back", 6000)
+ok("D18: contracargo → turno futuro cancelado, pago en revisión", bk(bc)[0] == "cancelled_refunded"
+   and q("select mp_status, outcome, review_reasons from payments where mp_payment_id = 'P-CB'")[0] == ("charged_back", "review", ["charged_back"]))
+ok("D18: aviso al cliente y al prestador", any("contracargo" in m["body"] for m in one("select my_messages()", uid=cli))
+   and any(n["kind"] == "mp_charged_back" for n in one("select my_provider_notices()", uid=owner)))
+ok("D18: sin penalizaciones (no cuenta como falta)", one("select coalesce(sum(no_shows), 0) from provider_clients where provider_id = %s and user_id = %s", (pid, cli)) == 0)
+r = book(sv, at(8, 10), cli)[0][0]
+bm = r["booking_ids"][0]
+pay([bm], "P-MED", 6000, 1000, pid, acc1)
+mp_update("P-MED", "in_mediation")
+ok("D18: reclamo → solo se marca, el turno sigue, revisión y aviso al prestador", bk(bm)[0] == "confirmed"
+   and q("select mp_status, outcome from payments where mp_payment_id = 'P-MED'")[0] == ("in_mediation", "review")
+   and any(n["kind"] == "mp_in_mediation" for n in one("select my_provider_notices()", uid=owner)))
+ok("aviso de un pago que no está registrado: queda para revisar", mp_update("P-NADA", "charged_back")["status"] == "review"
+   and one("select outcome from payments where mp_payment_id = 'P-NADA'") == "review")
+
+# ---------- D19: reintentos con backoff ----------
+rf = one("select id from refunds where booking_id = %s", (b1,))
+ok("la devolución está en la cola", any(x[0] == rf for x in q("select id from refunds_due(200)", role="service_role")))
+steps = []
+for i in range(9):
+    estado = svc_role("select refund_result(%s, false, null, %s)", (rf, f"insufficient_amount #{i + 1}"))
+    gap = one("select round(extract(epoch from next_attempt_at - last_attempt_at) / 60) from refunds where id = %s", (rf,))
+    steps.append((estado, int(gap)))
+    # simula que pasó el tiempo hasta el próximo intento
+    q("update refunds set first_attempt_at = first_attempt_at - (next_attempt_at - last_attempt_at), next_attempt_at = now() where id = %s", (rf,))
+ok("D19: 10 min, 30 min, 1 h, 3 h, 6 h, 12 h y después cada 24 h", [g for _, g in steps[:8]] == [10, 30, 60, 180, 360, 720, 1440, 1440])
+ok("D19: recién a los ~3 días pasa a fallida (9 intentos)", [s for s, _ in steps] == ["pending"] * 8 + ["failed"])
+rv = one("select admin_review()", uid=adm)
+rf2 = one("select id from refunds where booking_id = %s", (b2,))
+svc_role("select refund_result(%s, false, null, 'collector_without_balance')", (rf2,))
+rv = one("select admin_review()", uid=adm)
+ok("D19: 'Para revisar' muestra la fallida y la que está reintentando, con el último error",
+   any(x["id"] == rf and x["status"] == "failed" for x in rv["refunds"])
+   and any(x["id"] == rf2 and x["status"] == "pending" and x["attempts"] == 1 and x["last_error"] == "collector_without_balance" for x in rv["refunds"]))
+ok("'Para revisar' muestra los pagos en revisión con su motivo", any(x["mp_payment_id"] == "P-OVER" and x["review_reasons"] == ["amount_over"] for x in rv["payments"]))
+ok("solo el admin ve 'Para revisar'", err(q("select admin_review()", uid=owner), "forbidden"))
+
+# ---------- D20: Reintentar y Resuelto a mano ----------
+ok("D20: Reintentar vuelve a poner la fallida en la cola", not err(q("select admin_refund_retry(%s)", (rf,), uid=adm))
+   and q("select status, attempts from refunds where id = %s", (rf,))[0] == ("pending", 0))
+ok("D20: solo el admin reintenta", err(q("select admin_refund_retry(%s)", (rf,), uid=owner), "forbidden"))
+ok("D20: Resuelto a mano exige una nota", err(q("select admin_resolve('refund', %s, '  ')", (rf2,), uid=adm), "note_required"))
+n_refunds = one("select count(*) from refunds")
+ok("D20: Resuelto a mano registra quién y cuándo, y no dispara devoluciones",
+   not err(q("select admin_resolve('refund', %s, 'Le devolví por transferencia')", (rf2,), uid=adm))
+   and q("select status, resolved_by = %s, resolved_at is not null, resolved_note from refunds where id = %s", (adm, rf2))[0] == ("resolved", True, True, "Le devolví por transferencia")
+   and one("select count(*) from refunds") == n_refunds and bk(b2)[1] == 0
+   and not any(x[0] == rf2 for x in q("select id from refunds_due(200)", role="service_role")))
+ok("D20: un pago en revisión también se resuelve con nota", not err(q("select admin_resolve('payment', (select id from payments where mp_payment_id = 'P-OVER'), 'Diferencia devuelta por MP')", uid=adm))
+   and not any(x["mp_payment_id"] == "P-OVER" for x in one("select admin_review()", uid=adm)["payments"]))
+ok("D20: el prestador no puede resolver", err(q("select admin_resolve('refund', %s, 'nota larga')", (rf,), uid=owner), "forbidden"))
+ok("una devolución hecha descuenta lo pendiente del turno", svc_role("select refund_result(%s, true, 'R-1')", (rf,)) == "done"
+   and bk(b1)[1] == 0 and q("select status, mp_refund_id from refunds where id = %s", (rf,))[0] == ("done", "R-1"))
+mine = {b["id"]: b for b in one("select my_bookings()", uid=cli)}
+ok("Mis turnos: el cliente ve su devolución hecha, con monto, fecha y motivo",
+   (mine[b1]["refund_amount"], mine[b1]["refund_status"], mine[b1]["refund_reason"]) == (6000, "done", "slot_taken") and mine[b1]["refund_done_at"])
+ok("Mis turnos: y la que todavía está en curso", (mine[s_ids[1]]["refund_amount"], mine[s_ids[1]]["refund_status"]) == (6000, "pending")
+   and mine[b0]["refund_amount"] is None)
+
+# ---------- e) Turnos viejos (antes del Bloque 1): mp_payment_id sin payment_id ----------
+q("alter table bookings disable trigger bookings_activity")
+bl = one("""insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, paid_mp, app_fee, mp_payment_id, series_id)
+            values (%s, %s, %s, 'Ana Cobros', 'Corte', 'app', 'confirmed', %s, %s, 10000, 5000, 1000, 5000, 1000, 'LEGACY-1', gen_random_uuid()) returning id""",
+         (pid, sv, cli, at(9, 9), at(9, 9) + dt.timedelta(minutes=30)))
+bl2 = one("""insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, paid_mp, app_fee, series_id)
+             values (%s, %s, %s, 'Ana Cobros', 'Corte', 'app', 'confirmed', %s, %s, 10000, 5000, 1000, 5000, 1000, (select series_id from bookings where id = %s)) returning id""",
+          (pid, sv, cli, at(16, 9), at(16, 9) + dt.timedelta(minutes=30), bl))
+q("alter table bookings enable trigger bookings_activity")
+q("select cancel_by_provider(%s)", (bl,), uid=owner)
+q("select cancel_by_provider(%s)", (bl2,), uid=owner)
+ok("e) turno viejo: la devolución usa su mp_payment_id (no queda 'sin pago ligado')", refunds_of(bl) == [(6000, "provider_cancelled", "pending", False, "LEGACY-1", acc1)])
+ok("e) turno viejo de una serie: usa el mp_payment_id del primero de la serie", refunds_of(bl2) == [(6000, "provider_cancelled", "pending", False, "LEGACY-1", acc1)])
+ok("e) también con tope: no más de lo cobrado por ese turno", err(q("select refund_request(%s, null, 1, 'provider_cancelled')", (bl,)), "refund_exceeds_booking"))
+bn = one("""insert into bookings (provider_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, paid_mp)
+            values (%s, %s, 'Ana Cobros', 'Corte', 'app', 'confirmed', %s, %s, 10000, 5000) returning id""", (pid, cli, at(9, 12), at(9, 12) + dt.timedelta(minutes=30)))
+q("select cancel_by_provider(%s)", (bn,), uid=owner)
+rn = one("select id from refunds where booking_id = %s", (bn,))
+ok("turno sin ningún pago ligado: queda fallida para revisar, con el motivo", refunds_of(bn)[0][2] == "failed"
+   and any(x["id"] == rn and "No hay un pago" in x["last_error"] for x in one("select admin_review()", uid=adm)["refunds"]))
+
+# ---------- H23: desconectar Mercado Pago ----------
+r = book(sv, at(10, 9), cli)[0][0]
+h_mp = r["booking_ids"][0]
+q("update bookings set mp_preference_id = 'pref-1' where id = %s", (h_mp,))       # el cliente ya está en Mercado Pago
+r = book(sv, at(10, 10), cli)[0][0]
+h_new = r["booking_ids"][0]                                                       # todavía no fue a Mercado Pago
+r = book(sv, at(10, 11), cli2)[0][0]
+h_exp = r["booking_ids"][0]
+q("update bookings set mp_preference_id = 'pref-2' where id = %s", (h_exp,))
+st = one("select mp_disconnect()", uid=owner)
+ok("H23: desconectar → no puede cobrar, y le dice cuántos turnos futuros pagados tiene y cuántos están pagando",
+   st["can_charge"] is False and st["future_paid"] >= 3 and st["paying_now"] == 2 and st["old_accounts"] == 1)
+ok("H23: la cuenta queda solo para devoluciones (con su llave) y mp_connected en false",
+   q("select status, access_token is not null from mp_accounts where id = %s", (acc1,))[0] == ("refunds_only", True)
+   and one("select mp_connected from provider_private where provider_id = %s", (pid,)) is False)
+ok("H23: la reserva que no fue a Mercado Pago se libera en el acto", bk(h_new)[0] == "expired")
+ok("H23: la que tiene el cobro creado sigue hasta vencer", bk(h_mp)[0] == "hold" and bk(h_exp)[0] == "hold")
+ok("H23: reservas nuevas con seña rechazadas con un error claro", err(book(sv, at(11, 9), cli2), "provider_mp_not_connected"))
+ok("H23: la ficha pública dice que no toma turnos online", one("select get_provider(%s)", (pid,), role="anon")["can_charge"] is False)
+ok("H23: desconectar dos veces da error claro", err(q("select mp_disconnect()", uid=owner), "mp_not_connected"))
+res = pay([h_mp], "P-AFTER", 6000, 1000, pid, acc1)
+ok("H23: el hold con cobro creado que se paga después se confirma (con la cuenta que lo cobró)", res["confirmed"] == 1 and bk(h_mp)[0] == "confirmed"
+   and one("select mp_account_id from payments where mp_payment_id = 'P-AFTER'") == acc1)
+expire(h_exp)
+ok("H23: el hold con cobro creado que no se paga vence", bk(h_exp)[0] == "expired")
+q("select cancel_by_provider(%s)", (s_ids[2],), uid=owner)
+ok("H23: cancelar un turno pagado después de desconectar → devolución con la llave guardada (cuenta vieja)",
+   refunds_of(s_ids[2]) == [(6000, "provider_cancelled", "pending", True, "P-SERIE", acc1)])
+# reconectar con OTRA cuenta
+acc2 = connect(pid, "222")
+ok("H23: reconectar con otra cuenta crea otra llave y no pisa la anterior", acc2 != acc1
+   and q("select status, access_token from mp_accounts where id = %s", (acc1,))[0] == ("refunds_only", enc("tok-111"))
+   and q("select status, access_token from mp_accounts where id = %s", (acc2,))[0] == ("active", enc("tok-222")))
+ok("H23: con la cuenta nueva vuelve a cobrar", one("select my_mp_status()", uid=owner)["can_charge"] is True and one("select my_mp_status()", uid=owner)["account"] == "222")
+q("select cancel_by_provider(%s)", (h_mp,), uid=owner)
+ok("H23: devolver un pago de la cuenta vieja usa la llave de la cuenta vieja", refunds_of(h_mp)[0][5] == acc1)
+r = book(sv, at(11, 9), cli2)[0][0]
+pay(r["booking_ids"], "P-NEW", 6000, 1000, pid)
+ok("H23: los pagos nuevos quedan con la cuenta nueva", one("select mp_account_id from payments where mp_payment_id = 'P-NEW'") == acc2)
+# reconectar con la MISMA cuenta
+acc1b = svc_role("select mp_connect(%s, '111', %s, %s, 15552000)", (pid, enc("tok-111-nuevo"), enc("ref-111-nuevo")))
+ok("H23: reconectar la misma cuenta actualiza esa llave (no crea otra)", acc1b == acc1
+   and q("select status, access_token from mp_accounts where id = %s", (acc1,))[0] == ("active", enc("tok-111-nuevo"))
+   and one("select status from mp_accounts where id = %s", (acc2,)) == "refunds_only"
+   and one("select count(*) from mp_accounts where provider_id = %s", (pid,)) == 2)
+ok("una sola cuenta activa por prestador", one("select count(*) from mp_accounts where provider_id = %s and status = 'active'", (pid,)) == 1)
+
+# ---------- Purga de llaves ----------
+ok("purga: la cuenta 222 tiene un turno futuro pagado → no se borra", svc_role("select purge_mp_accounts()") == 0
+   and one("select status from mp_accounts where id = %s", (acc2,)) == "refunds_only")
+b_new = one("select id from bookings where payment_id = (select id from payments where mp_payment_id = 'P-NEW')")
+q("select cancel_by_provider(%s)", (b_new,), uid=owner)
+ok("purga: con la devolución pendiente, tampoco", svc_role("select purge_mp_accounts()") == 0)
+svc_role("select refund_result(id, true, 'R-NEW') from refunds where booking_id = %s", (b_new,))
+ok("purga: con un pago de los últimos 180 días, tampoco (contracargos y reclamos)", svc_role("select purge_mp_accounts()") == 0)
+q("update payments set created_at = now() - interval '181 days' where mp_account_id = %s", (acc2,))
+ok("purga: sin nada pendiente, se borra la llave y queda la fila", svc_role("select purge_mp_accounts()") == 1
+   and q("select status, access_token, refresh_token, mp_user_id from mp_accounts where id = %s", (acc2,))[0] == ("purged", None, None, "222"))
+ok("purga: la cuenta activa nunca se borra", one("select status from mp_accounts where id = %s", (acc1,)) == "active")
+ok("purga: purge_deleted_secrets (cron viejo) hace lo mismo", svc_role("select purge_deleted_secrets()") == 0)
+
+# ---------- Nunca falla ante un pago aprobado ----------
+res = pay([], "P-VACIO", 3000, 0, pid, acc1)
+ok("pago sin turnos: se registra y se devuelve todo", res["status"] == "processed"
+   and q("select amount, reason, status from refunds where payment_id = (select id from payments where mp_payment_id = 'P-VACIO')")[0] == (3000, "unknown_booking", "pending"))
+otro = mkuser("otro@cobros.ar", "Otro")
+pid_x = one("select register_provider('Otro Prov', 'Calle 2', array['b'], '2284 1', '30111333')", uid=otro)
+r = book(sv, at(12, 9), cli)[0][0]
+res = pay(r["booking_ids"], "P-OTRO", 6000, 1000, pid_x)
+ok("turno de otro prestador: no se toca, el pago queda para revisar y lo cobrado se devuelve", bk(r["booking_ids"][0])[0] == "hold"
+   and "other_provider" in one("select review_reasons from payments where mp_payment_id = 'P-OTRO'")
+   and q("select amount, reason from refunds where payment_id = (select id from payments where mp_payment_id = 'P-OTRO')")[0] == (6000, "unknown_booking"))
+
+# ---------- 7) Devoluciones creadas por el admin ("Devolver" en Para revisar) ----------
+r = book(sv, at(13, 9), cli)[0][0]
+pay(r["booking_ids"], "P-OVER2", 7500, 1000, pid)
+po2 = one("select id from payments where mp_payment_id = 'P-OVER2'")
+item = [x for x in one("select admin_review()", uid=adm)["payments"] if x["id"] == po2][0]
+ok("7) Para revisar ofrece devolver lo que falta (la diferencia: $1.500)", item["refundable"] == 1500 and item["refundable_from_app"] is True)
+ok("7) Devolver exige una nota", err(q("select admin_refund_create(%s, null, 1500, ' ')", (po2,), uid=adm), "note_required"))
+ok("7) solo el admin devuelve", err(q("select admin_refund_create(%s, null, 1500, 'nota')", (po2,), uid=owner), "forbidden"))
+rid = one("select admin_refund_create(%s, null, 1500, 'Pagó de más: le devuelvo la diferencia')", (po2,), uid=adm)
+ok("7) pago con monto de más → devuelve la diferencia, con quién y la nota, y la ejecuta mp-refunds con la cuenta que cobró",
+   q("select amount, reason, status, created_by = %s, note, mp_account_id, mp_payment_id from refunds where id = %s", (adm, rid))[0]
+   == (1500, "admin", "pending", True, "Pagó de más: le devuelvo la diferencia", acc1, "P-OVER2")
+   and any(x[0] == rid for x in q("select id from refunds_due(200)", role="service_role")))
+ok("7) el pago sale de Para revisar con la nota de la devolución", not any(x["id"] == po2 for x in one("select admin_review()", uid=adm)["payments"])
+   and one("select review_note from payments where id = %s", (po2,)).startswith("Devolución de $1.500"))
+ok("7) respeta el tope: no se puede devolver más de lo cobrado", err(q("select admin_refund_create(%s, null, 6001, 'otra')", (po2,), uid=adm), "refund_exceeds_payment"))
+ok("13) el cliente ve la devolución de su pago aunque no sea de un turno", one("select count(*) from refunds where id = %s", (rid,), uid=cli) == 1
+   and one("select count(*) from refunds where id = %s", (rid,), uid=cli2) == 0)
+# pago en revisión por un error inesperado → devolver todo
+q("""create or replace function public.prueba_falla() returns trigger language plpgsql as $$
+     begin if new.payment_id = (select id from public.payments where mp_payment_id = 'P-ERR') then raise exception 'falla inesperada de prueba'; end if; return new; end $$""")
+q("create trigger prueba_falla before insert on payment_bookings for each row execute function public.prueba_falla()")
+r = book(sv, at(13, 10), cli)[0][0]
+res = pay(r["booking_ids"], "P-ERR", 6000, 1000, pid)
+q("drop trigger prueba_falla on payment_bookings")
+pe = one("select id from payments where mp_payment_id = 'P-ERR'")
+ok("un error inesperado deja el pago registrado en revisión, con el error", res["status"] == "review"
+   and one("select review_reasons[1] from payments where id = %s", (pe,)).startswith("error: falla inesperada de prueba"))
+rid2 = one("select admin_refund_create(%s, null, 6000, 'Error al procesar: devuelvo todo')", (pe,), uid=adm)
+ok("7) pago en revisión por error → devolver todo", q("select amount, status from refunds where id = %s", (rid2,))[0] == (6000, "pending")
+   and err(q("select admin_refund_create(%s, null, 1, 'más')", (pe,), uid=adm), "refund_exceeds_payment"))
+
+# ---------- H27: Reprocesar un pago que quedó en revisión por un error inesperado ----------
+ok("H27: el que ya tiene una devolución no se puede reprocesar", one("select payment_reprocessable(%s)", (pe,)) is False
+   and err(q("select admin_reprocess(%s, 'probar')", (pe,), uid=adm), "cannot_reprocess"))
+q("create trigger prueba_falla before insert on payment_bookings for each row execute function public.prueba_falla()")
+q("update payments set mp_payment_id = 'P-ERR-viejo' where id = %s", (pe,))   # la falla de prueba mira el pago 'P-ERR'
+r = book(sv, at(17, 9), cli)[0][0]
+pay(r["booking_ids"], "P-ERR", 6000, 1000, pid, acc1, raw={"id": "P-ERR", "status": "approved"})
+q("drop trigger prueba_falla on payment_bookings")
+pr_ = one("select id from payments where mp_payment_id = 'P-ERR'")
+rev = next(x for x in one("select admin_review()", uid=adm)["payments"] if x["id"] == pr_)
+ok("H27: en revisión por error, con la comisión de Mercado Pago guardada, se puede reprocesar", rev["reprocessable"] is True
+   and one("select fee_mp from payments where id = %s", (pr_,)) == 1000)
+ok("H27: reprocesar pide una nota y es solo del admin", err(q("select admin_reprocess(%s, '')", (pr_,), uid=adm), "note_required")
+   and err(q("select admin_reprocess(%s, 'nota')", (pr_,), uid=owner)) and err(q("select admin_reprocess(%s, 'nota')", (pr_,), role="service_role")))
+rp = one("select admin_reprocess(%s, 'Se cayó la base un momento')", (pr_,), uid=adm)
+newp = q("select id, outcome, reprocessed->>'note', reprocessed->>'by', reprocessed->'error'->>0, jsonb_array_length(mp_responses) from payments where mp_payment_id = 'P-ERR'")
+ok("H27: reprocesado: el turno se confirma con el pago", rp["status"] == "processed" and rp["confirmed"] == 1
+   and bk(r["booking_ids"][0])[0] == "confirmed" and one("select payment_id from bookings where id = %s", (r["booking_ids"][0],)) == newp[0][0])
+ok("H27: en la misma transacción se reemplaza el registro de revisión y queda quién, cuándo y por qué", len(newp) == 1 and newp[0][1] == "confirmed"
+   and newp[0][2] == "Se cayó la base un momento" and newp[0][3] == str(adm) and newp[0][4].startswith("error: falla inesperada")
+   and newp[0][5] >= 1 and not any(x["id"] in (pr_, newp[0][0]) for x in one("select admin_review()", uid=adm)["payments"]))
+# si los turnos cambiaron (el prestador lo canceló), no se reprocesa
+q("create trigger prueba_falla before insert on payment_bookings for each row execute function public.prueba_falla()")
+q("update payments set mp_payment_id = 'P-ERR-ok' where id = %s", (newp[0][0],))
+r = book(sv, at(17, 11), cli)[0][0]
+pay(r["booking_ids"], "P-ERR", 6000, 1000, pid, acc1)
+q("drop trigger prueba_falla on payment_bookings")
+pr2 = one("select id from payments where mp_payment_id = 'P-ERR'")
+q("select cancel_by_provider(%s)", (r["booking_ids"][0],), uid=owner)
+ok("H27: si el turno ya no está en hold o vencido sin pago, no se reprocesa", err(q("select admin_reprocess(%s, 'nota')", (pr2,), uid=adm), "cannot_reprocess")
+   and one("select outcome from payments where id = %s", (pr2,)) == "review")
+
+# ---------- 8) Errores pasajeros: suben (el webhook responde 500 y Mercado Pago reintenta) ----------
+q("create table if not exists prueba_pasajero (code text)")
+q("""create or replace function public.prueba_pasajera() returns trigger language plpgsql as $$
+     declare c text := (select code from public.prueba_pasajero limit 1);
+     begin if c is not null and new.mp_payment_id like 'P-PAS%%' then raise exception 'error pasajero de prueba' using errcode = c; end if; return new; end $$""")
+q("create trigger prueba_pasajera before insert on payments for each row execute function public.prueba_pasajera()")
+r = book(sv, at(13, 11), cli)[0][0]
+for code, name in (("40P01", "deadlock_detected"), ("40001", "serialization_failure"), ("55P03", "lock_not_available"),
+                   ("57014", "query_canceled"), ("23505", "unique_violation")):
+    q("delete from prueba_pasajero"); q("insert into prueba_pasajero values (%s)", (code,))
+    e = q("select confirm_payment(%s::bigint[], 'P-PAS', 6000, p_provider => %s, p_fee_mp => 1000)", (r["booking_ids"], pid), role="service_role")
+    ok(f"8) {name} sube (no queda el pago en revisión)", err(e, "error pasajero") and one("select count(*) from payments where mp_payment_id = 'P-PAS'") == 0
+       and bk(r["booking_ids"][0])[0] == "hold")
+q("delete from prueba_pasajero")
+res = pay(r["booking_ids"], "P-PAS", 6000, 1000, pid)
+ok("8) el reintento de Mercado Pago lo confirma", res["status"] == "processed" and res["confirmed"] == 1 and bk(r["booking_ids"][0])[0] == "confirmed")
+q("drop trigger prueba_pasajera on payments")
+
+# ---------- 10) Reclamo → resuelto a favor (approved) → otro reclamo ----------
+r = book(sv, at(13, 12), cli)[0][0]
+pay(r["booking_ids"], "P-MED2", 6000, 1000, pid)
+mp_update("P-MED2", "in_mediation")
+q("select admin_resolve('payment', (select id from payments where mp_payment_id = 'P-MED2'), 'Reclamo respondido')", uid=adm)
+mp_update("P-MED2", "approved")
+st_mid = q("select mp_status, review_reasons from payments where mp_payment_id = 'P-MED2'")[0]
+ok("10) approved después de un reclamo: el pago vuelve a 'approved' y el motivo queda como historial", st_mid == ("approved", ["in_mediation"]))
+mp_update("P-MED2", "in_mediation")
+nmed = q("select count(*) from provider_notices where kind = 'mp_in_mediation' and (ref = 'P-MED2' or ref like 'P-MED2#%%')")[0][0]
+ok("10) un segundo reclamo genera un segundo aviso y vuelve a Para revisar", nmed == 2
+   and any(x["mp_payment_id"] == "P-MED2" for x in one("select admin_review()", uid=adm)["payments"])
+   and one("select review_reasons from payments where mp_payment_id = 'P-MED2'") == ["in_mediation"])
+
+# ---------- 2/9) Cancelaciones del sistema: no son del prestador ----------
+mine = {b["id"]: b for b in one("select my_bookings()", uid=cli)}
+ok("2) el turno del pago tardío (H01) queda 'expired' con su devolución, no 'canceló el prestador'",
+   mine[b1]["status"] == "expired" and mine[b1]["refund_reason"] == "slot_taken")
+dep = one("select admin_stats()", uid=adm)["deposits_month"]
+dep_kept = one("""select coalesce(sum(paid_mp), 0) from bookings where source = 'app' and paid_mp > 0
+                   and created_at >= date_trunc('month', now() at time zone 'America/Argentina/Buenos_Aires') at time zone 'America/Argentina/Buenos_Aires'
+                   and (status in ('confirmed','done','no_show','cancelled_client') or (status = 'cancelled_provider' and settle_by_provider))""")
+dep_all = one("select coalesce(sum(paid_mp), 0) from bookings where source = 'app' and paid_mp > 0")
+ok("9) 'Señas cobradas' del admin no cuenta lo devuelto (expired con pago, cancelado por el prestador, devuelto por MP)", dep == dep_kept and dep < dep_all)
+
+# ---------- 2) Cobrador equivocado y avisos descartados (en la base; el webhook se prueba en pruebas/funciones) ----------
+r = book(sv, at(13, 13), cli)[0][0]
+res = svc_role("select payment_review('P-WRONG', %s, '999999', %s::bigint[], 6000, 'wrong_collector', %s)", (pid, r["booking_ids"], json.dumps({"id": "P-WRONG", "payer": {"email": "x@y.z"}})))
+ok("cobrador equivocado: el pago queda en revisión y no confirma turnos", res["status"] == "review" and bk(r["booking_ids"][0])[0] == "hold"
+   and q("select outcome, review_reasons, collector_id, mp_account_id from payments where mp_payment_id = 'P-WRONG'")[0] == ("review", ["wrong_collector"], "999999", None)
+   and q("select count(*) from payment_bookings where payment_id = (select id from payments where mp_payment_id = 'P-WRONG')")[0][0] == 0)
+ok("…aparece en Para revisar y la app no lo puede devolver sola (no es de una cuenta de TuTiempo)",
+   any(x["mp_payment_id"] == "P-WRONG" and x["refundable_from_app"] is False for x in one("select admin_review()", uid=adm)["payments"]))
+svc_role("select mp_webhook_event('P-WRONG', %s, %s, 'wrong_collector')", (pid, acc1))
+ok("los avisos descartados quedan en mp_webhook_events y los ve el admin", any(x["mp_payment_id"] == "P-WRONG" and x["reason"] == "wrong_collector" for x in one("select admin_review()", uid=adm)["webhook_events"])
+   and one("select count(*) from mp_webhook_events", uid=adm) >= 1)
+ok("…nadie más los lee ni los escribe", one("select count(*) from mp_webhook_events", uid=owner) == 0 and err(q("select * from mp_webhook_events", role="anon"))
+   and err(q("insert into mp_webhook_events (reason) values ('wrong_collector')", uid=adm)) and err(q("select mp_webhook_event('x', null, null, 'bad_currency')", uid=adm)))
+
+# ---------- Renovación de llaves: una sola a la vez ----------
+ok("reservar la renovación: la toma uno solo", svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is True and svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is False)
+svc_role("select mp_account_refreshed(%s, %s, %s, 15552000)", (acc1, enc("tok-nuevo"), enc("ref-nuevo")))
+ok("guardar la llave nueva libera la reserva", q("select access_token, refresh_token, refreshing_until from mp_accounts where id = %s", (acc1,))[0] == (enc("tok-nuevo"), enc("ref-nuevo"), None)
+   and svc_role("select mp_account_refresh_claim(%s)", (acc1,)) is True)
+svc_role("select mp_account_error(%s, 'No se pudo renovar', false)", (acc1,))
+ok("un error también la libera (y no desconecta si la llave no venció)", q("select refreshing_until, status from mp_accounts where id = %s", (acc1,))[0] == (None, "active"))
+cuentas = {x["id"]: x for x in one("select admin_review()", uid=adm)["accounts"]}
+ok("2b) la cuenta con error aparece en Para revisar: prestador, cuenta, error y desde cuándo", acc1 in cuentas
+   and cuentas[acc1]["provider_name"] == "Prov Cobros" and cuentas[acc1]["mp_user_id"] == "111" and cuentas[acc1]["last_error"] == "No se pudo renovar"
+   and cuentas[acc1]["error_at"] is not None)
+desde = one("select last_error_at from mp_accounts where id = %s", (acc1,))
+svc_role("select mp_account_error(%s, 'Otra vez: no se pudo renovar', false)", (acc1,))
+ok("2b) si vuelve a fallar, sigue la fecha del primer error", one("select last_error_at from mp_accounts where id = %s", (acc1,)) == desde)
+svc_role("select mp_account_refreshed(%s, %s, %s, 15552000)", (acc1, enc("tok-nuevo"), enc("ref-nuevo")))
+ok("2b) cuando se renueva bien, sale de Para revisar", acc1 not in {x["id"] for x in one("select admin_review()", uid=adm)["accounts"]}
+   and one("select last_error_at from mp_accounts where id = %s", (acc1,)) is None)
+ok("la app no puede reservar ni guardar llaves", err(q("select mp_account_refresh_claim(%s)", (acc1,), uid=owner)) and err(q("select mp_account_refreshed(%s, 'a', 'b', 1)", (acc1,), uid=adm)))
+
+# ---------- Un turno con la plata devuelta no vuelve a confirmarse sin un pago nuevo ----------
+for bid, estado in ((b1, "expired"), (e_ids[1], "cancelled_refunded")):
+    n_before = one("select count(*) from refunds where booking_id = %s", (bid,))
+    res = pay([bid], f"P-OTRA-VEZ-{bid}", 6000, 1000, pid)
+    ok(f"un turno '{estado}' no se confirma con otro pago de ese mismo turno: se devuelve", bk(bid)[0] == estado and res["confirmed"] == 0
+       and one("select count(*) from refunds where booking_id = %s and reason = 'booking_unavailable'", (bid,)) >= 1
+       and one("select count(*) from refunds where booking_id = %s", (bid,)) == n_before + 1)
+    ok(f"…ni el cliente lo puede volver a confirmar por su cuenta ('{estado}')",
+       err(q("update bookings set status = 'confirmed' where id = %s", (bid,), uid=cli)) or bk(bid)[0] == estado)
+nr = book(sv, at(13, 15), cli)[0][0]   # el horario de b1 lo tomó otro cliente (H01): "Reservar de nuevo" elige otro
+ok("\"Reservar de nuevo\" es una reserva nueva con su pago (otro turno, otra seña): el turno devuelto no cambia",
+   nr["status"] == "pending_payment" and nr["booking_ids"][0] != b1 and nr["amount_due"] == 6000 and bk(b1)[0] == "expired")
+
+# ---------- cancel_by_provider con un pago que llega justo (dos conexiones de verdad) ----------
+import threading, time
+r = book(sv, at(13, 14), cli)[0][0]
+hb = r["booking_ids"][0]
+c2 = psycopg.connect(DSN)
+cur2 = c2.cursor()
+cur2.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps({"role": "service_role"}),))
+cur2.execute("set local role service_role")
+cur2.execute("select confirm_payment(%s::bigint[], 'P-JUSTO', 6000, p_provider => %s, p_fee_mp => 1000)", ([hb], pid))   # sin commit todavía
+out = {}
+th = threading.Thread(target=lambda: out.update(r=q("select cancel_by_provider(%s)", (hb,), uid=owner)))
+th.start()
+time.sleep(0.8)
+ok("la cancelación espera al pago que se está confirmando", th.is_alive())
+c2.commit(); c2.close()
+th.join(10)
+pj = one("select id from payments where mp_payment_id = 'P-JUSTO'")
+ok("2) cancelar un hold que se pagó justo: devuelve lo cobrado, ligado a ese pago", not err(out.get("r")) and out["r"][0][0]["refund_mp"] == 6000
+   and bk(hb)[0] == "cancelled_provider" and q("select amount, payment_id, reason from refunds where booking_id = %s", (hb,)) == [(6000, pj, "provider_cancelled")])
+
+# ---------- Seguridad ----------
+ok("nadie de la app lee las llaves", err(q("select access_token from mp_accounts", uid=owner)) and err(q("select * from mp_accounts", role="anon")))
+ok("el cliente ve sus pagos y no los ajenos", one("select count(*) from payments where client_id = %s", (cli,), uid=cli) > 0
+   and one("select count(*) from payments where client_id = %s", (cli2,), uid=cli) == 0)
+ok("el cliente no ve la respuesta de Mercado Pago ni la cuenta", err(q("select mp_responses from payments", uid=cli)) and err(q("select mp_account_id from payments", uid=cli)))
+ok("el prestador ve los pagos de su agenda", one("select count(*) from payments", uid=owner) == one("select count(*) from payments where provider_id = %s", (pid,)))
+ok("otro prestador solo ve los pagos de su agenda", one("select count(*) from payments", uid=otro) == 1
+   and one("select count(*) from payments where provider_id = %s", (pid,), uid=otro) == 0
+   and one("select count(*) from refunds", uid=otro) == one("select count(*) from refunds where provider_id = %s", (pid_x,)) == 1)
+ok("anon no ve pagos ni devoluciones", err(q("select count(*) from payments", role="anon")) or one("select count(*) from payments", role="anon") == 0)
+ok("la app no escribe pagos ni devoluciones", err(q("update payments set amount = 1", uid=adm)) and err(q("update refunds set status = 'done'", uid=adm)))
+for fn in ("confirm_payment(array[1]::bigint[], 'x', 1)", "payment_mp_update('x', 'refunded')", "refund_result(1, true)", "refunds_due()",
+           "mp_connect(1, '1', 'a', 'b', 1)", "purge_mp_accounts()", "mp_account_error(1, 'x')"):
+    ok(f"solo el servidor llama a {fn.split('(')[0]}", err(q(f"select {fn}", uid=owner)) and err(q(f"select {fn}", uid=adm)))
+ok("el cliente no puede desconectar a un prestador", err(q("select mp_disconnect()", uid=cli), "not_provider"))
+ok("los avisos del prestador son solo suyos", len(one("select my_provider_notices()", uid=otro)) == one("select count(*) from provider_notices where provider_id = %s", (pid_x,))
+   and err(q("select * from provider_notices", role="anon")) is not None)
+
+# ---------- Bloque 2a: llaves cifradas, cuentas activas con id, cron con Vault, limpieza ----------
+ok("2a) no hay ninguna llave en texto plano: todas empiezan con 'v1:'",
+   one("select count(*) from mp_accounts where (access_token is not null and access_token !~ '^v[0-9]+:') or (refresh_token is not null and refresh_token !~ '^v[0-9]+:')") == 0
+   and one("select count(*) from mp_accounts where access_token is not null") > 0)
+ok("2a) la base rechaza una llave nueva en texto plano", err(q("select mp_connect(%s, '333', 'APP_USR-texto-plano', null, 100)", (pid,), role="service_role"), "token_not_encrypted")
+   and err(q("select mp_account_refreshed(%s, 'APP_USR-otra', 'ref', 100)", (acc1,), role="service_role"), "token_not_encrypted"))
+ok("2a) una cuenta activa siempre tiene mp_user_id", err(q("update mp_accounts set mp_user_id = null where id = %s", (acc1,)), "mp_accounts_active_user"))
+ok("2a) provider_secrets ya no existe (D21)", one("select to_regclass('public.provider_secrets')") is None)
+# cron de devoluciones: lee la URL y la clave de Vault y llama a mp-refunds con pg_net
+q("delete from vault.secrets where name in ('tt_project_url', 'tt_cron_secret')"); q("delete from net.requests")
+ok("2a) sin los secretos en Vault, el cron no llama a nada (y avisa)", svc_role("select run_refunds()") is None and one("select count(*) from net.requests") == 0)
+q("select vault.create_secret('https://proyecto.supabase.co/', 'tt_project_url')"); q("select vault.create_secret('secreto-del-cron', 'tt_cron_secret')")
+rq = svc_role("select run_refunds()")
+req = q("select url, headers from net.requests where id = %s", (rq,))[0]
+ok("2a) con Vault: llama a mp-refunds con la clave del cron (no la service_role)", req[0] == "https://proyecto.supabase.co/functions/v1/mp-refunds"
+   and req[1].get("Authorization") == "Bearer secreto-del-cron")
+ok("2a) la app no puede disparar el cron ni la limpieza", err(q("select run_refunds()", uid=adm)) and err(q("select daily_cleanup()", uid=adm)))
+ok("2a) la app no lee Vault", err(q("select * from vault.decrypted_secrets", uid=adm)) and err(q("select * from vault.decrypted_secrets", role="anon")))
+# limpieza diaria
+q("insert into mp_oauth_states (state, provider_id, created_at) values ('viejo', %s, now() - interval '2 days'), ('nuevo', %s, now())", (pid, pid))
+q("insert into mp_webhook_events (mp_payment_id, reason, created_at) values ('E-VIEJO', 'payment_not_found', now() - interval '200 days'), ('E-RECIENTE', 'payment_not_found', now() - interval '10 days')")
+q("insert into mp_webhook_events (mp_payment_id, reason, created_at) values ('P-WRONG', 'wrong_collector', now() - interval '200 days')")   # su pago sigue en revisión
+cl = svc_role("select daily_cleanup()")
+ok("2a) limpieza: borra intentos de conexión de más de 1 día", q("select state from mp_oauth_states where state in ('viejo', 'nuevo')") == [("nuevo",)])
+ok("2a) limpieza: borra avisos descartados de más de 180 días, salvo los de un pago en revisión",
+   sorted(r[0] for r in q("select mp_payment_id from mp_webhook_events where mp_payment_id in ('E-VIEJO', 'E-RECIENTE') or (mp_payment_id = 'P-WRONG' and created_at < now() - interval '100 days')"))
+   == ["E-RECIENTE", "P-WRONG"] and cl["oauth_states"] >= 1 and cl["webhook_events"] >= 1)
+
+# ---------- D30 (V1): comisión de TuTiempo sobre la seña y costo de Mercado Pago según el plazo ----------
+ex = {(3000, 7.61): 3475, (3000, 5.31): 3391, (3000, 4.10): 3348, (3000, 1.80): 3269, (4000, 7.61): 4633, (4000, 5.31): 4521,
+      (4000, 4.10): 4463, (4000, 1.80): 4359, (5000, 7.61): 5791, (5000, 5.31): 5651, (5000, 4.10): 5579, (5000, 1.80): 5449}
+got = {k: one("select (charge_parts(%s::int, 7, %s::numeric))[3]", (k[0], str(k[1])), role="anon") for k in ex}
+ok("D30: los 12 ejemplos de la propuesta (seña 30/40/50% de $10.000, 7% de TuTiempo, los 4 plazos) dan el total aprobado", got == ex)
+ok("D30: con Mercado Pago en 0%, seña + comisión (50%: $5.000 + $350 = $5.350)", one("select charge_parts(5000, 7, 0)", role="anon") == [350, 0, 5350])
+ok("D30: sin seña (premio) no se cobra nada", one("select charge_parts(0, 7, 7.61)", role="anon") == [0, 0, 0])
+ok("D30/D34: por defecto, comisión 7% (del precio del turno) y Mercado Pago en 0% en los cuatro plazos (hasta la aprobación legal)",
+   one("select row(mp_pct_instant, mp_pct_d10, mp_pct_d18, mp_pct_d35)::text from app_settings") == "(0.00,0.00,0.00,0.00)"
+   and one("select column_default from information_schema.columns where table_name = 'app_settings' and column_name = 'deposit_commission_pct'") == "7")
+ok("D30: los prestadores arrancan con el plazo 'al instante'", one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "instant")
+ok("D30: solo el admin cambia las comisiones", err(q("select admin_set_fees(5, 1, 1, 1, 1)", uid=owner), "forbidden")
+   and err(q("select admin_set_fees(5, 1, 1, 1, 1)", role="anon")) and err(q("update app_settings set mp_pct_d10 = 1", uid=adm)))
+ok("D30: fuera de rango se rechaza (comisión 0 a 30, Mercado Pago 0 a 15)", err(q("select admin_set_fees(31, 0, 0, 0, 0)", uid=adm), "bad_commission")
+   and err(q("select admin_set_fees(7, 16, 0, 0, 0)", uid=adm), "bad_mp_pct") and err(q("select admin_set_fees(7, -1, 0, 0, 0)", uid=adm), "bad_mp_pct"))
+fs = one("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+ok("D30: el admin carga la comisión y la tabla de Mercado Pago", float(fs["commission"]) == 10 and float(fs["d10"]) == 5.31 and float(fs["d35"]) == 1.8)
+ok("D30: el prestador elige su plazo (y solo el suyo)", not err(q("update provider_settings set payout_term = 'd10' where provider_id = %s", (pid,), uid=owner))
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10"
+   and err(q("update provider_settings set payout_term = 'd7' where provider_id = %s", (pid,), uid=owner))
+   and q("update provider_settings set payout_term = 'instant' where provider_id = %s returning 1", (pid,), uid=cli) == [])
+# 4/11: al guardar desde la app la seña queda en 30% (ps_fixed_deposit). Las cuentas de D30 de acá abajo son con la seña
+# del 50% de antes, para no rehacer los ejemplos de la propuesta: se vuelve a poner sin sesión (la seña fija se prueba en
+# su sección, al final)
+ok("4/11: el profesional que cambió su plazo desde la app quedó con la seña fija del 30%",
+   one("select deposit_pct from provider_settings where provider_id = %s", (pid,)) == 30)
+q("update provider_settings set deposit_pct = 50 where provider_id = %s", (pid,))
+viejo = one("select id from bookings where provider_id = %s and status = 'confirmed' and mp_fee = 0 order by id limit 1", (pid,))
+r30 = book(sv, at(28, 9), cli)[0][0]; b30 = r30["booking_ids"][0]
+ok("D30: reserva con plazo 10 días: seña $5.000 + TuTiempo $1.000 + Mercado Pago $337 = $6.337 (⌈6.000 / 0,9469⌉)",
+   r30["amount_due"] == 6337 and bk(b30, "deposit, client_fee, mp_fee, mp_fee_pct::float") == (5000, 1000, 337, 5.31))
+res = pay([b30], "P-D30", 6337, 1000, pid, acc1, {"id": "P-D30", "status": "approved",
+          "fee_details": [{"type": "mercadopago_fee", "amount": 336.49}, {"type": "application_fee", "amount": 1000}]})
+ok("D30: la comisión de Mercado Pago es la del plazo (5,31% de $6.337 = $336): se confirma sin revisión",
+   res["confirmed"] == 1 and q("select outcome, review_reasons, mp_cost, mp_cost_expected from payments where mp_payment_id = 'P-D30'")[0] == ("confirmed", [], 336, 336))
+ok("D30: el prestador recibe la seña completa; TuTiempo su comisión; lo de Mercado Pago queda aparte",
+   bk(b30, "status, paid_mp, app_fee, paid_mp_fee") == ("confirmed", 5000, 1000, 337))
+ok("D30: Mis turnos muestra lo que se sumó por Mercado Pago", any(x["id"] == b30 and x["mp_fee"] == 337 and x["paid_mp_fee"] == 337 for x in one("select my_bookings()", uid=cli)))
+r31 = book(sv, at(28, 10), cli)[0][0]; b31 = r31["booking_ids"][0]
+pay([b31], "P-D30-MAL", 6337, 1000, pid, acc1, {"id": "P-D30-MAL", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": 400}, {"type": "application_fee", "amount": 1000}]})
+pm31 = q("select outcome, review_reasons, mp_cost, mp_cost_expected from payments where mp_payment_id = 'P-D30-MAL'")[0]
+ok("D30: Mercado Pago cobró un % que no es el de ningún plazo (6,31%): el turno se confirma y el pago queda para revisar, con los dos números",
+   bk(b31)[0] == "confirmed" and pm31 == ("review", ["mp_cost_mismatch"], 400, 336)
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10")
+nt = one("select body from provider_notices where provider_id = %s and kind = 'mp_cost' and ref = 'costo-P-D30-MAL'", (pid,))
+ok("D30: el prestador recibe el aviso con los dos números", nt is not None and "6,31% ($400)" in nt and "5,31% ($336)" in nt)
+ok("v2: el aviso ya no manda a «tu perfil (Cobros)»: «Si tu cuenta tiene otras tasas, avisanos.»",
+   nt.endswith("en el pago n° P-D30-MAL. Si tu cuenta tiene otras tasas, avisanos.") and "Cobros" not in nt)
+ok("D30: el admin ve los dos números en Para revisar", any(x["mp_payment_id"] == "P-D30-MAL" and x["mp_cost"] == 400 and x["mp_cost_expected"] == 336
+   for x in one("select admin_review()", uid=adm)["payments"]))
+r32 = book(sv, at(28, 11), cli)[0][0]; b32 = r32["booking_ids"][0]
+pay([b32], "P-D30-MARGEN", 6337, 1000, pid, acc1, {"id": "P-D30-MARGEN", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": 338}, {"type": "application_fee", "amount": 1000}]})
+ok("D30: hasta $2 de diferencia no es un error (redondeos de Mercado Pago)", one("select outcome from payments where mp_payment_id = 'P-D30-MARGEN'") == "confirmed")
+cb = one("select cancel_by_provider(%s)", (b30,), uid=owner)
+ok("D30: si cancela el prestador se devuelve TODO lo que pagó el cliente ($6.337, con lo de Mercado Pago), como hasta ahora",
+   cb["refund_mp"] == 6337 and refunds_of(b30)[0][:3] == (6337, "provider_cancelled", "pending"))
+ok("D30: el aviso al cliente dice el total que se le devuelve", any("$6.337" in m["body"] for m in one("select my_messages()", uid=cli) if m["kind"] == "cancel"))
+r33 = book(sv, at(28, 12), cli, 1, 1)[0][0]
+ok("D30: dos turnos juntos: cada uno con su seña, comisión y costo de Mercado Pago ($6.337 × 2)", r33["amount_due"] == 12674
+   and one("select sum(mp_fee) from bookings where id = any(%s)", (r33["booking_ids"],)) == 674)
+pay(r33["booking_ids"], "P-D30-SERIE", 12674, 2000, pid, acc1, {"id": "P-D30-SERIE", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": 673}, {"type": "application_fee", "amount": 2000}]})
+ok("D30: serie: la comisión esperada sale del total del pago (5,31% de $12.674 = $673)",
+   q("select outcome, mp_cost_expected from payments where mp_payment_id = 'P-D30-SERIE'")[0] == ("confirmed", 673))
+q("select admin_set_fees(10, 0, 0, 0, 0)", uid=adm)
+r34 = book(sv, at(28, 15), cli)[0][0]; b34 = r34["booking_ids"][0]
+pay([b34], "P-D30-CERO", 6000, 1000, pid, acc1, {"id": "P-D30-CERO", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": 457}, {"type": "application_fee", "amount": 1000}]})
+ok("D30: con Mercado Pago en 0% no se suma nada ni se compara (la comisión la absorbe el prestador, como hoy)",
+   r34["amount_due"] == 6000 and bk(b34, "mp_fee, mp_fee_pct::float") == (0, 0)
+   and q("select outcome, mp_cost, mp_cost_expected from payments where mp_payment_id = 'P-D30-CERO'")[0] == ("confirmed", 457, None))
+ok("D30: los turnos reservados antes no cambian", viejo is not None and bk(viejo, "mp_fee, paid_mp_fee") == (0, 0))
+ok("D30: con Mercado Pago en 0% tampoco se detecta el plazo (sigue el del prestador)",
+   one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10"
+   and one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_term'", (pid,)) == 0
+   and one("select mp_term_match(6000, 457, 'd10')") is None)
+q("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+
+# ---------- D30 · El plazo de Mercado Pago se detecta solo (por la comisión que informa cada pago) ----------
+iva = lambda total, pct: round(total * pct * 1.21 / 100)
+ok("D30 auto: mp_term_match reconoce el plazo del prestador, otro plazo (con y sin IVA) o ninguno",
+   one("select mp_term_match(6337, 336, 'd10')") == "d10" and one("select mp_term_match(6337, 482, 'd10')") == "instant"
+   and one("select mp_term_match(6337, %s, 'd10')", (iva(6337, 7.61),)) == "instant"
+   and one("select mp_term_match(6337, %s, 'instant')", (iva(6337, 1.80),)) == "d35"
+   and one("select mp_term_match(6337, 338, 'd10')") == "d10" and one("select mp_term_match(6337, 339, 'd10')") is None
+   and one("select mp_term_match(6337, 400, 'd10')") is None)
+ok("D30 auto: mp_term_match no se llama desde la app", err(q("select mp_term_match(6337, 336, 'd10')", uid=owner)) and err(q("select mp_term_match(6337, 336, 'd10')", role="anon")))
+# 4/11 · Bloque 4: el plazo lo elige el profesional; la detección ya no lo cambia sola: avisa y el pago va a Para revisar
+q("update provider_settings set payout_term = 'instant' where provider_id = %s", (pid,))
+r40 = book(sv, at(29, 9), cli)[0][0]; b40 = r40["booking_ids"][0]
+tot40 = one("select (charge_parts(5000, 10000, 10, 7.61))[3]")
+ok("D30: con «al instante» el cliente paga el % de ese plazo (seña $5.000 + $1.000 + Mercado Pago 7,61%)", r40["amount_due"] == tot40 == 6495)
+res40 = pay([b40], "P-AUTO-35", tot40, 1000, pid, acc1, {"id": "P-AUTO-35", "status": "approved",
+            "fee_details": [{"type": "mercadopago_fee", "amount": round(tot40 * 1.80 / 100, 2)}, {"type": "application_fee", "amount": 1000}]})
+ok("4/11: Mercado Pago descontó el % de 35 días: el turno se confirma, el pago va a Para revisar y el plazo NO cambia solo",
+   res40["confirmed"] == 1 and q("select outcome, review_reasons from payments where mp_payment_id = 'P-AUTO-35'")[0] == ("review", ["mp_term_mismatch"])
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "instant" and bk(b40)[0] == "confirmed")
+n40 = one("select body from provider_notices where provider_id = %s and kind = 'mp_term' and ref = 'plazo-d35-P-AUTO-35'", (pid,))
+ok("4/11: el profesional recibe el aviso con los dos plazos (el de la comisión y el que eligió en Horarios)",
+   n40 is not None and "Mercado Pago te cobró la comisión de acreditar a 35 días ($117)" in n40
+   and "en Horarios tenés elegido al instante (pago n° P-AUTO-35)" in n40 and "cambiá el plazo en Horarios" in n40)
+r41 = book(sv, at(29, 10), cli)[0][0]; b41 = r41["booking_ids"][0]
+ok("4/11: el turno siguiente se sigue cobrando con el plazo que eligió ($6.495, no el de 35 días)",
+   r41["amount_due"] == 6495 and bk(b41, "mp_fee_pct::float")[0] == 7.61)
+pay([b41], "P-AUTO-OK", 6495, 1000, pid, acc1, {"id": "P-AUTO-OK", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": iva(6495, 7.61)}, {"type": "application_fee", "amount": 1000}]})
+ok("4/11: si la comisión es la del plazo elegido (con el IVA incluido): sin revisión y sin otro aviso",
+   one("select outcome from payments where mp_payment_id = 'P-AUTO-OK'") == "confirmed"
+   and one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_term'", (pid,)) == 1)
+r42 = book(sv, at(29, 11), cli)[0][0]; b42 = r42["booking_ids"][0]
+pay([b42], "P-AUTO-RARO", 6495, 1000, pid, acc1, {"id": "P-AUTO-RARO", "status": "approved",
+    "fee_details": [{"type": "mercadopago_fee", "amount": 200}, {"type": "application_fee", "amount": 1000}]})
+ok("D30: una comisión que no es la de ningún plazo va a Para revisar (como antes) y el plazo no cambia",
+   q("select outcome, review_reasons from payments where mp_payment_id = 'P-AUTO-RARO'")[0] == ("review", ["mp_cost_mismatch"])
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "instant" and bk(b42)[0] == "confirmed")
+ok("4/11: el profesional elige su plazo en Horarios (y la seña sigue en 30%)", not err(q("update provider_settings set payout_term = 'd35' where provider_id = %s", (pid,), uid=owner))
+   and q("select payout_term, deposit_pct from provider_settings where provider_id = %s", (pid,))[0] == ("d35", 30))
+q("update provider_settings set payout_term = 'd10', deposit_pct = 50 where provider_id = %s", (pid,))
+
+# ---------- 4/11 · Bloque 4: seña fija del 30% para todos ----------
+ok("4/11: la seña por defecto es del 30% (sin la opción del total)",
+   one("select column_default from information_schema.columns where table_name = 'provider_settings' and column_name = 'deposit_pct'") == "30"
+   and one("select column_default from information_schema.columns where table_name = 'provider_settings' and column_name = 'pay_mode'") == "'deposit'::text")
+ok("4/11: un profesional nuevo arranca con la seña del 30%", q("select pay_mode, deposit_pct from provider_settings where provider_id = %s", (pid_x,))[0] == ("deposit", 30))
+q("update provider_settings set deposit_pct = 50, pay_mode = 'full' where provider_id = %s", (pid,), uid=owner)
+ok("4/11: desde la app no se puede elegir otra seña ni cobrar el total (queda en 30%)",
+   q("select pay_mode, deposit_pct from provider_settings where provider_id = %s", (pid,))[0] == ("deposit", 30))
+q("insert into provider_settings (provider_id, pay_mode, deposit_pct) values (%s, 'full', 80) on conflict (provider_id) do update set pay_mode = excluded.pay_mode, deposit_pct = excluded.deposit_pct", (pid,), uid=owner)
+ok("4/11: tampoco con un upsert (como guarda Horarios)", q("select pay_mode, deposit_pct from provider_settings where provider_id = %s", (pid,))[0] == ("deposit", 30))
+q("select admin_set_fees(10, 0, 0, 0, 0)", uid=adm)
+r44 = book(sv, at(29, 13), cli)[0][0]
+ok("4/11: la reserva nueva lleva la seña del 30% ($3.000 de $10.000) + la comisión del precio ($1.000)",
+   r44["amount_due"] == 4000 and bk(r44["booking_ids"][0], "deposit, client_fee") == (3000, 1000))
+q("select cancel_by_client(%s)", (r44["booking_ids"][0],), uid=cli)
+q("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+q("update provider_settings set payout_term = 'd10', deposit_pct = 50 where provider_id = %s", (pid,))
+
+# ---------- D34 · la comisión de TuTiempo sale del PRECIO del turno, no de la seña ----------
+q("select admin_set_fees(10, 0, 0, 0, 0)", uid=adm)
+q("update provider_settings set deposit_pct = 30 where provider_id = %s", (pid,))
+r50 = book(sv, at(30, 9), cli)[0][0]; b50 = r50["booking_ids"][0]
+ok("D34: seña 30% ($3.000) + 10% del precio ($1.000, no $300 de la seña) = $4.000",
+   r50["amount_due"] == 4000 and bk(b50, "deposit, client_fee, price") == (3000, 1000, 10000))
+ok("D34: charge_parts(seña, precio, %, %MP) es la cuenta de la base (corte $10.000, seña $5.000, 7%: $5.700; con 7,61%: $6.170)",
+   one("select charge_parts(5000, 10000, 7, 0)", role="anon") == [700, 0, 5700] and one("select charge_parts(5000, 10000, 7, 7.61)", role="anon") == [700, 470, 6170]
+   and one("select charge_parts(0, 10000, 7, 0)", role="anon") == [0, 0, 0])
+q("select cancel_by_client(%s)", (b50,), uid=cli)
+q("update provider_settings set deposit_pct = 50 where provider_id = %s", (pid,))
+q("select admin_set_fees(10, 7.61, 5.31, 4.10, 1.80)", uid=adm)
+
+# ---------- La migración completa se puede volver a correr sobre una base con datos ----------
+import os
+todo = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "supabase", "TODO_EN_UNO.sql"), encoding="utf8").read()
+# v2: un aviso de D30 con el texto viejo (de antes de la migración) se reescribe al correrla
+q("""insert into provider_notices (provider_id, kind, ref, body) values (%s, 'mp_cost', 'costo-VIEJO',
+     'Mercado Pago te cobró 6,31%% ($400) en vez de 5,31%% ($336) en el pago n° VIEJO: revisá que el plazo de acreditación de tu perfil (Cobros) sea el mismo que el de tu cuenta de Mercado Pago.')""", (pid,))
+for vez in (1, 2):
+    with conn.cursor() as c:
+        c.execute(todo)
+ok("TODO_EN_UNO.sql se puede volver a correr 2 veces sobre esta base", one("select to_regclass('public.provider_secrets')") is None)
+ok("D30: volver a correr la migración no cambia las comisiones cargadas ni el plazo del prestador",
+   one("select row(deposit_commission_pct, mp_pct_d10)::text from app_settings") == "(10.00,5.31)"
+   and one("select payout_term from provider_settings where provider_id = %s", (pid,)) == "d10")
+ok("v2: el aviso de D30 que tenía el texto viejo queda con el nuevo (no se borra)",
+   one("select body from provider_notices where ref = 'costo-VIEJO'") == "Mercado Pago te cobró 6,31% ($400) en vez de 5,31% ($336) en el pago n° VIEJO. Si tu cuenta tiene otras tasas, avisanos.")
+ok("…y los datos siguen igual", one("select count(*) from payments") > 10 and one("select status from mp_accounts where id = %s", (acc1,)) == "active"
+   and one("select count(*) from mp_accounts where access_token !~ '^v[0-9]+:'") == 0)
+
+# ---------- D43 (10/11, Bruno): el pago que llega con el profesional suspendido se devuelve ----------
+def total_of(bid):
+    return one("select deposit + client_fee + mp_fee - paid_wallet from bookings where id = %s", (bid,))
+def fee_of(bid):
+    return one("select client_fee from bookings where id = %s", (bid,))
+cli3 = mkuser("carla@cobros.ar", "Carla Cobros")
+for d43 in range(30, 45):   # el primer día que atiende a las 9 (lejos de los turnos de arriba)
+    r43 = book(sv, at(d43, 9), cli3)
+    if not err(r43):
+        break
+ok("D43: (reserva antes de la suspensión)" + ("" if not err(r43) else " · " + str(r43)), not err(r43))
+hs = r43[0][0]["booking_ids"]
+q("update providers set status = 'suspended' where id = %s", (pid,))
+ok("D43: suspendido, no se reservan turnos nuevos", err(book(sv, at(d43, 10), cli3), "provider_not_available"))
+rs = pay(hs, "PAGO-SUSP", total_of(hs[0]), fee_of(hs[0]), pid, acc1)
+ok("D43: pago aprobado con el profesional suspendido → el turno no se confirma",
+   rs["confirmed"] == 0 and rs["refunded"] == 1 and bk(hs[0], "status, payment_id is not null") == ("expired", True))
+ok("D43: …la devolución queda registrada por todo lo cobrado, con el motivo provider_suspended",
+   q("select r.amount, r.reason, r.status from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = 'PAGO-SUSP'") == [(total_of(hs[0]), "provider_suspended", "pending")]
+   and one("select outcome from payments where mp_payment_id = 'PAGO-SUSP'") == "refund"
+   and q("select result, reason from payment_bookings pb join payments p on p.id = pb.payment_id where p.mp_payment_id = 'PAGO-SUSP'") == [("refund", "provider_suspended")])
+msg = q("select body from client_messages where ref = %s and kind = 'cancel'", (str(hs[0]),))
+ok("D43: …al cliente le llega el aviso (neutro, sin link al perfil) y entra a la cola de emails",
+   len(msg) == 1 and "por ahora no está tomando reservas" in msg[0][0] and "Te devolvemos todo lo que pagaste" in msg[0][0] and "reservá de nuevo" not in msg[0][0] and "http" not in msg[0][0]
+   and one("select count(*) from email_outbox o join client_messages m on m.id = o.message_id where m.ref = %s and m.kind = 'cancel'", (str(hs[0]),)) == 1)
+ok("D43: …y el profesional, el de pago devuelto", one("select count(*) from provider_notices where provider_id = %s and kind = 'mp_refunded' and body like %s", (pid, "%cuenta suspendida%")) == 1)
+ok("D43: el mismo aviso de pago otra vez no devuelve dos veces", pay(hs, "PAGO-SUSP", total_of(hs[0]), fee_of(hs[0]), pid, acc1)["status"] == "already_processed"
+   and one("select count(*) from refunds r join payments p on p.id = r.payment_id where p.mp_payment_id = 'PAGO-SUSP'") == 1)
+q("update providers set status = 'active' where id = %s", (pid,))
+ha = book(sv, at(d43, 9), cli3)[0][0]["booking_ids"]
+ra = pay(ha, "PAGO-REACT", total_of(ha[0]), fee_of(ha[0]), pid, acc1)
+ok("D43: reactivado, un pago nuevo normal confirma el turno (y en el mismo horario que se devolvió)",
+   ra["confirmed"] == 1 and bk(ha[0], "status") == ("confirmed",) and one("select count(*) from refunds where booking_id = %s", (ha[0],)) == 0)
+
+print("TODO OK" if not F else f"{F} FALLAS")
+sys.exit(1 if F else 0)

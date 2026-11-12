@@ -1,0 +1,63 @@
+# TuTiempo · Hostinger (LiteSpeed / Apache)
+DirectoryIndex index.html
+Options -Indexes
+AddDefaultCharset UTF-8
+AddType font/woff2 .woff2
+AddType application/javascript .js .cjs
+AddType application/manifest+json .webmanifest
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Forzar HTTPS
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+  # Bloquear archivos ocultos y de respaldo
+  RewriteRule (^|/)\.(?!well-known/) - [F,L]
+  RewriteRule \.(bak|sql|log|ini|sh|md|zip)$ - [F,L,NC]
+  # Direcciones de la app (Bloque B): un pedido que no es un archivo ni una carpeta y no tiene extensión va a index.html,
+  # y el enrutador de la app muestra la pantalla (o "no encontrado"). Un archivo con extensión que no existe da 404:
+  # nunca HTML en lugar de un .js o un .css. La query (?mp=, ?token_hash=) pasa tal cual.
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_URI} !\.[A-Za-z0-9]{1,8}$
+  RewriteRule ^ /index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "DENY"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+  Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+  # CSP: solo scripts propios; conexiones solo a Supabase. Si usás un dominio propio para Supabase, agregalo en connect-src e img-src.
+  # H30: Cloudflare Turnstile (el CAPTCHA de Supabase Auth) carga su script y su recuadro desde challenges.cloudflare.com
+  # (script-src y frame-src). Sin turnstileSiteKey en config.js la app no lo carga.
+  # Bloque C: el service worker (/sw.js) y el manifest, solo de este sitio (worker-src y manifest-src).
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+  <FilesMatch "\.(html|js|cjs)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  <FilesMatch "^config\.(js|cjs)$">
+    Header set Cache-Control "no-store"
+  </FilesMatch>
+  # Bloque C: el service worker, el manifest y la pantalla sin conexión, siempre al día (el navegador revisa sw.js y
+  # el manifest seguido: con caché larga, una versión nueva tardaría en llegar)
+  <FilesMatch "^(sw\.js|manifest\.webmanifest|offline\.(html|js))$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  <FilesMatch "\.png$">
+    Header set Cache-Control "public, max-age=604800"
+  </FilesMatch>
+  <FilesMatch "\.(woff2|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  # JS y CSS de assets/ (Vite): el nombre lleva un hash del contenido, así que nunca cambian; un año de caché
+  <FilesMatch "-[A-Za-z0-9_-]{8}\.(js|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript image/svg+xml
+</IfModule>

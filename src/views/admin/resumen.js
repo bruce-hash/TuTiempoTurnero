@@ -1,0 +1,117 @@
+import { money, pctTxt } from "../../lib/dinero.js";
+import { esc } from "../../lib/dom.js";
+import { dm } from "../../lib/fechas.js";
+import { CATS } from "../../lib/rubros.js";
+import { dniRequired } from "../../lib/verificacion.js";
+import { admIc } from "./admin.js";
+import { admReview } from "./revisar.js";
+import { alertItems, markShownAlerts } from "../../lib/avisos-admin.js";
+import { S } from "../../state.js";
+import { store } from "../../store.js";
+import { ic } from "../../ui/iconos.js";
+
+// resumen del admin: comisión del mes, alertas, hoy y ayer, últimas 4 semanas, indicadores, más activos y rubros
+export function admRes(data) {
+  const st = data.st;
+  const pending = data.pv.filter((prov) => prov.status === "pending");
+  // activos sin Mercado Pago: el aviso dice quiénes (hasta 3) y lleva a la lista filtrada
+  const noMp = data.pv.filter((prov) => prov.status === "active" && !prov.mp);
+  const nNoMp = Math.max(+st.mp_missing || 0, noMp.length);
+  const noMpNames = noMp.slice(0, 3).map((prov) => `<b>${esc(prov.name)}</b>`).join(", ") + (nNoMp > 3 ? ` y ${nNoMp - 3} más` : "");
+  // variación contra el mes pasado
+  const delta = (now, prev) => {
+    now = +now || 0;
+    prev = +prev || 0;
+    if (!prev) {
+      return "";
+    }
+    const change = Math.round(((now - prev) / prev) * 100);
+    return `<em class="dl">${change >= 0 ? "▲" : "▼"} ${Math.abs(change)}% vs. mes pasado</em>`;
+  };
+  const kpi = (label, value, sub, extra) =>
+    `<div class="kpi"><span>${label}</span><b>${value}</b>${extra || ""}${sub ? `<small>${sub}</small>` : ""}</div>`;
+  const nMonth = +st.bookings_month || 0;
+  const ticket = nMonth ? Math.round(+st.gross_month / nMonth) : 0;
+  const nsPct = nMonth ? Math.round((+st.no_show_month / nMonth) * 100) : 0;
+  const days = (st.by_day || []).map((row) => ({
+    day: String(row.day).slice(0, 10),
+    n: +row.n || 0,
+    gross: +row.gross || 0,
+    fee: +row.fee || 0,
+  }));
+  // by_day trae los últimos 30 días: se agrupan de a 7 desde hoy para atrás
+  const weeks = [0, 1, 2, 3]
+    .map((weeksAgo) => {
+      const wdays = days.slice(Math.max(0, days.length - (weeksAgo + 1) * 7), Math.max(0, days.length - weeksAgo * 7));
+      const week = {
+        n: 0,
+        gross: 0,
+        fee: 0,
+        from: wdays.length ? wdays[0].day : "",
+        to: wdays.length ? wdays[wdays.length - 1].day : "",
+      };
+      wdays.forEach((day) => {
+        week.n += day.n;
+        week.gross += day.gross;
+        week.fee += day.fee;
+      });
+      return week;
+    })
+    .filter((week) => week.from);
+  const maxN = Math.max(1, ...weeks.map((week) => week.n));
+  const labels = ["Últimos 7 días", "La semana anterior", "Hace 2 semanas", "Hace 3 semanas"];
+  const today = days[days.length - 1] || {
+    n: 0,
+    fee: 0,
+  };
+  const yesterday = days[days.length - 2] || {
+    n: 0,
+    fee: 0,
+  };
+  // v2 (3/11): cada aviso con su clave (cambia si cambia lo que dice): se puede borrar y uno borrado no vuelve igual
+  const ids = (list) => list.map((prov) => prov.id).sort((a, b) => a - b).join(",");
+  const alerts = [
+    pending.length ? { key: `pend:${ids(pending)}`, html: `${ic("dni")} <b>${pending.length}</b> profesional${pending.length > 1 ? "es esperan" : " espera"} ${dniRequired() ? "la verificación del DNI" : "aprobación"}. <button class="lnk" data-act="admT" data-t="prov">Revisar</button>` } : null,
+    nNoMp ? { key: `nomp:${ids(noMp) || nNoMp}`, html: `${ic("sena")} <b>${nNoMp}</b> profesional${nNoMp > 1 ? "es activos no conectaron" : " activo no conectó"} Mercado Pago: no ${nNoMp > 1 ? "pueden" : "puede"} cobrar señas${noMp.length ? ` (${noMpNames})` : ""}. <button class="lnk" data-act="admT" data-t="prov" data-f="nomp">Ver quiénes</button>` } : null,
+    +st.providers_suspended
+      ? { key: `susp:${st.providers_suspended}`, html: `${ic("bloquear")} <b>${st.providers_suspended}</b> suspendido${+st.providers_suspended > 1 ? "s" : ""}.` }
+      : null,
+    nsPct >= 8 ? { key: `ns:${new Date().toISOString().slice(0, 7)}`, html: `${ic("aviso")} Las faltas llegan al ${nsPct}% de los turnos del mes.` } : null,
+    // C02: el servidor no devuelve la app en las direcciones internas (recargar o abrir un link lleva al inicio)
+    S.routesOk === false ? { key: "routes", html: `${ic("web")} <b>El sitio no devuelve la app en sus direcciones</b> (por ejemplo /panel/agenda): al recargar o al abrir un link o el QR de un perfil se puede volver al inicio. Revisá que el archivo .htaccess esté subido a la carpeta del sitio (docs/02, «Hostinger»).` } : null,
+  ];
+  const shown = alertItems(alerts);
+  // los que se ven ahora quedan vistos (en la próxima visita, "leídos"), después de dibujar
+  setTimeout(markShownAlerts, 0);
+  const byCatMonth = st.by_category_month || {};
+  const byCat = st.by_category || {};
+  const maxCat = Math.max(1, ...CATS.map(([cat]) => +byCatMonth[cat] || 0));
+  const thisWeek = weeks[0];
+  const lastWeek = weeks[1];
+  const trend = thisWeek && lastWeek && lastWeek.n ? Math.round(((thisWeek.n - lastWeek.n) / lastWeek.n) * 100) : null;
+  return `<div class="kpi big admhero"><span>Comisión de TuTiempo este mes (${pctTxt(store.FEES.commission)}% del servicio)</span><b>${money(+st.commission_month || 0)}</b>${delta(st.commission_month, st.commission_prev)}</div>
+   ${shown.count ? `<div class="panel admalert"><div class="admal-h"><p class="lbl">Avisos</p>${shown.clearBtn}</div><ul class="adml">${shown.html}</ul></div>` : ""}
+   ${admReview()}
+   <div class="admday"><div><span>Hoy</span><b>${today.n} turno${today.n === 1 ? "" : "s"}</b><small>Comisión ${money(today.fee)}</small></div><div><span>Ayer</span><b>${yesterday.n} turno${yesterday.n === 1 ? "" : "s"}</b><small>Comisión ${money(yesterday.fee)}</small></div></div>
+   <div class="panel"><p class="lbl">Cómo vienen las semanas</p>
+    <div class="wks">${weeks
+      .map(
+        (
+          week,
+          index,
+        ) => `<div class="wkrow${index === 0 ? " cur" : ""}"><div class="wkh"><b>${labels[index]}</b><span>${dm(week.from)} al ${dm(week.to)}</span></div><div class="wkv"><b>${week.n}</b><span>turnos</span></div>
+      <div class="wkbar" aria-hidden="true"><i style="width:${Math.round((week.n / maxN) * 100)}%"></i></div><p class="wkm">Facturado <b>${money(week.gross)}</b> · Comisión <b>${money(week.fee)}</b></p></div>`,
+      )
+      .join("")}</div>
+    ${trend != null ? `<p class="note wknote">${trend >= 0 ? ic("sube") : ic("baja")} En los últimos 7 días hubo <b>${Math.abs(trend)}% ${trend >= 0 ? "más" : "menos"}</b> turnos que la semana anterior.</p>` : ""}</div>
+   <div class="kpis adm">${kpi("Facturado por la app", money(+st.gross_month || 0), "este mes", delta(st.gross_month, st.gross_prev))}${kpi("Turnos del mes", nMonth, "", delta(nMonth, st.bookings_prev))}
+    ${kpi("Ticket promedio", money(ticket), "por turno")}${kpi("Señas cobradas", money(+st.deposits_month || 0), "para los profesionales")}
+    ${kpi("Profesionales activos", st.providers_active, `+${st.new_providers_month || 0} nuevos este mes`)}${kpi("Clientes", st.clients, `+${st.new_clients_month || 0} nuevos este mes · cuentas de cliente`)}
+    ${kpi("Faltas", nsPct + "%", `${st.no_show_month || 0} turno${+st.no_show_month == 1 ? "" : "s"} sin aviso`)}${kpi("Cancelaciones", +st.cancelled_month || 0, "avisaron que no iban")}</div>
+   <div class="panel"><p class="lbl">Los más activos · últimos 30 días</p><ol class="ag admtop">${(st.top || []).map((prov, index) => `<li><span class="rankn">${index + 1}</span><div><b>${esc(prov.name)}</b><span>${admIc(prov.cats)} ${prov.activity} servicio${+prov.activity == 1 ? "" : "s"} hechos</span></div><b>${prov.activity}</b></li>`).join("") || "<li><span></span><div><span>Todavía no hay servicios hechos.</span></div></li>"}</ol>
+    <p class="note" style="text-align:left;margin:8px 0 0">Así se ordenan en la app: primero los que más servicios hacen.</p></div>
+   <div class="panel"><p class="lbl">Rubros · turnos del mes</p>${CATS.map(([cat, plural, one, icon]) => {
+     const count = +byCatMonth[cat] || 0;
+     return `<div class="srow"><div class="srow-h"><span>${icon} ${plural} <span class="hint">· ${+byCat[cat] || 0} profesional${+byCat[cat] == 1 ? "" : "es"}</span></span><b>${count}</b></div><div class="sbar"><i style="width:${Math.round((count / maxCat) * 100)}%;background:var(--brand)"></i></div></div>`;
+   }).join("")}</div>`;
+}

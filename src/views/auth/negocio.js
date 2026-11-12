@@ -1,0 +1,263 @@
+import { esc } from "../../lib/dom.js";
+import { STEPS, dniDone, setupTodo, stepDone } from "../../lib/alta.js";
+import { DOW } from "../../lib/fechas.js";
+import { ME, avatar, pr } from "../../lib/prestadores.js";
+import { CATS, catName } from "../../lib/rubros.js";
+import { cfg } from "../../lib/turnero.js";
+import { dniRequired } from "../../lib/verificacion.js";
+import { S } from "../../state.js";
+import { mpTermNote } from "../prestador/perfil.js";
+import { depositNote, termPicker } from "../prestador/plazo.js";
+import { dniForm } from "../prestador/verificacion.js";
+import { vLogin } from "./login.js";
+import { api } from "../../api/index.js";
+import { render } from "../../ui/render.js";
+import { ic } from "../../ui/iconos.js";
+
+// Registrá tu negocio (ingreso y registro, aprobado el 1/11): página completa en 5 pasos, después de la cuenta (paso 0,
+// la misma ventana de ingreso). Se guarda en cada paso ("Guardar y seguir"): si sale y vuelve, sigue donde quedó.
+// "Volver" no pierde nada. No recibe reservas hasta estar aprobado y con Mercado Pago conectado.
+
+// Paso 2: ejemplos por rubro (nombre y duración, sin precio; los puede ajustar el cliente de TuTiempo después)
+export const SVC_EXAMPLES = {
+  b: [["Corte", 30], ["Corte y barba", 45], ["Barba", 20], ["Corte infantil", 30]],
+  p: [["Corte", 45], ["Brushing", 30], ["Color", 90], ["Mechas", 120]],
+  m: [["Descontracturante", 60], ["Relajante", 60], ["Piedras calientes", 75]],
+  l: [["Lifting", 60], ["Extensiones clásicas", 120], ["Service", 60]],
+  u: [["Esmaltado semipermanente", 60], ["Kapping", 75], ["Esculpidas", 120]],
+  d: [["Cera piernas completas", 45], ["Cavado", 20], ["Cejas", 15]],
+};
+// Paso 3: plantillas de horarios. days: [dow, [desde, hasta], [desde, hasta] | null]
+export const HOUR_TEMPLATES = [
+  ["lv", "Lunes a viernes, 9 a 18", "Sábado y domingo cerrado", [1, 2, 3, 4, 5].map((dow) => [dow, ["09:00", "18:00"], null])],
+  ["ls", "Lunes a sábado, 9 a 13 y 16 a 20", "Con corte al mediodía", [1, 2, 3, 4, 5, 6].map((dow) => [dow, ["09:00", "13:00"], ["16:00", "20:00"]])],
+  ["ms", "Martes a sábado, 10 a 20", "Domingo y lunes cerrado", [2, 3, 4, 5, 6].map((dow) => [dow, ["10:00", "20:00"], null])],
+  ["dd", "Armarlo día por día", "Elegí qué días abrís y en qué horario", null],
+];
+export const DURATIONS = [15, 20, 30, 40, 45, 60, 75, 90, 120, 150, 180, 240];
+
+const errOf = (key) => (S.biz.errs && S.biz.errs[key] ? `<span class="ferr" id="berr-${key}">${ic("aviso")} ${esc(S.biz.errs[key])}</span>` : "");
+const field = (id, label, value, attrs = "", hint = "") =>
+  `<div class="f"><label for="${id}">${label}</label><input id="${id}" value="${esc(value || "")}" ${attrs}>${hint ? `<span class="hint">${hint}</span>` : ""}${errOf(id)}</div>`;
+
+function stepsAside(n) {
+  const item = (label, i) => {
+    const num = i + 1;
+    const cls = num === n ? "now" : stepDone(num) ? "done" : "";
+    // los pasos ya guardados se pueden volver a abrir
+    const go = cls === "done" ? `data-act="bizGo" data-n="${num}"` : "";
+    return `<li class="${cls}"><button type="button" ${go} ${go ? "" : "disabled"} ${num === n ? 'aria-current="step"' : ""}><span class="d">${cls === "done" ? "✓" : num}</span>${label}</button></li>`;
+  };
+  return `<aside class="biz-steps" aria-label="Pasos del alta"><p>Registrá tu negocio</p><ol>${STEPS.map(item).join("")}</ol>
+   <p class="note">Se guarda en cada paso: si salís, seguís donde quedaste.</p></aside>`;
+}
+// form: la etiqueta del formulario con "%" donde va el contenido (los pasos 4 y 5 no tienen: botones con data-act)
+function shell(n, body, { title, sub, next = "Guardar y seguir", form, finish }) {
+  const prog = `<div class="biz-prog">Paso ${n} de 5 · ${STEPS[n - 1]}<div class="segs">${STEPS.map((label, i) => `<i class="${i + 1 < n || stepDone(i + 1) ? "done" : i + 1 === n ? "now" : ""}"></i>`).join("")}</div></div>`;
+  const acts = `<div class="biz-acts">${n > 1 ? '<button type="button" class="btn btn-ghost" data-act="bizBack">Volver</button>' : '<span class="biz-saved">Podés cambiar todo después desde tu Perfil.</span>'}<button class="btn btn-pri" ${form ? 'type="submit"' : finish ? 'type="button" data-act="bizFinish"' : 'type="button" data-act="bizNext"'}>${next}</button></div>`;
+  const inner = `${prog}<h1 class="biz-h">${title}</h1><p class="am-sub">${sub}</p>${body}<div class="err" id="bizErr">${esc(S.biz.err || "")}</div>${acts}`;
+  return `<div class="biz">${stepsAside(n)}<section class="biz-card">${form ? form.replace("%", () => inner) : inner}</section></div>`;
+}
+
+function step1() {
+  const prov = S.barberAuth ? pr(ME()) : null;
+  const d = Object.assign({ name: prov ? prov.name : "", cats: prov ? prov.cats : [], addr: prov ? prov.addr : "", tel: prov ? prov.tel : "", ig: prov ? prov.ig : "" }, S.biz.data || {});
+  const photo = prov && prov.photo ? avatar(prov) : S.biz.photoPreview ? `<img src="${esc(S.biz.photoPreview)}" alt="">` : ic("trabajos");
+  return shell(
+    1,
+    `${field("bn", "Nombre del negocio", d.name, 'maxlength="80" autocomplete="organization"')}
+   <div class="f"><label>Rubro <span class="hint">(uno o más)</span></label><div class="catpick" style="margin:0">${CATS.map(([key, , name, icon]) => `<label><input type="checkbox" id="bc-${key}" ${(d.cats || []).includes(key) ? "checked" : ""}><span>${icon} ${name}</span></label>`).join("")}</div>${errOf("cats")}</div>
+   <div class="biz-row">${field("ba", "Dirección", d.addr, 'maxlength="160" autocomplete="street-address"')}<div class="f"><label for="bcity">Ciudad</label><select id="bcity" disabled><option>Olavarría</option></select></div></div>
+   <div class="biz-row">${field("bt", "Celular del negocio", d.tel, 'type="tel" inputmode="tel" maxlength="40" autocomplete="tel"', "Lo ve TuTiempo y el cliente que tiene un turno pago con vos.")}${field("bi", 'Instagram <span class="hint">(opcional)</span>', d.ig, 'maxlength="60" placeholder="@tunegocio"')}</div>
+   <div class="f"><label for="bphoto">Foto o logo <span class="hint">(opcional)</span></label><div class="biz-photo"><i>${photo}</i><div><input type="file" id="bphoto" accept="image/*"><div class="hint" style="margin-top:4px">Cuadrada, se ve en tu perfil y en el listado. Si no subís una, van tus iniciales.</div></div></div></div>`,
+    { title: "Tu negocio", sub: "Lo que ven tus clientes cuando te buscan.", form: '<form id="fBiz1" novalidate>%</form>' },
+  );
+}
+function step2() {
+  const prov = pr(ME());
+  const rows = S.biz.svcs || [];
+  const cats = prov.cats || [];
+  const durSel = (i, value) =>
+    `<select id="bsd${i}" aria-label="Duración del servicio ${i + 1}">${DURATIONS.concat(DURATIONS.includes(+value) ? [] : [+value])
+      .filter((min) => min > 0)
+      .sort((a, b) => a - b)
+      .map((min) => `<option value="${min}" ${+value === min ? "selected" : ""}>${min < 60 ? min + " min" : min % 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : min / 60 + " h"}</option>`)
+      .join("")}</select>`;
+  const catSel = (i, value) =>
+    cats.length > 1
+      ? `<div class="f"><label for="bsc${i}">Rubro</label><select id="bsc${i}">${cats.map((cat) => `<option value="${cat}" ${value === cat ? "selected" : ""}>${esc(catName(cat))}</option>`).join("")}</select></div>`
+      : "";
+  const examples = cats
+    .map(
+      (cat) =>
+        `<p class="lbl" style="margin:0 0 6px">Ejemplos para ${esc(catName(cat).toLowerCase())} (tocá para agregar)</p><div class="biz-chips">${(SVC_EXAMPLES[cat] || [])
+          .map(([name, min]) => `<button type="button" class="chip" data-act="bizEx" data-c="${cat}" data-n="${esc(name)}" data-d="${min}">＋ ${esc(name)} · ${min} min</button>`)
+          .join("")}</div>`,
+    )
+    .join("");
+  return shell(
+    2,
+    `${examples}
+   <div class="biz-svcs">${rows
+     .map(
+       (row, i) =>
+         `<div class="biz-svc ${cats.length > 1 ? "with-cat" : ""}"><div class="f"><label for="bsn${i}">Servicio</label><input id="bsn${i}" value="${esc(row[0])}" maxlength="80"></div><div class="f"><label for="bsd${i}">Duración</label>${durSel(i, row[1])}</div><div class="f"><label for="bsp${i}">Precio ($)</label><input id="bsp${i}" value="${row[2] || ""}" inputmode="numeric" placeholder="10000"></div>${catSel(i, row[3])}<button type="button" class="btn btn-ghost biz-x" data-act="bizSvcDel" data-i="${i}" aria-label="Quitar el servicio ${i + 1}">✕</button></div>`,
+     )
+     .join("")}</div>
+   <button type="button" class="lnk" data-act="bizSvcAdd">＋ Agregar otro servicio</button>
+   <p class="note" style="text-align:left;margin-top:12px">Necesitás al menos uno por rubro. El precio que cargues es el que ve el cliente; la seña se calcula sola.</p>`,
+    { title: "Servicios", sub: "Lo que reservan tus clientes. Podés sumar más después.", form: '<form id="fBiz2" novalidate>%</form>' },
+  );
+}
+function step3() {
+  const days = S.biz.days || {};
+  const tpl = S.biz.tpl || "";
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const row = (dow) => {
+    const day = days[dow] || { on: false, m: ["09:00", "18:00"], t: null };
+    return `<div class="biz-day ${day.on ? "" : "off"}"><label class="chk"><input type="checkbox" id="wd${dow}" ${day.on ? "checked" : ""}> <b>${DOW[dow]}</b></label>
+     <span class="biz-rng"><input type="time" id="wm${dow}f" value="${day.m[0]}" aria-label="${DOW[dow]} desde" ${day.on ? "" : "disabled"}> a <input type="time" id="wm${dow}t" value="${day.m[1]}" aria-label="${DOW[dow]} hasta" ${day.on ? "" : "disabled"}></span>
+     <span class="biz-rng"><label class="chk mini"><input type="checkbox" id="wt${dow}" ${day.t ? "checked" : ""} ${day.on ? "" : "disabled"}> y de</label><input type="time" id="wt${dow}f" value="${day.t ? day.t[0] : "16:00"}" aria-label="${DOW[dow]} tarde desde" ${day.on && day.t ? "" : "disabled"}> a <input type="time" id="wt${dow}t" value="${day.t ? day.t[1] : "20:00"}" aria-label="${DOW[dow]} tarde hasta" ${day.on && day.t ? "" : "disabled"}></span>${errOf("d" + dow)}</div>`;
+  };
+  return shell(
+    3,
+    `<div class="biz-opt" role="radiogroup" aria-label="Plantilla de horarios">${HOUR_TEMPLATES.map(([key, label, hint]) => `<label class="${tpl === key ? "on" : ""}"><input type="radio" name="btpl" data-act="bizTpl" data-k="${key}" ${tpl === key ? "checked" : ""}><span><b>${label}</b><small>${hint}</small></span></label>`).join("")}</div>
+   <div class="biz-days">${order.map(row).join("")}</div>${errOf("days")}`,
+    { title: "Horarios", sub: "Elegí una plantilla y ajustala. Los feriados quedan cerrados solos (si trabajás, los abrís desde Horarios) y las vacaciones las bloqueás vos.", form: '<form id="fBiz3" novalidate>%</form>' },
+  );
+}
+function step4() {
+  const conf = cfg(ME());
+  const mpOk = S.mp === "ok";
+  // 4/11 · Bloque 4: la seña es fija (30%, D06) y el plazo de Mercado Pago lo elige el profesional (D30)
+  return shell(
+    4,
+    `${depositNote("margin:0 0 12px")}${termPicker(S.biz.term || conf.term)}
+   <div class="biz-mp"><div><b>Mercado Pago</b><div class="hint">${mpOk ? "✓ Conectado: las señas entran directo a tu cuenta." : "Las señas entran directo a tu cuenta."}</div></div>${mpOk ? "" : '<button type="button" class="btn btn-pri btn-sm" data-act="bizMp">Conectar Mercado Pago</button>'}</div>
+   ${mpTermNote("margin-top:12px")}${mpOk ? "" : '<p class="note" style="text-align:left;margin-top:6px">Si preferís, conectalo después desde Perfil → Cobros.</p>'}`,
+    { title: "Seña y cobro", sub: "La seña de cada turno y cuándo te la acredita Mercado Pago." },
+  );
+}
+function step5() {
+  const body = dniRequired()
+    ? dniDone()
+      ? '<div class="am-ok">Ya tenemos tu DNI: lo revisa el equipo de TuTiempo.</div>'
+      : dniForm(S.dniSt || {})
+    : '<div class="am-ok"><b>Aprobación de TuTiempo</b><br>El equipo de TuTiempo revisa tu perfil antes de que aparezca en el listado. No tenés que cargar nada más.</div>';
+  // 7/11 · Legales: al enviar el negocio acepta los términos (incluyen las reglas para profesionales) y la privacidad
+  const legal = '<p class="note biz-legal">Al enviar tu negocio aceptás los <button type="button" class="lnk" data-go="terminos">Términos y condiciones</button> (incluyen las reglas para profesionales) y la <button type="button" class="lnk" data-go="privacidad">Política de privacidad</button>.</p>';
+  return shell(5, body + legal, {
+    title: "Verificación",
+    sub: dniRequired() ? "Para que tus clientes sepan quién sos." : "Último paso.",
+    next: "Enviar para aprobar",
+    finish: true,
+  });
+}
+function done() {
+  const prov = pr(ME());
+  const first = ((S.user && S.user.name) || (prov && prov.name) || "").split(" ")[0];
+  const todo = setupTodo().slice(2);
+  return `<div class="biz biz-one"><section class="biz-card" style="text-align:center"><div class="hero-ic">${ic("fiesta")}</div><h1 class="biz-h">¡Listo${first ? ", " + esc(first) : ""}!</h1>
+   <p class="am-sub">Tu negocio quedó cargado. Esto es lo que falta para recibir reservas:</p>
+   <ol class="steps" style="text-align:left"><li class="done"><span class="dot">✓</span><div><b>Datos, servicios, horarios y seña</b></div></li>${todo
+     .map(([label, ok], i) => `<li class="${ok ? "done" : i === 0 ? "now" : ""}"><span class="dot">${ok ? "✓" : i + 2}</span><div><b>${esc(label)}</b>${ok ? "" : label.startsWith("Conectar") ? "<span>Falta: sin esto no recibís reservas</span>" : ""}</div></li>`)
+     .join("")}</ol>
+   <button class="btn btn-pri btn-block" style="margin-top:8px" data-act="toPanel">Ir a mi Agenda</button></section></div>`;
+}
+
+// días del formulario: { dow: { on, m: [desde, hasta], t: [desde, hasta] | null } }
+export function daysFromCfg(conf) {
+  const days = {};
+  for (let dow = 0; dow < 7; dow++) {
+    const day = conf.days[dow] || {};
+    const m = day.m && day.m.on ? day.m : day.t && day.t.on ? day.t : null;
+    const t = day.m && day.m.on && day.t && day.t.on ? day.t : null;
+    days[dow] = { on: !!day.on && !!m, m: m ? [m.from, m.to] : ["09:00", "18:00"], t: t ? [t.from, t.to] : null };
+  }
+  return days;
+}
+export function daysFromTemplate(key) {
+  const tpl = HOUR_TEMPLATES.find((row) => row[0] === key);
+  const days = {};
+  for (let dow = 0; dow < 7; dow++) {
+    days[dow] = { on: false, m: ["09:00", "18:00"], t: null };
+  }
+  (tpl && tpl[3] ? tpl[3] : []).forEach(([dow, m, t]) => {
+    days[dow] = { on: true, m: m.slice(), t: t ? t.slice() : null };
+  });
+  return days;
+}
+// al entrar a un paso: lo que ya estaba guardado (o la plantilla sugerida)
+function prepareStep(step) {
+  const prov = pr(ME());
+  if (step === 2 && !S.biz.svcs && prov) {
+    S.biz.svcs = (prov.svcs || []).map((svc) => svc.slice());
+  }
+  if (step === 3 && !S.biz.days && prov) {
+    if (stepDone(3)) {
+      S.biz.days = daysFromCfg(cfg(ME()));
+      S.biz.tpl = "dd";
+    } else {
+      S.biz.days = daysFromTemplate("lv");
+      S.biz.tpl = "lv";
+    }
+  }
+}
+
+// D33: con sesión de cliente, antes del paso 1: ¿usa esta cuenta para el negocio o una aparte? Una cuenta es de cliente o
+// de negocio; si esta ya reservó, sigue a alguien o dejó reseñas, el negocio va en otra.
+function accountChoice() {
+  const hist = S.clientHist;
+  const email = esc((S.user && S.user.email) || "");
+  if (!hist) {
+    loadHistory();
+    return '<div class="biz biz-one"><section class="biz-card"><p class="note">Cargando…</p></section></div>';
+  }
+  const local = email.split("@")[0];
+  const tip = /@gmail\.com$/i.test((S.user && S.user.email) || "")
+    ? `<p class="note" style="text-align:left">¿Usás Gmail? Podés usar el mismo correo agregando <b>+negocio</b> antes de la arroba (<b>${local}+negocio</b> y tu @gmail.com de siempre): te llega a la misma casilla.</p>`
+    : '<p class="note" style="text-align:left">Podés usar otro email tuyo. Si tenés Gmail, el mismo correo con <b>+negocio</b> antes de la arroba te llega a la misma casilla.</p>';
+  if (!hist.any) {
+    return `<div class="biz biz-one"><section class="biz-card"><h1 class="biz-h">¿Usás esta cuenta para tu negocio?</h1>
+     <p class="am-sub">Con <b>${email}</b> todavía no reservaste, no seguís a nadie ni dejaste reseñas: la podés usar para tu negocio. Una cuenta de negocio no reserva como cliente.</p>
+     <button class="btn btn-pri btn-block" data-act="bizUseThis">Usar esta cuenta para mi negocio</button>
+     <div class="am-sec" style="justify-content:center"><button type="button" class="lnk" data-act="bizNewAccount">Prefiero una cuenta aparte</button></div></section></div>`;
+  }
+  return `<div class="biz biz-one"><section class="biz-card"><h1 class="biz-h">Tu negocio va en una cuenta aparte</h1>
+   <p class="am-sub">Con <b>${email}</b> ya reservaste, seguís a profesionales o dejaste reseñas. Una cuenta es de cliente o de negocio, nunca las dos: creá una cuenta nueva para tu negocio, con otro email. Esta queda como está.</p>
+   ${tip}
+   <button class="btn btn-pri btn-block" data-act="bizNewAccount">Cerrar sesión y crear la cuenta del negocio</button></section></div>`;
+}
+let loadingHist = false;
+function loadHistory() {
+  if (loadingHist) {
+    return;
+  }
+  loadingHist = true;
+  api
+    .clientHistory()
+    .then((hist) => {
+      S.clientHist = hist || { any: false };
+    })
+    .catch(() => {
+      S.clientHist = { any: true };
+    })
+    .finally(() => {
+      loadingHist = false;
+      render();
+    });
+}
+export function vNegocio() {
+  const step = S.bizStep;
+  if (!step) {
+    return vLogin();
+  }
+  if (step === "cuenta") {
+    return accountChoice();
+  }
+  if (step === "listo") {
+    return done();
+  }
+  prepareStep(step);
+  return [null, step1, step2, step3, step4, step5][step]();
+}

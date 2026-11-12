@@ -1,0 +1,54 @@
+import qrcode from "qrcode-generator";
+import { followersBlockedNote, provActive } from "../../lib/alta.js";
+import { esc } from "../../lib/dom.js";
+import { profileLinkText, profileUrl } from "../../router.js";
+import { store } from "../../store.js";
+import { gallery, rating, reviewsHtml } from "../../ui/resenas.js";
+import { ic } from "../../ui/iconos.js";
+
+// comunidad de un prestador, creada la primera vez que se pide
+// (en vivo arranca vacía y la completa la carga del perfil; en la demo se inventa a partir del rubro: src/demo/comunidad.js)
+export { comm } from "../../lib/comunidad.js";
+export function vBComunidad(prov) {
+  return `<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><p class="lbl" style="margin:0">Mis trabajos</p>${store.COMM.media.length ? '<button class="btn btn-ghost btn-sm" data-act="story" data-i="0">▶ Ver como historia</button>' : ""}</div>
+   <p class="note" style="text-align:left;margin:4px 0 10px">Tus clientes los ven en tu perfil y como historias.</p>${gallery(true)}</div>
+  <div class="stats2"><div><b>${store.COMM.followers}</b><span>Seguidores</span></div><div><b>${rating().toFixed(1)} ★</b><span>${store.COMM.reviews.length} reseñas</span></div><div><b>${store.COMM.media.length}</b><span>Fotos y videos</span></div></div>
+  <div class="panel avisarpanel"><p class="lbl">Avisar a tus seguidores</p>
+   ${
+     provActive()
+       ? `<div class="f" style="margin-bottom:10px"><label for="postTxt">Mensaje</label><textarea id="postTxt" placeholder="Ej: Hoy me quedan lugares de 15 a 17 h"></textarea></div>
+   <button class="btn btn-pri btn-block" data-act="publicar">Enviar a ${store.COMM.followers} seguidores</button>
+   <p class="note" style="margin-top:6px">A cada uno le llega un aviso en la app y una notificación con el link a tu perfil. Hasta 5 avisos por día, contando los huecos que ofrecés desde la Agenda.</p>`
+       : `<p class="note fol-off" style="text-align:left">${esc(followersBlockedNote())}</p>`
+   }</div>
+  <div class="panel"><p class="lbl">Reseñas de clientes</p>${reviewsHtml(true)}</div>
+  <div class="panel" style="text-align:center"><p class="lbl">Sumá seguidores</p><div class="qr" aria-hidden="true">${qr(profileUrl(prov))}</div><p style="margin:8px 0 2px;font-weight:700">${esc(profileLinkText(prov))}</p><p class="note">Imprimí el QR para el espejo y poné el link en tu bio de Instagram.</p>
+   <button class="btn btn-pri btn-block" data-act="qrPrint">${ic("imprimir")} Imprimir o guardar el QR en PDF</button>
+   <button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="copiarLink">Copiar link</button></div>`;
+}
+// C40 (V3b): hoja lista para imprimir (o "Guardar como PDF" desde la impresión del navegador), sin librerías nuevas:
+// nombre del negocio, el QR grande y el link. Va fuera de #app y la regla @media print deja solo esta hoja.
+export function qrSheet(prov, logo) {
+  return `<section class="qrsheet" aria-hidden="true"><div class="qs-logo">${logo}</div>
+   <h1>${esc(prov.name)}</h1><p class="qs-lead">Reservá tu turno online</p>
+   <div class="qs-qr">${qr(profileUrl(prov), 340)}</div>
+   <p class="qs-how">Escaneá el código con la cámara del celular</p><p class="qs-link">${esc(profileLinkText(prov))}</p>
+   <p class="qs-claim">TU TIEMPO. SU SOLUCIÓN. AL INSTANTE.</p></section>`;
+}
+// QR con la dirección del perfil (Bloque B), con qrcode-generator 2.0.4 (MIT, ver docs/licencias.md): corrección de
+// errores media y 4 módulos de margen blanco, como pide el estándar para que lo lean todas las cámaras
+function qr(url, px = 132) {
+  const code = qrcode(0, "M");
+  code.addData(url);
+  code.make();
+  const size = code.getModuleCount();
+  let dark = "";
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      if (code.isDark(row, col)) {
+        dark += `M${col} ${row}h1v1h-1z`;
+      }
+    }
+  }
+  return `<svg viewBox="-4 -4 ${size + 8} ${size + 8}" width="${px}" height="${px}" shape-rendering="crispEdges" style="background:#fff"><path fill="#0f172a" d="${dark}"/></svg>`;
+}
