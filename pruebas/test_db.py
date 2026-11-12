@@ -1817,5 +1817,30 @@ ok("D43: la cola de emails no acepta una fila sin aviso ni con los dos", err(q("
    and err(q("insert into email_outbox (message_id, notice_id, user_id, kind, expires_at) select m.id, n.id, %s, 'account', now() + interval '1 day' "
              "from client_messages m, provider_notices n limit 1", (ownS,))))
 
+# ---------- 12/11 · borrar un profesional con cajas cerradas (antes: day_closed) ----------
+def con_cajas(email, nombre):
+    own = mkuser(email, nombre)
+    pid = q("select register_provider(%s, 'Calle 12', array['b'], '2284 1212', null)", (nombre,), uid=own)[0][0]
+    q("update providers set status='active' where id=%s", (pid,))
+    hoy_ba = q("select (now() at time zone 'America/Argentina/Buenos_Aires')::date")[0][0]
+    for dias in (2, 20):   # un día cerrado de esta semana (day_closed) y uno viejo (day_too_old)
+        d = hoy_ba - dt.timedelta(days=dias)
+        q("insert into walkins (provider_id, at, kind, description, amount, method) values (%s, (%s::date + time '12:00') at time zone 'America/Argentina/Buenos_Aires', 'service', 'Corte', 5000, 'cash')", (pid, d))
+        q("insert into cash_closings (provider_id, kind, period, income) values (%s, 'day', %s, 5000)", (pid, d))
+    return own, pid
+ownB1, pB1 = con_cajas("borrar12a@test.ar", "Borrar Admin 12")
+ok("12/11: el profesional no puede tocar la caja de un día cerrado (el guardia sigue)",
+   err(q("delete from walkins where provider_id=%s", (pB1,), uid=ownB1), "day_closed"))
+r12 = q("select admin_delete_provider(%s)", (pB1,), uid=adm)
+ok("12/11: el admin borra a un profesional con cajas cerradas (de esta semana y viejas)", not err(r12)
+   and q("select status, owner_id from providers where id=%s", (pB1,))[0] == ("deleted", None)
+   and q("select count(*) from walkins where provider_id=%s", (pB1,))[0][0] == 0
+   and q("select count(*) from cash_closings where provider_id=%s", (pB1,))[0][0] == 0, str(r12))
+ownB2, pB2 = con_cajas("borrar12b@test.ar", "Borrar Propio 12")
+r12 = q("select delete_my_provider()", uid=ownB2)
+ok("12/11: …y el profesional da de baja su negocio con cajas cerradas", not err(r12)
+   and q("select status from providers where id=%s", (pB2,))[0][0] == "deleted"
+   and q("select count(*) from walkins where provider_id=%s", (pB2,))[0][0] == 0, str(r12))
+
 print("TODO OK" if not F else f"{F} FALLAS")
 sys.exit(1 if F else 0)
