@@ -8,9 +8,9 @@ import { api } from "../api/index.js";
 import { pending } from "../api/saved.js";
 import { LIVE } from "../config.js";
 import { S } from "../state.js";
-import { render } from "../ui/render.js";
 import { refreshAgendaNow, refreshCommunityNow } from "./agenda-al-dia.js";
 import { typing } from "./precios.js";
+import { drawSoon } from "./dibujar.js";
 
 const EVERY = 60000;
 const busy = () => pending.n > 0 || typing() || S.msgOpen || !!document.querySelector(".authmodal");
@@ -28,7 +28,8 @@ export async function refreshInboxNow() {
     await api.myMessages();
     const changed = inboxKey() !== before;
     if (changed && isClient() && !busy()) {
-      render();
+      // 12/11: nunca en medio de un toque (src/lib/dibujar.js): tocar la campanita justo cuando llegaba un aviso no abría
+      drawSoon(() => isClient() && !busy());
     }
     return changed;
   } catch {

@@ -19,18 +19,37 @@ const dropMessages = (keep) => {
   const kept = inbox.filter(keep);
   inbox.splice(0, inbox.length, ...kept);
 };
+// 12/11: después de borrar en la base, la lista se vuelve a pedir (lo que quedó de verdad); mientras tanto, una respuesta
+// de antes (el repaso de cada minuto, volver a la app) no la pisa: store.INBOX_EDIT
+const inboxKey = () => JSON.stringify((S.inbox || []).map((msg) => [msg.id, msg.read]));
+const afterDismiss = () => {
+  if (!api.myMessages) {
+    return null; // la demo no tiene base
+  }
+  const before = inboxKey();
+  return api.myMessages().then(() => {
+    if (inboxKey() !== before) {
+      render();
+    }
+  });
+};
 registerClick("inboxDel", (ev, el, act) => {
   const id = el.dataset.id;
+  store.INBOX_EDIT++;
   dropMessages((msg) => String(msg.id) !== id);
-  api.m.dismissMessages([+id]).catch(() => {});
+  Promise.resolve(api.m.dismissMessages([+id]))
+    .then(afterDismiss)
+    .catch(() => {});
   render();
 });
 // los que están en pantalla ya se vieron (la campanita los marca leídos al abrir): primero se marcan, después se borran
 registerClick("inboxClear", (ev, el, act) => {
+  store.INBOX_EDIT++;
   (S.inbox || []).forEach((msg) => (msg.read = true));
   dropMessages((msg) => !msg.read);
   Promise.resolve(api.m.readMessages())
     .then(() => api.m.dismissMessages(null))
+    .then(afterDismiss)
     .catch(() => {});
   toast("Borramos los avisos leídos");
   render();

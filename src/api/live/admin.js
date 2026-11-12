@@ -113,8 +113,23 @@ export const liveAdmin = {
     if (!S.user) {
       return;
     }
-    const rows = await call(sb.rpc("my_messages")).catch(() => []);
-    S.inbox = (rows || []).map((msg) => ({
+    // 12/11: si mientras llegaba la respuesta se marcaron leídos o se borraron avisos (store.INBOX_EDIT), la respuesta es
+    // de antes y no pisa la lista (los avisos borrados volvían); si falla, queda la lista que había (no «No tenés avisos»)
+    const edit = store.INBOX_EDIT || 0;
+    const uid = S.user.id;
+    const rows = await call(sb.rpc("my_messages")).catch(() => null);
+    if (!S.user || S.user.id !== uid) {
+      return;
+    }
+    if (rows == null || (store.INBOX_EDIT || 0) !== edit) {
+      // los avisos de otra cuenta (otra sesión en este dispositivo) nunca quedan a la vista
+      if (store.INBOX_FOR !== uid) {
+        S.inbox = [];
+      }
+      return;
+    }
+    store.INBOX_FOR = uid;
+    S.inbox = rows.map((msg) => ({
       id: msg.id,
       pid: msg.provider_id,
       name: msg.provider_name,

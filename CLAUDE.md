@@ -70,6 +70,9 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
     la actual con `sbScratch()` (no toca la sesión) y el código de `reauthenticate()` como `nonce`.
   - V3b (C22): `src/lib/agenda-al-dia.js` vuelve a pedir los turnos de la Agenda cada 30 s y al volver a la pestaña (sin
     Realtime) y solo dibuja si cambió algo; no toca la pantalla con un guardado pendiente, un formulario abierto o alguien escribiendo.
+  - 12/11: `src/lib/dibujar.js` (`drawSoon`): todo redibujo que llega solo (Agenda, avisos, volver a la app) espera a que
+    termine el toque, si no el toque se pierde (la campanita no abría). La bandeja del cliente descarta una respuesta de
+    `my_messages` que salió antes de un cambio local (`store.INBOX_EDIT`): «Borrar los leídos» no vuelve a aparecer.
   - V4 resto: C31 gastos fijos en `src/lib/fijos.js` (qué corre cada mes; en la demo, la misma regla) y en la base
     (`fixed_expenses`, `fixed_expenses_sync` al abrir el panel, `fixed_expense_save`/`_stop` solo desde el mes actual, D40; `fixed_id`/`fixed_month` solo las funciones, S16; un mes cerrado
     no cambia). C30: «Antes de cerrar» en la Caja del día (`dayPending`). C36: `products.cost`; las ventas, con «Vender producto» en la Caja del día (`saleForm`, 7/11).

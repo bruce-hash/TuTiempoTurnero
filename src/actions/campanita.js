@@ -6,12 +6,21 @@ import { markBellRead } from "../ui/campanita.js";
 import { render } from "../ui/render.js";
 import { setBtab } from "../lib/panel-nav.js";
 import { loadPart } from "../partes.js";
+import { refreshInboxNow } from "../lib/avisos-al-dia.js";
 
 // 4/11 · La campanita de avisos (src/ui/campanita.js): abrir y cerrar, y a dónde llevan los avisos del profesional
 registerClick("bellToggle", (ev, el, act) => {
   S.bellOpen = !S.bellOpen;
   if (S.bellOpen) {
     markBellRead();
+    // 12/11: al abrir, los avisos de la base (uno que acaba de llegar por push se ve ya, sin esperar el repaso del minuto);
+    // lo nuevo también queda leído
+    refreshInboxNow().then((changed) => {
+      if (changed && S.bellOpen) {
+        markBellRead(true);
+        render();
+      }
+    });
   }
   render();
   if (S.bellOpen) {
