@@ -10,11 +10,9 @@ import { cfg, freeCount, slotsFor } from "../lib/turnero.js";
 import { S } from "../state.js";
 import { go, render, renderSmooth } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
-import { SMAX } from "../views/prestador/estadisticas.js";
-import { ymk } from "../views/prestador/finanzas.js";
-import { PRESETS } from "../views/prestador/horarios.js";
-import { scheduleHorarios } from "./prestador-horarios.js";
-import { selectBtab, setBtab } from "../views/prestador/panel.js";
+import { ymk } from "../lib/finanzas-base.js";
+import { selectBtab, setBtab } from "../lib/panel-nav.js";
+import { loadAllParts, part } from "../partes.js";
 
 // un solo listener de toques: primero los atributos de navegación y selección (data-go, data-svc, data-day,
 // data-slot…), que cambian el estado y vuelven a dibujar; al final, data-act busca la acción en el registro
@@ -156,7 +154,10 @@ document.addEventListener("click", (ev) => {
   }
   const presetEl = ev.target.closest("[data-preset]");
   if (presetEl) {
-    const preset = PRESETS.find((row) => row[0] === presetEl.dataset.preset);
+    const preset = part("panel")?.PRESETS.find((row) => row[0] === presetEl.dataset.preset);
+    if (!preset) {
+      return;
+    }
     const conf = cfg(ME());
     [1, 2, 3, 4, 5].forEach((dow) => {
       conf.days[dow] = {
@@ -175,7 +176,7 @@ document.addEventListener("click", (ev) => {
   if (hhpEl) {
     $("#hhp").value = hhpEl.dataset.hhp;
     document.querySelectorAll("[data-hhp]").forEach((btn) => btn.setAttribute("aria-pressed", btn === hhpEl));
-    scheduleHorarios();
+    part("panel")?.scheduleHorarios();
     return;
   }
   const svEl = ev.target.closest("[data-sv]");
@@ -192,7 +193,7 @@ document.addEventListener("click", (ev) => {
   }
   const smoEl = ev.target.closest("[data-smo]");
   if (smoEl) {
-    S.smo = Math.min(SMAX(), (S.smo || 0) + +smoEl.dataset.smo);
+    S.smo = Math.min(part("panel")?.SMAX() ?? 0, (S.smo || 0) + +smoEl.dataset.smo);
     render();
     return;
   }
@@ -346,5 +347,14 @@ document.addEventListener("click", (ev) => {
   const accion = CLICK.get(act);
   if (accion) {
     accion(ev, actEl, act);
+  } else {
+    // 11/11 (división del código): la acción es de una parte que todavía no se bajó (por ejemplo, la campanita del
+    // profesional desde una pantalla de cliente): se bajan y se ejecuta
+    loadAllParts().then(() => {
+      const late = CLICK.get(act);
+      if (late && actEl.isConnected) {
+        late(ev, actEl, act);
+      }
+    });
   }
 });

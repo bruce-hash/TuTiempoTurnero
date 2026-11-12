@@ -3,7 +3,7 @@ import { TODAY, addDays, dkey, prevMonthDay } from "../lib/fechas.js";
 import { pr } from "../lib/prestadores.js";
 import { RUBRO, catName } from "../lib/rubros.js";
 import { store } from "../store.js";
-import { MSG_DEF } from "../views/prestador/mensajes.js";
+import { MSG_DEF } from "../lib/mensajes-def.js";
 
 // cierres de caja de ejemplo: todos los días del mes con movimientos, menos los dos últimos
 export function demoClosings(fin) {

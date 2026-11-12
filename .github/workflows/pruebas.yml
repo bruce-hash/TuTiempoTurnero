@@ -200,6 +200,9 @@ jobs:
       - name: App instalable y push (manifest, service worker, sin conexión, versión nueva, notificaciones)
         run: npm run test:pwa
 
+      - name: División del código (cada pantalla baja lo suyo, nada pasa de 500 kB, las partes sin conexión)
+        run: npm run test:partes
+
       - name: Comparación con la versión anterior (demo y en vivo, texto y capturas)
         run: npm run test:comparar
 

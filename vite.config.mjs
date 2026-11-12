@@ -27,9 +27,14 @@ export default defineConfig(({ command, mode }) => {
       outDir,
       // no se vacía la carpeta entera: ahí puede estar el config.js real (lo viejo se borra en limpiarSalida)
       emptyOutDir: false,
+      // el aviso de 500 kB vale para producción; el de prueba lleva la demo y va en un solo archivo (ver output)
+      chunkSizeWarningLimit: mode === "test" ? 2000 : 500,
       rolldownOptions: {
         // el código viene del app.cjs minificado del cliente, con comentarios /* @__PURE__ */ en lugares que Rolldown ignora
         checks: { invalidAnnotation: false },
+        // el build de prueba va en un solo archivo, como antes de la división (crawl.js lo corre en jsdom, que no carga
+        // módulos); la división de producción (src/partes.js) la prueban test:partes y test:verificar con dist/
+        output: mode === "test" ? { codeSplitting: false } : {},
       },
     },
     plugins: [
@@ -55,13 +60,19 @@ export default defineConfig(({ command, mode }) => {
         // Producción: src/demo/index.js (barra, datos de ejemplo y reinicio de la demo) se reemplaza por un módulo vacío.
         name: "tutiempo:sin-demo",
         enforce: "pre",
+        // 11/11 (división del código): lo mismo con src/ganchos-prueba.js, que con su import.meta.glob ansioso traía toda la
+        // app al arranque (y así las partes de src/partes.js no quedaban aparte).
         async resolveId(source, importer, options) {
-          if (conDemo || !source.endsWith("/demo/index.js")) return null;
+          if (conDemo || !/\/(demo\/index|ganchos-prueba)\.js$/.test(source)) return null;
           const r = await this.resolve(source, importer, { ...options, skipSelf: true });
-          return r && normalizePath(r.id) === ROOT_ID + "/src/demo/index.js" ? "\0tutiempo-demo-vacia" : null;
+          const id = r && normalizePath(r.id);
+          if (id === ROOT_ID + "/src/demo/index.js") return "\0tutiempo-demo-vacia";
+          if (id === ROOT_ID + "/src/ganchos-prueba.js") return "\0tutiempo-ganchos-vacios";
+          return null;
         },
         load(id) {
-          return id === "\0tutiempo-demo-vacia" ? "export {};" : null;
+          if (id === "\0tutiempo-demo-vacia") return "export {};";
+          return id === "\0tutiempo-ganchos-vacios" ? "export function exponerParaPruebas() {}" : null;
         },
       },
       {

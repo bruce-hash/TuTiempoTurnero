@@ -12,7 +12,7 @@ import { store } from "../store.js";
 import { AUTH_PAGES, focusFirstField, rememberOpener, returnFocus } from "../ui/ingreso.js";
 import { clearPending, setPending, stashPending } from "../lib/pendiente.js";
 import { pr } from "../lib/prestadores.js";
-import { useProvider } from "../views/prestador/panel.js";
+import { useProvider } from "../lib/panel-nav.js";
 import { go, render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 

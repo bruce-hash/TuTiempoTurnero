@@ -8,7 +8,7 @@ import { dniRequired } from "../../lib/verificacion.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { stampsOn } from "../../ui/sellos.js";
-import { DEPOSIT_PCT } from "../prestador/plazo.js";
+import { DEPOSIT_PCT } from "../../lib/sena.js";
 import { ic } from "../../ui/iconos.js";
 
 // D34: comisión de TuTiempo (% del precio del servicio) y % de Mercado Pago por plazo de acreditación. El ejemplo, con un

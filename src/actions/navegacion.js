@@ -11,10 +11,13 @@ import { go, render } from "../ui/render.js";
 import { profileUrl } from "../router.js";
 import { toggleAccountMenu } from "../ui/menu-cuenta.js";
 import { toast } from "../ui/toast.js";
-import { comm, qrSheet } from "../views/prestador/comunidad.js";
+import { comm } from "../lib/comunidad.js";
+import { loadPart, retryPart } from "../partes.js";
 import { IMAGO } from "../ui/iconos.js";
 
 // “Volver al inicio” desde la pantalla de error
+// 11/11: una parte de la app que no se pudo bajar (sin conexión): se vuelve a intentar
+registerClick("partRetry", (ev, el) => retryPart(el.dataset.part));
 registerClick("recover", (ev, el, act) => {
   S.view = "home";
   S.role = S.barberAuth && S.role === "barbero" ? "barbero" : "cliente";
@@ -131,7 +134,8 @@ registerClick("copiarLink", (ev, el, act) => {
   }
 });
 // C40 (V3b): la hoja del QR se agrega al final de la página, se imprime (ahí está "Guardar como PDF") y se saca
-registerClick("qrPrint", (ev, el, act) => {
+registerClick("qrPrint", async (ev, el, act) => {
+  const { qrSheet } = await loadPart("panel");
   document.querySelectorAll(".qrsheet").forEach((sheet) => sheet.remove());
   document.body.insertAdjacentHTML("beforeend", qrSheet(pr(ME()), IMAGO));
   document.body.classList.add("printing-qr");

@@ -9,31 +9,8 @@ import { lastTxt, realClients } from "./clientes.js";
 import { STORE } from "./panel.js";
 import { ic } from "../../ui/iconos.js";
 
-// avisos automáticos por defecto (el parámetro no se usa). 7/11 · Bloque 5: salen el recordatorio de 2 h y el saludo
-// de cumpleaños (ya no se mandan a nadie: send_scheduled_notices en la base)
-export const MSG_DEF = (cat) => [
-  {
-    k: "conf",
-    t: "Confirmación al reservar",
-    cuando: "Apenas reserva",
-    on: true,
-    txt: "¡Hola {nombre}! Tu turno en {barberia} quedó para el {dia} a las {hora}. Te esperamos en {direccion}.",
-  },
-  {
-    k: "r24",
-    t: "Recordatorio 24 h antes",
-    cuando: "Un día antes",
-    on: true,
-    txt: "{nombre}, te recordamos tu turno mañana a las {hora} en {barberia}. ¡Te esperamos!",
-  },
-  {
-    k: "rev",
-    t: "Pedido de reseña",
-    cuando: "2 horas después del turno",
-    on: true,
-    txt: "¡Gracias por venir, {nombre}! ¿Nos dejás tu opinión? Nos ayuda muchísimo: {link}",
-  },
-];
+import { MSG_DEF } from "../../lib/mensajes-def.js";
+export { MSG_DEF };
 store.MSGS = MSG_DEF();
 // mensajes listos para mandar a los clientes: [clave, título, texto]
 export const MSG_TPL = [

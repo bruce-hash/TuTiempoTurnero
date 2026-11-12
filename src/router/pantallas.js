@@ -14,7 +14,7 @@ import { S } from "../state.js";
 import { P, store } from "../store.js";
 import { svcByKey } from "../ui/sellos.js";
 import { toast } from "../ui/toast.js";
-import { setBtab } from "../views/prestador/panel.js";
+import { setBtab } from "../lib/panel-nav.js";
 import { nextStep } from "../lib/alta.js";
 import { ADMIN_TABS, PANEL_TABS, PROFILE_TABS, SLUG_OF, keyOf } from "./direcciones.js";
 
