@@ -170,6 +170,13 @@ async function normalizar(page) {
         --font-d:var(--font);--d-ls:-.02em;--hero-bg:linear-gradient(180deg,#ffffff,#f3f2ee);--hero-fg:#121212;--hero-muted:#5b5b57;--hero-em:#121212;
         --hero-chip:rgba(0,0,0,.06);--hero-bd:#e5e4df;--bar-bg:#121212;--bar-muted:#b5b5b0;--bar-btn-fg:#121212;--glow:rgba(18,18,18,0.4)}</style>`);
     }
+    // 12/11 (cambio a propósito): la barra «Tu próximo turno» y los chips del rubro oscuro (barberías) llevan el fondo de su
+    // tarjeta debajo (antes, texto claro sobre una página clara), y «Después, en el local» es más grande. En las dos
+    // versiones vuelve lo de antes; lo nuevo lo muestran las capturas del PR
+    if (!document.getElementById("cmp-1211")) {
+      document.head.insertAdjacentHTML("beforeend", `<style id="cmp-1211">.cchip.seg-b,.nextbar.seg-b{background:var(--brand-soft)!important}
+        .feeline{font-size:12px!important;color:var(--muted)!important;font-weight:500!important}</style>`);
+    }
     // 9/11 (cambio a propósito): en el celular, ningún campo con letra menor a 16 px (iOS agrandaba la página al tocarlo):
     // los campos quedan un poco más altos. Se aplica la misma regla a las dos versiones; la prueba ancho.mjs la controla.
     if (!document.getElementById("cmp-16px")) {

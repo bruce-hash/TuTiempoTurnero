@@ -2055,7 +2055,10 @@ async function turnoConMargen(p) {
     const before2 = await inboxHas2();
     await pa.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "tt-push" } })));
     await pa.waitForFunction(() => (S.inbox || []).some((msg) => msg.body === "Segunda novedad con la app abierta"), null, { timeout: 8000 }).catch(() => {});
-    ok("10/11: con la app abierta, la novedad aparece en la campanita sin recargar", !before2 && (await inboxHas2()) && (await pa.locator(".bell-btn .bell-n").count()) >= 1);
+    // 12/11: justo después de un toque la pantalla espera un instante para redibujar (src/lib/dibujar.js)
+    await pa.waitForSelector(".bell-btn .bell-n", { timeout: 3000 }).catch(() => {});
+    ok("10/11: con la app abierta, la novedad aparece en la campanita sin recargar", !before2 && (await inboxHas2()) && (await pa.locator(".bell-btn .bell-n").count()) >= 1,
+       JSON.stringify({ before2, has: await inboxHas2(), badge: await pa.locator(".bell-btn .bell-n").count() }));
     // S19 (8/11): con el negocio suspendido no hay «Avisar a tus seguidores» ni «Ofrecer» (la base también lo rechaza)
     await q("update providers set status = 'suspended' where id = $1", [sofi.id]);
     await ps.goto(BASE + "/panel/trabajos"); await ps.waitForSelector(".avisarpanel", { timeout: 8000 }).catch(() => {}); await ps.waitForTimeout(500);
@@ -2291,6 +2294,46 @@ async function turnoConMargen(p) {
       await p6.waitForTimeout(1200);
       ok(`10/11: ${label}: …y el turno nuevo aparece apenas termina el toque`, new RegExp("Llega " + label).test(await p6.locator(".tl").innerText().catch(() => "")));
       await ctx.close();
+    }
+  }
+  // 12/11 · la campanita del cliente: un aviso que llega justo mientras se toca la campanita no se come el toque, y
+  // «Borrar los leídos» no se deshace con un repaso que ya estaba en camino (la respuesta vieja pisaba la lista)
+  {
+    const cid = (await q("insert into auth.users (email, encrypted_password, email_confirmed_at, raw_user_meta_data) values ('campana@test.ar','Camp2026xx',now(),'{\"full_name\":\"Carlos Campana\"}') returning id::text"))[0].id;
+    const cpid = (await q("select id from providers where name like 'Sofía%'"))[0].id;
+    for (const body of ["Aviso uno", "Aviso dos"]) await q("insert into client_messages (provider_id, user_id, body) values ($1,$2,$3)", [cpid, cid, body]);
+    for (const [label, opts] of [["celular", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }], ["compu", { viewport: { width: 1366, height: 860 } }]]) {
+      const ctx = await b.newContext(opts); const pc = await ctx.newPage(); pc.on("pageerror", (e) => errs.push(e.message));
+      await pc.goto(BASE + "/ingresar"); await pc.waitForSelector("#ai_e");
+      await pc.fill("#ai_e", "campana@test.ar"); await pc.fill("#ai_p", "Camp2026xx"); await pc.click("#fLogin button[type=submit]");
+      await pc.waitForFunction(() => window.S && S.user && (S.inbox || []).length >= 2, null, { timeout: 10000 }).catch(() => {}); await pc.waitForTimeout(800);
+      // llega un aviso nuevo justo entre que el dedo baja y sube sobre la campanita
+      const box = await pc.locator("#nav .bell-btn").boundingBox();
+      const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+      const llega = async () => { await q("insert into client_messages (provider_id, user_id, body) values ($1,$2,$3)", [cpid, cid, "Llega durante el toque " + label]); await pc.evaluate(() => refreshInboxNow()); await pc.waitForTimeout(500); };
+      if (label === "celular") {
+        const cdp = await ctx.newCDPSession(pc);
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx, y: cy }] });
+        await llega();
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      } else {
+        await pc.mouse.move(cx, cy); await pc.mouse.down(); await llega(); await pc.mouse.up();
+      }
+      await pc.waitForTimeout(1200);
+      ok(`12/11: ${label}: tocar la campanita justo cuando llega un aviso la abre igual (con el aviso nuevo)`, await pc.isVisible("#bellPanel")
+         && new RegExp("Llega durante el toque " + label).test(await pc.locator("#bellPanel").innerText().catch(() => "")));
+      // «Borrar los leídos» con un repaso lento en camino (la respuesta de antes de borrar llega después)
+      await pc.route("**/rest/v1/rpc/my_messages*", async (route) => { const r = await route.fetch(); await new Promise((res) => setTimeout(res, 2500)); await route.fulfill({ response: r }); });
+      await pc.evaluate(() => { refreshInboxNow(); });
+      await pc.waitForTimeout(300);
+      await pc.click("#bellPanel [data-act=inboxClear]");
+      await pc.waitForTimeout(4000);
+      await pc.unroute("**/rest/v1/rpc/my_messages*");
+      const left = await pc.evaluate(() => ({ inbox: (S.inbox || []).length, badge: !!document.querySelector("#nav .bell-n") }));
+      ok(`12/11: ${label}: «Borrar los leídos» no se deshace con un repaso que ya estaba en camino`, left.inbox === 0 && !left.badge
+         && (await q("select count(*)::int c from client_messages where user_id = $1 and dismissed_at is null", [cid]))[0].c === 0, JSON.stringify(left));
+      await ctx.close();
+      for (const body of ["Aviso uno", "Aviso dos"]) await q("insert into client_messages (provider_id, user_id, body) values ($1,$2,$3)", [cpid, cid, body]);
     }
   }
   ok("sin errores de JavaScript", errs.length === 0); if (errs.length) console.log(errs.slice(0, 5), bad);

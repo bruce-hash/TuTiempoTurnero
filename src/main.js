@@ -83,6 +83,10 @@ async function boot() {
       }
       if (event === "SIGNED_OUT") {
         S.user = null;
+        // 12/11: los avisos de la cuenta que salió no quedan en memoria
+        S.inbox = [];
+        S.bellOpen = false;
+        store.INBOX_FOR = null;
         clearPendingPay(null);
         S.barberAuth = false;
         if (S.role === "barbero") {

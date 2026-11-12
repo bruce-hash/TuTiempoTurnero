@@ -13,6 +13,7 @@ import { go, render } from "../ui/render.js";
 import { resumePendingPay } from "./cobro-pendiente.js";
 import { typing } from "./precios.js";
 import { isStandalone } from "./pwa.js";
+import { drawSoon } from "./dibujar.js";
 import { pushAvailability, refreshPush } from "./push.js";
 
 const EVERY = 15000; // a lo sumo una vez cada 15 s (volver a primer plano dispara varios eventos juntos)
@@ -27,9 +28,10 @@ export async function refreshScreen() {
     return false;
   }
   last = Date.now();
+  // 12/11: nunca en medio de un toque (src/lib/dibujar.js)
   const done = () => {
     if (!busy()) {
-      render();
+      drawSoon(() => !busy());
     }
   };
   // la Agenda y el perfil del profesional ya se ponen al día solos al volver (agenda-al-dia.js, precios.js)

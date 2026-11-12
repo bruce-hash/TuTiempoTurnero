@@ -145,16 +145,19 @@ export function bell() {
 }
 
 // al abrir quedan leídos (en la base y en pantalla); los que eran nuevos se siguen resaltando hasta cerrar
-export function markBellRead() {
+// keep: suma a los que ya estaban resaltados (lo que llegó con la lista abierta)
+export function markBellRead(keep) {
   const list = items();
-  opened = new Set(list.filter((item) => !item.read).map((item) => String(item.id)));
-  if (!opened.size) {
+  const fresh = list.filter((item) => !item.read).map((item) => String(item.id));
+  opened = keep ? new Set([...opened, ...fresh]) : new Set(fresh);
+  if (!fresh.length) {
     return;
   }
   list.forEach((item) => (item.read = true));
   if (forProvider()) {
     api.m.readNotices();
   } else {
+    store.INBOX_EDIT++;
     api.m.readMessages();
   }
 }

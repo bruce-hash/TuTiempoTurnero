@@ -131,7 +131,11 @@ footer .in>.legal{flex-basis:100%;max-width:none;border-top:1px solid var(--line
 .notif div{flex:1;min-width:0}
 /* ===== v28 ===== */
 .actv{font-size:12px;color:var(--muted)}
-.feeline{font-size:12px!important;color:var(--muted);font-weight:500}
+/* 12/11: el rubro oscuro (barberías) tiene el fondo suave transparente: sobre una página clara, el chip y la barra
+   «Tu próximo turno» quedaban texto claro sobre claro. Con el fondo de su propia tarjeta debajo se leen siempre. */
+.cchip.seg-b,.nextbar.seg-b{background:linear-gradient(var(--brand-soft),var(--brand-soft)),var(--card)}
+/* 12/11: «Después, en el local» más grande (era 12 px y gris): lo que falta pagar se lee como el resto del detalle */
+.feeline{font-size:15px!important;color:var(--fg);font-weight:600}
 .bk-svc{margin:0;font-weight:800;font-size:16px}
 .tacts{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tacts .btn{min-height:48px}
 .btabw{display:flex;gap:6px;align-items:center}.btabw .btabs{flex:1;min-width:0;position:relative}
