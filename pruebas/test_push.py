@@ -147,7 +147,8 @@ ok("la confirmación entra a la cola una vez por dispositivo", conf == [("conf",
 q("select notify_booking(%s, 'conf')", (b1,))
 ok("el aviso repetido no suma otra notificación", len(cola(ana, "conf")) == 2)
 q("insert into client_messages (provider_id, user_id, body) values (%s, %s, 'Hola, tengo lugar el sábado')", (pid, ana))
-ok("los mensajes que escribe el prestador (msg) no van por push", one("select count(*) from push_outbox where user_id = %s and kind not in ('conf')", (ana,)) == 0)
+ok("12/11: el mensaje que escribe el profesional (msg) va por push, una vez por dispositivo", [r[0] for r in cola(ana, "msg")] == ["msg", "msg"]
+   and one("select count(*) from push_outbox where user_id = %s and kind not in ('conf','msg')", (ana,)) == 0)
 ep_ap = sub(apagado)
 q("update profiles set push_notices = false where id = %s", (apagado,))
 b_ap = turno(apagado, 48)
@@ -155,6 +156,9 @@ q("select notify_booking(%s, 'conf')", (b_ap,))
 ok("con «Recordatorios y novedades» apagada, la confirmación igual va", cola(apagado, "conf") == [("conf", "pending", None)])
 b_ap24 = turno(apagado, 20)
 q("select send_scheduled_notices()")
+q("insert into client_messages (provider_id, user_id, body) values (%s, %s, 'Hola, tengo lugar')", (pid, apagado))
+ok("12/11: …y con «Recordatorios y novedades» apagada, el mensaje del profesional no va por push (en la campanita, sí)", cola(apagado, "msg") == []
+   and one("select count(*) from client_messages where user_id = %s and kind = 'msg'", (apagado,)) == 1)
 ok("…el recordatorio no (el aviso en la app, sí)", cola(apagado, "r24") == []
    and one("select count(*) from client_messages where kind = 'r24' and ref = %s", (str(b_ap24),)) == 1)
 q("insert into client_messages (provider_id, user_id, body, kind, ref) values (%s, %s, '¡Feliz cumpleaños!', 'bday', '2026'), (%s, %s, '¿Nos dejás tu opinión?', 'rev', %s)",
@@ -291,6 +295,19 @@ b_404 = turno(ana, 42)
 q("select notify_booking(%s, 'conf')", (b_404,))
 q("select push_result(%s, 404)", (one("select id from push_outbox where booking_id = %s and kind = 'conf'", (b_404,)),), role="service_role")
 ok("404: también se borra", sub_id(ep_ana) is None)
+ok("12/11: la dirección vencida (404/410) no vuelve a entrar sola: push_subscribe contesta push_gone (la app pide otra)",
+   err(q("select push_subscribe(%s, %s, %s, null)", (ep_ana, KEY, AUTH), uid=ana), "push_gone") and sub_id(ep_ana) is None
+   and err(q("select push_subscribe(%s, %s, %s, null)", (ep_ana2, KEY, AUTH), uid=otra), "push_gone"))
+ok("12/11: push_gone guarda la huella de la dirección, no la dirección",
+   one("select count(*) from push_gone where endpoint_sha = encode(sha256(convert_to(%s, 'UTF8')), 'hex')", (ep_ana,)) == 1
+   and one("select count(*) from push_gone g where to_jsonb(g)::text like %s", ("%" + ep_ana[-24:] + "%",)) == 0)
+# celular compartido: el mismo dispositivo ingresa con otra cuenta → la suscripción pasa a la nueva
+ep_comp = sub(ana)
+sub(otra, ep_comp)
+ok("12/11: celular compartido: la suscripción pasa a la cuenta que ingresó y la anterior deja de recibir",
+   one("select user_id from push_subscriptions where endpoint = %s", (ep_comp,)) == otra
+   and one("select push_registered(%s)", (ep_comp,), uid=otra) is True and one("select push_registered(%s)", (ep_comp,), uid=ana) is False)
+q("select push_unsubscribe(%s)", (ep_comp,), uid=otra)
 ep_ana = sub(ana)
 b_403 = turno(ana, 43)
 q("select notify_booking(%s, 'conf')", (b_403,))
@@ -515,6 +532,39 @@ D = due()
 hbp = [d for d in D.values() if d["tag"] == f"holiday-{hb}"]
 ok("feriados cerrados: «Tenés N turnos el <día>, que es feriado…» va por push, a la Agenda de ese día",
    hb and len(hbp) == 1 and hbp[0]["title"] == "Turnos en un feriado" and hbp[0]["url"] == f"/panel/agenda?dia={fB}" and ", que es feriado. Se mantiene" in hbp[0]["body"], str(hbp))
+
+# ---------- 12/11 · el mensaje del profesional y «Mandarme una de prueba» ----------
+own12 = mkuser("dueno12@push.test", "Dueña Doce")
+pid12 = one("select register_provider('Peluquería Doce', 'Calle 12', array['p'], '2284 12', '30111912')", uid=own12)
+q("update providers set status = 'active', dni_verified = true where id = %s", (pid12,))
+cli12 = mkuser("cli12@push.test", "Carla Doce")
+ep12 = sub(cli12, label="Chrome en Android")
+q("insert into client_messages (provider_id, user_id, body) values (%s, %s, 'Carla, se liberó un turno el viernes a las 10')", (pid12, cli12))
+d12 = [v for v in due().values() if v["endpoint"] == ep12]
+ok("12/11: el mensaje del profesional por push: «Mensaje de <profesional>» con el texto, a Mis turnos",
+   len(d12) == 1 and d12[0]["title"] == "Mensaje de Peluquería Doce" and d12[0]["body"] == "Carla, se liberó un turno el viernes a las 10"
+   and d12[0]["url"] == "/mis-turnos" and d12[0]["urgency"] == "normal", str(d12))
+q("insert into client_blocks (provider_id, user_id) values (%s, %s)", (pid12, cli12))
+q("insert into client_messages (provider_id, user_id, body) values (%s, %s, 'Otro mensaje')", (pid12, cli12))
+ok("12/11: al cliente bloqueado no le llega el mensaje (ni push ni campanita)", one("select count(*) from client_messages where user_id = %s", (cli12,)) == 1
+   and one("select count(*) from push_outbox where user_id = %s and kind = 'msg'", (cli12,)) == 1)
+t1 = q("select push_test(%s)", (ep12,), uid=cli12)
+ok("12/11: «Mandarme una de prueba» encola una push a ese dispositivo", not err(t1) and tuple(q("select kind, status from push_outbox where id = %s", (t1[0][0],))[0]) == ("test", "pending"))
+ok("12/11: …a lo sumo una cada 30 segundos", err(q("select push_test(%s)", (ep12,), uid=cli12), "push_test_wait"))
+ok("12/11: …solo a un dispositivo propio (ni ajeno ni sin sesión)", err(q("select push_test(%s)", (ep12,), uid=ana), "push_not_registered")
+   and err(q("select push_test(%s)", (ep12,), role="anon")))
+dt = due().get(t1[0][0])
+ok("12/11: la prueba sale con «Prueba de TuTiempo»", dt is not None and dt["title"] == "Prueba de TuTiempo" and "funcionan en este dispositivo" in dt["body"] and dt["url"] == "/", str(dt))
+ok("12/11: push_test_status: en camino, y solo para quien la mandó", one("select push_test_status(%s)", (t1[0][0],), uid=cli12)["status"] == "pending"
+   and one("select push_test_status(%s)", (t1[0][0],), uid=ana)["status"] == "gone")
+q("select push_result(%s, 403, 'BadJwtToken')", (t1[0][0],), role="service_role")
+st = one("select push_test_status(%s)", (t1[0][0],), uid=cli12)
+ok("12/11: …y si falla, el código y el error del servicio de push (para saber qué arreglar)", st["status"] == "failed" and st["code"] == 403 and "BadJwtToken" in st["error"], str(st))
+q("update push_outbox set created_at = now() - interval '1 minute' where id = %s", (t1[0][0],))
+t2 = q("select push_test(%s)", (ep12,), uid=cli12)[0][0]
+due()
+q("select push_result(%s, 201)", (t2,), role="service_role")
+ok("12/11: …enviada", one("select push_test_status(%s)", (t2,), uid=cli12)["status"] == "sent")
 
 print("TODO OK" if F == 0 else f"{F} FALLAS")
 sys.exit(1 if F else 0)

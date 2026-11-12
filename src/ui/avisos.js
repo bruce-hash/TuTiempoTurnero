@@ -1,3 +1,4 @@
+import { esc } from "../lib/dom.js";
 import { dismissed, inAppBrowser, isIOS, needsIosInstall } from "../lib/pwa.js";
 import { S } from "../state.js";
 import { ic } from "./iconos.js";
@@ -72,6 +73,16 @@ export function installCard() {
 export const installMenuItem = () => (S.canInstall || needsIosInstall()) && !inAppBrowser() ? [ic("instalar"), isIOS() ? "Agregar a inicio" : "Instalar la app", 'data-act="pwaInstall"'] : null;
 
 // Mi perfil (cliente) y Perfil del panel (prestador): este dispositivo y la opción de cada uno
+// 12/11: las notificaciones están rechazadas en este dispositivo: no se vuelve a pedir el permiso, se explica cómo
+// habilitarlo según dónde está la persona (la app instalada en el iPhone, Android o la compu)
+function blockedHelp(ua = navigator.userAgent) {
+  const how = /iPhone|iPad|iPod/.test(ua)
+    ? "en el iPhone: Configuración → Notificaciones → TuTiempo → Permitir notificaciones"
+    : /Android/.test(ua)
+      ? "en el celular: tocá el candado al lado de la dirección (o, con la app instalada, mantené apretado el ícono → Información de la app) → Notificaciones → Permitir"
+      : "en la compu: tocá el candado al lado de la dirección → Notificaciones → Permitir";
+  return `Bloqueaste las notificaciones de TuTiempo en este dispositivo y no te las vamos a volver a pedir. Si querés recibirlas, habilitalas ${how}, y volvé a abrir TuTiempo: se activan solas.`;
+}
 export function pushPanel(scope) {
   const push = S.push || {};
   if (!S.user) {
@@ -95,9 +106,11 @@ export function pushPanel(scope) {
   } else if (push.avail === "unsupported") {
     device = `<p class="note pwa-note">Este navegador no permite notificaciones.${byEmail(scope)}</p>`;
   } else if (push.avail === "denied") {
-    device = `<p class="note pwa-note">Bloqueaste las notificaciones de TuTiempo en este navegador. Para recibirlas, habilitalas en la configuración del sitio (el candado al lado de la dirección → Notificaciones → Permitir) y volvé acá.</p>`;
+    device = `<p class="note pwa-note">${blockedHelp()}</p>`;
   } else if (push.on) {
     device = `<div class="pwa-dev"><div><b>En ${here}</b><div class="hint">Recibís los avisos acá</div></div><span class="pill-ok">Activadas</span></div>
+     <button class="btn btn-ghost btn-block" data-act="pushTest">Mandarme una de prueba</button>
+     ${S.pushTestNote ? `<p class="note pwa-note">${esc(S.pushTestNote)}</p>` : ""}
      <button class="btn btn-ghost btn-block" data-act="pushOff">Desactivar en ${here}</button>`;
   } else {
     device = `<div class="pwa-dev"><div><b>En ${here}</b><div class="hint">Todavía no recibís avisos acá</div></div></div>
@@ -108,7 +121,7 @@ export function pushPanel(scope) {
       ? `${mail}<label class="chk pwa-opt"><input type="checkbox" id="bPushBk"${S.user.pushBookings === false ? "" : " checked"}> Notificaciones de reservas y cancelaciones</label>
      <label class="chk pwa-opt"><input type="checkbox" id="bPushFl"${S.user.pushFollowers === false ? "" : " checked"}> Notificaciones de nuevos seguidores</label>
      <p class="note pwa-note">Los avisos de cobros (pagos devueltos, contracargos, reconectar Mercado Pago) te llegan siempre.</p>`
-      : `<label class="chk pwa-opt"><input type="checkbox" id="uPush"${S.user.pushNotices === false ? "" : " checked"}> Recordatorios y novedades por notificación</label>
+      : `<label class="chk pwa-opt"><input type="checkbox" id="uPush"${S.user.pushNotices === false ? "" : " checked"}> Recordatorios, novedades y mensajes por notificación</label>
      <p class="note pwa-note">Igual que en email: la confirmación y las cancelaciones llegan siempre. En la notificación no va nada privado: el detalle lo ves al abrir la app.</p>`;
   return `<div class="panel push-panel"><p class="lbl">Notificaciones</p>${device}${option}</div>`;
 }

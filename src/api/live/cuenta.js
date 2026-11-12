@@ -206,6 +206,17 @@ export const liveCuenta = {
   async pushRegistered(endpoint) {
     return !!(await call(sb.rpc("push_registered", { p_endpoint: endpoint })));
   },
+  // 12/11: «Mandarme una de prueba» (Mi perfil → Notificaciones): el número de la prueba y, después, cómo salió
+  async pushTest(endpoint) {
+    return await call(sb.rpc("push_test", { p_endpoint: endpoint }));
+  },
+  async pushTestStatus(id) {
+    return await call(sb.rpc("push_test_status", { p_id: id }));
+  },
+  // 12/11: ligar este dispositivo a la cuenta sin avisos en pantalla (al ingresar o al abrir la app con el permiso dado)
+  async pushSubscribeQuiet(endpoint, p256dh, auth, label) {
+    await call(sb.rpc("push_subscribe", { p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth, p_label: label }));
+  },
   // Paso 1 (v4): estado del pago y del turno para la pantalla de regreso de Mercado Pago, con el token de la vuelta (anda
   // sin sesión: solo servicio, prestador, día y hora). null si el token no existe.
   async checkoutStatus(token) {

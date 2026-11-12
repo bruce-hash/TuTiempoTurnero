@@ -13,6 +13,7 @@ import { go, render } from "../ui/render.js";
 import { resumePendingPay } from "./cobro-pendiente.js";
 import { typing } from "./precios.js";
 import { isStandalone } from "./pwa.js";
+import { pushAvailability, refreshPush } from "./push.js";
 
 const EVERY = 15000; // a lo sumo una vez cada 15 s (volver a primer plano dispara varios eventos juntos)
 const PULL = 70; // px para soltar y actualizar
@@ -119,6 +120,16 @@ export function startAppRefresh() {
     return;
   }
   document.addEventListener("visibilitychange", onForeground);
+  // 12/11: si la persona habilitó las notificaciones en la configuración y vuelve a la app, se activan solas (sin recargar)
+  document.addEventListener("visibilitychange", () => {
+    const push = S.push || {};
+    if (document.visibilityState !== "visible" || !S.user || push.on || pushAvailability() === push.avail) {
+      return;
+    }
+    refreshPush()
+      .then(() => render())
+      .catch(() => {});
+  });
   window.addEventListener("pageshow", (ev) => {
     if (ev.persisted) {
       onForeground();

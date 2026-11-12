@@ -4,7 +4,7 @@ import { LIVE, sb } from "../config.js";
 import { demoStash } from "../demo/usuarios.js";
 import { setPending } from "../lib/pendiente.js";
 import { pr } from "../lib/prestadores.js";
-import { disablePush } from "../lib/push.js";
+import { forgetPushHere } from "../lib/push.js";
 import { S } from "../state.js";
 import { store } from "../store.js";
 import { render } from "../ui/render.js";
@@ -25,7 +25,7 @@ export function blockBusiness(el, pending) {
 // cerrar la sesión de este dispositivo (cliente, negocio o admin) sin cambiar de pantalla
 export async function signOutHere() {
   if (LIVE) {
-    await disablePush().catch(() => {});
+    await forgetPushHere().catch(() => {});
     await sb.auth.signOut().catch(() => {});
     store.BOOK = store.BOOK.filter((booking) => !booking.mine && booking.pid != S.me);
     const prov = pr(S.me);

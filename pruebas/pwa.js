@@ -153,7 +153,7 @@ const PUSH_STUB = `(() => {
   await open(page, "/cuenta");
   ok("Mi perfil: «Activadas» en este dispositivo, con Desactivar y la opción de recordatorios", /Activadas/.test(await page.locator(".push-panel").innerText()) && await page.isVisible("[data-act=pushOff]") && await page.isChecked("#uPush"));
   await page.uncheck("#uPush"); await page.waitForTimeout(800);
-  ok("Mi perfil: «Recordatorios y novedades por notificación» se guarda en la base", (await q("select push_notices from profiles where id = $1", [uid]))[0].push_notices === false);
+  ok("Mi perfil: «Recordatorios, novedades y mensajes por notificación» se guarda en la base", (await q("select push_notices from profiles where id = $1", [uid]))[0].push_notices === false);
   await page.check("#uPush"); await page.waitForTimeout(600);
   await page.click("[data-act=pushOff]"); await page.waitForTimeout(1000);
   ok("«Desactivar en este celular» borra la suscripción", (await q("select count(*)::int c from push_subscriptions where user_id = $1", [uid]))[0].c === 0 && /Activar avisos/.test(await page.locator(".push-panel").innerText()));
@@ -192,6 +192,74 @@ const PUSH_STUB = `(() => {
   await open(page, "/cuenta");
   await page.click("#app [data-act=logout]"); await page.waitForTimeout(1500);
   ok("al cerrar sesión se borra la suscripción de este dispositivo", (await q("select count(*)::int c from push_subscriptions where user_id = $1", [uid]))[0].c === 0);
+
+  // ---------- 12/11: con el permiso ya dado, los avisos se reactivan solos al ingresar ----------
+  const subsOf = async (id) => (await q("select endpoint from push_subscriptions where user_id = $1", [id])).map((r) => r.endpoint);
+  const waitSubs = async (id, n) => { for (let i = 0; i < 40 && (await subsOf(id)).length !== n; i++) await page.waitForTimeout(150); return subsOf(id); };
+  const stub = () => page.evaluate(() => ({ perm: window.__perm, subscribed: window.__subscribed || 0, endpoint: JSON.parse(localStorage.getItem("__pushstub") || "{}").endpoint }));
+  const uid2 = (await q("insert into auth.users (email, encrypted_password, email_confirmed_at, raw_user_meta_data) values ('pwa2@test.ar', 'Pwa2026yyy', now(), '{\"full_name\":\"Paula Segunda\"}') returning id::text"))[0].id;
+  const before = await stub();
+  ok("12/11: al cerrar sesión la suscripción del navegador queda (sin cuenta en la base no le llega nada)", !!before.endpoint && (await q("select count(*)::int c from push_subscriptions where endpoint = $1", [before.endpoint]))[0].c === 0);
+  await login(page, "pwa@test.ar", "Pwa2026xxx");
+  let mine = await waitSubs(uid, 1);
+  let now = await stub();
+  ok("12/11: ingresar con el permiso concedido → suscripto sin tocar nada (sin pedir permiso ni tarjeta)", mine.length === 1 && mine[0] === before.endpoint && now.perm === 0
+     && (await page.locator(".pwa-card [data-act=pushOn]").count()) === 0, JSON.stringify({ mine, now }));
+  await open(page, "/cuenta");
+  ok("12/11: …y Mi perfil dice «Activadas»", /Activadas/.test(await page.locator(".push-panel").innerText()));
+  // «Mandarme una de prueba»: la push a este dispositivo y cómo salió (acá el servicio de push lo hace la base a mano)
+  await page.click(".push-panel [data-act=pushTest]");
+  let testRow = [];
+  for (let i = 0; i < 40 && !testRow.length; i++) { await page.waitForTimeout(150); testRow = await q("select id, status from push_outbox where user_id = $1 and kind = 'test'", [uid]); }
+  ok("12/11: «Mandarme una de prueba» encola una push a este dispositivo", testRow.length === 1 && testRow[0].status === "pending");
+  await q("select push_result($1, 201)", [testRow[0].id]);
+  await page.waitForFunction(() => /La prueba salió/.test(document.querySelector(".push-panel")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+  ok("12/11: …y Mi perfil dice que salió (y qué revisar si no apareció)", /La prueba salió/.test(await page.locator(".push-panel").innerText()));
+  await q("update push_outbox set created_at = now() - interval '1 minute' where id = $1", [testRow[0].id]);
+  await page.click(".push-panel [data-act=pushTest]");
+  testRow = [];
+  for (let i = 0; i < 40 && testRow.length < 2; i++) { await page.waitForTimeout(150); testRow = await q("select id from push_outbox where user_id = $1 and kind = 'test' order by id", [uid]); }
+  await q("select push_result($1, 403, 'BadJwtToken')", [testRow[testRow.length - 1].id]);
+  await page.waitForFunction(() => /rechazó la prueba/.test(document.querySelector(".push-panel")?.innerText || ""), null, { timeout: 8000 }).catch(() => {});
+  ok("12/11: …y si el servicio la rechaza, lo dice con el detalle (403 · BadJwtToken)", /rechazó la prueba.*403 · BadJwtToken/.test(await page.locator(".push-panel").innerText()));
+  await page.click("#app [data-act=logout]"); await page.waitForTimeout(1200);
+  ok("12/11: cerrar sesión → sin suscripción en la base", (await subsOf(uid)).length === 0);
+  await login(page, "pwa2@test.ar", "Pwa2026yyy");
+  ok("12/11: ingresar con otra cuenta en el mismo navegador → la suscripción es de la cuenta nueva", (await waitSubs(uid2, 1))[0] === before.endpoint && (await subsOf(uid)).length === 0);
+  // celular compartido sin cerrar sesión (la sesión se perdió): la que ingresa se queda con el dispositivo
+  await page.evaluate(() => Object.keys(localStorage).filter((k) => /^sb-.*-auth-token/.test(k)).forEach((k) => localStorage.removeItem(k)));
+  await login(page, "pwa@test.ar", "Pwa2026xxx");
+  ok("12/11: …y si ingresa la primera sin que la otra haya cerrado sesión, el dispositivo pasa a ella (la otra deja de recibir)",
+     (await waitSubs(uid, 1))[0] === before.endpoint && (await subsOf(uid2)).length === 0);
+  // «Desactivar en este dispositivo» se respeta: no se reactiva sola al volver a ingresar
+  await open(page, "/cuenta");
+  await page.click("[data-act=pushOff]"); await page.waitForTimeout(1000);
+  await page.click("#app [data-act=logout]"); await page.waitForTimeout(1200);
+  await login(page, "pwa@test.ar", "Pwa2026xxx");
+  await page.waitForTimeout(1500);
+  await open(page, "/cuenta");
+  ok("12/11: «Desactivar» → al volver a ingresar no se reactiva (Mi perfil ofrece «Activar avisos»)", (await subsOf(uid)).length === 0
+     && /Activar avisos/.test(await page.locator(".push-panel").innerText()));
+  await page.click(".push-panel [data-act=pushOn]"); await page.waitForTimeout(1000);
+  ok("12/11: …hasta que la persona toca «Activar avisos» de nuevo", (await subsOf(uid)).length === 1);
+  await page.reload(); await page.waitForTimeout(1500);
+  ok("12/11: …y desde ahí vuelve a reactivarse sola (al abrir la app sigue suscripta)", (await subsOf(uid)).length === 1);
+  // suscripción vencida (el servicio de push contestó 404/410): al abrir la app se pide una nueva
+  const dead = (await subsOf(uid))[0];
+  await q("insert into push_gone (user_id, host, status, kind, endpoint_sha) values ($1, 'fcm.googleapis.com', 410, 'conf', encode(sha256(convert_to($2, 'UTF8')), 'hex'))", [uid, dead]);
+  await q("delete from push_subscriptions where endpoint = $1", [dead]);
+  await page.reload(); await page.waitForTimeout(500);
+  mine = await waitSubs(uid, 1);
+  now = await stub();
+  ok("12/11: una suscripción vencida (404/410) se recrea sola al abrir la app, con una dirección nueva", mine.length === 1 && mine[0] !== dead && now.endpoint === mine[0], JSON.stringify({ dead, mine }));
+  // rechazado: no se vuelve a pedir y Mi perfil explica cómo habilitarlo
+  await page.evaluate(() => { const st = JSON.parse(localStorage.getItem("__pushstub") || "{}"); st.permission = "denied"; localStorage.setItem("__pushstub", JSON.stringify(st)); });
+  await open(page, "/cuenta");
+  const deniedText = await page.locator(".push-panel").innerText();
+  ok("12/11: permiso rechazado → no se pide de nuevo; Mi perfil explica cómo habilitarlo desde la configuración", /no te las vamos a volver a pedir/.test(deniedText)
+     && /candado al lado de la dirección/.test(deniedText) && (await page.locator(".push-panel [data-act=pushOn]").count()) === 0 && (await page.evaluate(() => window.__perm)) === 0, deniedText);
+  await page.evaluate(() => { const st = JSON.parse(localStorage.getItem("__pushstub") || "{}"); st.permission = "granted"; localStorage.setItem("__pushstub", JSON.stringify(st)); });
+  await page.click("#app [data-act=logout]").catch(() => {}); await page.waitForTimeout(1200);
 
   // ---------- versión nueva ----------
   const swFile = path.join(WEB, "sw.js");
@@ -280,6 +348,30 @@ const PUSH_STUB = `(() => {
   await page.click("[data-act=pwaGuideClose]"); await page.waitForTimeout(200);
   ok("…que se cierra con «Entendido»", (await page.locator(".pwa-guide").count()) === 0);
   await page.context().close();
+
+  // ---------- 12/11: iPhone con la app instalada (el permiso queda en la app) ----------
+  {
+    const ctx = await browser.newContext({ userAgent: IPHONE, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    await ctx.addInitScript(() => {
+      Object.defineProperty(navigator, "standalone", { get: () => true, configurable: true });
+      if (!localStorage.getItem("__pushstub")) localStorage.setItem("__pushstub", JSON.stringify({ permission: "granted" }));
+    });
+    await ctx.addInitScript(PUSH_STUB);
+    page = await ctx.newPage();
+    page.on("pageerror", (e) => errors.push(e.message));
+    await login(page, "pwa@test.ar", "Pwa2026xxx");
+    const ios1 = [];
+    for (let i = 0; i < 40 && !ios1.length; i++) { await page.waitForTimeout(150); ios1.push(...(await q("select endpoint from push_subscriptions where user_id = $1 and label = 'Safari en iPhone'", [uid])).map((r) => r.endpoint)); }
+    ok("12/11: iPhone con la app instalada y el permiso dado: al ingresar queda suscripto sin tocar nada", ios1.length === 1 && (await page.evaluate(() => window.__perm)) === 0);
+    await open(page, "/cuenta");
+    await page.click("#app [data-act=logout]"); await page.waitForTimeout(1200);
+    await login(page, "pwa@test.ar", "Pwa2026xxx");
+    let ios2 = [];
+    for (let i = 0; i < 40 && !ios2.length; i++) { await page.waitForTimeout(150); ios2 = (await q("select endpoint from push_subscriptions where user_id = $1 and label = 'Safari en iPhone'", [uid])).map((r) => r.endpoint); }
+    ok("12/11: iPhone: cerrar sesión y volver a ingresar reusa la misma suscripción (sin pedirle otra al iPhone, que exige un toque)",
+       ios2[0] === ios1[0] && (await page.evaluate(() => window.__subscribed || 0)) === 0, JSON.stringify({ ios1, ios2 }));
+    await ctx.close();
+  }
 
   // ---------- freno de emergencia ----------
   page = await nueva();

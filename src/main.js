@@ -92,6 +92,17 @@ async function boot() {
         store.BOOK = store.BOOK.filter((booking) => !booking.mine);
         render();
       }
+      // 12/11: al renovarse la sesión, este dispositivo sigue ligado a la cuenta (con el permiso ya dado; ver refreshPush)
+      if (event === "TOKEN_REFRESHED" && S.user) {
+        const was = S.push && S.push.on;
+        refreshPush()
+          .then((push) => {
+            if (push.on !== was) {
+              render();
+            }
+          })
+          .catch(() => {});
+      }
     });
     {
       const query = new URLSearchParams(location.search);
