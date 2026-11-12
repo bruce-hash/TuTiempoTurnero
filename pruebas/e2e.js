@@ -2239,7 +2239,11 @@ async function turnoConMargen(p) {
   {
     const sofiP = (await q("select id from providers where name like 'Sofía%'"))[0].id;
     const [sv6] = await q("select id from services where provider_id=$1 and active order by id limit 1", [sofiP]);
-    const dia6 = (await q("select ((now() at time zone 'America/Argentina/Buenos_Aires')::date + 3)::text d"))[0].d;
+    // 12/11: un día que Sofía trabaja (de 3 a 9 días adelante): «hoy + 3» caía domingo los jueves y la Agenda decía «Cerrado»
+    const dia6 = (await q(`select to_char(g::date, 'YYYY-MM-DD') d from generate_series((now() at time zone 'America/Argentina/Buenos_Aires')::date + 3,
+        (now() at time zone 'America/Argentina/Buenos_Aires')::date + 9, interval '1 day') g
+       where exists (select 1 from provider_hours ph where ph.provider_id = $1 and ph.dow = extract(dow from g)::int)
+       order by g limit 1`, [sofiP]))[0].d;
     const nombres = ["Toque Uno", "Toque Dos", "Toque Tres", "Toque Cuatro"];
     for (const [i, n] of nombres.entries()) {
       await q(`insert into bookings (provider_id, service_id, client_name, service_name, source, status, starts_at, ends_at, price)

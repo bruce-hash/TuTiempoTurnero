@@ -5,7 +5,7 @@ import { esc } from "../../lib/dom.js";
 import { MESES, NOW, TODAY, capW, dm, dmyIso } from "../../lib/fechas.js";
 import { S } from "../../state.js";
 import { admFin } from "./datos.js";
-import { YEARS } from "../prestador/finanzas.js";
+import { YEARS } from "../../lib/finanzas-base.js";
 import { ic } from "../../ui/iconos.js";
 
 // mes sin movimientos

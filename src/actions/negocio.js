@@ -1,7 +1,7 @@
 import { openAuth } from "./auth.js";
 import { signOutHere } from "./cuentas.js";
 import { registerChange, registerClick, registerSubmit } from "./registro.js";
-import { DEPOSIT_PCT } from "../views/prestador/plazo.js";
+import { DEPOSIT_PCT } from "../lib/sena.js";
 import { api } from "../api/index.js";
 import { LIVE } from "../config.js";
 import { bizStartPath, dniDone, nextStep } from "../lib/alta.js";
@@ -21,7 +21,7 @@ import { focusFirstField } from "../ui/ingreso.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 import { daysFromTemplate } from "../views/auth/negocio.js";
-import { useProvider } from "../views/prestador/panel.js";
+import { useProvider } from "../lib/panel-nav.js";
 
 // Registrá tu negocio (ingreso y registro, aprobado el 1/11): las puertas ("Registrá tu negocio" en el inicio, el footer,
 // el pie de Crear cuenta y el menú de un cliente) y los 5 pasos. Cada paso se guarda con las funciones que ya usa el

@@ -12,7 +12,7 @@ import { toast } from "../ui/toast.js";
 import { blockDays } from "../views/prestador/bloqueo-dias.js";
 import { lowWindows } from "../views/prestador/estadisticas.js";
 import { savedState, savedText } from "../views/prestador/horarios.js";
-import { DEPOSIT_PCT } from "../views/prestador/plazo.js";
+import { DEPOSIT_PCT } from "../lib/sena.js";
 
 // 4/11 · Bloque 4: desde arriba de Horarios, directo al bloqueo de días
 registerClick("toDayBlock", (ev, el, act) => {

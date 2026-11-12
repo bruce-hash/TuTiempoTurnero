@@ -1,16 +1,14 @@
 import qrcode from "qrcode-generator";
-import { LIVE } from "../../config.js";
 import { followersBlockedNote, provActive } from "../../lib/alta.js";
 import { esc } from "../../lib/dom.js";
 import { profileLinkText, profileUrl } from "../../router.js";
-import { seedComm } from "../../demo/comunidad.js";
 import { store } from "../../store.js";
 import { gallery, rating, reviewsHtml } from "../../ui/resenas.js";
 import { ic } from "../../ui/iconos.js";
 
 // comunidad de un prestador, creada la primera vez que se pide
 // (en vivo arranca vacía y la completa la carga del perfil; en la demo se inventa a partir del rubro: src/demo/comunidad.js)
-export const comm = (pid) => (store.COMMBY[pid] ||= LIVE ? { followers: 0, reviews: [], media: [] } : seedComm(pid));
+export { comm } from "../../lib/comunidad.js";
 export function vBComunidad(prov) {
   return `<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><p class="lbl" style="margin:0">Mis trabajos</p>${store.COMM.media.length ? '<button class="btn btn-ghost btn-sm" data-act="story" data-i="0">▶ Ver como historia</button>' : ""}</div>
    <p class="note" style="text-align:left;margin:4px 0 10px">Tus clientes los ven en tu perfil y como historias.</p>${gallery(true)}</div>

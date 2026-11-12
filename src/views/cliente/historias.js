@@ -3,7 +3,7 @@ import { avatar, pr } from "../../lib/prestadores.js";
 import { S } from "../../state.js";
 import { store } from "../../store.js";
 import { render } from "../../ui/render.js";
-import { comm } from "../prestador/comunidad.js";
+import { comm } from "../../lib/comunidad.js";
 
 store.STORY_T = null;
 // historias: los trabajos del prestador a pantalla completa, uno tras otro (S.story = { pid, i })

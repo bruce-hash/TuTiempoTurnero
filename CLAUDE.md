@@ -148,6 +148,12 @@ Bruno es el responsable técnico: vos generás el código, él lo dirige, revisa
   - C04 (marca): `src/marca/` tiene el logo del manual en SVG (isotipo, logotipo, imagotipo); `src/ui/iconos.js` los arma
     (`LOGO`, `ISO`, `IMAGO`) y `tools/iconos.mjs` saca de ahí los íconos de la app, el favicon y el logo de los emails
     (PNG en `public/icons/`). La paleta del manual está en el segmento TuTiempo de `src/styles/tokens.css`; el texto verde es #07774F.
+  - 11/11 · División del código (`src/partes.js`): el arranque baja solo lo de todos; el panel del profesional
+    (`src/partes/panel.js`), el de TuTiempo (`partes/admin.js`) y «Registrá tu negocio» (`partes/negocio.js`) se bajan con
+    `import()` al abrirlos, con sus acciones. Desde fuera de una parte, nada de import estático a sus módulos: `part("panel")?.x()`
+    (si ya está) o `loadPart("panel").then(...)`; lo que usan también otras pantallas va a `src/lib/` (`panel-nav.js`,
+    `comunidad.js`, `finanzas-base.js`, `mensajes-def.js`, `sena.js`). El service worker guarda todas las partes (sin
+    conexión siguen andando). Lo verifica `npm run test:partes` (build de producción con la base local).
   - `src/demo/`: modo demo (datos de ejemplo, barra "Ver como"). Solo en desarrollo y pruebas: **nada de `src/demo/`
     llega al build de producción** (lo verifica `npm run test:sin-demo`).
   - Viene del `app.cjs` minificado del cliente. Desde el Bloque A2 las variables locales tienen nombres claros (en
@@ -222,7 +228,7 @@ el registro. Una función nueva = vista + `data-act` + `registerClick(...)` en e
 - Ningún bloque termina con pruebas en rojo. Antes de cerrar cada bloque corré, según lo que tocaste:
   `npm run sql:check`, `pruebas/test_db.py`, `pruebas/test_cobros.py`, `pruebas/test_emails.py`, `pruebas/test_push.py` y `pruebas/test_mudanza.py` (base); `npm run test:funciones` y `npm run test:webpush` si tocás las
   Edge Functions o los cobros (Deno 2.1.4, Postgres y PostgREST); `npm run test:unidad`, `npm run test:crawl`,
-  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:verificar`, `npm run test:pwa` y `npm run test:comparar` (navegador
+  `npm run test:ancho`, `npm run test:clicks` y `npm run test:sin-demo` (frontend); `npm run test:e2e`, `npm run test:rutas`, `npm run test:captcha`, `npm run test:verificar`, `npm run test:pwa`, `npm run test:partes` y `npm run test:comparar` (navegador
   real, necesitan Postgres y PostgREST: ver abajo); `npm run test:htaccess` y `npm run test:litespeed` si tocás el
   `.htaccess` (Apache local y OpenLiteSpeed en docker; en el CI, contenedores `httpd:2.4` y `openlitespeed`). El workflow `.github/workflows/pruebas.yml` corre todo en cada PR y en cada push a `developer`/`main`.
 - El crawl corre con el reloj fijo (`TT_AHORA`, por defecto 2026-10-21 15:00): la cantidad de toques depende de la
@@ -268,6 +274,7 @@ export PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=...
 npm run test:e2e        # recorrido completo en vivo (base nueva + PostgREST + pruebas/e2e_server.js)
 npm run test:rutas      # direcciones: cada ruta, recarga, atrás/adelante, sesión, reservadas, QR (mismo entorno)
 npm run test:captcha    # H30: Turnstile (falso) en cada llamada a Auth, sin clave no carga nada (mismo entorno)
+npm run test:partes     # división del código: cada pantalla baja lo suyo, nada pasa de 500 kB, partes sin conexión
 npm run test:pwa        # Bloque C: manifest, service worker (sin Supabase en la caché), sin conexión, versión nueva, push (mismo entorno)
 npm run test:htaccess   # el .htaccess real con el apache2 local (apt install apache2): fallback, 404, HTTPS, CSP
 npm run test:litespeed  # C02: el mismo .htaccess con OpenLiteSpeed en docker (el servidor de Hostinger): direcciones, 404, HTTPS

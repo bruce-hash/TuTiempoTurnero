@@ -4,8 +4,8 @@ import { S } from "../state.js";
 import { toast } from "../ui/toast.js";
 import { markBellRead } from "../ui/campanita.js";
 import { render } from "../ui/render.js";
-import { setBtab } from "../views/prestador/panel.js";
-import { loadFollowers } from "../views/prestador/seguidores.js";
+import { setBtab } from "../lib/panel-nav.js";
+import { loadPart } from "../partes.js";
 
 // 4/11 · La campanita de avisos (src/ui/campanita.js): abrir y cerrar, y a dónde llevan los avisos del profesional
 registerClick("bellToggle", (ev, el, act) => {
@@ -29,7 +29,7 @@ registerClick("bellGo", (ev, el, act) => {
   if (el.dataset.to === "seguidores") {
     setBtab("clientes");
     S.ctab = "seguidores";
-    loadFollowers(true);
+    loadPart("panel").then((mod) => mod.loadFollowers(true));
   } else if (el.dataset.to === "agenda") {
     // 10/11 · turnos en un feriado: a la Agenda, en ese día
     setBtab("agenda");
