@@ -1,5 +1,13 @@
 # Despliegue automático a prueba y verificación
 
+> **12/11 · Apagado.** Desde el paso a producción, el proyecto de Supabase que era de prueba es el de producción y
+> `prueba.tutiempo.com.ar` redirige a `https://tutiempo.com.ar`. Los dos workflows quedan apagados (corren solo si la
+> variable del repo `PRUEBA_ACTIVA` vale `si`) y «Verificar prueba» ya no corre de noche. Para volver a tener un entorno
+> de prueba hay que crear un proyecto de Supabase **nuevo y aparte** (paso 1 de abajo), una carpeta y una cuenta FTP
+> nuevas, cargar los secretos del entorno `prueba` con esos datos, volver a poner el `schedule` y crear la variable.
+> Mientras tanto, en GitHub → Settings → Environments → `prueba` conviene borrar los secretos viejos (ver
+> docs/12-dia-del-cambio.md).
+
 Dos botones en GitHub → Actions:
 
 - **Desplegar prueba**: aplica las migraciones al Supabase de prueba (`supabase db push`), despliega las Edge Functions

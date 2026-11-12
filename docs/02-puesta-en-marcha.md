@@ -719,6 +719,9 @@ Para sacarlo, el orden inverso: primero apagarlo en Supabase, después borrar la
 prendido en Supabase y sin la clave en `config.js`, nadie puede ingresar.
 
 ## Etapa B · Producción
+> **12/11:** producción quedó en el **mismo proyecto** que prueba (D12), no en uno nuevo. El paso a paso de ese día está en
+> **docs/12-dia-del-cambio.md**; lo de abajo queda para armar un proyecto de producción desde cero.
+
 1. Supabase: proyecto nuevo `tutiempo` en plan **Pro** (backups diarios). Mismos pasos 1 a 7.
 2. Auth: SMTP propio (Resend, D14: paso 2b con las claves `prod-funcion` y `prod-auth`) y Google con el dominio
    definitivo. CAPTCHA (Turnstile): **activalo**, con un widget propio de producción (hostname

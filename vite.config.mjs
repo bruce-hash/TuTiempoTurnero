@@ -83,7 +83,7 @@ export default defineConfig(({ command, mode }) => {
         },
         buildStart() {
           // lo que generaba el build anterior (y el de tools/build.mjs): todo menos config.js
-          for (const f of ["assets", "index.html", "app.js", "app.css", "fonts", "vendor", ".htaccess", "robots.txt", "sw.js", "manifest.webmanifest", "offline.html", "offline.js", "icons"]) {
+          for (const f of ["assets", "index.html", "app.js", "app.css", "fonts", "vendor", ".htaccess", "robots.txt", "sitemap.xml", "sw.js", "manifest.webmanifest", "offline.html", "offline.js", "icons"]) {
             fs.rmSync(path.join(out, f), { recursive: true, force: true });
           }
         },

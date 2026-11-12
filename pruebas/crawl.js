@@ -66,8 +66,9 @@ const sel='#app button:not([disabled]),#app [data-go],#app [data-act],#app [data
  const terms=[];
  for(const [name,setup] of SCREENS){
   w.eval(setup);await tick();
-  // terminología (v2, 3/11): en lo que se ve no queda "prestador" ni "usuario" (son "profesional" y "cliente")
-  {const txt=[d.getElementById('app'),d.getElementById('nav'),d.querySelector('footer'),d.querySelector('.demo')].filter(Boolean).map(x=>x.textContent).join(' ');const m=txt.match(/[^.]{0,30}\b(prestador\w*|usuari[oa]s?)\b[^.]{0,30}/i);if(m)terms.push(name+' · "'+m[0].trim()+'"')}
+  // terminología (v2, 3/11): en lo que se ve no queda "prestador" ni "usuario" (son "profesional" y "cliente").
+  // 12/11: salvo la Política de privacidad, que es el texto del abogado tal cual (docs/11-legales.md)
+  if(!/privacidad/.test(name)){const txt=[d.getElementById('app'),d.getElementById('nav'),d.querySelector('footer'),d.querySelector('.demo')].filter(Boolean).map(x=>x.textContent).join(' ');const m=txt.match(/[^.]{0,30}\b(prestador\w*|usuari[oa]s?)\b[^.]{0,30}/i);if(m)terms.push(name+' · "'+m[0].trim()+'"')}
   const list=[...d.querySelectorAll(sel)].filter(x=>!x.closest('a[target]')&&!SKIP.has(x.dataset.act)).map(sig);
   const uniq=[...new Set(list)];
   for(const s0 of uniq){

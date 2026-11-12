@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TuTiempo · producción. Las páginas fijas; los perfiles de los profesionales los encuentra Google desde los rubros. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://tutiempo.com.ar/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>https://tutiempo.com.ar/rubro/barberias</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://tutiempo.com.ar/rubro/peluquerias</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://tutiempo.com.ar/rubro/masajes</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://tutiempo.com.ar/rubro/pestanas</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://tutiempo.com.ar/rubro/unas</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://tutiempo.com.ar/rubro/depilacion</loc><changefreq>daily</changefreq></url>
+  <url><loc>https://tutiempo.com.ar/registrar-negocio</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://tutiempo.com.ar/terminos</loc><changefreq>monthly</changefreq></url>
+  <url><loc>https://tutiempo.com.ar/privacidad</loc><changefreq>monthly</changefreq></url>
+</urlset>

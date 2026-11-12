@@ -45,5 +45,6 @@ fs.writeFileSync(
   `// TuTiempo · prueba (lo arma el despliegue automático, docs/10; no editar a mano)\nwindow.TT_CONFIG = ${JSON.stringify(config, null, 2)};\n`,
 );
 fs.writeFileSync(path.join(dist, "robots.txt"), "User-agent: *\nDisallow: /\n");
+fs.rmSync(path.join(dist, "sitemap.xml"), { force: true });   // el de producción no va en prueba
 fs.writeFileSync(path.join(dist, "version.json"), JSON.stringify({ commit, built_at: new Date().toISOString() }) + "\n");
 console.log(`dist listo para prueba: commit ${commit.slice(0, 7)}, ${url}`);
