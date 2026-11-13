@@ -36,6 +36,30 @@ const vivos = [...nombres].filter((n) => new RegExp(`(?<![\\w$.])${n.replace(/\$
 if (vivos.length) falla(`código de src/demo/ o src/api/demo.js en producción: ${vivos.join(", ")}`);
 else ok(`ninguna de las ${nombres.size} declaraciones de demo llega a producción (${demoFiles.length} archivos)`);
 
+// ---------- 1b. 13/11: todo lo de src/ entra a producción ----------
+// La app de producción no carga src/ganchos-prueba.js, que en el build de prueba trae todos los módulos: un módulo que
+// solo registra cosas (por ejemplo las escrituras de api.m en src/api/live/m-*.js) y que nadie importa funciona en las
+// pruebas y falta en producción. Fuera de la lista: la demo, los ganchos, la plantilla del service worker y los módulos
+// que son solo constantes (el build los copia donde se usan y no figuran como módulo).
+const SOLO_CONSTANTES = ["src/lib/sena.js"];
+const enDist = JSON.parse(fs.readFileSync(path.join(ROOT, ".build", "modulos-dist.json"), "utf8"));
+const todos = listar(path.join(ROOT, "src")).filter((f) => f.endsWith(".js")).map(rel).map((f) => f.split(path.sep).join("/"));
+const afuera = todos.filter((f) => !(f in enDist) && !f.startsWith("src/demo/") && f !== "src/ganchos-prueba.js" && f !== "src/pwa/sw.js" && !SOLO_CONSTANTES.includes(f));
+if (afuera.length) falla(`módulos de src/ que no entran a producción (nadie los importa): ${afuera.join(", ")}`);
+else ok(`los ${todos.length} módulos de src/ entran a producción (salvo la demo, los ganchos de prueba y el service worker)`);
+// y cada api.m.<algo> que usa la app está definido en un módulo que entra a producción
+const usados = new Set();
+for (const f of todos.filter((f) => !f.startsWith("src/demo/"))) {
+  for (const m of fs.readFileSync(path.join(ROOT, f), "utf8").matchAll(/\bapi\.m\.([A-Za-z_$][\w$]*)/g)) usados.add(m[1]);
+}
+const definidos = new Set();
+for (const f of Object.keys(enDist).filter((f) => f.startsWith("src/api/live/"))) {
+  for (const m of fs.readFileSync(path.join(ROOT, f), "utf8").matchAll(/^\s+(?:async\s+)?([A-Za-z_$][\w$]*)\s*(?::|\()/gm)) definidos.add(m[1]);
+}
+const sinDefinir = [...usados].filter((n) => !definidos.has(n));
+if (sinDefinir.length) falla(`api.m sin definir en producción: ${sinDefinir.join(", ")}`);
+else ok(`las ${usados.size} escrituras api.m.* que usa la app están en producción`);
+
 // ---------- 2. dist/ sin ganchos de prueba, sin barra de demo y sin datos de ejemplo ----------
 const dist = path.join(ROOT, "dist");
 const archivos = listar(dist).filter((f) => /\.(html|js|css)$/.test(f) && !/\/(vendor|config(\.example)?\.js$)/.test(rel(f).replace(/^dist/, "")));
