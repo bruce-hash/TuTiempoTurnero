@@ -104,8 +104,11 @@ if (process.env.E2E_URL) {
   await db.connect();
   await db.query("insert into auth.users (email, encrypted_password, email_confirmed_at, raw_user_meta_data) values ('partes-admin@test.ar', 'admin12345', now(), '{\"full_name\":\"Admin\"}') on conflict do nothing");
   await db.query("insert into app_admins (user_id) select id from auth.users where email = 'partes-admin@test.ar' on conflict do nothing");
-  await db.end();
-  const visit = async (label, email, password, url, selector) => {
+  // 13/11: un cliente para la escritura de la parte de todos (seguir a un profesional)
+  await db.query("insert into auth.users (email, encrypted_password, email_confirmed_at, raw_user_meta_data) values ('partes-cli@test.ar', 'cliente12345', now(), '{\"full_name\":\"Cli Partes\"}') on conflict do nothing");
+  const sofi = (await db.query("select p.id, p.slug, p.status from providers p join auth.users u on u.id = p.owner_id where u.email = 'sofia@test.ar'")).rows[0];
+  const q1 = async (sql, args) => (await db.query(sql, args)).rows[0];
+  const visit = async (label, email, password, url, selector, act) => {
     const ctx = await browser.newContext({ serviceWorkers: "block" });
     const page = await ctx.newPage();
     const errors = [];
@@ -130,6 +133,7 @@ if (process.env.E2E_URL) {
       }
       await page.waitForSelector(selector, { timeout: 20000 });
       await page.waitForTimeout(500);
+      if (act) await act(page);
     } catch (e) {
       errors.push(e.message.split("\n")[0]);
     }
@@ -146,6 +150,27 @@ if (process.env.E2E_URL) {
   const admin = await visit("admin", "partes-admin@test.ar", "admin12345", "/admin", ".kpis.adm");
   ok("panel de TuTiempo: baja solo su parte y se dibuja (tablero)", admin.parts.join() === "admin", admin.parts.join(", "));
   ok("panel de TuTiempo: sin errores", !admin.errors.length, admin.errors.join(" | "));
+  // 13/11: escrituras de verdad con el build de producción. Hasta hoy dist/ no traía src/api/live/m-*.js (api.m.* sin
+  // definir: suspender, eliminar, seguir, guardar el perfil…) y las pruebas no lo veían porque usan el build de prueba.
+  const susp = await visit("admin-suspender", "partes-admin@test.ar", "admin12345", "/admin/prestadores", `[data-act=admOpen][data-id="${sofi.id}"]`, async (page) => {
+    await page.click(`[data-act=admOpen][data-id="${sofi.id}"]`);
+    await page.click(`[data-act=admSusp][data-id="${sofi.id}"]`);
+    await page.waitForSelector("#admSuspWhy", { timeout: 10000 });
+    await page.click(".admsusp [data-act=admSet][data-s=suspended]");
+    for (let i = 0; i < 40 && (await q1("select status from providers where id = $1", [sofi.id])).status !== "suspended"; i++) await page.waitForTimeout(250);
+  });
+  const suspended = (await q1("select status from providers where id = $1", [sofi.id])).status;
+  ok("producción: el admin suspende a un profesional (api.m.adminSetProvider)", suspended === "suspended", suspended);
+  ok("producción: suspender, sin errores", !susp.errors.length, susp.errors.join(" | "));
+  await db.query("update providers set status = $2 where id = $1", [sofi.id, sofi.status]);
+  const fol = await visit("seguir", "partes-cli@test.ar", "cliente12345", "/" + sofi.slug, "[data-act=seguir]", async (page) => {
+    await page.click("[data-act=seguir]");
+    for (let i = 0; i < 40 && !(await q1("select count(*)::int n from follows f join auth.users u on u.id = f.user_id where u.email = 'partes-cli@test.ar' and f.provider_id = $1", [sofi.id])).n; i++) await page.waitForTimeout(250);
+  });
+  const nFol = (await q1("select count(*)::int n from follows f join auth.users u on u.id = f.user_id where u.email = 'partes-cli@test.ar' and f.provider_id = $1", [sofi.id])).n;
+  ok("producción: un cliente sigue a un profesional (api.m.follow)", nFol === 1, String(nFol));
+  ok("producción: seguir, sin errores", !fol.errors.length, fol.errors.join(" | "));
+  await db.end();
   const biz = await visit("negocio", null, null, "/registrar-negocio", "#app [data-act=authKind], #app form, #app h1");
   ok("«Registrá tu negocio»: baja su parte", biz.parts.includes("negocio") && !biz.parts.includes("admin"), biz.parts.join(", "));
   ok("«Registrá tu negocio»: sin errores", !biz.errors.length, biz.errors.join(" | "));
