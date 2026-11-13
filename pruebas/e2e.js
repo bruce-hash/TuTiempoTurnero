@@ -2243,10 +2243,14 @@ async function turnoConMargen(p) {
   {
     const sofiP = (await q("select id from providers where name like 'Sofía%'"))[0].id;
     const [sv6] = await q("select id from services where provider_id=$1 and active order by id limit 1", [sofiP]);
-    // 12/11: un día que Sofía trabaja (de 3 a 9 días adelante): «hoy + 3» caía domingo los jueves y la Agenda decía «Cerrado»
+    // 12/11: un día que Sofía trabaja (de 3 días adelante en más): «hoy + 3» caía domingo los jueves y la Agenda decía «Cerrado».
+    // 13/11: y sin otros turnos ese día: los de las pruebas de antes (según la fecha) chocaban con estos de 10 a 13:40
     const dia6 = (await q(`select to_char(g::date, 'YYYY-MM-DD') d from generate_series((now() at time zone 'America/Argentina/Buenos_Aires')::date + 3,
-        (now() at time zone 'America/Argentina/Buenos_Aires')::date + 9, interval '1 day') g
+        (now() at time zone 'America/Argentina/Buenos_Aires')::date + 40, interval '1 day') g
        where exists (select 1 from provider_hours ph where ph.provider_id = $1 and ph.dow = extract(dow from g)::int)
+         and not exists (select 1 from bookings b where b.provider_id = $1
+                          and (b.starts_at at time zone 'America/Argentina/Buenos_Aires')::date = g::date)
+         and not exists (select 1 from holidays h where h.day = g::date)
        order by g limit 1`, [sofiP]))[0].d;
     const nombres = ["Toque Uno", "Toque Dos", "Toque Tres", "Toque Cuatro"];
     for (const [i, n] of nombres.entries()) {
