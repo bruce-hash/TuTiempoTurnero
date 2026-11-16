@@ -1,4 +1,4 @@
-import { savePendingPay } from "../../lib/cobro-pendiente.js";
+import { clearPendingPay, pendingPay, savePendingPay } from "../../lib/cobro-pendiente.js";
 import { isStandalone } from "../../lib/pwa.js";
 import { liveApi } from "./index.js";
 import { feesFromDb } from "../mapeo.js";
@@ -13,6 +13,21 @@ import { S } from "../../state.js";
 import { render } from "../../ui/render.js";
 import { store } from "../../store.js";
 import { avatarUrl } from "../../ui/fotos.js";
+
+// 13/11: abre el cobro en Mercado Pago para estos turnos (en espera de pago) y va a pagar. Si no se puede, el error lleva
+// el motivo que devuelve mp-create-preference (errores.js lo muestra): antes todo terminaba en «Algo salió mal».
+async function openPayment(ids) {
+  const pref = await sb.functions.invoke("mp-create-preference", { body: { booking_ids: ids, app: isStandalone() } });
+  if (pref.error || !pref.data || !pref.data.init_point) {
+    const why = await pref.error?.context?.json?.().catch(() => null);
+    const code = why && why.error;
+    throw new Error(["hold_expired", "provider_not_available", "provider_mp_not_connected", "mp_error"].includes(code) ? code : "pay_open_failed");
+  }
+  // 4/11: el cobro queda guardado en la app (turno y token de regreso) para confirmarlo al volver, aunque la vuelta
+  // de Mercado Pago se abra en otro navegador (iPhone con la app instalada)
+  savePendingPay(pref.data.token, pref.data.booking || ids[0]);
+  safeRedirect(pref.data.init_point);
+}
 
 export const liveAdmin = {
   async adminCheck() {
@@ -155,18 +170,41 @@ export const liveAdmin = {
     const addonIds = selAdds(prov)
       .map((addon) => addon[3])
       .filter(Boolean);
-    const res = await call(
-      sb.rpc("book_slot", {
-        p_service: svc[4],
-        p_start: localToIso(date, time),
-        p_repeat_weeks: rep || 0,
-        // rep = cada cuántas semanas: siempre 3 turnos más además del primero
-        p_extra: rep ? 3 : 0,
-        p_pay: S.payM === "cash" ? "cash" : S.payM === "reward" ? "reward" : "mp",
-        p_addons: addonIds,
-        p_intake: {},
-      }),
-    );
+    // 13/11: volvió atrás desde Mercado Pago (quedó un cobro abierto guardado) y tocó «Pagar» de nuevo: si ese horario
+    // ya está apartado a su nombre, se paga ese mismo turno (sin pedir otro, que la base vería ocupado)
+    if (pendingPay()) {
+      const ids = await liveApi.myHoldAt(pid, date, time);
+      if (ids.length) {
+        await openPayment(ids);
+        return { redirect: true };
+      }
+    }
+    let res;
+    try {
+      res = await call(
+        sb.rpc("book_slot", {
+          p_service: svc[4],
+          p_start: localToIso(date, time),
+          p_repeat_weeks: rep || 0,
+          // rep = cada cuántas semanas: siempre 3 turnos más además del primero
+          p_extra: rep ? 3 : 0,
+          p_pay: S.payM === "cash" ? "cash" : S.payM === "reward" ? "reward" : "mp",
+          p_addons: addonIds,
+          p_intake: {},
+        }),
+      );
+    } catch (err) {
+      // 13/11: lo mismo sin el cobro guardado (modo privado, otro navegador): la base lo vio ocupado porque está apartado
+      // a su nombre (hold de 10 minutos). En vez de «se acaba de ocupar», se paga ese mismo turno.
+      if (/slot_taken|slot_not_available/.test((err && err.message) || "")) {
+        const ids = await liveApi.myHoldAt(pid, date, time);
+        if (ids.length) {
+          await openPayment(ids);
+          return { redirect: true };
+        }
+      }
+      throw err;
+    }
     if (res.status === "confirmed") {
       await Promise.all([liveApi.myBookings(), liveApi.loadProvider(pid, true), liveApi.myStamps()]);
       return {
@@ -176,43 +214,42 @@ export const liveAdmin = {
         cash: res.pay === "cash",
       };
     }
-    const pref = await sb.functions.invoke("mp-create-preference", {
-      body: {
-        booking_ids: res.booking_ids,
-        app: isStandalone(),
-      },
-    });
-    if (pref.error || !pref.data || !pref.data.init_point) {
-      const why = await pref.error?.context?.json?.().catch(() => null);
-      await sb.rpc("cancel_by_client", {
-        p_booking: res.booking_ids[0],
-      });
-      // D43: el profesional no está activo (suspendido): el mensaje de book_slot para ese error (errores.js)
-      throw new Error(why && why.error === "provider_not_available" ? "provider_not_available" : "No pudimos abrir Mercado Pago. Probá de nuevo.");
+    try {
+      await openPayment(res.booking_ids);
+    } catch (err) {
+      // no se pudo abrir el cobro: se libera la reserva para que el horario no quede trabado
+      await sb.rpc("cancel_by_client", { p_booking: res.booking_ids[0] });
+      throw err;
     }
-    // 4/11: el cobro queda guardado en la app (turno y token de regreso) para confirmarlo al volver, aunque la vuelta
-    // de Mercado Pago se abra en otro navegador (iPhone con la app instalada)
-    savePendingPay(pref.data.token, pref.data.booking || res.booking_ids[0]);
-    safeRedirect(pref.data.init_point);
     return {
       redirect: true,
     };
   },
+  // 13/11: los turnos en espera de pago de este cliente en ese horario (el primero y los de su serie), para volver a pagarlos
+  async myHoldAt(pid, date, time) {
+    await liveApi.myBookings();
+    const first = store.BOOK.find((item) => item.status === "hold" && item.pid == pid && item.date === date && item.time === time);
+    if (!first) {
+      return [];
+    }
+    return store.BOOK.filter((item) => item.status === "hold" && (item.id === first.id || (first.series && item.series === first.series)))
+      .sort((one, other) => (one.id === first.id ? -1 : other.id === first.id ? 1 : one.id - other.id))
+      .map((item) => item.id)
+      .slice(0, 4);
+  },
   // C54 (V8): volver a pagar un turno que sigue reservado (hold) después de que el pago no se completó en Mercado Pago.
   // El monto lo vuelve a calcular la Edge Function desde la base; si el hold ya venció, avisa (hold_expired).
   async payHold(ids) {
-    const pref = await sb.functions.invoke("mp-create-preference", { body: { booking_ids: ids, app: isStandalone() } });
-    if (pref.error || !pref.data || !pref.data.init_point) {
-      const why = await pref.error?.context?.json?.().catch(() => null);
-      throw new Error(
-        why && why.error === "hold_expired"
-          ? "El horario ya se liberó. Elegí otro."
-          : why && why.error === "provider_not_available"
-            ? "provider_not_available"
-            : "No pudimos abrir Mercado Pago. Probá de nuevo.",
-      );
+    await openPayment(ids);
+  },
+  // 13/11: «Elegir otro horario» después de un pago que no se completó: libera ya el horario apartado (cancel_by_client
+  // sobre un turno en espera de pago lo pasa a vencido). Si el pago igual llega después, la base lo confirma si el
+  // horario sigue libre o lo devuelve entero (D28, D29).
+  async releaseHold(ids) {
+    for (const id of ids) {
+      await call(sb.rpc("cancel_by_client", { p_booking: id })).catch(() => null);
     }
-    savePendingPay(pref.data.token, pref.data.booking || ids[0]);
-    safeRedirect(pref.data.init_point);
+    clearPendingPay();
+    await liveApi.myBookings();
   },
 };

@@ -10,6 +10,8 @@ import { S } from "../../state.js";
 import { myStamps, stampGoal } from "../../ui/sellos.js";
 import { ic } from "../../ui/iconos.js";
 
+// 13/11: la seña siempre va con Mercado Pago (D06); «Efectivo» y «Mercado Pago» de abajo son para el resto, en el local.
+// Antes decía «¿Cómo pagás el resto?» y «Efectivo» a secas: parecía que se podía pagar todo en efectivo.
 // confirmación y pago de la reserva: repetición (serie de 3 turnos más), forma de pago (Mercado Pago, efectivo
 // en el local para el resto, o premio de sellos) y el resumen. Los montos acá son para mostrar: el cobro real lo
 // calcula la base al crear la reserva.
@@ -88,15 +90,15 @@ export function vCheckoutTurno() {
      <p class="note" style="text-align:left;margin:0">Si cancelás, los sellos vuelven a tu tarjeta.</p>
      <div class="err" id="terr"></div><button class="btn btn-pri btn-block" type="submit">Canjear premio y reservar</button>`];
      } else {
-       return [`<div class="panel"><p class="lbl">Seña para reservar</p>
+       return [`<div class="panel"><p class="lbl">${rest > 0 ? "Ahora: la seña, con Mercado Pago" : "Ahora, con Mercado Pago"}</p>
       <div class="paym"><span class="mp">MP</span><span><b>${rest > 0 ? `Seña de ${money(depositTotal)}` : money(depositTotal)}${feeTotal + mpTotal ? ` + ${money(feeTotal + mpTotal)} de ${mpTotal ? "comisiones" : "comisión"}` : ""} con Mercado Pago</b><small class="hint">${rest > 0 ? "Es obligatoria: con la seña pagada tu turno queda confirmado." : "Este profesional cobra el total al reservar."}</small></span></div>
       ${canRedeem ? `<div class="paypick" style="margin-top:10px"><button type="button" role="radio" class="payopt" data-paym="reward" aria-checked="false"><span class="mp reward">${ic("premio")}</span><span><b>Usar mi premio</b><small class="hint">Tu tarjeta de ${esc(svc[0])} está llena: este turno gratis, sin seña.</small></span></button></div>` : ""}
       ${mustTotal ? '<p class="alert" style="margin-top:10px">Este profesional pide pagar el total por faltas anteriores sin aviso.</p>' : ""}</div>
     ${
       rest > 0
-        ? `<div class="panel"><p class="lbl">¿Cómo pagás el resto (${money(rest)})?</p><div class="paypick" role="radiogroup">
-      ${cashOk ? `<button type="button" role="radio" class="payopt" data-paym="cash" aria-checked="${method === "cash"}"><span class="mp cash">$</span><span><b>Efectivo</b><small class="hint">En el local, el día del turno.</small></span></button>` : ""}
-      <button type="button" role="radio" class="payopt" data-paym="mp" aria-checked="${method === "mp"}"><span class="mp">MP</span><span><b>Mercado Pago</b><small class="hint">En el local, con QR o transferencia.</small></span></button></div></div>`
+        ? `<div class="panel"><p class="lbl">Después, en el local: ¿cómo pagás los ${money(rest)} que faltan?</p><div class="paypick" role="radiogroup">
+      ${cashOk ? `<button type="button" role="radio" class="payopt" data-paym="cash" aria-checked="${method === "cash"}"><span class="mp cash">$</span><span><b>Efectivo en el local</b><small class="hint">El día del turno. La seña igual se paga ahora con Mercado Pago.</small></span></button>` : ""}
+      <button type="button" role="radio" class="payopt" data-paym="mp" aria-checked="${method === "mp"}"><span class="mp">MP</span><span><b>Mercado Pago en el local</b><small class="hint">El día del turno, con QR o transferencia.</small></span></button></div></div>`
         : ""
     }
 `, `<div class="panel"><div class="sum">

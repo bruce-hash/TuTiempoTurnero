@@ -293,6 +293,68 @@ async function turnoConMargen(p) {
     await db.query("delete from bookings where id = $1", [hid]);
   }
   {
+    // 13/11: «Elegir otro horario» después de un pago que no se completó libera el horario al instante (antes quedaba
+    // tomado hasta 10 minutos)
+    const hb = (await q("select provider_id, service_id, starts_at, ends_at from bookings where client_id = (select id from auth.users where email='ana@test.ar') and status='confirmed' order by id limit 1"))[0];
+    const hid = (await q("insert into bookings (provider_id, service_id, client_id, client_name, service_name, source, status, starts_at, ends_at, price, deposit, client_fee, hold_expires_at) values ($1, $2, (select id from auth.users where email='ana@test.ar'), 'Ana', 'Esmaltado semipermanente', 'app', 'hold', $3::timestamptz + interval '9 days', $4::timestamptz + interval '9 days', 12000, 6000, 1200, now() + interval '10 minutes') returning id",
+      [hb.provider_id, hb.service_id, hb.starts_at, hb.ends_at]))[0].id;
+    const htok = (await q("select checkout_open(array[$1]::bigint[], null) as t", [hid]))[0].t;
+    await pg.goto(`${BASE}/turno/${hid}?pago=${htok}&mp=failure`); await pg.waitForSelector("[data-act=holdRelease]", { timeout: 8000 }).catch(() => {}); await wait(400);
+    ok("13/11: «El pago no se completó» ofrece «Elegir otro horario», que libera este",
+       (await pg.locator("[data-act=holdRelease]").count()) === 1 && /libera este para otra persona/.test(await txt()));
+    await pg.click("[data-act=holdRelease]");
+    const freed = await until("select status from bookings where id = $1", [hid], (r) => r[0].status === "expired");
+    await pg.waitForSelector(".svci", { timeout: 8000 }).catch(() => {}); await wait(300);
+    ok("13/11: …lo libera al instante (vencido) y vuelve al perfil del profesional", freed && !new URL(pg.url()).pathname.startsWith("/turno") && (await pg.locator(".svci").count()) > 0,
+       JSON.stringify({ freed, url: pg.url() }));
+    // 16/11: y ese cliente lo vuelve a ver libre. «Mis turnos» trae el turno vencido; antes el turnero lo contaba como ocupado
+    // y el horario le quedaba tapado solo a él (a los demás clientes no)
+    const seen = await pg.evaluate((id) => {
+      const mine = store.BOOK.find((b) => b.mine && String(b.id) === String(id));
+      return { mine: mine ? mine.status : null, taken: mine ? busy(mine.pid, mine.date).some((b) => String(b.id) === String(id)) : null };
+    }, hid);
+    ok("16/11: …y el turno vencido no le tapa ese horario al mismo cliente", seen.mine === "expired" && seen.taken === false, JSON.stringify(seen));
+    await db.query("delete from mp_checkouts where $1 = any(booking_ids)", [hid]);
+    await db.query("delete from bookings where id = $1", [hid]);
+  }
+  {
+    // 13/11: volvió atrás desde Mercado Pago sin pagar y tocó «Pagar» de nuevo: el horario está apartado a su nombre.
+    // Antes: «Ese horario se acaba de ocupar» por 10 minutos. Ahora: paga ese mismo turno (no crea otro).
+    const sofiSlug = (await q("select slug from providers where name like 'Sofía%'"))[0].slug;
+    await pg.goto(`${BASE}/${sofiSlug}`); await pg.waitForSelector(".svci", { timeout: 8000 }).catch(() => {}); await wait(400);
+    await pg.click(".svci"); await wait(300);
+    await turnoConMargen(pg); await pg.click("[data-act=reservarT]"); await pg.waitForSelector("#fTurno", { timeout: 8000 }).catch(() => {}); await wait(300);
+    ok("13/11: el pago dice que la seña va ahora con Mercado Pago y el resto, en el local",
+       /Ahora: la seña, con Mercado Pago/i.test(await txt()) && (!(await pg.locator("[data-paym=cash]").count()) || /Efectivo en el local/.test(await txt())) && /Después, en el local: ¿cómo pagás/i.test(await txt()),
+       (await txt()).slice(0, 600));
+    // lo que hizo el primer «Pagar» antes de ir a Mercado Pago: el turno en espera de pago, a nombre de Ana
+    const held = await pg.evaluate(async () => {
+      const svc = pr(S.pid).svcs[S.svc];
+      const r = await sb.rpc("book_slot", { p_service: svc[4], p_start: localToIso(S.slot.date, S.slot.time), p_repeat_weeks: 0, p_extra: 0, p_pay: "mp", p_addons: [], p_intake: {} });
+      const id = r.data && r.data.booking_ids && r.data.booking_ids[0];
+      // y el cobro abierto que guarda la app antes de ir a Mercado Pago (cobro-pendiente.js)
+      if (id) savePendingPay([...crypto.getRandomValues(new Uint8Array(32))].map((x) => x.toString(16).padStart(2, "0")).join(""), id);
+      return id;
+    });
+    const antes = (await q("select count(*)::int c from bookings where client_id = (select id from auth.users where email='ana@test.ar')"))[0].c;
+    await Promise.all([pg.waitForURL(/mp=success/, { timeout: 10000 }).catch(() => {}), pg.click("#fTurno button[type=submit]")]);
+    await pg.waitForSelector(".booked", { timeout: 8000 }).catch(() => {}); await wait(600);
+    const despues = (await q("select count(*)::int c from bookings where client_id = (select id from auth.users where email='ana@test.ar')"))[0].c;
+    const st = held ? (await q("select status from bookings where id = $1", [held]))[0].status : null;
+    ok("13/11: «Pagar» otra vez sobre su propio horario apartado paga ese mismo turno (sin «se acaba de ocupar» ni un turno nuevo)",
+       !!held && st === "confirmed" && despues === antes && new URL(pg.url()).pathname === "/turno/" + held, JSON.stringify({ held, st, antes, despues, url: pg.url() }));
+    if (held) {
+      await db.query("delete from mp_checkouts where $1 = any(booking_ids)", [held]);
+      await db.query("delete from client_messages where ref = $1::text", [held]);
+      await db.query("delete from provider_notices where ref = $1::text", [held]);
+      await db.query("delete from payment_bookings where booking_id = $1", [held]);
+      const pids = (await q("select payment_id from bookings where id = $1", [held])).map((r) => r.payment_id);
+      await db.query("update bookings set payment_id = null where id = $1", [held]);
+      await db.query("delete from payments where id = any($1::bigint[])", [pids.filter(Boolean)]);
+      await db.query("delete from bookings where id = $1", [held]);
+    }
+  }
+  {
     // 4/11 · Bloque 1: Mercado Pago "tarde" (como el real): la vuelta llega antes que el aviso del pago, con los
     // parámetros que agrega Mercado Pago. Turnos extra en "hold" de Ana, que se borran al final.
     const hb = (await q("select provider_id, service_id, starts_at, ends_at from bookings where client_id = (select id from auth.users where email='ana@test.ar') and status='confirmed' order by id limit 1"))[0];

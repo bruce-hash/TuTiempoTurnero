@@ -177,6 +177,22 @@ async function normalizar(page) {
       document.head.insertAdjacentHTML("beforeend", `<style id="cmp-1211">.cchip.seg-b,.nextbar.seg-b{background:var(--brand-soft)!important}
         .feeline{font-size:12px!important;color:var(--muted)!important;font-weight:500!important}</style>`);
     }
+    // 13/11 (cambio a propósito): en el pago, la seña va «Ahora, con Mercado Pago» y «Efectivo»/«Mercado Pago» dicen que
+    // son para el resto, en el local. En las dos versiones vuelven los textos de antes; lo nuevo lo prueba e2e.js
+    {
+      const PAGO = [
+        [/^Ahora: la seña, con Mercado Pago$|^Ahora, con Mercado Pago$/, "Seña para reservar"],
+        [/^Después, en el local: ¿cómo pagás los (.+) que faltan\?$/, "¿Cómo pagás el resto ($1)?"],
+        [/^Efectivo en el local$/, "Efectivo"],
+        [/^El día del turno\. La seña igual se paga ahora con Mercado Pago\.$/, "En el local, el día del turno."],
+        [/^Mercado Pago en el local$/, "Mercado Pago"],
+        [/^El día del turno, con QR o transferencia\.$/, "En el local, con QR o transferencia."],
+      ];
+      const walkPago = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walkPago.nextNode(); node; node = walkPago.nextNode()) {
+        for (const [re, to] of PAGO) if (re.test(node.nodeValue)) node.nodeValue = node.nodeValue.replace(re, to);
+      }
+    }
     // 9/11 (cambio a propósito): en el celular, ningún campo con letra menor a 16 px (iOS agrandaba la página al tocarlo):
     // los campos quedan un poco más altos. Se aplica la misma regla a las dos versiones; la prueba ancho.mjs la controla.
     if (!document.getElementById("cmp-16px")) {

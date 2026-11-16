@@ -117,7 +117,10 @@ export const cli = (name) =>
 export const uname = () =>
   S.user ? (S.user.name.split(" ")[0] + " " + (S.user.name.split(" ")[1] || "").charAt(0) + ".").trim() : "";
 export const isDayBlock = (booking) => booking.type === "block" && String(booking.svc || "").startsWith("🏖️");
-export const busy = (pid, date) => store.BOOK.filter((booking) => booking.pid == pid && booking.date === date && booking.status !== "cancelled");
+// lo que ocupa un horario: como en la base (bookings_no_overlap), ni los cancelados ni los vencidos. 16/11: «Mis turnos» trae
+// también los vencidos del cliente (un pago que no se completó), y ese horario le quedaba tapado solo a él
+export const busy = (pid, date) =>
+  store.BOOK.filter((booking) => booking.pid == pid && booking.date === date && booking.status !== "cancelled" && booking.status !== "expired");
 export function overlaps(a1, a2, b1, b2) {
   return a1 < b2 && b1 < a2;
 }
