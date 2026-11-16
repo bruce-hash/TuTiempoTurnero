@@ -8,7 +8,13 @@ AddType application/manifest+json .webmanifest
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  # Forzar HTTPS
+  # 16/11: una sola dirección del sitio, https://tutiempo.com.ar. www.tutiempo.com.ar (por http o https) va ahí en un solo
+  # salto, con la misma ruta y la misma query (Apache y LiteSpeed le suman solos la query original). Las funciones de
+  # Supabase solo atienden pedidos del sitio (SITE_URL, sin www): desde www no se podía abrir Mercado Pago.
+  # Solo actúa con ese nombre exacto: prueba.tutiempo.com.ar y los demás siguen igual.
+  RewriteCond %{HTTP_HOST} ^www\.tutiempo\.com\.ar(:\d+)?$ [NC]
+  RewriteRule ^ https://tutiempo.com.ar%{REQUEST_URI} [L,R=301]
+  # Forzar HTTPS (http://tutiempo.com.ar → https://tutiempo.com.ar, con la misma ruta y query)
   RewriteCond %{HTTPS} off
   RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
   # Bloquear archivos ocultos y de respaldo
