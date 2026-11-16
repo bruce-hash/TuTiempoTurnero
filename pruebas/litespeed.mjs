@@ -27,10 +27,11 @@ const ok = (name, cond, extra = "") => {
   if (!cond) fails++;
   console.log((cond ? "OK   " : "FAIL ") + name + (cond || !extra ? "" : "  → " + extra));
 };
-const get = (url) =>
+// host: el nombre con el que llega el pedido (Host), para probar www.tutiempo.com.ar sin DNS
+const get = (url, host) =>
   new Promise((resolve, reject) => {
     http
-      .get(url, (res) => {
+      .get(url, { headers: host ? { Host: host } : {} }, (res) => {
         let body = "";
         res.setEncoding("utf8");
         res.on("data", (chunk) => (body += chunk));
@@ -80,6 +81,24 @@ try {
   for (const route of ["/", "/panel/agenda", "/mis-turnos?x=1"]) {
     const r = await get(REAL + route);
     ok(`HTTP ${route} → 301 a HTTPS con la misma dirección`, r.status === 301 && r.headers.location === `https://localhost:8091${route}`, `${r.status} ${r.headers.location}`);
+  }
+
+  // ---------- 1b. 16/11: una sola dirección, https://tutiempo.com.ar ----------
+  // www (por http o https) va ahí en un solo salto, con la misma ruta y query; http sin www, a https. La copia sin la
+  // regla de HTTPS hace de pedido que ya llega por HTTPS (como en Hostinger).
+  const SITE = "https://tutiempo.com.ar";
+  for (const [base, host, route, label] of [
+    [APP, "www.tutiempo.com.ar", "/", "https://www… (la raíz)"],
+    [APP, "www.tutiempo.com.ar", "/pato-barber?x=1", "https://www… con ruta y query"],
+    [REAL, "www.tutiempo.com.ar", "/pato-barber?x=1", "http://www… con ruta y query, en un solo salto"],
+    [REAL, "tutiempo.com.ar", "/pato-barber?x=1", "http://tutiempo.com.ar con ruta y query"],
+  ]) {
+    const r = await get(base + route, host);
+    ok(`${label} → 301 a ${SITE}${route}`, r.status === 301 && r.headers.location === SITE + route, `${r.status} ${r.headers.location}`);
+  }
+  for (const host of ["tutiempo.com.ar", "prueba.tutiempo.com.ar"]) {
+    const r = await get(APP + "/pato-barber?x=1", host);
+    ok(`https://${host}/pato-barber?x=1 → 200 con la app, sin redirigir`, r.status === 200 && !r.headers.location && r.body === INDEX, `${r.status} ${r.headers.location || ""}`);
   }
 
   // ---------- 2. Las direcciones de la app: index.html, sin redirigir ----------

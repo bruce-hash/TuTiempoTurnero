@@ -23,11 +23,12 @@ const ok = (name, cond, extra = "") => {
 };
 
 // pedido sin seguir redirecciones (el certificado de prueba es autofirmado)
-function get(url) {
+// host: el nombre con el que llega el pedido (Host), para probar www.tutiempo.com.ar sin DNS
+function get(url, host) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith("https:") ? https : http;
     lib
-      .get(url, { rejectUnauthorized: false }, (res) => {
+      .get(url, { rejectUnauthorized: false, headers: host ? { Host: host } : {} }, (res) => {
         let body = "";
         res.setEncoding("utf8");
         res.on("data", (chunk) => (body += chunk));
@@ -64,6 +65,23 @@ for (const route of ["/panel/agenda?x=1", "/?mp=success&b=12", "/?token_hash=abc
   const res = await get(HTTP + route);
   const want = "https://" + new URL(HTTP).host + route;
   ok(`HTTP ${route} → 301 a HTTPS con la query intacta`, res.status === 301 && res.headers.location === want, `${res.status} ${res.headers.location}`);
+}
+// 1b. 16/11: una sola dirección, https://tutiempo.com.ar. www (por http o https) va ahí en un solo salto, con la misma
+// ruta y query; http sin www, a https. Las funciones de Supabase solo atienden al sitio sin www (SITE_URL).
+const SITE = "https://tutiempo.com.ar";
+for (const [base, host, route, label] of [
+  [HTTPS, "www.tutiempo.com.ar", "/", "https://www… (la raíz)"],
+  [HTTPS, "www.tutiempo.com.ar", "/pato-barber?x=1", "https://www… con ruta y query"],
+  [HTTPS, "WWW.TuTiempo.com.ar", "/turno/12?pago=abc&mp=success", "https://WWW… (mayúsculas) con ruta y query"],
+  [HTTP, "www.tutiempo.com.ar", "/pato-barber?x=1", "http://www… con ruta y query, en un solo salto"],
+  [HTTP, "tutiempo.com.ar", "/pato-barber?x=1", "http://tutiempo.com.ar con ruta y query"],
+]) {
+  const res = await get(base + route, host);
+  ok(`${label} → 301 a ${SITE}${route}`, res.status === 301 && res.headers.location === SITE + route, `${res.status} ${res.headers.location}`);
+}
+for (const host of ["tutiempo.com.ar", "prueba.tutiempo.com.ar"]) {
+  const res = await get(HTTPS + "/pato-barber?x=1", host);
+  ok(`https://${host}/pato-barber?x=1 → 200 con la app, sin redirigir`, isIndex(res) && !res.headers.location, `${res.status} ${res.headers.location || ""}`);
 }
 // 2. Direcciones de la app → index.html, con CSP, HSTS y los demás encabezados
 for (const route of ["/", "/rubro/unas", "/buscar?q=corte", "/filo-barber-club", "/filo-barber-club/trabajos", "/p/7", "/turno/12", "/mis-turnos", "/panel/agenda", "/panel/clientes?cliente=3", "/admin/balance/2026-10", "/no-existe", "/functions/v1/mp-webhook"]) {
