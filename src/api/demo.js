@@ -62,6 +62,7 @@ export const demoApi = {
   },
   async checkoutPoke() {},
   async payHold() {},
+  async releaseHold() {},
   // Bloque C: en la demo no hay notificaciones push
   async pushRegistered() {
     return false;

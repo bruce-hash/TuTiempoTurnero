@@ -79,7 +79,8 @@ export function vTurnoOk() {
   if (booking.status === "hold" && (S.payBack === "failure" || gaveUp)) {
     // C54 (V8): volvió de Mercado Pago sin pagar: el horario sigue reservado unos minutos y se puede reintentar
     return `<div class="narrow stack" style="margin-top:24px;text-align:center"><div class="panel"><div class="hero-ic">${ic("error")}</div><h1 class="h1">El pago no se completó</h1>
-    <p class="lead">Tu horario sigue reservado unos minutos: podés volver a intentarlo con otra tarjeta o medio de pago.</p><button class="btn btn-pri btn-block" data-act="payRetry">Volver a intentar</button><button class="btn btn-ghost btn-block" style="margin-top:8px" data-go="perfil" data-id="${booking.pid}">Elegir otro horario</button></div></div>`;
+    <p class="lead">Tu horario sigue reservado unos minutos: podés volver a intentarlo con otra tarjeta o medio de pago.</p><button class="btn btn-pri btn-block" data-act="payRetry">Volver a intentar</button><button class="btn btn-ghost btn-block" style="margin-top:8px" data-act="holdRelease">Elegir otro horario</button>
+    <p class="note" style="margin:8px 0 0">«Elegir otro horario» libera este para otra persona.</p></div></div>`;
   }
   if (booking.status === "hold") {
     waitPaid(booking.id);

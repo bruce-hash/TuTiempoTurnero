@@ -206,6 +206,28 @@ registerClick("payRetry", (ev, el, act) => {
     api.myBookings().then(render).catch(() => {});
   });
 });
+// 13/11: «Elegir otro horario» después de un pago que no se completó: libera ya el horario apartado (antes quedaba
+// tomado hasta 10 minutos) y vuelve al perfil para elegir otro
+registerClick("holdRelease", (ev, el, act) => {
+  const booking = store.BOOK.find((item) => item.id === S.turnoId);
+  if (!booking) {
+    return;
+  }
+  const ids = store.BOOK.filter((item) => item.status === "hold" && (item.id === booking.id || (booking.series && item.series === booking.series))).map((item) => item.id);
+  el.disabled = true;
+  const pid = booking.pid;
+  api
+    .releaseHold(ids)
+    .catch(() => {})
+    .then(() => api.loadProvider(pid, true).catch(() => {}))
+    .then(() => {
+      S.payBack = null;
+      S.payResume = null;
+      S.slot = null;
+      go("perfil", pid);
+      toast("Listo: liberamos ese horario. Elegí otro.");
+    });
+});
 // Paso 1 (v4): desde la pantalla de regreso de Mercado Pago sin sesión: ingresar y volver al turno
 registerClick("payLogin", (ev, el, act) => {
   navigate("/ingresar?volver=" + encodeURIComponent("/turno/" + S.turnoId));

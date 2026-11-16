@@ -8,6 +8,16 @@ const ERRS = {
   too_many_holds: "Tenés reservas sin pagar. Terminá de pagar o esperá 10 minutos.",
   service_not_found: "Ese servicio ya no existe.",
   provider_not_available: "Este perfil ya no está disponible.",
+  // 13/11: lo que devuelve mp-create-preference cuando no se puede abrir el cobro (antes todo era «Algo salió mal»)
+  hold_expired: "El horario ya se liberó. Elegí otro.",
+  mp_error: "Mercado Pago no pudo abrir el cobro. Probá de nuevo en unos minutos.",
+  pay_open_failed: "No pudimos abrir Mercado Pago. Probá de nuevo en unos minutos.",
+  // y los de book_slot que no tenían texto propio (también terminaban en «Algo salió mal»)
+  too_many_attempts: "Hiciste muchas reservas sin pagar en las últimas 24 horas. Probá de nuevo más tarde.",
+  busy_retry: "Hay mucha gente reservando en este momento. Probá de nuevo en unos segundos.",
+  bad_repeat: "Ese turno no se puede repetir así. Elegí otra opción.",
+  bad_addon: "Uno de los adicionales ya no está disponible. Elegí de nuevo.",
+  bad_pay: "Elegí cómo pagás el resto.",
   cannot_cancel: "Ese turno ya no se puede cancelar.",
   already_registered: "Ya tenés un perfil de profesional.",
   bad_dni: "El DNI tiene que tener 7 u 8 números, sin puntos.",
