@@ -307,6 +307,13 @@ async function turnoConMargen(p) {
     await pg.waitForSelector(".svci", { timeout: 8000 }).catch(() => {}); await wait(300);
     ok("13/11: …lo libera al instante (vencido) y vuelve al perfil del profesional", freed && !new URL(pg.url()).pathname.startsWith("/turno") && (await pg.locator(".svci").count()) > 0,
        JSON.stringify({ freed, url: pg.url() }));
+    // 16/11: y ese cliente lo vuelve a ver libre. «Mis turnos» trae el turno vencido; antes el turnero lo contaba como ocupado
+    // y el horario le quedaba tapado solo a él (a los demás clientes no)
+    const seen = await pg.evaluate((id) => {
+      const mine = store.BOOK.find((b) => b.mine && String(b.id) === String(id));
+      return { mine: mine ? mine.status : null, taken: mine ? busy(mine.pid, mine.date).some((b) => String(b.id) === String(id)) : null };
+    }, hid);
+    ok("16/11: …y el turno vencido no le tapa ese horario al mismo cliente", seen.mine === "expired" && seen.taken === false, JSON.stringify(seen));
     await db.query("delete from mp_checkouts where $1 = any(booking_ids)", [hid]);
     await db.query("delete from bookings where id = $1", [hid]);
   }
