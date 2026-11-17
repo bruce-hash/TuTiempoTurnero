@@ -2,6 +2,7 @@ import { esc } from "../lib/dom.js";
 import { dismissed, inAppBrowser, isIOS, needsIosInstall } from "../lib/pwa.js";
 import { S } from "../state.js";
 import { ic } from "./iconos.js";
+import { pushAllowWhere, pushIosReinstall } from "../lib/permiso-avisos.js";
 
 // Bloque C: lo que ve la persona de la app instalable y las notificaciones push. Solo arma HTML; las acciones están en
 // actions/avisos.js. Sin vapidPublicKey en config.js (o en la demo) no aparece nada de notificaciones.
@@ -75,13 +76,9 @@ export const installMenuItem = () => (S.canInstall || needsIosInstall()) && !inA
 // Mi perfil (cliente) y Perfil del panel (prestador): este dispositivo y la opción de cada uno
 // 12/11: las notificaciones están rechazadas en este dispositivo: no se vuelve a pedir el permiso, se explica cómo
 // habilitarlo según dónde está la persona (la app instalada en el iPhone, Android o la compu)
-function blockedHelp(ua = navigator.userAgent) {
-  const how = /iPhone|iPad|iPod/.test(ua)
-    ? "en el iPhone: Configuración → Notificaciones → TuTiempo → Permitir notificaciones"
-    : /Android/.test(ua)
-      ? "en el celular: tocá el candado al lado de la dirección (o, con la app instalada, mantené apretado el ícono → Información de la app) → Notificaciones → Permitir"
-      : "en la compu: tocá el candado al lado de la dirección → Notificaciones → Permitir";
-  return `Bloqueaste las notificaciones de TuTiempo en este dispositivo y no te las vamos a volver a pedir. Si querés recibirlas, habilitalas ${how}, y volvé a abrir TuTiempo: se activan solas.`;
+// 17/11: el texto de cada dispositivo está en lib/permiso-avisos.js (también lo usa el aviso de «Activar avisos»)
+function blockedHelp() {
+  return `Bloqueaste las notificaciones de TuTiempo en este dispositivo y no te las vamos a volver a pedir. Si querés recibirlas, habilitalas ${pushAllowWhere()}, y volvé a abrir TuTiempo: se activan solas.${pushIosReinstall()}`;
 }
 export function pushPanel(scope) {
   const push = S.push || {};
