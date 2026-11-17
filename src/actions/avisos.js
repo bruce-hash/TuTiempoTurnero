@@ -3,6 +3,7 @@ import { api } from "../api/index.js";
 import { disablePush, enablePush, testPush } from "../lib/push.js";
 import { dismiss, needsIosInstall, promptInstall, reloadNow } from "../lib/pwa.js";
 import { S } from "../state.js";
+import { pushAllowWhere } from "../lib/permiso-avisos.js";
 import { render } from "../ui/render.js";
 import { toast } from "../ui/toast.js";
 
@@ -17,7 +18,7 @@ registerClick("pushOn", (ev, el, act) => {
       result === "on"
         ? "Listo: te vamos a avisar en este dispositivo."
         : result === "denied"
-          ? "No diste permiso para las notificaciones. Si cambiás de idea, habilitalas en la configuración del navegador."
+          ? `No diste permiso para las notificaciones. Si cambiás de idea, habilitalas ${pushAllowWhere()}.`
           : "No pudimos activar los avisos. Probá de nuevo en un momento.",
     );
     render();

@@ -243,5 +243,18 @@ const RUBRO_EMOJIS = { b: "💈", p: "✂", m: "🌿", l: "👁", u: "💅", d: 
   ok("feriados cerrados: los turnos que se mantienen", holidayBookingsNote(1) === "Tenés 1 turno ese día: se mantiene" && holidayBookingsNote(3) === "Tenés 3 turnos ese día: se mantienen");
 }
 
+{
+  // 17/11: rechazó las notificaciones. En el iPhone no es «la configuración del navegador»: Configuración → Notificaciones
+  // → TuTiempo, y si TuTiempo no aparece ahí, volver a agregarla a inicio. Android y la compu, el candado.
+  const { pushAllowWhere, pushIosReinstall } = await import("../src/lib/permiso-avisos.js");
+  const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
+  const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36";
+  const PC = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
+  ok("avisos bloqueados (iPhone): Configuración → Notificaciones → TuTiempo", /Configuración → Notificaciones → TuTiempo/.test(pushAllowWhere(IPHONE)) && !/navegador/.test(pushAllowWhere(IPHONE)));
+  ok("avisos bloqueados (iPhone): si no aparece, volver a agregarla a inicio", /no aparece/.test(pushIosReinstall(IPHONE)) && /Agregar a inicio/.test(pushIosReinstall(IPHONE)));
+  ok("avisos bloqueados (iPad con la vista de compu): como el iPhone", /TuTiempo/.test(pushAllowWhere("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "MacIntel", 5)));
+  ok("avisos bloqueados (Android y compu): el candado, sin lo del iPhone", /candado/.test(pushAllowWhere(ANDROID, "Linux", 5)) && /candado/.test(pushAllowWhere(PC, "Win32", 0)) && pushIosReinstall(ANDROID, "Linux", 5) === "" && pushIosReinstall(PC, "Win32", 0) === "");
+}
+
 console.log(F ? `${F} FALLAS` : "TODO OK");
 process.exit(F ? 1 : 0);
